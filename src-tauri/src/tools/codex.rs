@@ -103,7 +103,7 @@ pub fn detect() -> CodexConfigStatus {
 
 pub fn generate_snippet(host: &str, port: i64) -> String {
     format!(
-        r#"model = "gpt-5"
+        r#"model = "gpt-5.5"
 model_provider = "agentgate"
 
 [model_providers.agentgate]
@@ -299,7 +299,7 @@ pub(crate) fn update_toml_content(existing: &str, host: &str, port: i64) -> Resu
 
     // Only set model if not already present
     if doc.get("model").is_none() {
-        doc["model"] = toml_edit::value("gpt-5");
+        doc["model"] = toml_edit::value("gpt-5.5");
     }
     doc["model_provider"] = toml_edit::value("agentgate");
 
@@ -348,7 +348,7 @@ mod tests {
     #[test]
     fn test_generate_snippet() {
         let snippet = generate_snippet("127.0.0.1", 9090);
-        assert!(snippet.contains("model = \"gpt-5\""));
+        assert!(snippet.contains("model = \"gpt-5.5\""));
         assert!(snippet.contains("model_provider = \"agentgate\""));
         assert!(snippet.contains("base_url = \"http://127.0.0.1:9090/v1\""));
         assert!(snippet.contains("wire_api = \"responses\""));
@@ -377,7 +377,7 @@ other = "value"
         let existing = r#"other = "value"
 "#;
         let result = update_toml_content(existing, "host", 1234).unwrap();
-        assert!(result.contains("model = \"gpt-5\""));
+        assert!(result.contains("model = \"gpt-5.5\""));
         assert!(result.contains("model_provider = \"agentgate\""));
     }
 

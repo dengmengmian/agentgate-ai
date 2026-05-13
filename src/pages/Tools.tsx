@@ -9,6 +9,9 @@ import {
   AlertTriangle,
   Zap,
   Shield,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
@@ -18,7 +21,7 @@ import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import type { ToolConfigView } from "@/types/tool";
-import type { CodexConfigStatus, ClaudeCodeEnvStatus } from "@/types/config";
+import type { CodexConfigStatus, ClaudeCodeEnvStatus, ConfigBackup } from "@/types/config";
 
 const iconMap: Record<string, React.ElementType> = {
   terminal: Terminal,
@@ -37,6 +40,10 @@ export function Tools() {
   const [showCodexPreview, setShowCodexPreview] = useState(false);
   const [confirmApplyCodex, setConfirmApplyCodex] = useState(false);
   const [confirmApplyClaude, setConfirmApplyClaude] = useState(false);
+  const [codexBackups, setCodexBackups] = useState<ConfigBackup[]>([]);
+  const [claudeBackups, setClaudeBackups] = useState<ConfigBackup[]>([]);
+  const [showCodexBackups, setShowCodexBackups] = useState(false);
+  const [showClaudeBackups, setShowClaudeBackups] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -89,7 +96,27 @@ export function Tools() {
   };
 
   const handleBackupClaude = async () => {
-    try { await api.backupClaudeCodeConfig(); toast("success", `Claude Code ${t("tools.backed_up")}`); }
+    try { await api.backupClaudeCodeConfig(); toast("success", `Claude Code ${t("tools.backed_up")}`); loadBackups(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
+  const loadBackups = async () => {
+    try {
+      const [cb, ccb] = await Promise.all([api.listCodexBackups(), api.listClaudeCodeBackups()]);
+      setCodexBackups(cb);
+      setClaudeBackups(ccb);
+    } catch { /* ignore */ }
+  };
+
+  useEffect(() => { loadBackups(); }, []);
+
+  const handleRestoreCodex = async (backupId: string) => {
+    try { await api.restoreCodexBackup(backupId); toast("success", t("tools.restored")); load(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
+  const handleRestoreClaude = async (backupId: string) => {
+    try { await api.restoreClaudeCodeBackup(backupId); toast("success", t("tools.restored")); load(); }
     catch (err) { toast("error", (err as api.AppError).message); }
   };
 
@@ -150,6 +177,30 @@ export function Tools() {
             <JsonCodeBlock title="Proposed ~/.codex/auth.json" content={'{\n  "OPENAI_API_KEY": "<ag_local_token>"\n}'} language="json" />
           </div>
         )}
+
+        {codexBackups.length > 0 && (
+          <div className="mt-4 border-t border-border pt-3">
+            <button onClick={() => setShowCodexBackups(!showCodexBackups)} className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary">
+              {showCodexBackups ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {t("tools.backup_history")} ({codexBackups.length})
+            </button>
+            {showCodexBackups && (
+              <div className="mt-2 space-y-1.5">
+                {codexBackups.map(b => (
+                  <div key={b.id} className="flex items-center justify-between rounded-md bg-card-secondary px-3 py-2 text-xs">
+                    <div>
+                      <span className="text-text-primary">{b.backup_path.split("/").pop()}</span>
+                      <span className="ml-2 text-text-muted">{new Date(b.created_at).toLocaleString()}</span>
+                    </div>
+                    <button onClick={() => handleRestoreCodex(b.id)} className="btn-secondary text-[11px]">
+                      <RotateCcw className="h-3 w-3" />{t("tools.restore")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Claude Code Card */}
@@ -201,6 +252,30 @@ export function Tools() {
         </div>
 
         {claudeSnippet && <JsonCodeBlock title="Claude Code Environment" content={claudeSnippet} language="bash" />}
+
+        {claudeBackups.length > 0 && (
+          <div className="mt-4 border-t border-border pt-3">
+            <button onClick={() => setShowClaudeBackups(!showClaudeBackups)} className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary">
+              {showClaudeBackups ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {t("tools.backup_history")} ({claudeBackups.length})
+            </button>
+            {showClaudeBackups && (
+              <div className="mt-2 space-y-1.5">
+                {claudeBackups.map(b => (
+                  <div key={b.id} className="flex items-center justify-between rounded-md bg-card-secondary px-3 py-2 text-xs">
+                    <div>
+                      <span className="text-text-primary">{b.backup_path.split("/").pop()}</span>
+                      <span className="ml-2 text-text-muted">{new Date(b.created_at).toLocaleString()}</span>
+                    </div>
+                    <button onClick={() => handleRestoreClaude(b.id)} className="btn-secondary text-[11px]">
+                      <RotateCcw className="h-3 w-3" />{t("tools.restore")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* OpenCode Card */}

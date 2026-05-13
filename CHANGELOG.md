@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.1] - 2025-05-13
+
+### Features / 功能
+
+- **应用图标** — 全新轨道中心 Logo，替换默认 Tauri 图标
+- **应用内自动更新** — 集成 tauri-plugin-updater，启动时自动检查 GitHub Releases 新版本
+- **设置页检查更新** — 关于区域新增「检查更新」按钮和 GitHub 链接
+- **工具配置备份列表** — Codex 和 Claude Code 配置支持查看备份历史和一键恢复
+- **CI/CD 自动发版** — GitHub Actions 多平台构建（macOS ARM/Intel、Windows、Linux），push tag 自动发布
+- **中英双语 README** — README.md（中文）+ README_EN.md（英文），含截图和安装说明
+
+### Bug Fixes / 修复
+
+- 修复 Codex 配置默认模型从 `gpt-5` 更新为 `gpt-5.5`
+- 修复 `.gitignore` 中 `logs` 规则误排除 `src/components/logs/` 导致 CI 构建失败
+- 修复侧边栏 Logo 图标与新品牌风格不一致
+- 精简关于页面，移除技术栈细节，只保留版本号和协议
+
+---
+
 ## [0.1.0] - 2025-05-13
 
 First public release.

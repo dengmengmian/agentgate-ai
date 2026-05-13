@@ -1,6 +1,6 @@
 [package]
 name = "agentgate"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local gateway for AI coding agents"
 authors = ["mengmian"]
 edition = "2021"

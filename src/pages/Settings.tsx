@@ -138,7 +138,7 @@ export function Settings() {
       <section className="rounded-lg border border-border bg-card p-5">
         <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.about")}</h3>
         <div className="space-y-2 text-xs">
-          <div className="flex justify-between"><span className="text-text-muted">{t("settings.version")}</span><span className="text-text-primary">0.1.0</span></div>
+          <div className="flex justify-between"><span className="text-text-muted">{t("settings.version")}</span><span className="text-text-primary">0.1.1</span></div>
           <div className="flex justify-between"><span className="text-text-muted">{t("settings.license")}</span><span className="text-text-primary">MIT</span></div>
         </div>
         <div className="mt-4 flex gap-2">
