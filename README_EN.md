@@ -72,6 +72,20 @@ AgentGate is a local model gateway and provider-switching tool for AI coding age
 
 Download the installer for your platform from the [Releases](../../releases) page.
 
+| Platform | Format |
+|---|---|
+| macOS (Apple Silicon) | `.dmg` (aarch64) |
+| macOS (Intel) | `.dmg` (x86_64) |
+| Windows | `.msi` / `.exe` |
+| Linux | `.AppImage` / `.deb` |
+
+> **macOS users**: The app is not signed with an Apple Developer certificate. On first launch, macOS will block it. Go to **System Settings → Privacy & Security**, find AgentGate and click **Open Anyway**. Or run:
+> ```bash
+> xattr -d com.apple.quarantine /Applications/AgentGate.app
+> ```
+
+> **Windows users**: SmartScreen may show a warning on first run. Click **More info → Run anyway**.
+
 ### Build from Source
 
 **Prerequisites**
