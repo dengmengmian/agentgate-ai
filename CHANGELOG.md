@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.2] - 2025-05-13
+
+### Improvements / 优化
+
+- 版本号统一从 Tauri API 运行时读取，不再硬编码
+- 检查更新失败时静默处理，不再弹出错误提示
+- Codex 默认模型更新为 `gpt-5.5`
+- 工具页面新增备份历史列表和一键恢复功能
+
+---
+
 ## [0.1.1] - 2025-05-13
 
 ### Features / 功能
