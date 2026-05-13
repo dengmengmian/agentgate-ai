@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -9,6 +10,7 @@ import {
   Stethoscope,
   Settings,
 } from "lucide-react";
+import { getVersion } from "@tauri-apps/api/app";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
@@ -25,6 +27,8 @@ const navItems = [
 
 export function Sidebar() {
   const { t } = useI18n();
+  const [version, setVersion] = useState("");
+  useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
 
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-card">
@@ -63,7 +67,7 @@ export function Sidebar() {
       </nav>
 
       <div className="border-t border-border px-5 py-3">
-        <p className="text-[11px] text-text-muted">v0.1.0</p>
+        <p className="text-[11px] text-text-muted">{version ? `v${version}` : ""}</p>
       </div>
     </aside>
   );

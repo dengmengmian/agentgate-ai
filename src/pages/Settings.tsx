@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Shield, FolderOpen, RefreshCcw, Download } from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
+import { getVersion } from "@tauri-apps/api/app";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "@/components/common/Toast";
 import { useI18n, type Locale } from "@/lib/i18n";
@@ -13,6 +14,8 @@ export function Settings() {
   const [settings, setSettings] = useState<GatewaySettingsType | null>(null);
   const [auth, setAuth] = useState<GatewayAuthSettings | null>(null);
   const [confirmRegen, setConfirmRegen] = useState(false);
+  const [appVersion, setAppVersion] = useState("");
+  useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     try {
@@ -138,7 +141,7 @@ export function Settings() {
       <section className="rounded-lg border border-border bg-card p-5">
         <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.about")}</h3>
         <div className="space-y-2 text-xs">
-          <div className="flex justify-between"><span className="text-text-muted">{t("settings.version")}</span><span className="text-text-primary">0.1.1</span></div>
+          <div className="flex justify-between"><span className="text-text-muted">{t("settings.version")}</span><span className="text-text-primary">{appVersion}</span></div>
           <div className="flex justify-between"><span className="text-text-muted">{t("settings.license")}</span><span className="text-text-primary">MIT</span></div>
         </div>
         <div className="mt-4 flex gap-2">
@@ -195,7 +198,8 @@ function CheckUpdateButton({ t }: { t: (key: string) => string }) {
         setStatus("latest");
       }
     } catch {
-      toast("error", t("update.check_failed"));
+      // Network error or dev mode — treat as up to date
+      setStatus("latest");
     } finally {
       setChecking(false);
     }

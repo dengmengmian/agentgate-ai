@@ -28,14 +28,11 @@ sed -i '' "s/^version = \".*\"/version = \"$NEW_VERSION\"/" "$ROOT/src-tauri/Car
 # 3. src-tauri/tauri.conf.json
 sed -i '' "s/\"version\": \".*\"/\"version\": \"$NEW_VERSION\"/" "$ROOT/src-tauri/tauri.conf.json"
 
-# 4. Settings page version display
-sed -i '' "s/text-text-primary\">[0-9]*\.[0-9]*\.[0-9]*<\/span><\/div>/text-text-primary\">$NEW_VERSION<\/span><\/div>/" "$ROOT/src/pages/Settings.tsx"
-
 echo "Version updated to $NEW_VERSION in:"
 echo "  - package.json"
 echo "  - src-tauri/Cargo.toml"
 echo "  - src-tauri/tauri.conf.json"
-echo "  - src/pages/Settings.tsx"
+echo "  (Settings & Sidebar read version from Tauri API at runtime)"
 echo ""
 echo "Next steps:"
 echo "  1. Update CHANGELOG.md"
