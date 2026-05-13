@@ -187,12 +187,21 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
+fn is_chinese_locale() -> bool {
+    std::env::var("LANG")
+        .or_else(|_| std::env::var("LC_ALL"))
+        .or_else(|_| std::env::var("LC_MESSAGES"))
+        .map(|v| v.starts_with("zh"))
+        .unwrap_or(false)
+}
+
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let show = MenuItemBuilder::with_id("show", "Show AgentGate").build(app)?;
-    let start_gw = MenuItemBuilder::with_id("start_gateway", "Start Gateway").build(app)?;
-    let stop_gw = MenuItemBuilder::with_id("stop_gateway", "Stop Gateway").build(app)?;
-    let restart_gw = MenuItemBuilder::with_id("restart_gateway", "Restart Gateway").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
+    let zh = is_chinese_locale();
+    let show = MenuItemBuilder::with_id("show", if zh { "显示 AgentGate" } else { "Show AgentGate" }).build(app)?;
+    let start_gw = MenuItemBuilder::with_id("start_gateway", if zh { "启动网关" } else { "Start Gateway" }).build(app)?;
+    let stop_gw = MenuItemBuilder::with_id("stop_gateway", if zh { "停止网关" } else { "Stop Gateway" }).build(app)?;
+    let restart_gw = MenuItemBuilder::with_id("restart_gateway", if zh { "重启网关" } else { "Restart Gateway" }).build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", if zh { "退出" } else { "Quit" }).build(app)?;
 
     let menu = MenuBuilder::new(app)
         .item(&show)
@@ -206,7 +215,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let _tray = TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
-        .tooltip("AgentGate - Gateway Stopped")
+        .tooltip(if is_chinese_locale() { "AgentGate - 网关已停止" } else { "AgentGate - Gateway Stopped" })
         .menu(&menu)
         .on_menu_event(move |app, event| {
             match event.id().as_ref() {
