@@ -1,0 +1,315 @@
+import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+
+export type Locale = "en" | "zh";
+
+const translations: Record<string, Record<Locale, string>> = {
+  // ── Nav / Layout ──
+  "nav.dashboard": { en: "Dashboard", zh: "仪表盘" },
+  "nav.tools": { en: "Tools", zh: "工具" },
+  "nav.providers": { en: "Providers", zh: "服务商" },
+  "nav.routes": { en: "Routes", zh: "路由" },
+  "nav.gateway": { en: "Gateway", zh: "网关" },
+  "nav.logs": { en: "Logs", zh: "日志" },
+  "nav.diagnostics": { en: "Diagnostics", zh: "诊断" },
+  "nav.settings": { en: "Settings", zh: "设置" },
+  "topbar.gateway": { en: "Gateway", zh: "网关" },
+  "topbar.running": { en: "Running", zh: "运行中" },
+  "topbar.stopped": { en: "Stopped", zh: "已停止" },
+
+  // ── Dashboard ──
+  "dashboard.gateway": { en: "Gateway", zh: "网关" },
+  "dashboard.provider": { en: "Provider", zh: "服务商" },
+  "dashboard.input": { en: "Input", zh: "输入" },
+  "dashboard.output": { en: "Output", zh: "输出" },
+  "dashboard.recent_requests": { en: "Recent Requests", zh: "最近请求" },
+  "dashboard.tool_status": { en: "Tool Status", zh: "工具状态" },
+  "dashboard.copy_codex_config": { en: "Copy Codex Config", zh: "复制 Codex 配置" },
+  "dashboard.start": { en: "Start", zh: "启动" },
+  "dashboard.stop": { en: "Stop", zh: "停止" },
+  "dashboard.restart": { en: "Restart", zh: "重启" },
+  "dashboard.metrics.recent_requests": { en: "Recent Requests", zh: "最近请求" },
+  "dashboard.metrics.tools_detected": { en: "Tools Detected", zh: "检测到的工具" },
+  "dashboard.metrics.protocol": { en: "Protocol", zh: "协议" },
+  "dashboard.total": { en: "total", zh: "总计" },
+  "dashboard.found": { en: "Found", zh: "已找到" },
+  "dashboard.not_found": { en: "Not found", zh: "未找到" },
+
+  // ── Providers ──
+  "providers.configured": { en: "configured", zh: "已配置" },
+  "providers.add": { en: "Add Provider", zh: "添加服务商" },
+  "providers.edit": { en: "Edit Provider", zh: "编辑服务商" },
+  "providers.delete": { en: "Delete Provider", zh: "删除服务商" },
+  "providers.delete_confirm": { en: "Are you sure you want to delete", zh: "确定要删除" },
+  "providers.delete_warn": { en: "This action cannot be undone.", zh: "此操作无法撤销。" },
+  "providers.no_providers": { en: "No providers", zh: "暂无服务商" },
+  "providers.add_first": { en: "Add your first provider to get started", zh: "添加第一个服务商以开始使用" },
+  "providers.test": { en: "Test", zh: "测试" },
+  "providers.set_active": { en: "Set Active", zh: "设为活跃" },
+  "providers.active": { en: "Active", zh: "活跃" },
+  "providers.type": { en: "Type", zh: "类型" },
+  "providers.protocol": { en: "Protocol", zh: "协议" },
+  "providers.api_key": { en: "API Key", zh: "API 密钥" },
+  "providers.default_model": { en: "Default Model", zh: "默认模型" },
+  "providers.reasoning_model": { en: "Reasoning Model", zh: "推理模型" },
+  "providers.timeout": { en: "Timeout", zh: "超时" },
+  "providers.created": { en: "Provider created", zh: "服务商已创建" },
+  "providers.updated": { en: "Provider updated", zh: "服务商已更新" },
+  "providers.deleted": { en: "deleted", zh: "已删除" },
+  "providers.now_active": { en: "is now active", zh: "已设为活跃" },
+  "providers.name": { en: "Name", zh: "名称" },
+  "providers.base_url": { en: "Base URL", zh: "基础 URL" },
+  "providers.enabled": { en: "Enabled", zh: "已启用" },
+  "providers.disabled": { en: "Disabled", zh: "已禁用" },
+  "providers.create": { en: "Create Provider", zh: "创建服务商" },
+  "providers.save": { en: "Save Changes", zh: "保存更改" },
+  "providers.not_set": { en: "Not set", zh: "未设置" },
+  "providers.supported_models": { en: "Supported Models", zh: "支持的模型" },
+  "providers.supported_models_hint": { en: "Save first, then click Fetch Models to auto-detect.", zh: "先保存，然后点击「获取模型」自动检测。" },
+  "providers.fetch_models": { en: "Fetch Models", zh: "获取模型" },
+  "providers.fetch_models_hint": { en: "Click Fetch Models to load from provider.", zh: "点击「获取模型」从服务商加载。" },
+  "providers.model_mapping": { en: "Model Mapping", zh: "模型映射" },
+  "providers.model_mapping_hint": { en: "Map client model names (e.g. gpt-5.5, claude-sonnet-4-6) to provider models.", zh: "将客户端模型名（如 gpt-5.5、claude-sonnet-4-6）映射到服务商模型。" },
+  "providers.select_client_model": { en: "Select client model...", zh: "选择客户端模型..." },
+  "providers.anthropic_url": { en: "Anthropic Endpoint", zh: "Anthropic 兼容端点" },
+  "providers.anthropic_url_hint": { en: "Anthropic Messages API endpoint for Claude Code pass-through (e.g. https://api.deepseek.com/anthropic)", zh: "Anthropic Messages API 端点，用于 Claude Code 直通转发（如 https://api.deepseek.com/anthropic）" },
+  "providers.extra_headers": { en: "Extra Headers", zh: "额外请求头" },
+  "providers.extra_headers_hint": { en: "JSON object of custom headers, e.g. {\"User-Agent\":\"KimiCLI/1.40.0\"}", zh: "自定义请求头 JSON 对象，如 {\"User-Agent\":\"KimiCLI/1.40.0\"}" },
+  "providers.test_connection": { en: "Test Connection", zh: "测试连接" },
+
+  // ── Gateway ──
+  "gateway.local_gateway": { en: "Local Gateway", zh: "本地网关" },
+  "gateway.protocol_conversion": { en: "Protocol conversion and request forwarding", zh: "协议转换和请求转发" },
+  "gateway.listening": { en: "Listening on", zh: "监听地址" },
+  "gateway.not_listening": { en: "Not listening", zh: "未监听" },
+  "gateway.settings_changed": { en: "Settings changed. Restart gateway to apply.", zh: "设置已变更。重启网关以生效。" },
+  "gateway.start": { en: "Start Gateway", zh: "启动网关" },
+  "gateway.stop": { en: "Stop Gateway", zh: "停止网关" },
+  "gateway.restart": { en: "Restart", zh: "重启" },
+  "gateway.started": { en: "Gateway started", zh: "网关已启动" },
+  "gateway.stopped": { en: "Gateway stopped", zh: "网关已停止" },
+  "gateway.restarted": { en: "Gateway restarted", zh: "网关已重启" },
+  "gateway.active_provider": { en: "Active Provider", zh: "活跃服务商" },
+  "gateway.started_at": { en: "Started At", zh: "启动时间" },
+  "gateway.configuration": { en: "Configuration", zh: "配置" },
+  "gateway.listen_address": { en: "Listen Address", zh: "监听地址" },
+  "gateway.port": { en: "Port", zh: "端口" },
+  "gateway.input_protocol": { en: "Input Protocol", zh: "输入协议" },
+  "gateway.output_protocol": { en: "Output Protocol", zh: "输出协议" },
+  "gateway.auto_start": { en: "Auto Start", zh: "自动启动" },
+  "gateway.log_retention": { en: "Log Retention (days)", zh: "日志保留（天）" },
+  "gateway.save": { en: "Save", zh: "保存" },
+  "gateway.settings_saved": { en: "Gateway settings saved", zh: "网关设置已保存" },
+  "gateway.route_modes": { en: "Route Modes", zh: "路由模式" },
+  "gateway.codex_compat": { en: "Codex compatibility", zh: "Codex 兼容" },
+  "gateway.tool_call_streaming": { en: "Tool call streaming", zh: "工具调用流式" },
+  "gateway.deepseek_cleaner": { en: "DeepSeek schema cleaner", zh: "DeepSeek 清理" },
+  "gateway.enabled": { en: "enabled", zh: "已启用" },
+  "gateway.none": { en: "None", zh: "无" },
+
+  // ── Logs ──
+  "logs.requests": { en: "requests", zh: "条请求" },
+  "logs.clear": { en: "Clear Logs", zh: "清除日志" },
+  "logs.clear_title": { en: "Clear All Logs", zh: "清除所有日志" },
+  "logs.clear_msg": { en: "This will permanently delete all request logs. This action cannot be undone.", zh: "将永久删除所有请求日志。此操作无法撤销。" },
+  "logs.clear_confirm": { en: "Clear All", zh: "全部清除" },
+  "logs.cleared": { en: "Logs cleared", zh: "日志已清除" },
+  "logs.no_logs": { en: "No request logs", zh: "暂无请求日志" },
+  "logs.no_logs_desc": { en: "Logs will appear here once the gateway processes requests", zh: "网关处理请求后，日志将显示在此处" },
+  "logs.search": { en: "Search...", zh: "搜索..." },
+  "logs.all": { en: "All", zh: "全部" },
+  "logs.success": { en: "Success", zh: "成功" },
+  "logs.error": { en: "Error", zh: "错误" },
+  "logs.time": { en: "Time", zh: "时间" },
+  "logs.route": { en: "Route", zh: "路由" },
+  "logs.client": { en: "Client", zh: "客户端" },
+  "logs.provider": { en: "Provider", zh: "服务商" },
+  "logs.model": { en: "Model", zh: "模型" },
+  "logs.status": { en: "Status", zh: "状态" },
+  "logs.latency": { en: "Latency", zh: "延迟" },
+  "logs.raw_request": { en: "Raw Request", zh: "原始请求" },
+  "logs.converted_request": { en: "Converted Request", zh: "转换后请求" },
+  "logs.raw_response": { en: "Raw Response", zh: "原始响应" },
+  "logs.converted_response": { en: "Converted Response", zh: "转换后响应" },
+  "logs.tool_calls": { en: "Tool Calls", zh: "工具调用" },
+  "logs.trace": { en: "Trace", zh: "追踪" },
+  "logs.tokens": { en: "Tokens", zh: "令牌" },
+
+  // ── Tools ──
+  "tools.codex": { en: "Codex", zh: "Codex" },
+  "tools.codex_desc": { en: "OpenAI's CLI coding agent", zh: "OpenAI 命令行编程助手" },
+  "tools.claude_code": { en: "Claude Code", zh: "Claude Code" },
+  "tools.claude_code_desc": { en: "Anthropic's CLI for Claude", zh: "Anthropic 的 Claude 命令行工具" },
+  "tools.preview": { en: "Preview", zh: "预览" },
+  "tools.apply_config": { en: "Apply Config", zh: "应用配置" },
+  "tools.backup": { en: "Backup", zh: "备份" },
+  "tools.open": { en: "Open", zh: "打开" },
+  "tools.env_snippet": { en: "Env Snippet", zh: "环境变量片段" },
+  "tools.refresh": { en: "Refresh Detection", zh: "刷新检测" },
+  "tools.agentgate_configured": { en: "AgentGate configured", zh: "AgentGate 已配置" },
+  "tools.not_configured": { en: "Not configured", zh: "未配置" },
+  "tools.no_config": { en: "No config", zh: "无配置" },
+  "tools.config_found": { en: "Config found", zh: "配置已找到" },
+  "tools.auth_status": { en: "Auth Status", zh: "认证状态" },
+  "tools.token_set": { en: "AgentGate token set", zh: "AgentGate 令牌已设置" },
+  "tools.current_provider": { en: "Current Provider", zh: "当前服务商" },
+  "tools.codex_auth_desc": { en: "Apply writes config.toml (provider settings) and auth.json (AgentGate local token as OPENAI_API_KEY).", zh: "应用配置将写入 config.toml（服务商设置）和 auth.json（AgentGate 本地令牌作为 OPENAI_API_KEY）。" },
+  "tools.claude_auth_desc": { en: "Claude Code stores AgentGate local token in settings.json. Provider keys are managed by AgentGate.", zh: "Claude Code 将 AgentGate 本地令牌存储在 settings.json 中。服务商密钥由 AgentGate 管理。" },
+  "tools.apply_codex_title": { en: "Apply AgentGate Config to Codex", zh: "应用 AgentGate 配置到 Codex" },
+  "tools.apply_codex_msg": { en: "This will update ~/.codex/config.toml to use AgentGate with command auth. Current config will be backed up.", zh: "将更新 ~/.codex/config.toml 使用 AgentGate。当前配置将自动备份。" },
+  "tools.apply_claude_title": { en: "Apply AgentGate Config to Claude Code", zh: "应用 AgentGate 配置到 Claude Code" },
+  "tools.apply_claude_msg": { en: "This will update ~/.claude/settings.json to use AgentGate. The local access token will be written to settings.json. Current config will be backed up.", zh: "将更新 ~/.claude/settings.json 使用 AgentGate。本地访问令牌将写入 settings.json。当前配置将自动备份。" },
+  "tools.config_written": { en: "config written to", zh: "配置已写入" },
+  "tools.backup_saved": { en: "Backup saved", zh: "备份已保存" },
+  "tools.backed_up": { en: "config backed up", zh: "配置已备份" },
+  "tools.direct_credentials": { en: "Direct credentials", zh: "直接凭证" },
+  "tools.no_credentials": { en: "No credentials", zh: "无凭证" },
+  "tools.conflicts_detected": { en: "conflicts detected", zh: "冲突已检测到" },
+
+  // ── Routes ──
+  "routes.route_profiles": { en: "route profiles", zh: "个路由配置" },
+  "routes.no_profiles": { en: "No route profiles", zh: "暂无路由配置" },
+  "routes.auto_created": { en: "Route profiles will be created automatically", zh: "路由配置将自动创建" },
+  "routes.enable_failover": { en: "Enable Failover", zh: "启用故障转移" },
+  "routes.switch_manual": { en: "Switch to Manual", zh: "切换到手动" },
+  "routes.set_default": { en: "Set Default", zh: "设为默认" },
+  "routes.provider_chain": { en: "Provider Chain", zh: "服务商链" },
+  "routes.add_provider": { en: "Add provider...", zh: "添加服务商..." },
+  "routes.add": { en: "Add", zh: "添加" },
+  "routes.default_updated": { en: "Default route profile updated", zh: "默认路由配置已更新" },
+  "routes.mode_changed": { en: "Mode changed to", zh: "模式已切换为" },
+  "routes.active_updated": { en: "Active provider updated", zh: "活跃服务商已更新" },
+  "routes.provider_added": { en: "Provider added to route", zh: "服务商已添加到路由" },
+  "routes.provider_removed": { en: "Provider removed", zh: "服务商已移除" },
+  "routes.cooldown_reset": { en: "Cooldown reset", zh: "冷却已重置" },
+  "routes.delete_title": { en: "Delete Route Profile", zh: "删除路由配置" },
+  "routes.delete_confirm": { en: "This cannot be undone.", zh: "此操作无法撤销。" },
+  "routes.deleted": { en: "Route profile deleted", zh: "路由配置已删除" },
+  "routes.active": { en: "active", zh: "活跃" },
+  "routes.cooldown": { en: "cooldown", zh: "冷却中" },
+  "routes.failures": { en: "failures", zh: "次失败" },
+  "routes.mode": { en: "Mode", zh: "模式" },
+
+  // ── Settings ──
+  "settings.gateway_security": { en: "Gateway Security", zh: "网关安全" },
+  "settings.auth_mode": { en: "Auth Mode", zh: "认证模式" },
+  "settings.token_path": { en: "Token Path", zh: "令牌路径" },
+  "settings.local_token": { en: "Local Token", zh: "本地令牌" },
+  "settings.codex_auth": { en: "Codex Auth", zh: "Codex 认证" },
+  "settings.claude_auth": { en: "Claude Code Auth", zh: "Claude Code 认证" },
+  "settings.regenerate_token": { en: "Regenerate Token", zh: "重新生成令牌" },
+  "settings.open_token_folder": { en: "Open Token Folder", zh: "打开令牌文件夹" },
+  "settings.regen_title": { en: "Regenerate Access Token", zh: "重新生成访问令牌" },
+  "settings.regen_msg": { en: "Regenerating the token will invalidate existing tool configurations. Codex uses command auth and reads the token file automatically. You must re-apply Claude Code config after regeneration.", zh: "重新生成令牌将使现有工具配置失效。Codex 使用命令认证，会自动读取令牌文件。重新生成后必须重新应用 Claude Code 配置。" },
+  "settings.regen_done": { en: "Token regenerated. Re-apply Claude Code config (Codex uses command auth and updates automatically).", zh: "令牌已重新生成。请重新应用 Claude Code 配置（Codex 使用命令认证会自动更新）。" },
+  "settings.general": { en: "General", zh: "通用" },
+  "settings.auto_start_gateway": { en: "Auto-start gateway", zh: "自动启动网关" },
+  "settings.auto_start_desc": { en: "Start the local gateway on app launch", zh: "应用启动时自动启动本地网关" },
+  "settings.gateway": { en: "Gateway", zh: "网关" },
+  "settings.data": { en: "Data", zh: "数据" },
+  "settings.log_retention": { en: "Log retention", zh: "日志保留" },
+  "settings.log_retention_desc": { en: "How long to keep request logs", zh: "请求日志保留时长" },
+  "settings.about": { en: "About", zh: "关于" },
+  "settings.version": { en: "Version", zh: "版本" },
+  "settings.runtime": { en: "Runtime", zh: "运行时" },
+  "settings.frontend": { en: "Frontend", zh: "前端" },
+  "settings.database": { en: "Database", zh: "数据库" },
+  "settings.updated": { en: "Setting updated", zh: "设置已更新" },
+  "settings.language": { en: "Language", zh: "语言" },
+  "settings.lang_desc": { en: "Interface language", zh: "界面语言" },
+
+  // ── Stats ──
+  "stats.total_requests": { en: "Total Requests", zh: "总请求" },
+  "stats.success_rate": { en: "Success Rate", zh: "成功率" },
+  "stats.avg_latency": { en: "Avg Latency", zh: "平均延迟" },
+  "stats.today": { en: "Today", zh: "今日" },
+  "stats.today_errors": { en: "Today Errors", zh: "今日错误" },
+  "stats.daily_chart": { en: "Daily Requests (7 days)", zh: "每日请求（7 天）" },
+  "stats.top_providers": { en: "Top Providers", zh: "热门服务商" },
+  "stats.errors_label": { en: "errors", zh: "错误" },
+  "stats.input_tokens": { en: "Input Tokens", zh: "输入 Token" },
+  "stats.output_tokens": { en: "Output Tokens", zh: "输出 Token" },
+  "stats.total_tokens": { en: "Total Tokens", zh: "总 Token" },
+  "stats.requests": { en: "Requests", zh: "请求" },
+
+  // ── Diagnostics ──
+  "diag.run_self_test": { en: "Run Self Test", zh: "运行自检" },
+  "diag.export_bundle": { en: "Export Diagnostics", zh: "导出诊断包" },
+  "diag.open_data_dir": { en: "Open Data Dir", zh: "打开数据目录" },
+  "diag.self_test": { en: "Self Test Report", zh: "自检报告" },
+  "diag.no_report": { en: "No report yet", zh: "暂无报告" },
+  "diag.run_prompt": { en: "Click 'Run Self Test' to check system health", zh: "点击「运行自检」检查系统状态" },
+  "diag.exported": { en: "Diagnostics exported", zh: "诊断包已导出" },
+
+  // ── Common ──
+  "common.loading": { en: "Loading...", zh: "加载中..." },
+  "common.cancel": { en: "Cancel", zh: "取消" },
+  "common.confirm": { en: "Confirm", zh: "确认" },
+  "common.delete": { en: "Delete", zh: "删除" },
+  "common.apply": { en: "Apply", zh: "应用" },
+  "common.save": { en: "Save", zh: "保存" },
+  "common.edit": { en: "Edit", zh: "编辑" },
+  "common.close": { en: "Close", zh: "关闭" },
+  "common.details": { en: "Details", zh: "详情" },
+  "common.none": { en: "None", zh: "无" },
+  "common.days": { en: "days", zh: "天" },
+
+  // ── Update ──
+  "update.available": { en: "New version available", zh: "发现新版本" },
+  "update.downloading": { en: "Downloading...", zh: "下载中..." },
+  "update.installing": { en: "Installing...", zh: "安装中..." },
+  "update.now": { en: "Update", zh: "更新" },
+  "update.later": { en: "Later", zh: "稍后" },
+  "update.check": { en: "Check for Updates", zh: "检查更新" },
+  "update.checking": { en: "Checking...", zh: "检查中..." },
+  "update.is_latest": { en: "Already up to date", zh: "已是最新版本" },
+  "update.check_failed": { en: "Failed to check for updates", zh: "检查更新失败" },
+  "update.install_failed": { en: "Failed to install update", zh: "安装更新失败" },
+  "update.restart_hint": { en: "Update installed, restart to apply", zh: "更新已安装，重启生效" },
+
+  // ── Settings about ──
+  "settings.license": { en: "License", zh: "开源协议" },
+};
+
+interface I18nContextType {
+  locale: Locale;
+  setLocale: (l: Locale) => void;
+  t: (key: string, fallback?: string) => string;
+}
+
+const I18nContext = createContext<I18nContextType>({
+  locale: "en",
+  setLocale: () => {},
+  t: (key) => key,
+});
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [locale, setLocaleState] = useState<Locale>(() => {
+    const saved = localStorage.getItem("agentgate_locale");
+    if (saved === "zh" || saved === "en") return saved;
+    return navigator.language.startsWith("zh") ? "zh" : "en";
+  });
+
+  const setLocale = useCallback((l: Locale) => {
+    setLocaleState(l);
+    localStorage.setItem("agentgate_locale", l);
+  }, []);
+
+  const t = useCallback(
+    (key: string, fallback?: string) => {
+      const entry = translations[key];
+      if (entry) return entry[locale];
+      return fallback ?? key;
+    },
+    [locale]
+  );
+
+  return (
+    <I18nContext.Provider value={{ locale, setLocale, t }}>
+      {children}
+    </I18nContext.Provider>
+  );
+}
+
+export function useI18n() {
+  return useContext(I18nContext);
+}

@@ -1,0 +1,53 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+
+# Rust build
+src-tauri/target/
+
+# Tauri generated
+src-tauri/gen/schemas
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local env / secrets
+*.local
+.env
+.env.*
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# Tauri updater signing keys
+src-tauri/keys/
+
+# AgentGate runtime data
+*.db
+*.db-wal
+*.db-shm
+proxy_debug.log
+reasoning_store.json
+last_request.json

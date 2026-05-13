@@ -1,0 +1,349 @@
+import { invoke } from "@tauri-apps/api/core";
+import type {
+  ProviderView,
+  CreateProviderInput,
+  UpdateProviderInput,
+  ProviderTestResult,
+} from "@/types/provider";
+import type {
+  GatewayStatus,
+  GatewaySettings,
+  UpdateGatewaySettingsInput,
+} from "@/types/gateway";
+import type {
+  RequestLogListItem,
+  RequestLogDetail,
+  RequestLogFilter,
+} from "@/types/request-log";
+import type { ToolConfigView } from "@/types/tool";
+
+// ── Error handling ─────────────────────────────────────────────
+
+export interface AppError {
+  code: string;
+  message: string;
+  detail?: string;
+  suggestion?: string;
+}
+
+function extractError(err: unknown): AppError {
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return err as AppError;
+  }
+  if (typeof err === "string") {
+    return { code: "UNKNOWN", message: err };
+  }
+  return { code: "UNKNOWN", message: "An unexpected error occurred" };
+}
+
+async function cmd<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+  try {
+    return await invoke<T>(command, args);
+  } catch (err) {
+    throw extractError(err);
+  }
+}
+
+// ── Providers ──────────────────────────────────────────────────
+
+export async function listProviders(): Promise<ProviderView[]> {
+  return cmd("list_providers");
+}
+
+export async function getProvider(id: string): Promise<ProviderView> {
+  return cmd("get_provider", { id });
+}
+
+export async function createProvider(input: CreateProviderInput): Promise<ProviderView> {
+  return cmd("create_provider", { input });
+}
+
+export async function updateProvider(
+  id: string,
+  input: UpdateProviderInput
+): Promise<ProviderView> {
+  return cmd("update_provider", { id, input });
+}
+
+export async function deleteProvider(id: string): Promise<boolean> {
+  return cmd("delete_provider", { id });
+}
+
+export async function setActiveProvider(id: string): Promise<ProviderView> {
+  return cmd("set_active_provider", { id });
+}
+
+export async function fetchProviderModels(id: string): Promise<string[]> {
+  return cmd("fetch_provider_models", { id });
+}
+
+export async function testProvider(id: string): Promise<ProviderTestResult> {
+  return cmd("test_provider", { id });
+}
+
+// ── Gateway ────────────────────────────────────────────────────
+
+export async function getGatewayStatus(): Promise<GatewayStatus> {
+  return cmd("get_gateway_status");
+}
+
+export async function getGatewaySettings(): Promise<GatewaySettings> {
+  return cmd("get_gateway_settings");
+}
+
+export async function updateGatewaySettings(
+  input: UpdateGatewaySettingsInput
+): Promise<GatewaySettings> {
+  return cmd("update_gateway_settings", { input });
+}
+
+export async function startGateway(): Promise<GatewayStatus> {
+  return cmd("start_gateway");
+}
+
+export async function stopGateway(): Promise<GatewayStatus> {
+  return cmd("stop_gateway");
+}
+
+export async function restartGateway(): Promise<GatewayStatus> {
+  return cmd("restart_gateway");
+}
+
+// ── Logs ───────────────────────────────────────────────────────
+
+export async function listRequestLogs(
+  filter: RequestLogFilter
+): Promise<RequestLogListItem[]> {
+  return cmd("list_request_logs", { filter });
+}
+
+export async function getRequestLogDetail(
+  id: string
+): Promise<RequestLogDetail> {
+  return cmd("get_request_log_detail", { id });
+}
+
+export async function clearRequestLogs(): Promise<boolean> {
+  return cmd("clear_request_logs");
+}
+
+// ── Tools ──────────────────────────────────────────────────────
+
+export async function listTools(): Promise<ToolConfigView[]> {
+  return cmd("list_tools");
+}
+
+export async function generateCodexConfig(): Promise<string> {
+  return cmd("generate_codex_config");
+}
+
+// ── Gateway Auth ───────────────────────────────────────────────
+
+export async function getGatewayAuthSettings(): Promise<GatewayAuthSettings> {
+  return cmd("get_gateway_auth_settings");
+}
+
+export async function regenerateLocalAccessToken(): Promise<GatewayAuthSettings> {
+  return cmd("regenerate_local_access_token");
+}
+
+export async function ensureLocalAccessToken(): Promise<GatewayAuthSettings> {
+  return cmd("ensure_local_access_token");
+}
+
+export async function openTokenFolder(): Promise<boolean> {
+  return cmd("open_token_folder");
+}
+
+// ── Codex Config ───────────────────────────────────────────────
+
+import type {
+  GatewayAuthSettings,
+  CodexConfigStatus,
+  ConfigPreview,
+  ApplyConfigResult,
+  ConfigBackup,
+  ClaudeCodeEnvStatus,
+  ClaudeCodeConfigPreview,
+} from "@/types/config";
+
+export async function detectCodexConfig(): Promise<CodexConfigStatus> {
+  return cmd("detect_codex_config");
+}
+
+export async function previewCodexConfig(): Promise<ConfigPreview> {
+  return cmd("preview_codex_config");
+}
+
+export async function applyCodexConfig(): Promise<ApplyConfigResult> {
+  return cmd("apply_codex_config");
+}
+
+export async function backupCodexConfig(): Promise<ConfigBackup> {
+  return cmd("backup_codex_config");
+}
+
+export async function listCodexBackups(): Promise<ConfigBackup[]> {
+  return cmd("list_codex_backups");
+}
+
+export async function restoreCodexBackup(backupId: string): Promise<boolean> {
+  return cmd("restore_codex_backup", { backupId });
+}
+
+export async function openCodexConfig(): Promise<boolean> {
+  return cmd("open_codex_config");
+}
+
+// ── Claude Code ────────────────────────────────────────────────
+
+export async function detectClaudeCodeEnv(): Promise<ClaudeCodeEnvStatus> {
+  return cmd("detect_claude_code_env");
+}
+
+export async function previewClaudeCodeConfig(): Promise<ClaudeCodeConfigPreview> {
+  return cmd("preview_claude_code_config");
+}
+
+export async function applyClaudeCodeConfig(): Promise<ApplyConfigResult> {
+  return cmd("apply_claude_code_config");
+}
+
+export async function backupClaudeCodeConfig(): Promise<ConfigBackup> {
+  return cmd("backup_claude_code_config");
+}
+
+export async function listClaudeCodeBackups(): Promise<ConfigBackup[]> {
+  return cmd("list_claude_code_backups");
+}
+
+export async function restoreClaudeCodeBackup(backupId: string): Promise<boolean> {
+  return cmd("restore_claude_code_backup", { backupId });
+}
+
+export async function openClaudeCodeConfig(): Promise<boolean> {
+  return cmd("open_claude_code_config");
+}
+
+export async function generateClaudeCodeEnv(): Promise<string> {
+  return cmd("generate_claude_code_env");
+}
+
+// ── Route Profiles ─────────────────────────────────────────────
+
+import type {
+  RouteProfileView,
+  RouteProfileDetail,
+  CreateRouteProfileInput,
+  UpdateRouteProfileInput,
+  AddProviderToRouteInput,
+  ProviderRuntimeStatus,
+} from "@/types/route-profile";
+
+export async function listRouteProfiles(): Promise<RouteProfileView[]> {
+  return cmd("list_route_profiles");
+}
+
+export async function getRouteProfile(id: string): Promise<RouteProfileDetail> {
+  return cmd("get_route_profile", { id });
+}
+
+export async function createRouteProfile(input: CreateRouteProfileInput): Promise<RouteProfileView> {
+  return cmd("create_route_profile", { input });
+}
+
+export async function updateRouteProfile(id: string, input: UpdateRouteProfileInput): Promise<RouteProfileView> {
+  return cmd("update_route_profile", { id, input });
+}
+
+export async function deleteRouteProfile(id: string): Promise<boolean> {
+  return cmd("delete_route_profile", { id });
+}
+
+export async function setDefaultRouteProfile(id: string): Promise<boolean> {
+  return cmd("set_default_route_profile", { id });
+}
+
+export async function setRouteProfileMode(id: string, mode: string): Promise<boolean> {
+  return cmd("set_route_profile_mode", { id, mode });
+}
+
+export async function setRouteActiveProvider(routeProfileId: string, providerId: string): Promise<boolean> {
+  return cmd("set_route_active_provider", { routeProfileId, providerId });
+}
+
+export async function addProviderToRoute(routeProfileId: string, providerId: string, input: AddProviderToRouteInput): Promise<boolean> {
+  return cmd("add_provider_to_route", { routeProfileId, providerId, input });
+}
+
+export async function removeProviderFromRoute(routeProfileId: string, providerId: string): Promise<boolean> {
+  return cmd("remove_provider_from_route", { routeProfileId, providerId });
+}
+
+export async function reorderRouteProviders(routeProfileId: string, providerIds: string[]): Promise<boolean> {
+  return cmd("reorder_route_providers", { routeProfileId, providerIds });
+}
+
+export async function listProviderRuntimeStatus(): Promise<ProviderRuntimeStatus[]> {
+  return cmd("list_provider_runtime_status");
+}
+
+export async function resetProviderRuntimeStatus(providerId: string): Promise<ProviderRuntimeStatus> {
+  return cmd("reset_provider_runtime_status", { providerId });
+}
+
+export async function resetAllProviderRuntimeStatus(): Promise<boolean> {
+  return cmd("reset_all_provider_runtime_status");
+}
+
+// ── Stats ──────────────────────────────────────────────────────
+
+import type { RequestStats } from "@/types/stats";
+
+export async function getRequestStats(): Promise<RequestStats> {
+  return cmd("get_request_stats");
+}
+
+// ── Diagnostics ────────────────────────────────────────────────
+
+import type { CheckReport, FullSelfTestReport, ExportResult } from "@/types/diagnostics";
+
+export async function runHealthCheck(): Promise<CheckReport> {
+  return cmd("run_health_check");
+}
+
+export async function runDatabaseCheck(): Promise<CheckReport> {
+  return cmd("run_database_check");
+}
+
+export async function runGatewayAuthCheck(): Promise<CheckReport> {
+  return cmd("run_gateway_auth_check");
+}
+
+export async function runProviderCheck(): Promise<CheckReport> {
+  return cmd("run_provider_check");
+}
+
+export async function runCodexConfigCheck(): Promise<CheckReport> {
+  return cmd("run_codex_config_check");
+}
+
+export async function runClaudeCodeConfigCheck(): Promise<CheckReport> {
+  return cmd("run_claude_code_config_check");
+}
+
+export async function runRouteProfileCheck(): Promise<CheckReport> {
+  return cmd("run_route_profile_check");
+}
+
+export async function runFullSelfTest(): Promise<FullSelfTestReport> {
+  return cmd("run_full_self_test");
+}
+
+export async function exportDiagnosticBundle(includeLogs?: boolean, maxLogs?: number): Promise<ExportResult> {
+  return cmd("export_diagnostic_bundle", { includeLogs, maxLogs });
+}
+
+export async function openAppDataDir(): Promise<boolean> {
+  return cmd("open_app_data_dir");
+}

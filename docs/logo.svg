@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="bgD" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1a1535"/>
+    </linearGradient>
+    <linearGradient id="circD" x1="160" y1="160" x2="352" y2="352" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="108" fill="url(#bgD)"/>
+
+  <!-- Outer orbit ring -->
+  <circle cx="256" cy="256" r="160" stroke="url(#circD)" stroke-width="10" fill="none" opacity="0.2"/>
+
+  <!-- Middle orbit ring (tilted feel via ellipse) -->
+  <ellipse cx="256" cy="256" rx="160" ry="90" stroke="url(#circD)" stroke-width="10" fill="none" opacity="0.35"
+           transform="rotate(-25 256 256)"/>
+
+  <!-- Another orbit -->
+  <ellipse cx="256" cy="256" rx="160" ry="90" stroke="url(#circD)" stroke-width="10" fill="none" opacity="0.35"
+           transform="rotate(25 256 256)"/>
+
+  <!-- Center hub -->
+  <circle cx="256" cy="256" r="52" fill="#7C3AED" opacity="0.25"/>
+  <circle cx="256" cy="256" r="52" stroke="#8B5CF6" stroke-width="12" fill="none"/>
+  <circle cx="256" cy="256" r="28" fill="#22D3EE"/>
+  <circle cx="256" cy="256" r="14" fill="white"/>
+
+  <!-- Satellite nodes on orbits -->
+  <circle cx="256" cy="96" r="14" fill="#818CF8"/>
+  <circle cx="256" cy="416" r="14" fill="#818CF8"/>
+
+  <circle cx="116" cy="336" r="14" fill="#22D3EE"/>
+  <circle cx="396" cy="176" r="14" fill="#22D3EE"/>
+
+  <circle cx="116" cy="176" r="14" fill="#A78BFA"/>
+  <circle cx="396" cy="336" r="14" fill="#A78BFA"/>
+</svg>

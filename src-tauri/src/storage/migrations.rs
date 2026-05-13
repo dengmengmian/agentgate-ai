@@ -1,0 +1,323 @@
+use rusqlite::Connection;
+
+use crate::errors::AppError;
+
+pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS providers (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            provider_type TEXT NOT NULL,
+            base_url TEXT NOT NULL,
+            api_key TEXT,
+            default_model TEXT NOT NULL,
+            reasoning_model TEXT,
+            protocol TEXT NOT NULL,
+            timeout_seconds INTEGER NOT NULL DEFAULT 120,
+            status TEXT NOT NULL DEFAULT 'not_tested',
+            enabled INTEGER NOT NULL DEFAULT 1,
+            is_active INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS gateway_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            host TEXT NOT NULL DEFAULT '127.0.0.1',
+            port INTEGER NOT NULL DEFAULT 9090,
+            active_provider_id TEXT,
+            input_protocol TEXT NOT NULL DEFAULT 'openai_responses',
+            output_protocol TEXT NOT NULL DEFAULT 'openai_chat_completions',
+            auto_start INTEGER NOT NULL DEFAULT 0,
+            log_retention_days INTEGER NOT NULL DEFAULT 14,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS request_logs (
+            id TEXT PRIMARY KEY,
+            request_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            client TEXT,
+            provider TEXT,
+            model TEXT,
+            route TEXT,
+            status_code INTEGER,
+            latency_ms INTEGER,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            raw_request TEXT,
+            converted_request TEXT,
+            raw_response TEXT,
+            converted_response TEXT,
+            sse_events TEXT,
+            tool_calls TEXT,
+            error_message TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        ",
+    )?;
+
+    // Phase 6: route profiles tables
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS route_profiles (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            client_type TEXT NOT NULL,
+            input_protocol TEXT NOT NULL,
+            mode TEXT NOT NULL DEFAULT 'manual',
+            active_provider_id TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS route_profile_providers (
+            id TEXT PRIMARY KEY,
+            route_profile_id TEXT NOT NULL,
+            provider_id TEXT NOT NULL,
+            priority INTEGER NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            model_override TEXT,
+            max_retries INTEGER NOT NULL DEFAULT 0,
+            cooldown_seconds INTEGER NOT NULL DEFAULT 600,
+            failover_on_status_codes TEXT,
+            failover_on_error_keywords TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS provider_runtime_status (
+            provider_id TEXT PRIMARY KEY,
+            available INTEGER NOT NULL DEFAULT 1,
+            consecutive_failures INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            last_error_code TEXT,
+            last_error_at TEXT,
+            cooldown_until TEXT,
+            quota_exhausted INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
+        );
+        ",
+    )?;
+
+    // Migration: add supported_models column to providers
+    let has_sm: bool = conn.prepare("SELECT supported_models FROM providers LIMIT 0").is_ok();
+    if !has_sm {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN supported_models TEXT;")?;
+    }
+
+    // Migration: add model_mapping column to providers
+    let has_mm: bool = conn.prepare("SELECT model_mapping FROM providers LIMIT 0").is_ok();
+    if !has_mm {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN model_mapping TEXT;")?;
+    }
+
+    // Migration: add extra_headers column to providers
+    let has_eh: bool = conn.prepare("SELECT extra_headers FROM providers LIMIT 0").is_ok();
+    if !has_eh {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN extra_headers TEXT;")?;
+    }
+
+    // Migration: add anthropic_base_url column to providers
+    let has_abu: bool = conn.prepare("SELECT anthropic_base_url FROM providers LIMIT 0").is_ok();
+    if !has_abu {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN anthropic_base_url TEXT;")?;
+    }
+
+    // Phase 7: config_backups table
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS config_backups (
+            id TEXT PRIMARY KEY,
+            tool_type TEXT NOT NULL,
+            source_path TEXT NOT NULL,
+            backup_path TEXT NOT NULL,
+            backup_kind TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            metadata_json TEXT
+        );
+        ",
+    )?;
+
+    // Migration: add trace_json column if not present
+    let has_trace: bool = conn
+        .prepare("SELECT trace_json FROM request_logs LIMIT 0")
+        .is_ok();
+    if !has_trace {
+        conn.execute_batch("ALTER TABLE request_logs ADD COLUMN trace_json TEXT;")?;
+    }
+
+    // Ensure gateway_settings has exactly one row
+    let count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM gateway_settings", [], |row| row.get(0))?;
+    if count == 0 {
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO gateway_settings (id, host, port, input_protocol, output_protocol, auto_start, log_retention_days, updated_at)
+             VALUES (1, '127.0.0.1', 9090, 'openai_responses', 'openai_chat_completions', 0, 14, ?1)",
+            [&now],
+        )?;
+    }
+
+    // Seed default providers on first run
+    seed_default_providers(conn)?;
+
+    // Seed sample request logs on first run
+    seed_sample_request_logs(conn)?;
+
+    // Seed default route profile on first run
+    seed_default_route_profile(conn)?;
+
+    Ok(())
+}
+
+fn seed_default_providers(conn: &Connection) -> Result<(), AppError> {
+    let count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM providers", [], |row| row.get(0))?;
+    if count > 0 {
+        return Ok(());
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO providers (id, name, provider_type, base_url, default_model, reasoning_model, protocol, timeout_seconds, status, enabled, is_active, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, 1, ?10, ?10)",
+        rusqlite::params![
+            uuid::Uuid::new_v4().to_string(),
+            "DeepSeek",
+            "deepseek",
+            "https://api.deepseek.com",
+            "deepseek-chat",
+            "deepseek-reasoner",
+            "openai_chat_completions",
+            120,
+            "not_tested",
+            &now,
+        ],
+    )?;
+
+    conn.execute(
+        "INSERT INTO providers (id, name, provider_type, base_url, default_model, protocol, timeout_seconds, status, enabled, is_active, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 0, ?9, ?9)",
+        rusqlite::params![
+            uuid::Uuid::new_v4().to_string(),
+            "Custom OpenAI Compatible",
+            "custom_openai_compatible",
+            "http://localhost:8000",
+            "custom-model",
+            "openai_chat_completions",
+            120,
+            "not_tested",
+            &now,
+        ],
+    )?;
+
+    // Set active_provider_id in gateway_settings
+    let active_id: Option<String> = conn
+        .query_row(
+            "SELECT id FROM providers WHERE is_active = 1 LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+
+    if let Some(id) = active_id {
+        conn.execute(
+            "UPDATE gateway_settings SET active_provider_id = ?1, updated_at = ?2 WHERE id = 1",
+            rusqlite::params![&id, &now],
+        )?;
+    }
+
+    Ok(())
+}
+
+fn seed_sample_request_logs(conn: &Connection) -> Result<(), AppError> {
+    let count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM request_logs", [], |row| row.get(0))?;
+    if count > 0 {
+        return Ok(());
+    }
+
+    let now = chrono::Utc::now();
+    let samples = vec![
+        ("Codex", "DeepSeek", "deepseek-chat", "/v1/responses", 200i64, 1120i64, None::<&str>),
+        ("Claude Code", "Anthropic", "claude-sonnet-4-6", "/v1/messages", 200, 890, None),
+        ("Codex", "DeepSeek", "deepseek-chat", "/v1/responses", 502, 5230, Some("Bad Gateway: upstream provider returned 502")),
+        ("OpenCode", "DeepSeek", "deepseek-reasoner", "/v1/chat/completions", 200, 2340, None),
+        ("Codex", "DeepSeek", "deepseek-chat", "/v1/responses", 200, 1560, None),
+    ];
+
+    for (i, (client, provider, model, route, status, latency, error)) in samples.into_iter().enumerate() {
+        let ts = now - chrono::Duration::minutes(i as i64 * 2);
+        conn.execute(
+            "INSERT INTO request_logs (id, request_id, timestamp, client, provider, model, route, status_code, latency_ms, error_message)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            rusqlite::params![
+                uuid::Uuid::new_v4().to_string(),
+                format!("req-seed-{:03}", i + 1),
+                ts.to_rfc3339(),
+                client,
+                provider,
+                model,
+                route,
+                status,
+                latency,
+                error,
+            ],
+        )?;
+    }
+
+    Ok(())
+}
+
+fn seed_default_route_profile(conn: &Connection) -> Result<(), AppError> {
+    let count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM route_profiles", [], |row| row.get(0))?;
+    if count > 0 {
+        return Ok(());
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let profile_id = uuid::Uuid::new_v4().to_string();
+
+    let active_provider_id: Option<String> = conn
+        .query_row("SELECT id FROM providers WHERE is_active = 1 LIMIT 1", [], |row| row.get(0))
+        .ok();
+
+    conn.execute(
+        "INSERT INTO route_profiles (id, name, client_type, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at)
+         VALUES (?1, 'Codex Default', 'codex', 'openai_responses', 'manual', ?2, 1, 1, ?3, ?3)",
+        rusqlite::params![&profile_id, &active_provider_id, &now],
+    )?;
+
+    let mut stmt = conn.prepare("SELECT id FROM providers WHERE enabled = 1 ORDER BY is_active DESC, created_at ASC")?;
+    let provider_ids: Vec<String> = stmt.query_map([], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let default_codes = serde_json::json!([402, 429, 500, 502, 503, 504]).to_string();
+    let default_kw = serde_json::json!(["quota", "insufficient balance", "rate limit", "too many requests", "timeout"]).to_string();
+
+    for (i, pid) in provider_ids.iter().enumerate() {
+        conn.execute(
+            "INSERT INTO route_profile_providers (id, route_profile_id, provider_id, priority, enabled, max_retries, cooldown_seconds, failover_on_status_codes, failover_on_error_keywords, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, 1, 0, 600, ?5, ?6, ?7, ?7)",
+            rusqlite::params![uuid::Uuid::new_v4().to_string(), &profile_id, pid, (i + 1) as i64, &default_codes, &default_kw, &now],
+        )?;
+        conn.execute(
+            "INSERT OR IGNORE INTO provider_runtime_status (provider_id, available, consecutive_failures, quota_exhausted, updated_at) VALUES (?1, 1, 0, 0, ?2)",
+            rusqlite::params![pid, &now],
+        )?;
+    }
+
+    Ok(())
+}
