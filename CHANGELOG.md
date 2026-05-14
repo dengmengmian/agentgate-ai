@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.7] - 2025-05-14
+
+### Bug Fixes / 修复
+
+- **修复 macOS 关闭窗口后点 Dock 图标无法重新打开** — 使用 `RunEvent::Reopen` 监听 Dock 点击，重新显示并聚焦窗口
+
+---
+
 ## [0.1.6] - 2025-05-14
 
 ### Bug Fixes / 修复
