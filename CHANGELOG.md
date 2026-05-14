@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.6] - 2025-05-14
+
+### Bug Fixes / 修复
+
+- **修复 SSE 流式文本空白被误删导致 markdown 不渲染** — `split_think_tags` 对无 `<think>` 标签的 delta chunk 不再 trim，保留换行和空格，修复 Codex 桌面端 markdown 表格/标题显示为原始文本的问题
+
+### Tests / 测试
+
+- 新增 6 个 `split_think_tags` 空白保留测试，覆盖 markdown 表格、标题、前后换行等关键场景（193 → 199）
+
+### Docs / 文档
+
+- 更新 providers、logs 截图
+
+---
+
 ## [0.1.5] - 2025-05-14
 
 ### Bug Fixes / 修复

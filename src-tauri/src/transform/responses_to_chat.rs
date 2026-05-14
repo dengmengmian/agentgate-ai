@@ -511,14 +511,14 @@ pub fn split_think_tags(content: &str) -> (String, Option<String>) {
     }
     // Append any trailing text
     remaining.push_str(&content[search_from..]);
-    let remaining = remaining.trim().to_string();
 
-    let thinking = if thinking_parts.is_empty() {
-        None
+    // Only trim if think tags were actually found and extracted
+    if !thinking_parts.is_empty() {
+        let trimmed = remaining.trim().to_string();
+        (trimmed, Some(thinking_parts.join("\n\n")))
     } else {
-        Some(thinking_parts.join("\n\n"))
-    };
-    (remaining, thinking)
+        (remaining, None)
+    }
 }
 
 #[cfg(test)]
@@ -1012,5 +1012,54 @@ mod tests {
         let tool_msg = &result.messages[1];
         let content_str = tool_msg.content.as_ref().unwrap().as_str().unwrap();
         assert_eq!(content_str, chinese_output, "Chinese tool output should pass through intact");
+    }
+
+    // ── split_think_tags whitespace preservation (critical for markdown rendering) ──
+
+    #[test]
+    fn test_split_think_tags_preserves_whitespace_no_tags() {
+        // SSE delta chunks with leading/trailing newlines must be preserved
+        // for markdown tables and headers to render correctly
+        let (text, reasoning) = split_think_tags("\n\n## Header\n\n");
+        assert_eq!(text, "\n\n## Header\n\n");
+        assert_eq!(reasoning, None);
+    }
+
+    #[test]
+    fn test_split_think_tags_preserves_table_newlines() {
+        let chunk = "\n| col1 | col2 |\n| --- | --- |\n| a | b |\n";
+        let (text, reasoning) = split_think_tags(chunk);
+        assert_eq!(text, chunk, "Table newlines must be preserved for markdown rendering");
+        assert_eq!(reasoning, None);
+    }
+
+    #[test]
+    fn test_split_think_tags_preserves_leading_newline() {
+        let (text, reasoning) = split_think_tags("\nhello");
+        assert_eq!(text, "\nhello");
+        assert_eq!(reasoning, None);
+    }
+
+    #[test]
+    fn test_split_think_tags_preserves_trailing_newline() {
+        let (text, reasoning) = split_think_tags("hello\n\n");
+        assert_eq!(text, "hello\n\n");
+        assert_eq!(reasoning, None);
+    }
+
+    #[test]
+    fn test_split_think_tags_preserves_spaces_in_delta() {
+        // A delta chunk that is just whitespace (common in streaming)
+        let (text, reasoning) = split_think_tags("  ");
+        assert_eq!(text, "  ");
+        assert_eq!(reasoning, None);
+    }
+
+    #[test]
+    fn test_split_think_tags_with_tags_does_trim() {
+        // When think tags are extracted, trimming the remaining text is OK
+        let (text, reasoning) = split_think_tags("  <think>thinking</think>  hello  ");
+        assert_eq!(text, "hello");
+        assert_eq!(reasoning, Some("thinking".to_string()));
     }
 }
