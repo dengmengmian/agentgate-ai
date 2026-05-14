@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.4] - 2025-05-14
+
+### Features / 功能
+
+- **Claude Code 一键切换** — 与 Codex 相同的 save/restore 机制，保存原始 settings.json，切换到官方时自动恢复
+- **OpenCode 一键配置** — 新增 `tools/opencode.rs` 模块，写入 `~/.config/opencode/opencode.json`，修正配置文件路径
+- **路由系统完善** — 按协议自动创建 3 个默认路由（Codex / Claude Code / OpenCode），新增服务商自动加入所有路由链
+- **路由 UI 增强** — 新增「创建配置」按钮和表单，支持 inline 重命名，删除按钮始终可见
+- **导航重构** — 侧边栏按用户操作流程重排：概览 → 服务商 → 路由 → 网关 → 客户端 → 日志 → 诊断 → 设置
+
+### Improvements / 优化
+
+- 「仪表盘」→「概览」，「工具」→「客户端」，命名更符合用户认知
+- 移除路由中未使用的 `client_type` 和 `max_retries` 字段
+- 侧边栏移除装饰性星标，「设为默认」仅在同协议多配置时显示
+- 路由页选中状态在操作后保持不变（修复跳回第一个的 bug）
+- 移除所有 Codex/Claude Code 备份列表 UI 和相关死代码
+- 协议显示为可读标签（如 "OpenAI Responses (Codex)"）
+
+### Docs / 文档
+
+- 更新全部 6 张截图为最新 UI
+- README 中英文同步更新：导航命名、使用指南顺序、新增 OpenCode 配置章节
+
+---
+
 ## [0.1.3] - 2025-05-14
 
 ### Features / 功能
