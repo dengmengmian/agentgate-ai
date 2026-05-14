@@ -136,7 +136,8 @@ pub async fn handle_responses(
         };
 
         let model = candidate.model.clone();
-        let chat_req = match responses_to_chat::convert_with_provider(&req, &model, config.is_deepseek(), &config.provider_type) {
+        let provider_transform = crate::transform::providers::for_config(&config);
+        let chat_req = match responses_to_chat::convert_with_provider(&req, &model, provider_transform.as_ref()) {
             Ok(r) => r,
             Err(e) => {
                 attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));
@@ -651,26 +652,36 @@ pub async fn handle_messages(
 // ── Helpers ────────────────────────────────────────────────────
 
 pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
+    // 1. Try standard Authorization: Bearer <token>
     let auth_header = headers
         .get("authorization")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("");
 
-    if auth_header.is_empty() {
+    let (token, source) = if auth_header.is_empty() {
+        // 2. Fallback to x-api-key (used by some Anthropic SDK versions / Claude Code)
+        let x_api_key = headers
+            .get("x-api-key")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        (x_api_key, "x-api-key")
+    } else {
+        (auth_header.strip_prefix("Bearer ").unwrap_or(auth_header), "authorization")
+    };
+
+    if token.is_empty() {
         return Err(GatewayError(AppError::new(
             "GATEWAY_AUTH_MISSING",
             "Gateway access token is missing",
-        ).with_detail("The request does not include Authorization: Bearer <token>")
+        ).with_detail("The request does not include Authorization: Bearer <token> or X-Api-Key <token>")
          .with_suggestion("Re-apply the tool configuration from AgentGate or check the token file")));
     }
-
-    let token = auth_header.strip_prefix("Bearer ").unwrap_or(auth_header);
 
     if !local_token::validate_token(token) {
         return Err(GatewayError(AppError::new(
             "GATEWAY_AUTH_INVALID",
             "Gateway access token is invalid",
-        ).with_suggestion("Regenerate the token and re-apply tool configuration")));
+        ).with_suggestion(format!("Token received via '{source}' header does not match. Regenerate the token and re-apply tool configuration"))));
     }
 
     Ok(())
@@ -719,6 +730,30 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("authorization", token.parse().unwrap());
         assert!(validate_auth(&headers).is_ok());
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn test_validate_auth_x_api_key_valid() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let token = local_token::ensure_token().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-api-key", token.parse().unwrap());
+        assert!(validate_auth(&headers).is_ok());
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn test_validate_auth_x_api_key_invalid() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let _ = local_token::ensure_token().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-api-key", "wrong_token".parse().unwrap());
+        let err = validate_auth(&headers).unwrap_err();
+        assert_eq!(err.0.code, "GATEWAY_AUTH_INVALID");
+        assert!(err.0.suggestion.as_ref().unwrap().contains("x-api-key"));
         cleanup(&temp);
     }
 

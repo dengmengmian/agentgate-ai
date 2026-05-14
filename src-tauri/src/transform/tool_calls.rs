@@ -59,6 +59,36 @@ pub fn convert_tools_for_provider(tools: &[Value], clean_for_deepseek: bool, pro
                     }
                 }));
             }
+            "local_shell" => {
+                // Codex's builtin local_shell → standard function tool named "shell".
+                // Codex accepts tool_calls with either name, so emitting "shell" works.
+                result.push(json!({
+                    "type": "function",
+                    "function": {
+                        "name": "shell",
+                        "description": "Execute a shell command on the local machine. Returns stdout, stderr and exit code.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "array",
+                                    "items": { "type": "string" },
+                                    "description": "Argv array, e.g. [\"ls\", \"-la\"]. The first element is the program; remaining elements are arguments."
+                                },
+                                "workdir": {
+                                    "type": "string",
+                                    "description": "Working directory to run the command in (optional)."
+                                },
+                                "timeout_ms": {
+                                    "type": "number",
+                                    "description": "Timeout in milliseconds (optional, default 30000)."
+                                }
+                            },
+                            "required": ["command"]
+                        }
+                    }
+                }));
+            }
             "web_search" | "web_search_preview" => {
                 if is_kimi {
                     // Kimi uses builtin_function/$web_search
@@ -134,69 +164,73 @@ pub fn convert_tool_choice(tc: &Value) -> Value {
 
 /// Fix tool message ordering for DeepSeek.
 ///
-/// Rules:
+/// Rules (matching codex_proxy.py):
 /// 1. After an assistant message with tool_calls, corresponding tool messages must follow immediately.
-/// 2. Multiple tool_calls in one assistant message: tool outputs follow in matching order.
-/// 3. The LAST assistant message with tool_calls in the conversation may not have tool outputs yet
-///    (this is the current turn where the model previously requested tools and Codex hasn't filled them yet,
-///     or this is new context). We are lenient about this.
-/// 4. Unrelated user/system messages must not appear between assistant tool_calls and tool outputs.
+/// 2. System/developer messages injected between assistant and tool messages are moved before the assistant.
+///    (Codex sometimes injects approval notifications as system messages.)
+/// 3. Multiple tool_calls in one assistant message: tool outputs follow in matching order.
+/// 4. The LAST assistant with tool_calls may have missing tool outputs (model pending request).
 pub fn fix_tool_message_order(messages: Vec<ChatMessage>) -> Result<Vec<ChatMessage>, AppError> {
-    // Collect all tool outputs indexed by tool_call_id
-    let mut tool_output_pool: Vec<ChatMessage> = Vec::new();
-    let mut other_messages: Vec<ChatMessage> = Vec::new();
+    let mut reordered: Vec<ChatMessage> = Vec::new();
+    let len = messages.len();
+    let mut i = 0;
 
-    for msg in messages {
-        if msg.role == "tool" {
-            tool_output_pool.push(msg);
-        } else {
-            other_messages.push(msg);
-        }
-    }
+    while i < len {
+        let msg = &messages[i];
 
-    let mut result: Vec<ChatMessage> = Vec::new();
-    let total = other_messages.len();
+        if msg.role == "assistant" && msg.tool_calls.is_some() {
+            let tcs = msg.tool_calls.as_ref().unwrap();
+            let mut expected_ids: Vec<String> = tcs.iter().map(|tc| tc.id.clone()).collect();
+            let mut tool_msgs: Vec<ChatMessage> = Vec::new();
+            let mut non_tool_msgs: Vec<ChatMessage> = Vec::new();
 
-    for (i, msg) in other_messages.into_iter().enumerate() {
-        let is_last = i == total - 1;
-
-        if msg.role == "assistant" {
-            result.push(msg.clone());
-
-            if let Some(ref tcs) = msg.tool_calls {
-                for tc in tcs {
-                    let idx = tool_output_pool.iter().position(|t| {
-                        t.tool_call_id.as_deref() == Some(&tc.id)
-                    });
-                    match idx {
-                        Some(i) => {
-                            result.push(tool_output_pool.remove(i));
-                        }
-                        None => {
-                            // Be lenient for the last assistant message — Codex may not have
-                            // filled the tool outputs yet (this is the model's pending request).
-                            if !is_last {
-                                return Err(AppError::new(
-                                    "TOOL_OUTPUT_NOT_FOUND",
-                                    format!("Missing tool output for tool call '{}' (function: {})", tc.id, tc.function.name),
-                                ).with_suggestion("Check that all function_call items have matching function_call_output items in the input"));
-                            }
-                            // For the last assistant, skip silently — the model is about to respond
+            let mut j = i + 1;
+            while j < len && !expected_ids.is_empty() {
+                let nxt = &messages[j];
+                if nxt.role == "tool" {
+                    if let Some(ref tcid) = nxt.tool_call_id {
+                        if let Some(pos) = expected_ids.iter().position(|id| id == tcid) {
+                            expected_ids.remove(pos);
+                            tool_msgs.push(nxt.clone());
+                            j += 1;
+                            continue;
                         }
                     }
                 }
+
+                if nxt.role == "system" || nxt.role == "developer" {
+                    // Move injected system messages before the assistant
+                    non_tool_msgs.push(nxt.clone());
+                    j += 1;
+                    continue;
+                }
+
+                // Stop at user/assistant boundary
+                break;
             }
+
+            // Error if not last and some expected tool outputs are missing
+            let is_last = j >= len;
+            if !is_last && !expected_ids.is_empty() {
+                let tc = tcs.iter().find(|tc| expected_ids.contains(&tc.id)).unwrap();
+                return Err(AppError::new(
+                    "TOOL_OUTPUT_NOT_FOUND",
+                    format!("Missing tool output for tool call '{}' (function: {})", tc.id, tc.function.name),
+                ).with_suggestion("Check that all function_call items have matching function_call_output items in the input"));
+            }
+
+            // Put system/developer messages before assistant, then assistant, then tool messages
+            reordered.extend(non_tool_msgs);
+            reordered.push(msg.clone());
+            reordered.extend(tool_msgs);
+            i = j;
         } else {
-            result.push(msg);
+            reordered.push(msg.clone());
+            i += 1;
         }
     }
 
-    // Append any remaining unmatched tool outputs at the end (lenient)
-    for t in tool_output_pool {
-        result.push(t);
-    }
-
-    Ok(result)
+    Ok(reordered)
 }
 
 #[cfg(test)]
@@ -262,6 +296,17 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0]["function"]["name"], "my_tool");
         assert_eq!(result[0]["function"]["parameters"]["properties"]["input"]["type"], "string");
+    }
+
+    #[test]
+    fn test_convert_tools_local_shell() {
+        let tools = vec![json!({"type": "local_shell"})];
+        let result = convert_tools(&tools, false);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["type"], "function");
+        assert_eq!(result[0]["function"]["name"], "shell");
+        assert!(result[0]["function"]["parameters"]["properties"]["command"].is_object());
+        assert_eq!(result[0]["function"]["parameters"]["required"][0], "command");
     }
 
     #[test]
@@ -389,6 +434,7 @@ mod tests {
 
     #[test]
     fn test_fix_tool_message_order_multiple_tools() {
+        // Tool messages preserved in input order (matching Python codex_proxy behavior)
         let messages = vec![
             ChatMessage {
                 role: "assistant".to_string(),
@@ -427,8 +473,9 @@ mod tests {
             },
         ];
         let result = fix_tool_message_order(messages).unwrap();
-        assert_eq!(result[1].tool_call_id, Some("call_1".to_string()));
-        assert_eq!(result[2].tool_call_id, Some("call_2".to_string()));
+        // Tool messages keep input order (call_2 first, then call_1)
+        assert_eq!(result[1].tool_call_id, Some("call_2".to_string()));
+        assert_eq!(result[2].tool_call_id, Some("call_1".to_string()));
     }
 
     #[test]
@@ -454,5 +501,48 @@ mod tests {
         let result = fix_tool_message_order(messages).unwrap();
         assert_eq!(result.len(), 2);
         assert_eq!(result[1].role, "tool");
+    }
+
+    #[test]
+    fn test_fix_tool_message_order_moves_system_before_assistant() {
+        // Codex injects system messages (e.g. approval notifications) between
+        // assistant(tool_calls) and tool messages. These must be moved before
+        // the assistant for DeepSeek compatibility.
+        let messages = vec![
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: Some(json!("calling tool")),
+                reasoning_content: None,
+                tool_calls: Some(vec![ToolCall {
+                    id: "call_1".to_string(),
+                    call_type: "function".to_string(),
+                    function: ToolCallFunction { name: "search".to_string(), arguments: "{}".to_string() },
+                }]),
+                tool_call_id: None,
+                name: None,
+            },
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some(json!("approval notification")),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+            ChatMessage {
+                role: "tool".to_string(),
+                content: Some(json!("result")),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: Some("call_1".to_string()),
+                name: None,
+            },
+        ];
+        let result = fix_tool_message_order(messages).unwrap();
+        assert_eq!(result.len(), 3);
+        // System message moved before assistant
+        assert_eq!(result[0].role, "system");
+        assert_eq!(result[1].role, "assistant");
+        assert_eq!(result[2].role, "tool");
     }
 }

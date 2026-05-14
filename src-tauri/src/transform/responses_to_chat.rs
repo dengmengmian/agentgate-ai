@@ -5,12 +5,12 @@ use crate::protocol::chat_completions::{ChatCompletionsRequest, ChatMessage, Too
 use crate::protocol::openai_responses::ResponsesRequest;
 use crate::transform::tool_calls;
 use crate::transform::reasoning_store;
+use super::providers::ProviderTransform;
 
 pub fn convert_with_provider(
     req: &ResponsesRequest,
     model: &str,
-    clean_for_deepseek: bool,
-    provider_type: &str,
+    provider: &dyn ProviderTransform,
 ) -> Result<ChatCompletionsRequest, AppError> {
     let mut messages = Vec::new();
 
@@ -44,57 +44,20 @@ pub fn convert_with_provider(
 
     // 3. Convert tools (provider-aware for Kimi web_search)
     let converted_tools = req.tools.as_ref().map(|t| {
-        tool_calls::convert_tools_for_provider(t, clean_for_deepseek, provider_type)
+        tool_calls::convert_tools_for_provider(t, provider.clean_schemas(), provider.provider_type())
     }).filter(|t| !t.is_empty());
 
     // 4. Convert tool_choice
     let tool_choice = req.tool_choice.as_ref().map(tool_calls::convert_tool_choice);
 
-    // 5. Fix tool message order for DeepSeek
-    if clean_for_deepseek {
-        messages = tool_calls::fix_tool_message_order(messages)?;
+    // 5. Provider-specific message processing (e.g. DeepSeek: fix order, strip images, inject reasoning)
+    messages = provider.process_messages(messages)?;
 
-        // 6. Strip image_url content from messages (DeepSeek 400s on image_url)
-        for msg in &mut messages {
-            if let Some(Value::Array(parts)) = &msg.content {
-                let has_image = parts.iter().any(|p| p.get("type").and_then(|t| t.as_str()) == Some("image_url"));
-                if has_image {
-                    let text_only: Vec<Value> = parts.iter()
-                        .filter(|p| p.get("type").and_then(|t| t.as_str()) != Some("image_url"))
-                        .cloned().collect();
-                    msg.content = if text_only.is_empty() {
-                        Some(Value::String(String::new()))
-                    } else {
-                        Some(Value::Array(text_only))
-                    };
-                }
-            }
-        }
-
-        // 7. Ensure reasoning_content on assistant messages with tool_calls
-        //    (DeepSeek thinking mode requires this, empty " " as placeholder)
-        for msg in &mut messages {
-            if msg.role == "assistant" && msg.tool_calls.is_some() && msg.reasoning_content.is_none() {
-                // Check if any reasoning exists in the store for this context
-                let text = msg.content.as_ref()
-                    .and_then(|c| c.as_str())
-                    .unwrap_or("");
-                let stored = reasoning_store::lookup_by_content(text)
-                    .or_else(|| {
-                        msg.tool_calls.as_ref().and_then(|tcs| {
-                            tcs.iter().find_map(|tc| reasoning_store::lookup_by_tool_call_id(&tc.id))
-                        })
-                    });
-                msg.reasoning_content = stored.or_else(|| Some(" ".to_string()));
-            }
-        }
-    }
-
-    // 8. Merge consecutive messages of the same role
+    // 6. Merge consecutive messages of the same role
     //    (some providers reject user→user or assistant→assistant sequences)
     messages = merge_consecutive_messages(messages);
 
-    // 9. Sanitize tool call arguments (invalid JSON -> "{}")
+    // 7. Sanitize tool call arguments (invalid JSON -> "{}")
     for msg in &mut messages {
         if let Some(ref mut tcs) = msg.tool_calls {
             for tc in tcs {
@@ -106,17 +69,6 @@ pub fn convert_with_provider(
             }
         }
     }
-
-    // Kimi: force disable thinking when $web_search tool is present
-    let thinking = if let Some(ref tools) = converted_tools {
-        if tool_calls::contains_kimi_web_search(tools) {
-            Some(serde_json::json!({"type": "disabled"}))
-        } else {
-            None
-        }
-    } else {
-        None
-    };
 
     // Auto-inject stream_options for usage capture
     let stream_options = if req.stream.unwrap_or(false) {
@@ -137,31 +89,19 @@ pub fn convert_with_provider(
             _ => None,
         });
 
-    // MiniMax: strip unsupported fields (reasoning_effort, response_format)
-    let is_minimax = provider_type == "minimax" || provider_type.contains("minimax");
-    let reasoning_effort = if is_minimax { None } else { reasoning_effort };
-    let response_format_allowed = !is_minimax;
-
-    // Convert text.format → response_format (skip for MiniMax)
-    let response_format = if !response_format_allowed { None } else { req.text.as_ref()
+    // Convert text.format → response_format
+    let response_format = req.text.as_ref()
         .and_then(|t| t.get("format"))
         .and_then(|f| {
             let fmt_type = f.get("type").and_then(|t| t.as_str()).unwrap_or("");
             match fmt_type {
                 "json_object" => Some(serde_json::json!({"type": "json_object"})),
-                "json_schema" => {
-                    // DeepSeek doesn't support json_schema, downgrade to json_object
-                    if clean_for_deepseek {
-                        Some(serde_json::json!({"type": "json_object"}))
-                    } else {
-                        Some(f.clone())
-                    }
-                }
+                "json_schema" => Some(f.clone()),
                 _ => None,
             }
-        })};
+        });
 
-    Ok(ChatCompletionsRequest {
+    let mut chat_req = ChatCompletionsRequest {
         model: model.to_string(),
         messages,
         tools: converted_tools,
@@ -170,7 +110,7 @@ pub fn convert_with_provider(
         temperature: req.temperature,
         top_p: req.top_p,
         max_tokens: req.max_output_tokens,
-        thinking,
+        thinking: None,
         stream_options,
         response_format,
         reasoning_effort,
@@ -178,7 +118,13 @@ pub fn convert_with_provider(
         stop: req.stop.clone(),
         frequency_penalty: req.frequency_penalty,
         presence_penalty: req.presence_penalty,
-    })
+    };
+
+    // 8. Provider-specific finalization (thinking, reasoning_effort, response_format overrides)
+    let tools_clone = chat_req.tools.clone();
+    provider.finalize_request(&mut chat_req, &tools_clone);
+
+    Ok(chat_req)
 }
 
 fn convert_input(input: &Value) -> Result<Vec<ChatMessage>, AppError> {
@@ -212,7 +158,45 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                 let role = map_role(
                     item.get("role").and_then(|r| r.as_str()).unwrap_or("user"),
                 );
-                let content = extract_content(item.get("content"));
+
+                // Check for embedded tool_calls in content array (Codex multi-turn history format)
+                let mut embedded_text = String::new();
+                let mut embedded_tool_calls: Vec<ToolCall> = Vec::new();
+                if let Some(Value::Array(parts)) = item.get("content") {
+                    for part in parts {
+                        let pt = part.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                        match pt {
+                            "input_text" | "output_text" | "text" => {
+                                if let Some(t) = part.get("text").and_then(|t| t.as_str()) {
+                                    if !embedded_text.is_empty() {
+                                        embedded_text.push('\n');
+                                    }
+                                    embedded_text.push_str(t);
+                                }
+                            }
+                            "tool_call" => {
+                                embedded_tool_calls.push(ToolCall {
+                                    id: part.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string(),
+                                    call_type: "function".to_string(),
+                                    function: ToolCallFunction {
+                                        name: part.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string(),
+                                        arguments: part.get("arguments").map(|a| {
+                                            if a.is_string() { a.as_str().unwrap().to_string() }
+                                            else { a.to_string() }
+                                        }).unwrap_or_default(),
+                                    },
+                                });
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                let content = if !embedded_tool_calls.is_empty() {
+                    Value::String(embedded_text)
+                } else {
+                    extract_content(item.get("content"))
+                };
 
                 // reasoning_content: from item itself, or pending, or look up from store
                 let reasoning = if role == "assistant" {
@@ -235,7 +219,7 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                     role,
                     content: Some(content),
                     reasoning_content: reasoning,
-                    tool_calls: None,
+                    tool_calls: if embedded_tool_calls.is_empty() { None } else { Some(embedded_tool_calls) },
                     tool_call_id: None,
                     name: None,
                 });
@@ -291,8 +275,7 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                 }
 
                 let raw_output = item.get("output").map(|o| {
-                    if o.is_string() { o.as_str().unwrap().to_string() }
-                    else { o.to_string() }
+                    flatten_tool_output(o)
                 }).unwrap_or_default();
                 let output = Value::String(raw_output);
 
@@ -389,6 +372,47 @@ fn flush_tool_calls(messages: &mut Vec<ChatMessage>, pending: &mut Vec<ToolCall>
         tool_call_id: None,
         name: None,
     });
+}
+
+/// Flatten tool output to a string.
+/// Chat Completions tool role only accepts `content: string`, but Codex Responses API
+/// may send `output` as a ContentPart array (e.g. when a tool returns images + text).
+/// We extract text parts, drop images with a placeholder notice.
+fn flatten_tool_output(output: &Value) -> String {
+    if let Some(s) = output.as_str() {
+        return s.to_string();
+    }
+    if let Some(parts) = output.as_array() {
+        let mut chunks = Vec::new();
+        let mut dropped_images = 0u32;
+        for part in parts {
+            let pt = part.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            match pt {
+                "input_text" | "output_text" | "text" => {
+                    if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                        if !text.is_empty() {
+                            chunks.push(text.to_string());
+                        }
+                    }
+                }
+                "input_image" | "image_url" => {
+                    dropped_images += 1;
+                }
+                _ => {}
+            }
+        }
+        if dropped_images > 0 {
+            let suffix = if dropped_images > 1 { "s" } else { "" };
+            chunks.push(format!(
+                "[{dropped_images} image attachment{suffix} omitted from tool output]"
+            ));
+        }
+        if chunks.is_empty() {
+            return output.to_string();
+        }
+        return chunks.join("");
+    }
+    output.to_string()
 }
 
 fn msg(role: &str, content: Value) -> ChatMessage {
@@ -524,6 +548,7 @@ pub fn split_think_tags(content: &str) -> (String, Option<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::providers::{DefaultProvider, KimiProvider};
     use serde_json::json;
 
     #[test]
@@ -542,7 +567,7 @@ mod tests {
             max_output_tokens: None,
             ..Default::default()
         };
-        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         assert_eq!(result.model, "gpt-4");
         assert_eq!(result.messages.len(), 1);
         assert_eq!(result.messages[0].role, "user");
@@ -565,7 +590,7 @@ mod tests {
             max_output_tokens: None,
             ..Default::default()
         };
-        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         assert_eq!(result.messages.len(), 2);
         assert_eq!(result.messages[0].role, "system");
         assert_eq!(result.messages[0].content, Some(json!("Be helpful")));
@@ -588,7 +613,7 @@ mod tests {
             max_output_tokens: None,
             ..Default::default()
         };
-        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         assert_eq!(result.messages[0].content, Some(json!("Instr")));
     }
 
@@ -611,7 +636,7 @@ mod tests {
             max_output_tokens: None,
             ..Default::default()
         };
-        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         assert_eq!(result.messages.len(), 2);
         assert_eq!(result.messages[0].role, "user");
         assert_eq!(result.messages[1].role, "assistant");
@@ -636,7 +661,7 @@ mod tests {
             max_output_tokens: None,
             ..Default::default()
         };
-        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         assert_eq!(result.messages.len(), 2);
         assert_eq!(result.messages[0].role, "assistant");
         assert!(result.messages[0].tool_calls.is_some());
@@ -662,7 +687,7 @@ mod tests {
             max_output_tokens: None,
             ..Default::default()
         };
-        assert!(convert_with_provider(&req, "gpt-4", false, "").is_err());
+        assert!(convert_with_provider(&req, "gpt-4", &DefaultProvider).is_err());
     }
 
     #[test]
@@ -681,7 +706,7 @@ mod tests {
             max_output_tokens: None,
             ..Default::default()
         };
-        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         assert!(result.stream);
         assert!(result.stream_options.is_some());
         assert_eq!(result.stream_options.unwrap()["include_usage"], true);
@@ -703,7 +728,7 @@ mod tests {
             max_output_tokens: Some(1024),
             ..Default::default()
         };
-        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         assert_eq!(result.temperature, Some(0.7));
         assert_eq!(result.top_p, Some(0.9));
         assert_eq!(result.max_tokens, Some(1024));
@@ -876,7 +901,7 @@ mod tests {
             max_output_tokens: None,
             ..Default::default()
         };
-        let result = convert_with_provider(&req, "kimi-k2", false, "kimi").unwrap();
+        let result = convert_with_provider(&req, "kimi-k2", &KimiProvider).unwrap();
         assert!(result.thinking.is_some());
         assert_eq!(result.thinking.unwrap()["type"], "disabled");
     }
@@ -991,7 +1016,7 @@ mod tests {
             ]),
             ..Default::default()
         };
-        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         let tool_msg = &result.messages[1];
         let content_str = tool_msg.content.as_ref().unwrap().as_str().unwrap();
         assert_eq!(content_str.len(), 10000, "Tool output should not be truncated");
@@ -1008,7 +1033,7 @@ mod tests {
             ]),
             ..Default::default()
         };
-        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         let tool_msg = &result.messages[1];
         let content_str = tool_msg.content.as_ref().unwrap().as_str().unwrap();
         assert_eq!(content_str, chinese_output, "Chinese tool output should pass through intact");
@@ -1061,5 +1086,50 @@ mod tests {
         let (text, reasoning) = split_think_tags("  <think>thinking</think>  hello  ");
         assert_eq!(text, "hello");
         assert_eq!(reasoning, Some("thinking".to_string()));
+    }
+
+    // ── flatten_tool_output tests ──
+
+    #[test]
+    fn test_flatten_tool_output_string() {
+        assert_eq!(flatten_tool_output(&json!("hello")), "hello");
+    }
+
+    #[test]
+    fn test_flatten_tool_output_array_text_parts() {
+        let output = json!([
+            {"type": "output_text", "text": "result line 1"},
+            {"type": "output_text", "text": "result line 2"}
+        ]);
+        assert_eq!(flatten_tool_output(&output), "result line 1result line 2");
+    }
+
+    #[test]
+    fn test_flatten_tool_output_array_with_images() {
+        let output = json!([
+            {"type": "output_text", "text": "some text"},
+            {"type": "input_image", "image_url": {"url": "data:image/png;base64,abc"}}
+        ]);
+        let result = flatten_tool_output(&output);
+        assert!(result.contains("some text"));
+        assert!(result.contains("[1 image attachment omitted from tool output]"));
+    }
+
+    #[test]
+    fn test_flatten_tool_output_array_multiple_images() {
+        let output = json!([
+            {"type": "input_image", "image_url": {"url": "img1"}},
+            {"type": "input_image", "image_url": {"url": "img2"}},
+            {"type": "input_image", "image_url": {"url": "img3"}}
+        ]);
+        let result = flatten_tool_output(&output);
+        assert!(result.contains("[3 image attachments omitted from tool output]"));
+    }
+
+    #[test]
+    fn test_flatten_tool_output_non_string_non_array() {
+        // Numbers, objects, etc. → JSON stringify
+        assert_eq!(flatten_tool_output(&json!(42)), "42");
+        assert_eq!(flatten_tool_output(&json!({"key": "val"})), "{\"key\":\"val\"}");
     }
 }

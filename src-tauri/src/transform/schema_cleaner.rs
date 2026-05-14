@@ -7,12 +7,8 @@ pub fn clean_schema_for_deepseek(value: &mut Value) {
         Value::Object(map) => {
             map.remove("strict");
 
-            // Remove additionalProperties if false
-            if let Some(ap) = map.get("additionalProperties") {
-                if ap == &Value::Bool(false) {
-                    map.remove("additionalProperties");
-                }
-            }
+            // Remove additionalProperties entirely (DeepSeek doesn't support it, regardless of value)
+            map.remove("additionalProperties");
 
             // Clean null-valued properties
             if let Some(Value::Object(props)) = map.get_mut("properties") {
@@ -45,12 +41,7 @@ pub fn clean_schema_for_deepseek(value: &mut Value) {
                 }
             }
 
-            // Recurse into additionalProperties if it's an object schema
-            if let Some(ap) = map.get_mut("additionalProperties") {
-                if ap.is_object() {
-                    clean_schema_for_deepseek(ap);
-                }
-            }
+            // additionalProperties is always removed above
         }
         Value::Array(arr) => {
             for item in arr.iter_mut() {
@@ -82,18 +73,17 @@ mod tests {
     }
 
     #[test]
-    fn test_keeps_additional_properties_true() {
+    fn test_removes_additional_properties_true() {
         let mut schema = json!({"type": "object", "additionalProperties": true});
         clean_schema_for_deepseek(&mut schema);
-        assert_eq!(schema["additionalProperties"], true);
+        assert!(schema.get("additionalProperties").is_none());
     }
 
     #[test]
-    fn test_keeps_additional_properties_object() {
+    fn test_removes_additional_properties_object() {
         let mut schema = json!({"type": "object", "additionalProperties": {"type": "string", "strict": true}});
         clean_schema_for_deepseek(&mut schema);
-        assert!(schema.get("additionalProperties").is_some());
-        assert!(schema["additionalProperties"].get("strict").is_none());
+        assert!(schema.get("additionalProperties").is_none());
     }
 
     #[test]
