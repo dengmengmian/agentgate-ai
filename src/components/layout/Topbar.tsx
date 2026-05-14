@@ -10,8 +10,8 @@ export function Topbar() {
   const location = useLocation();
 
   const pageTitleKeys: Record<string, string> = {
-    "/": "nav.dashboard",
-    "/tools": "nav.tools",
+    "/": "nav.overview",
+    "/tools": "nav.clients",
     "/providers": "nav.providers",
     "/routes": "nav.routes",
     "/gateway": "nav.gateway",
@@ -20,7 +20,7 @@ export function Topbar() {
     "/settings": "nav.settings",
   };
 
-  const titleKey = pageTitleKeys[location.pathname] ?? "nav.dashboard";
+  const titleKey = pageTitleKeys[location.pathname] ?? "nav.overview";
   const [status, setStatus] = useState<GatewayStatus | null>(null);
 
   const refresh = useCallback(() => {

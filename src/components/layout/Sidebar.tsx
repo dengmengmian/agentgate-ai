@@ -2,10 +2,10 @@ import { useState, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
-  Wrench,
   Cloud,
-  Radio,
   GitBranch,
+  Radio,
+  Monitor,
   ScrollText,
   Stethoscope,
   Settings,
@@ -15,11 +15,11 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
 const navItems = [
-  { to: "/", labelKey: "nav.dashboard", icon: LayoutDashboard },
-  { to: "/tools", labelKey: "nav.tools", icon: Wrench },
+  { to: "/", labelKey: "nav.overview", icon: LayoutDashboard },
   { to: "/providers", labelKey: "nav.providers", icon: Cloud },
   { to: "/routes", labelKey: "nav.routes", icon: GitBranch },
   { to: "/gateway", labelKey: "nav.gateway", icon: Radio },
+  { to: "/tools", labelKey: "nav.clients", icon: Monitor },
   { to: "/logs", labelKey: "nav.logs", icon: ScrollText },
   { to: "/diagnostics", labelKey: "nav.diagnostics", icon: Stethoscope },
   { to: "/settings", labelKey: "nav.settings", icon: Settings },

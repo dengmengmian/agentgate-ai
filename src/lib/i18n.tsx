@@ -4,8 +4,8 @@ export type Locale = "en" | "zh";
 
 const translations: Record<string, Record<Locale, string>> = {
   // ── Nav / Layout ──
-  "nav.dashboard": { en: "Dashboard", zh: "仪表盘" },
-  "nav.tools": { en: "Tools", zh: "工具" },
+  "nav.overview": { en: "Overview", zh: "概览" },
+  "nav.clients": { en: "Clients", zh: "客户端" },
   "nav.providers": { en: "Providers", zh: "服务商" },
   "nav.routes": { en: "Routes", zh: "路由" },
   "nav.gateway": { en: "Gateway", zh: "网关" },
