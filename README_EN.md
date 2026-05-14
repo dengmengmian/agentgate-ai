@@ -23,16 +23,17 @@ AgentGate is a local model gateway and provider-switching tool for AI coding age
 
 **Multi-Provider Management**
 - Supports DeepSeek, OpenAI, OpenRouter, Kimi, and custom OpenAI-compatible endpoints
-- Route Profiles for configuring multi-provider priority chains
+- Route Profiles with multi-provider priority chains, auto-matched by protocol
 - Manual switching or automatic failover
 - Provider cooldown and runtime status tracking
 - Per-request failover: Provider A fails → automatically tries Provider B
+- New providers are automatically added to all route chains
 - Automatic model list fetching from providers
 
-**Tool Configuration Management**
-- One-click Codex configuration (config.toml + auth.json)
-- One-click Claude Code configuration (settings.json with inline token)
-- Automatic config backup and restore
+**Client Configuration**
+- Codex: one-click config + toggle between official and AgentGate (preserves conversations)
+- Claude Code: one-click config + toggle between official and AgentGate
+- OpenCode: one-click config
 - Local gateway access token (`ag_local_*`) authentication
 
 **Desktop Application**
@@ -44,9 +45,9 @@ AgentGate is a local model gateway and provider-switching tool for AI coding age
 
 ## Screenshots
 
-| Dashboard | Tool Configuration |
+| Overview | Client Configuration |
 |:---:|:---:|
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Tools](docs/screenshots/tools.png) |
+| ![Overview](docs/screenshots/dashboard.png) | ![Clients](docs/screenshots/tools.png) |
 
 | Provider Management | Route Configuration |
 |:---:|:---:|
@@ -130,29 +131,36 @@ After saving, click **Fetch Models** to auto-load the available model list.
 
 ### 2. Start the Gateway
 
-**Dashboard** or **Gateway** page → **Start Gateway**
+**Overview** or **Gateway** page → **Start Gateway**
 
 Listens on `127.0.0.1:9090` by default.
 
 ### 3. Configure Codex
 
-**Tools** → **Codex** → **Apply Config**
+**Clients** → **Codex** → **Apply Config**
 
-AgentGate will automatically write:
-- `~/.codex/config.toml` — provider settings
-- `~/.codex/auth.json` — AgentGate local token
+AgentGate will automatically:
 
-Codex works immediately after configuration — no additional environment variables needed.
+- Save original `~/.codex/config.toml` and `auth.json`
+- Write AgentGate provider settings and local token
+
+Click **Switch to Official** to restore the original config at any time — conversations are preserved.
 
 ### 4. Configure Claude Code
 
-**Tools** → **Claude Code** → **Apply Config**
+**Clients** → **Claude Code** → **Apply Config**
 
 AgentGate writes to `~/.claude/settings.json`, setting `ANTHROPIC_BASE_URL` to the local gateway and `ANTHROPIC_API_KEY` to the AgentGate local token.
 
-Restart your terminal, and Claude Code will work through AgentGate.
+Click **Switch to Official** to restore the original settings.json.
 
-### 5. Direct API Calls
+### 5. Configure OpenCode
+
+**Clients** → **OpenCode** → **Apply Config**
+
+AgentGate writes to `~/.config/opencode/opencode.json`, configuring an OpenAI-compatible provider pointing to the local gateway.
+
+### 6. Direct API Calls
 
 All endpoints (except `/health`) require authentication:
 
@@ -199,16 +207,16 @@ curl http://127.0.0.1:9090/v1/models -H "Authorization: Bearer $TOKEN"
 curl http://127.0.0.1:9090/health
 ```
 
-### 6. Multi-Provider & Failover
+### 7. Multi-Provider & Failover
 
 Configure Route Profiles on the **Routes** page:
 
-1. Add multiple providers to the provider chain
-2. Adjust priority (lower number = higher priority)
+1. Default routes are auto-created per protocol (Codex / Claude Code / OpenCode)
+2. Add multiple providers to the provider chain, adjust priorities
 3. Switch mode: manual / failover
 4. In failover mode, 429/402/5xx/timeout errors automatically try the next provider
 
-### 7. Diagnostics
+### 8. Diagnostics
 
 On the **Diagnostics** page:
 
@@ -241,7 +249,7 @@ On the **Diagnostics** page:
 AgentGate/
 ├── src/                          # Frontend (React)
 │   ├── app/App.tsx               # App entry point
-│   ├── pages/                    # Pages (Dashboard/Tools/Providers/Routes/Gateway/Logs/Diagnostics/Settings)
+│   ├── pages/                    # Pages (Overview/Providers/Routes/Gateway/Clients/Logs/Diagnostics/Settings)
 │   ├── components/               # UI components
 │   ├── lib/                      # API wrapper, i18n, utilities
 │   └── types/                    # TypeScript type definitions
@@ -253,7 +261,7 @@ AgentGate/
 │       ├── providers/            # Provider adapters
 │       ├── storage/              # SQLite storage layer
 │       ├── models/               # Data models
-│       ├── tools/                # Tool config management (Codex/Claude Code)
+│       ├── tools/                # Client config management (Codex/Claude Code/OpenCode)
 │       ├── security/             # Authentication & redaction
 │       ├── diagnostics/          # Diagnostics & self-checks
 │       ├── app/                  # Tauri commands & app state
