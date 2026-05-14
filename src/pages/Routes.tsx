@@ -10,6 +10,8 @@ import {
   Zap,
   Inbox,
   X,
+  Pencil,
+  Check,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -41,6 +43,8 @@ export function Routes() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newProtocol, setNewProtocol] = useState("openai_responses");
+  const [editingName, setEditingName] = useState(false);
+  const [editName, setEditName] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -125,6 +129,15 @@ export function Routes() {
     if (!deleteTarget) return;
     try { await api.deleteRouteProfile(deleteTarget.id); toast("success", t("routes.deleted")); setDeleteTarget(null); selectedIdRef.current = null; setDetail(null); load(); }
     catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
+  const handleRename = async () => {
+    if (!detail || !editName.trim()) return;
+    try {
+      await api.updateRouteProfile(detail.profile.id, { name: editName.trim() });
+      setEditingName(false);
+      load();
+    } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleCreate = async () => {
@@ -215,12 +228,9 @@ export function Routes() {
               >
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-text-primary">{p.name}</span>
-                  <div className="flex items-center gap-1.5">
-                    {p.is_default && <Star className="h-3 w-3 text-warning" />}
-                    <StatusBadge variant={p.mode === "failover" ? "accent" : "muted"}>
-                      {p.mode}
-                    </StatusBadge>
-                  </div>
+                  <StatusBadge variant={p.mode === "failover" ? "accent" : "muted"}>
+                    {p.mode}
+                  </StatusBadge>
                 </div>
                 <p className="mt-1 text-[11px] text-text-muted">
                   {protocolLabel(p.input_protocol)} · {p.providers_count} provider{p.providers_count !== 1 ? "s" : ""}
@@ -236,7 +246,30 @@ export function Routes() {
               <div className="rounded-lg border border-border bg-card p-5">
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-text-primary">{detail.profile.name}</h3>
+                    {editingName ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && handleRename()}
+                          className="form-input text-sm font-semibold"
+                          autoFocus
+                        />
+                        <button onClick={handleRename} className="rounded p-1 text-accent hover:bg-accent/10"><Check className="h-3.5 w-3.5" /></button>
+                        <button onClick={() => setEditingName(false)} className="rounded p-1 text-text-muted hover:bg-border"><X className="h-3.5 w-3.5" /></button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-text-primary">{detail.profile.name}</h3>
+                        <button
+                          onClick={() => { setEditName(detail.profile.name); setEditingName(true); }}
+                          className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
                     <p className="text-[11px] text-text-muted">
                       {protocolLabel(detail.profile.input_protocol)}
                     </p>
@@ -252,24 +285,20 @@ export function Routes() {
                         <><Shield className="h-3 w-3" />{t("routes.switch_manual")}</>
                       )}
                     </button>
-                    {!detail.profile.is_default && (
-                      <>
-                        {profiles.filter(p => p.input_protocol === detail.profile.input_protocol).length > 1 && (
-                          <button
-                            onClick={() => handleSetDefault(detail.profile.id)}
-                            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-                          >
-                            <Star className="h-3 w-3" />{t("routes.set_default")}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setDeleteTarget(detail.profile)}
-                          className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-error/20 hover:text-error"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </>
+                    {!detail.profile.is_default && profiles.filter(p => p.input_protocol === detail.profile.input_protocol).length > 1 && (
+                      <button
+                        onClick={() => handleSetDefault(detail.profile.id)}
+                        className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+                      >
+                        <Star className="h-3 w-3" />{t("routes.set_default")}
+                      </button>
                     )}
+                    <button
+                      onClick={() => setDeleteTarget(detail.profile)}
+                      className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-error/20 hover:text-error"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
                   </div>
                 </div>
                 <div className="flex gap-3 text-[11px]">
