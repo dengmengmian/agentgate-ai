@@ -249,12 +249,14 @@ export function Routes() {
                     </button>
                     {!detail.profile.is_default && (
                       <>
-                        <button
-                          onClick={() => handleSetDefault(detail.profile.id)}
-                          className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-                        >
-                          <Star className="h-3 w-3" />{t("routes.set_default")}
-                        </button>
+                        {profiles.filter(p => p.input_protocol === detail.profile.input_protocol).length > 1 && (
+                          <button
+                            onClick={() => handleSetDefault(detail.profile.id)}
+                            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+                          >
+                            <Star className="h-3 w-3" />{t("routes.set_default")}
+                          </button>
+                        )}
                         <button
                           onClick={() => setDeleteTarget(detail.profile)}
                           className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-error/20 hover:text-error"

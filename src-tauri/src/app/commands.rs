@@ -50,6 +50,24 @@ pub fn create_provider(
 
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::create(&conn, input)?;
+
+    // Auto-add new provider to all existing route profiles
+    let profile_ids: Vec<String> = conn
+        .prepare("SELECT id FROM route_profiles")?
+        .query_map([], |row| row.get(0))?
+        .filter_map(|r| r.ok())
+        .collect();
+    for pid in &profile_ids {
+        let _ = storage::route_profiles::add_provider(
+            &conn, pid, &provider.id,
+            crate::models::route_profile::AddProviderToRouteInput {
+                priority: None, model_override: None,
+                cooldown_seconds: None, failover_on_status_codes: None,
+                failover_on_error_keywords: None,
+            },
+        );
+    }
+
     Ok(provider.to_view())
 }
 
