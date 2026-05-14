@@ -18,18 +18,15 @@ export interface CodexConfigStatus {
   current_model: string | null;
   auth_mode: string;
   token_path: string;
+  is_agentgate_active: boolean;
+  openai_key_polluted: boolean;
+  has_saved_official: boolean;
 }
 
-export interface ConfigPreview {
+export interface ToggleResult {
+  success: boolean;
+  new_provider: string;
   config_path: string;
-  auth_json_path: string;
-  exists: boolean;
-  current_summary: string | null;
-  proposed_snippet: string;
-  proposed_auth_json: string;
-  warnings: string[];
-  auth_mode: string;
-  token_path: string;
 }
 
 export interface ApplyConfigResult {
@@ -75,13 +72,3 @@ export interface ProfileDetection {
   var_count: number;
 }
 
-export interface ClaudeCodeConfigPreview {
-  config_path: string;
-  exists: boolean;
-  current_summary: string | null;
-  proposed_env: Record<string, string>;
-  warnings: string[];
-  conflicts: string[];
-  auth_mode: string;
-  masked_local_token: string;
-}

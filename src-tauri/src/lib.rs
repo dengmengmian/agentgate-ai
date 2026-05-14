@@ -138,11 +138,8 @@ pub fn run() {
             commands::open_token_folder,
             // Codex Config
             commands::detect_codex_config,
-            commands::preview_codex_config,
             commands::apply_codex_config,
-            commands::backup_codex_config,
-            commands::list_codex_backups,
-            commands::restore_codex_backup,
+            commands::toggle_codex_provider,
             commands::open_codex_config,
             // Claude Code
             commands::detect_claude_code_env,

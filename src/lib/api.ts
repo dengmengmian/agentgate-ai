@@ -160,35 +160,22 @@ export async function openTokenFolder(): Promise<boolean> {
 import type {
   GatewayAuthSettings,
   CodexConfigStatus,
-  ConfigPreview,
   ApplyConfigResult,
   ConfigBackup,
   ClaudeCodeEnvStatus,
-  ClaudeCodeConfigPreview,
+  ToggleResult,
 } from "@/types/config";
 
 export async function detectCodexConfig(): Promise<CodexConfigStatus> {
   return cmd("detect_codex_config");
 }
 
-export async function previewCodexConfig(): Promise<ConfigPreview> {
-  return cmd("preview_codex_config");
-}
-
 export async function applyCodexConfig(): Promise<ApplyConfigResult> {
   return cmd("apply_codex_config");
 }
 
-export async function backupCodexConfig(): Promise<ConfigBackup> {
-  return cmd("backup_codex_config");
-}
-
-export async function listCodexBackups(): Promise<ConfigBackup[]> {
-  return cmd("list_codex_backups");
-}
-
-export async function restoreCodexBackup(backupId: string): Promise<boolean> {
-  return cmd("restore_codex_backup", { backupId });
+export async function toggleCodexProvider(): Promise<ToggleResult> {
+  return cmd("toggle_codex_provider");
 }
 
 export async function openCodexConfig(): Promise<boolean> {
@@ -201,9 +188,7 @@ export async function detectClaudeCodeEnv(): Promise<ClaudeCodeEnvStatus> {
   return cmd("detect_claude_code_env");
 }
 
-export async function previewClaudeCodeConfig(): Promise<ClaudeCodeConfigPreview> {
-  return cmd("preview_claude_code_config");
-}
+
 
 export async function applyClaudeCodeConfig(): Promise<ApplyConfigResult> {
   return cmd("apply_claude_code_config");

@@ -451,19 +451,7 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
 pub fn generate_codex_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
-
-    let config = format!(
-        r#"model = "gpt-5"
-model_provider = "agentgate"
-
-[model_providers.agentgate]
-name = "AgentGate"
-base_url = "http://{}:{}/v1"
-wire_api = "responses""#,
-        settings.host, settings.port
-    );
-
-    Ok(config)
+    Ok(crate::tools::codex::generate_snippet(&settings.host, settings.port))
 }
 
 // ── Route Profile Commands ─────────────────────────────────────
@@ -625,62 +613,21 @@ pub fn detect_codex_config() -> Result<crate::tools::codex::CodexConfigStatus, A
 }
 
 #[tauri::command]
-pub fn preview_codex_config(state: State<'_, AppState>) -> Result<crate::tools::codex::ConfigPreview, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    let settings = storage::gateway_settings::get(&conn)?;
-    Ok(crate::tools::codex::preview(&settings.host, settings.port))
-}
-
-#[tauri::command]
 pub fn apply_codex_config(state: State<'_, AppState>) -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
-    let (host, port, backup_dir) = {
+    let (host, port) = {
         let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
-        let app_data = std::env::var("HOME").unwrap_or_default();
-        let backup_dir = std::path::PathBuf::from(&app_data).join(".agentgate").join("backups");
-        (settings.host, settings.port, backup_dir)
+        (settings.host, settings.port)
     };
 
-    let result = crate::tools::codex::apply(&host, port, &backup_dir)?;
-
-    // Record backup in DB
-    if let Some(ref bp) = result.backup_path {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-        let _ = storage::config_backups::insert(&conn, "codex", &result.config_path, bp, "config_file", None);
-    }
-
-    Ok(result)
+    crate::tools::codex::apply(&host, port)
 }
 
 #[tauri::command]
-pub fn backup_codex_config(state: State<'_, AppState>) -> Result<crate::storage::config_backups::ConfigBackup, AppError> {
-    let app_data = std::env::var("HOME").unwrap_or_default();
-    let backup_dir = std::path::PathBuf::from(&app_data).join(".agentgate").join("backups");
-
-    let result = crate::tools::codex::backup(&backup_dir)?;
-
+pub fn toggle_codex_provider(state: State<'_, AppState>) -> Result<crate::tools::codex::ToggleResult, AppError> {
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    let backup = storage::config_backups::insert(&conn, "codex", &result.source_path, &result.backup_path, "config_file", None)?;
-    Ok(backup)
-}
-
-#[tauri::command]
-pub fn list_codex_backups(state: State<'_, AppState>) -> Result<Vec<crate::storage::config_backups::ConfigBackup>, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    storage::config_backups::list_by_tool(&conn, "codex")
-}
-
-#[tauri::command]
-pub fn restore_codex_backup(backup_id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
-    let backup = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-        storage::config_backups::get_by_id(&conn, &backup_id)?
-    };
-
-    let app_data = std::env::var("HOME").unwrap_or_default();
-    let backup_dir = std::path::PathBuf::from(&app_data).join(".agentgate").join("backups");
-    crate::tools::codex::restore(&backup.backup_path, &backup_dir)?;
-    Ok(true)
+    let settings = storage::gateway_settings::get(&conn)?;
+    crate::tools::codex::toggle_provider(&settings.host, settings.port)
 }
 
 #[tauri::command]

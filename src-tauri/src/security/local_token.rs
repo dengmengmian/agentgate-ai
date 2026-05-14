@@ -138,7 +138,7 @@ pub fn get_auth_settings() -> GatewayAuthSettings {
         auth_mode: "local_token_file".to_string(),
         token_path: path.to_string_lossy().to_string(),
         masked_token: masked,
-        codex_auth_type: "auth_json".to_string(),
+        codex_auth_type: "key_swap".to_string(),
         claude_code_auth_type: "inline_token".to_string(),
     }
 }

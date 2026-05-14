@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.3] - 2025-05-14
+
+### Features / 功能
+
+- **Codex 配置一键切换** — 新增「切换到官方 / 切换到 AgentGate」按钮，整体保存和恢复 `config.toml` + `auth.json`，切换后 Codex 立即生效
+- **保留官方会话** — 应用 AgentGate 配置时自动保存原始 Codex 官方配置（含 OAuth tokens），切回官方后对话记录不丢失
+- **多语言切换文案** — 切换按钮、状态提示、污染警告均支持中英双语
+- **污染检测与警告** — 检测 auth.json 中 OPENAI_API_KEY 被旧版覆盖的情况，显示黄色警告提示用户修复
+
+### Improvements / 优化
+
+- Codex 配置 apply 改为全量替换（不再 TOML 合并），逻辑更简洁可靠
+- 移除 Codex 备份历史列表，统一由切换机制管理配置恢复
+- `generate_codex_config` 命令统一调用 `codex::generate_snippet()`，修复模型名不一致 bug（gpt-5 → gpt-5.5）
+
+### Cleanup / 清理
+
+- 移除未使用的 Codex 备份/恢复/预览命令（`backup_codex_config`、`list_codex_backups`、`restore_codex_backup`、`preview_codex_config`）
+- 移除死代码：`update_toml_content`、`create_backup`、`ConfigPreview`、`BackupResult`（codex 模块）
+- 移除前端死导出 `previewClaudeCodeConfig`、死类型 `ClaudeCodeConfigPreview`
+- 移除未使用的 i18n key（`tools.preview`、`tools.refresh`）
+
+---
+
 ## [0.1.2] - 2025-05-13
 
 ### Improvements / 优化

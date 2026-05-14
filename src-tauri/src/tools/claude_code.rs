@@ -7,6 +7,13 @@ use serde::Serialize;
 use crate::errors::AppError;
 use crate::security::local_token;
 
+#[derive(Debug, Clone, Serialize)]
+pub struct BackupResult {
+    pub backup_id: String,
+    pub backup_path: String,
+    pub source_path: String,
+}
+
 const ENV_VARS: &[&str] = &[
     "ANTHROPIC_BASE_URL",
     "ANTHROPIC_API_KEY",
@@ -266,13 +273,13 @@ pub fn apply_config(host: &str, port: i64, model: &str, backup_dir: &Path) -> Re
     })
 }
 
-pub fn backup_config(backup_dir: &Path) -> Result<crate::tools::codex::BackupResult, AppError> {
+pub fn backup_config(backup_dir: &Path) -> Result<BackupResult, AppError> {
     let sp = settings_path();
     if !sp.exists() {
         return Err(AppError::new("CLAUDE_CONFIG_NOT_FOUND", "Claude Code settings.json does not exist"));
     }
     let bp = create_backup(&sp, backup_dir, "claude_code_settings")?;
-    Ok(crate::tools::codex::BackupResult {
+    Ok(BackupResult {
         backup_id: String::new(),
         backup_path: bp,
         source_path: sp.to_string_lossy().to_string(),
