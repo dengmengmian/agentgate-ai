@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Plus,
   Star,
@@ -37,6 +37,7 @@ export function Routes() {
   const [providers, setProviders] = useState<ProviderView[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<RouteProfileView | null>(null);
+  const selectedIdRef = useRef<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newProtocol, setNewProtocol] = useState("openai_responses");
@@ -50,9 +51,10 @@ export function Routes() {
       setProfiles(p);
       setProviders(prov);
       if (p.length > 0) {
-        const currentId = detail?.profile.id;
+        const currentId = selectedIdRef.current;
         const toLoad = currentId && p.find((x) => x.id === currentId) ? currentId : p[0].id;
         const d = await api.getRouteProfile(toLoad);
+        selectedIdRef.current = toLoad;
         setDetail(d);
       }
     } catch (err) {
@@ -65,8 +67,11 @@ export function Routes() {
   useEffect(() => { load(); }, [load]);
 
   const selectProfile = async (id: string) => {
-    try { const d = await api.getRouteProfile(id); setDetail(d); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+    try {
+      const d = await api.getRouteProfile(id);
+      selectedIdRef.current = id;
+      setDetail(d);
+    } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleSetDefault = async (id: string) => {
@@ -118,7 +123,7 @@ export function Routes() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    try { await api.deleteRouteProfile(deleteTarget.id); toast("success", t("routes.deleted")); setDeleteTarget(null); setDetail(null); load(); }
+    try { await api.deleteRouteProfile(deleteTarget.id); toast("success", t("routes.deleted")); setDeleteTarget(null); selectedIdRef.current = null; setDetail(null); load(); }
     catch (err) { toast("error", (err as api.AppError).message); }
   };
 
