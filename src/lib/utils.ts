@@ -4,9 +4,10 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
-export function formatTimestamp(iso: string): string {
+export function formatTimestamp(iso: string, locale: string = "en-US"): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString("en-US", {
+  const loc = locale === "zh" ? "zh-CN" : locale;
+  return d.toLocaleTimeString(loc, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
@@ -14,9 +15,10 @@ export function formatTimestamp(iso: string): string {
   });
 }
 
-export function formatDate(iso: string): string {
+export function formatDate(iso: string, locale: string = "en-US"): string {
   const d = new Date(iso);
-  return d.toLocaleDateString("en-US", {
+  const loc = locale === "zh" ? "zh-CN" : locale;
+  return d.toLocaleDateString(loc, {
     year: "numeric",
     month: "short",
     day: "numeric",

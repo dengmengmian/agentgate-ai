@@ -7,6 +7,7 @@ use crate::protocol::chat_completions::ChatCompletionsRequest;
 
 /// Internal provider config used by the gateway.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ProviderConfig {
     pub name: String,
     pub provider_type: String,
@@ -43,10 +44,6 @@ impl ProviderConfig {
 
     pub fn is_deepseek(&self) -> bool {
         self.provider_type == "deepseek"
-    }
-
-    pub fn is_kimi(&self) -> bool {
-        self.provider_type == "kimi" || self.base_url.contains("moonshot") || self.base_url.contains("kimi.com")
     }
 
     /// Build the chat completions URL, avoiding double /v1.
@@ -150,10 +147,14 @@ pub async fn send_stream(
 
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
-        s.to_string()
-    } else {
-        format!("{}...(truncated)", &s[..max])
+        return s.to_string();
     }
+    // Find the last char boundary at or before `max` to avoid panic on multibyte chars
+    let mut boundary = max;
+    while boundary > 0 && !s.is_char_boundary(boundary) {
+        boundary -= 1;
+    }
+    format!("{}...(truncated)", &s[..boundary])
 }
 
 #[cfg(test)]
@@ -173,6 +174,7 @@ mod tests {
             supported_models: None,
             model_mapping: None,
             extra_headers: Some(r#"{"User-Agent":"TestAgent/1.0"}"#.to_string()),
+            anthropic_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
@@ -235,25 +237,6 @@ mod tests {
         p.provider_type = "deepseek".to_string();
         let config = ProviderConfig::from_provider(&p).unwrap();
         assert!(config.is_deepseek());
-        assert!(!config.is_kimi());
-    }
-
-    #[test]
-    fn test_is_kimi() {
-        let mut p = test_provider();
-        p.provider_type = "kimi".to_string();
-        let config = ProviderConfig::from_provider(&p).unwrap();
-        assert!(config.is_kimi());
-        assert!(!config.is_deepseek());
-    }
-
-    #[test]
-    fn test_is_kimi_by_base_url() {
-        let mut p = test_provider();
-        p.provider_type = "custom".to_string();
-        p.base_url = "https://api.moonshot.cn".to_string();
-        let config = ProviderConfig::from_provider(&p).unwrap();
-        assert!(config.is_kimi());
     }
 
     #[test]
@@ -278,5 +261,20 @@ mod tests {
         p.base_url = "https://api.openai.com/".to_string();
         let config = ProviderConfig::from_provider(&p).unwrap();
         assert_eq!(config.chat_completions_url(), "https://api.openai.com/v1/chat/completions");
+    }
+
+    #[test]
+    fn test_truncate_chinese_no_panic() {
+        let s = "你好世界测试内容"; // 8 Chinese chars, 24 bytes
+        let result = truncate(s, 7); // inside "世" (bytes 6..9)
+        assert_eq!(result, "你好...(truncated)");
+    }
+
+    #[test]
+    fn test_truncate_mixed_content_no_panic() {
+        let s = "error: 请求频率过高，请稍后再试";
+        let result = truncate(s, 10); // inside Chinese range
+        assert!(!result.is_empty());
+        assert!(result.ends_with("...(truncated)"));
     }
 }

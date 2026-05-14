@@ -54,10 +54,12 @@ impl SseAccumulator {
     }
 
     fn log_event(&mut self, event: &str) {
-        if self.events_size < MAX_EVENTS_LOG_SIZE {
-            self.events_log.push_str(event);
+        let remaining = MAX_EVENTS_LOG_SIZE.saturating_sub(self.events_size);
+        if remaining > 0 {
+            let to_add = event.len().min(remaining);
+            self.events_log.push_str(&event[..to_add]);
             self.events_log.push('\n');
-            self.events_size += event.len() + 1;
+            self.events_size += to_add + 1;
         }
     }
 
@@ -436,10 +438,9 @@ mod tests {
         let mut acc = SseAccumulator::new("resp_1".to_string(), "m".to_string());
         let big = "x".repeat(MAX_EVENTS_LOG_SIZE + 1000);
         acc.log_event(&big);
-        // The event itself may be dropped entirely if it exceeds remaining capacity,
-        // but log_event adds len+1, so after the first big event it should stop.
-        assert!(acc.events_size >= big.len() + 1 || acc.events_size <= MAX_EVENTS_LOG_SIZE);
-        assert!(acc.events_size <= MAX_EVENTS_LOG_SIZE + big.len() + 1);
+        // log_event should cap at MAX_EVENTS_LOG_SIZE, never exceed it (plus 1 for newline)
+        assert!(acc.events_size <= MAX_EVENTS_LOG_SIZE + 1);
+        assert_eq!(acc.events_log.len(), MAX_EVENTS_LOG_SIZE + 1); // truncated content + newline
     }
 
     #[test]

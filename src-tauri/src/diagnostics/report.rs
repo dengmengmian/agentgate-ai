@@ -22,11 +22,7 @@ impl CheckItem {
     pub fn failed(id: &str, name: &str, msg: &str) -> Self {
         Self { id: id.into(), name: name.into(), status: "failed".into(), message: msg.into(), detail: None, suggestion: None }
     }
-    pub fn skipped(id: &str, name: &str, msg: &str) -> Self {
-        Self { id: id.into(), name: name.into(), status: "skipped".into(), message: msg.into(), detail: None, suggestion: None }
-    }
     pub fn with_suggestion(mut self, s: &str) -> Self { self.suggestion = Some(s.into()); self }
-    pub fn with_detail(mut self, d: &str) -> Self { self.detail = Some(d.into()); self }
 }
 
 #[derive(Debug, Clone, Serialize)]

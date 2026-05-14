@@ -172,34 +172,58 @@ pub fn clear(conn: &Connection) -> Result<bool, AppError> {
 }
 
 /// Get request statistics.
+/// Consolidated into fewer queries to reduce lock hold time.
 pub fn get_stats(conn: &Connection) -> Result<RequestStats, AppError> {
-    let total: i64 = conn.query_row("SELECT COUNT(*) FROM request_logs", [], |r| r.get(0))?;
-    let success: i64 = conn.query_row("SELECT COUNT(*) FROM request_logs WHERE status_code >= 200 AND status_code < 300", [], |r| r.get(0))?;
-    let errors: i64 = conn.query_row("SELECT COUNT(*) FROM request_logs WHERE status_code >= 400 OR status_code < 200", [], |r| r.get(0))?;
-    let avg_latency: f64 = conn.query_row("SELECT COALESCE(AVG(latency_ms), 0) FROM request_logs WHERE status_code >= 200 AND status_code < 300", [], |r| r.get(0))?;
-
-    // Today's stats
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let today_total: i64 = conn.query_row("SELECT COUNT(*) FROM request_logs WHERE timestamp LIKE ?1", [&format!("{today}%")], |r| r.get(0))?;
-    let today_errors: i64 = conn.query_row("SELECT COUNT(*) FROM request_logs WHERE timestamp LIKE ?1 AND (status_code >= 400 OR status_code < 200)", [&format!("{today}%")], |r| r.get(0))?;
+    let today_prefix = format!("{today}%");
 
-    // Daily stats (last 7 days)
-    let mut daily = Vec::new();
-    for i in 0..7 {
-        let day = (chrono::Utc::now() - chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
-        let count: i64 = conn.query_row("SELECT COUNT(*) FROM request_logs WHERE timestamp LIKE ?1", [&format!("{day}%")], |r| r.get(0))?;
-        let errs: i64 = conn.query_row("SELECT COUNT(*) FROM request_logs WHERE timestamp LIKE ?1 AND (status_code >= 400 OR status_code < 200)", [&format!("{day}%")], |r| r.get(0))?;
-        let day_input: i64 = conn.query_row("SELECT COALESCE(SUM(input_tokens), 0) FROM request_logs WHERE timestamp LIKE ?1", [&format!("{day}%")], |r| r.get(0))?;
-        let day_output: i64 = conn.query_row("SELECT COALESCE(SUM(output_tokens), 0) FROM request_logs WHERE timestamp LIKE ?1", [&format!("{day}%")], |r| r.get(0))?;
-        daily.push(DailyStat { date: day, total: count, errors: errs, success: count - errs, input_tokens: day_input, output_tokens: day_output });
+    // Single query for all global + today aggregates
+    let (total, success, errors, avg_latency, total_input_tokens, total_output_tokens,
+         today_total, today_errors, today_input_tokens, today_output_tokens): (i64, i64, i64, f64, i64, i64, i64, i64, i64, i64) =
+        conn.query_row(
+            "SELECT
+                COUNT(*),
+                SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN status_code >= 400 OR status_code < 200 THEN 1 ELSE 0 END),
+                COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0),
+                COALESCE(SUM(input_tokens), 0),
+                COALESCE(SUM(output_tokens), 0),
+                SUM(CASE WHEN timestamp LIKE ?1 THEN 1 ELSE 0 END),
+                SUM(CASE WHEN timestamp LIKE ?1 AND (status_code >= 400 OR status_code < 200) THEN 1 ELSE 0 END),
+                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN input_tokens ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN output_tokens ELSE 0 END), 0)
+            FROM request_logs",
+            [&today_prefix],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?)),
+        )?;
+
+    // Daily stats (last 7 days) — single query with GROUP BY
+    let seven_days_ago = (chrono::Utc::now() - chrono::Duration::days(6)).format("%Y-%m-%d").to_string();
+    let mut daily_map = std::collections::HashMap::new();
+    let mut stmt = conn.prepare(
+        "SELECT substr(timestamp, 1, 10) as day,
+                COUNT(*),
+                SUM(CASE WHEN status_code >= 400 OR status_code < 200 THEN 1 ELSE 0 END),
+                COALESCE(SUM(input_tokens), 0),
+                COALESCE(SUM(output_tokens), 0)
+         FROM request_logs
+         WHERE timestamp >= ?1
+         GROUP BY day"
+    )?;
+    let rows = stmt.query_map([&seven_days_ago], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?))
+    })?;
+    for row in rows {
+        if let Ok((day, count, errs, inp, outp)) = row {
+            daily_map.insert(day, (count, errs, inp, outp));
+        }
     }
-    daily.reverse();
-
-    // Token totals
-    let total_input_tokens: i64 = conn.query_row("SELECT COALESCE(SUM(input_tokens), 0) FROM request_logs", [], |r| r.get(0))?;
-    let total_output_tokens: i64 = conn.query_row("SELECT COALESCE(SUM(output_tokens), 0) FROM request_logs", [], |r| r.get(0))?;
-    let today_input_tokens: i64 = conn.query_row("SELECT COALESCE(SUM(input_tokens), 0) FROM request_logs WHERE timestamp LIKE ?1", [&format!("{today}%")], |r| r.get(0))?;
-    let today_output_tokens: i64 = conn.query_row("SELECT COALESCE(SUM(output_tokens), 0) FROM request_logs WHERE timestamp LIKE ?1", [&format!("{today}%")], |r| r.get(0))?;
+    let mut daily = Vec::new();
+    for i in (0..7).rev() {
+        let day = (chrono::Utc::now() - chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
+        let (count, errs, inp, outp) = daily_map.get(&day).copied().unwrap_or((0, 0, 0, 0));
+        daily.push(DailyStat { date: day, total: count, errors: errs, success: count - errs, input_tokens: inp, output_tokens: outp });
+    }
 
     // Top providers
     let mut stmt = conn.prepare("SELECT provider, COUNT(*) as cnt FROM request_logs WHERE provider IS NOT NULL GROUP BY provider ORDER BY cnt DESC LIMIT 5")?;

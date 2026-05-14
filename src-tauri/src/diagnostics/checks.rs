@@ -197,19 +197,14 @@ pub fn codex_config_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
 
     let status = crate::tools::codex::detect();
 
-    if !status.exists {
-        checks.push(CheckItem::warning("config_exists", "Config file", "Not found")
-            .with_suggestion("Apply config from Tools page"));
+    // Skip check entirely if Codex is not installed or not configured for AgentGate
+    if !status.exists || !status.has_agentgate {
+        checks.push(CheckItem::ok("not_configured", "Codex", "Not configured for AgentGate (skipped)"));
         return CheckReport::new("Codex Config Check", checks);
     }
-    checks.push(CheckItem::ok("config_exists", "Config file", "Exists"));
 
-    if status.has_agentgate {
-        checks.push(CheckItem::ok("agentgate_provider", "AgentGate provider", "Configured"));
-    } else {
-        checks.push(CheckItem::warning("agentgate_provider", "AgentGate provider", "Not configured")
-            .with_suggestion("Apply AgentGate config from Tools page"));
-    }
+    checks.push(CheckItem::ok("config_exists", "Config file", "Exists"));
+    checks.push(CheckItem::ok("agentgate_provider", "AgentGate provider", "Configured"));
 
     if status.current_provider.as_deref() == Some("agentgate") {
         checks.push(CheckItem::ok("model_provider", "model_provider", "Set to agentgate"));
@@ -250,33 +245,29 @@ pub fn codex_config_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
 
 // ── Claude Code Config Check ──────────────────────────────────
 
-pub fn claude_code_config_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
+pub fn claude_code_config_check(_db: &Arc<Mutex<Connection>>) -> CheckReport {
     let mut checks = Vec::new();
 
     let status = crate::tools::claude_code::detect_env();
 
-    if !status.settings_exists {
-        checks.push(CheckItem::warning("settings_exists", "Settings file", "Not found")
-            .with_suggestion("Apply config from Tools page"));
+    // Skip check entirely if AgentGate is not configured for Claude Code
+    if !status.has_agentgate {
+        checks.push(CheckItem::ok("not_configured", "Claude Code", "Not configured for AgentGate (skipped)"));
         return CheckReport::new("Claude Code Config Check", checks);
     }
-    checks.push(CheckItem::ok("settings_exists", "Settings file", "Exists"));
 
-    if status.has_agentgate {
-        checks.push(CheckItem::ok("agentgate_token", "AgentGate token", "Found in settings"));
+    // AgentGate is configured — verify it's correct
+    checks.push(CheckItem::ok("agentgate_token", "AgentGate token", "Found in settings"));
 
-        // Verify token matches
-        if let Ok(current_token) = local_token::read_token() {
-            let content = std::fs::read_to_string(crate::tools::claude_code::settings_path()).unwrap_or_default();
-            if content.contains(&current_token) {
-                checks.push(CheckItem::ok("token_match", "Token match", "Settings token matches current"));
-            } else {
-                checks.push(CheckItem::failed("token_match", "Token match", "Token in settings doesn't match current token")
-                    .with_suggestion("Re-apply Claude Code config from Tools page (token was regenerated)"));
-            }
+    // Verify token matches
+    if let Ok(current_token) = local_token::read_token() {
+        let content = std::fs::read_to_string(crate::tools::claude_code::settings_path()).unwrap_or_default();
+        if content.contains(&current_token) {
+            checks.push(CheckItem::ok("token_match", "Token match", "Settings token matches current"));
+        } else {
+            checks.push(CheckItem::failed("token_match", "Token match", "Token in settings doesn't match current token")
+                .with_suggestion("Re-apply Claude Code config from Tools page (token was regenerated)"));
         }
-    } else {
-        checks.push(CheckItem::warning("agentgate_token", "AgentGate token", "Not found in settings"));
     }
 
     // Base URL
@@ -377,7 +368,6 @@ pub fn export_bundle(
 ) -> Result<ExportResult, crate::errors::AppError> {
     use crate::security::redaction;
     use std::fs;
-    use std::io::Write;
 
     let export_dir = local_token::token_dir().join("diagnostics");
     fs::create_dir_all(&export_dir).map_err(|e| {
@@ -391,7 +381,7 @@ pub fn export_bundle(
     })?;
 
     let mut files = Vec::new();
-    let mut warnings = Vec::new();
+    let warnings = Vec::new();
 
     // 1. Self test report
     let report = full_self_test(db);

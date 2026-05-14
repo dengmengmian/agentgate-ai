@@ -160,6 +160,9 @@ pub fn delete(conn: &Connection, id: &str) -> Result<bool, AppError> {
 
     conn.execute("DELETE FROM providers WHERE id = ?1", [id])?;
 
+    // Clean up route_profile_providers references to this provider
+    conn.execute("DELETE FROM route_profile_providers WHERE provider_id = ?1", [id])?;
+
     if was_active {
         // Set next enabled provider as active
         let next_id: Option<String> = conn

@@ -45,6 +45,7 @@ export function Routes() {
   const [newProtocol, setNewProtocol] = useState("openai_responses");
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState("");
+  const [addProviderId, setAddProviderId] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -371,7 +372,7 @@ export function Routes() {
                 {/* Add provider */}
                 {availableProviders.length > 0 && (
                   <div className="mt-3 flex items-center gap-2">
-                    <select id="add-provider-select" className="form-input flex-1" defaultValue="">
+                    <select value={addProviderId} onChange={(e) => setAddProviderId(e.target.value)} className="form-input flex-1">
                       <option value="" disabled>{t("routes.add_provider")}</option>
                       {availableProviders.map((p) => (
                         <option key={p.id} value={p.id}>{p.name}</option>
@@ -379,8 +380,7 @@ export function Routes() {
                     </select>
                     <button
                       onClick={() => {
-                        const sel = document.getElementById("add-provider-select") as HTMLSelectElement;
-                        if (sel.value) handleAddProvider(sel.value);
+                        if (addProviderId) { handleAddProvider(addProviderId); setAddProviderId(""); }
                       }}
                       className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
                     >

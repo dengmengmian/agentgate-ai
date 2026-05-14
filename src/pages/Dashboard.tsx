@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   Activity,
   Zap,
@@ -37,28 +37,30 @@ export function Dashboard() {
   const [recentLogs, setRecentLogs] = useState<RequestLogListItem[]>([]);
   const [stats, setStats] = useState<RequestStats | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const [s, tl, l, st] = await Promise.all([
-        api.getGatewayStatus(),
-        api.listTools(),
-        api.listRequestLogs({ limit: 5 }),
-        api.getRequestStats(),
-      ]);
-      setStatus(s);
-      setTools(tl);
-      setRecentLogs(l);
-      setStats(st);
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
-  }, []);
-
   useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const [s, tl, l, st] = await Promise.all([
+          api.getGatewayStatus(),
+          api.listTools(),
+          api.listRequestLogs({ limit: 5 }),
+          api.getRequestStats(),
+        ]);
+        if (!cancelled) {
+          setStatus(s);
+          setTools(tl);
+          setRecentLogs(l);
+          setStats(st);
+        }
+      } catch (err) {
+        if (!cancelled) toast("error", (err as api.AppError).message);
+      }
+    };
     load();
     const timer = setInterval(load, 5000);
-    return () => clearInterval(timer);
-  }, [load]);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, []);
 
   const handleStart = async () => { try { setStatus(await api.startGateway()); toast("success", t("gateway.started")); } catch (err) { toast("error", (err as api.AppError).message); } };
   const handleStop = async () => { try { setStatus(await api.stopGateway()); toast("success", t("gateway.stopped")); } catch (err) { toast("error", (err as api.AppError).message); } };

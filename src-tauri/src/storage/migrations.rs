@@ -147,6 +147,16 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         ",
     )?;
 
+    // Index on request_logs.timestamp for stats query performance
+    conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_request_logs_timestamp ON request_logs(timestamp);",
+    )?;
+
+    // Clean up orphan route_profile_providers referencing deleted providers
+    conn.execute_batch(
+        "DELETE FROM route_profile_providers WHERE provider_id NOT IN (SELECT id FROM providers);",
+    )?;
+
     // Migration: add trace_json column if not present
     let has_trace: bool = conn
         .prepare("SELECT trace_json FROM request_logs LIMIT 0")

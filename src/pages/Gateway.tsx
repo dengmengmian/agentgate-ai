@@ -49,14 +49,24 @@ export function Gateway() {
   const markDirty = () => setDirty(true);
 
   const handleSave = async () => {
+    const portNum = parseInt(port, 10);
+    const retentionNum = parseInt(logRetention, 10);
+    if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
+      toast("error", t("gateway.invalid_port"));
+      return;
+    }
+    if (isNaN(retentionNum) || retentionNum < 1) {
+      toast("error", t("gateway.invalid_retention"));
+      return;
+    }
     try {
       await api.updateGatewaySettings({
         host,
-        port: parseInt(port, 10),
+        port: portNum,
         input_protocol: inputProtocol,
         output_protocol: outputProtocol,
         auto_start: autoStart,
-        log_retention_days: parseInt(logRetention, 10),
+        log_retention_days: retentionNum,
       });
       toast("success", t("gateway.settings_saved"));
       load();

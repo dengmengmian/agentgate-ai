@@ -99,6 +99,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "gateway.log_retention": { en: "Log Retention (days)", zh: "日志保留（天）" },
   "gateway.save": { en: "Save", zh: "保存" },
   "gateway.settings_saved": { en: "Gateway settings saved", zh: "网关设置已保存" },
+  "gateway.invalid_port": { en: "Invalid port (1-65535)", zh: "端口无效（1-65535）" },
+  "gateway.invalid_retention": { en: "Invalid retention days", zh: "保留天数无效" },
   "gateway.route_modes": { en: "Route Modes", zh: "路由模式" },
   "gateway.codex_compat": { en: "Codex compatibility", zh: "Codex 兼容" },
   "gateway.tool_call_streaming": { en: "Tool call streaming", zh: "工具调用流式" },
@@ -252,6 +254,7 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Common ──
   "common.loading": { en: "Loading...", zh: "加载中..." },
+  "common.refresh": { en: "Refresh", zh: "刷新" },
   "common.cancel": { en: "Cancel", zh: "取消" },
   "common.confirm": { en: "Confirm", zh: "确认" },
   "common.delete": { en: "Delete", zh: "删除" },

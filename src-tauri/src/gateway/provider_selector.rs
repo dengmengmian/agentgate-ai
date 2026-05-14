@@ -8,6 +8,7 @@ use crate::storage;
 
 /// The result of selecting a provider for a request.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ProviderSelection {
     pub route_profile_id: String,
     pub route_profile_name: String,
@@ -30,55 +31,6 @@ pub struct ProviderCandidate {
     pub cooldown_seconds: i64,
     pub failover_on_status_codes: Vec<i64>,
     pub failover_on_error_keywords: Vec<String>,
-}
-
-/// Select a provider for a request based on route profiles.
-/// Falls back to global active provider if no route profile matches.
-pub fn select(
-    db: &Arc<Mutex<Connection>>,
-    input_protocol: &str,
-    requested_model: Option<&str>,
-) -> Result<ProviderSelection, AppError> {
-    let conn = db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-
-    // Try to find default route profile for this protocol
-    let profile = storage::route_profiles::get_default_for_protocol(&conn, input_protocol)?;
-
-    if let Some(profile) = profile {
-        let rp_providers = storage::route_profiles::list_providers(&conn, &profile.id)?;
-
-        if rp_providers.is_empty() {
-            return Err(AppError::new("ROUTE_PROFILE_EMPTY", "Route profile has no providers")
-                .with_suggestion("Add at least one provider to the route profile"));
-        }
-
-        let candidates = build_candidates(&conn, &rp_providers, requested_model)?;
-
-        if candidates.is_empty() {
-            return Err(AppError::new("NO_PROVIDER_CANDIDATE", "No available provider candidate")
-                .with_suggestion("Enable at least one provider in the route profile"));
-        }
-
-        // Select provider based on mode
-        let (selected_provider, selected_model, priority, reason) = match profile.mode.as_str() {
-            "failover" => select_failover(&candidates)?,
-            _ => select_manual(&profile, &candidates, &conn)?,
-        };
-
-        Ok(ProviderSelection {
-            route_profile_id: profile.id,
-            route_profile_name: profile.name,
-            mode: profile.mode,
-            provider: selected_provider,
-            model: selected_model,
-            priority,
-            reason,
-            candidates,
-        })
-    } else {
-        // Fallback to global active provider
-        select_global_fallback(&conn, requested_model)
-    }
 }
 
 fn build_candidates(
@@ -134,43 +86,6 @@ fn build_candidates(
     }
 
     Ok(candidates)
-}
-
-fn select_manual(
-    profile: &crate::models::route_profile::RouteProfile,
-    candidates: &[ProviderCandidate],
-    conn: &Connection,
-) -> Result<(Provider, String, i64, String), AppError> {
-    // Use active_provider_id if set
-    if let Some(ref active_id) = profile.active_provider_id {
-        if let Some(c) = candidates.iter().find(|c| c.provider_id == *active_id) {
-            let provider = storage::providers::get_by_id(conn, active_id)?;
-            return Ok((provider, c.model.clone(), c.priority, "Manual: active provider".to_string()));
-        }
-    }
-
-    // Fallback to highest priority
-    let c = &candidates[0];
-    let provider = storage::providers::get_by_id(conn, &c.provider_id)?;
-    Ok((provider, c.model.clone(), c.priority, "Manual: highest priority".to_string()))
-}
-
-fn select_failover(
-    candidates: &[ProviderCandidate],
-) -> Result<(Provider, String, i64, String), AppError> {
-    // Prefer non-cooldown providers
-    for c in candidates {
-        if !c.in_cooldown {
-            // We need to load the provider from inside the caller's conn context,
-            // but we don't have conn here. We'll return a placeholder and let
-            // the caller handle the actual Provider loading.
-            // For simplicity, return the first non-cooldown candidate info.
-            // The actual Provider will be loaded by the caller.
-            return Err(AppError::internal("use select() directly"));
-        }
-    }
-    // All in cooldown — use first anyway
-    Err(AppError::internal("use select() directly"))
 }
 
 fn select_global_fallback(

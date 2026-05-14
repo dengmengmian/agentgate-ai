@@ -157,7 +157,7 @@ pub async fn handle_responses(
         match result {
             Ok(response) => {
                 // Success — mark provider healthy
-                if let Ok(conn) = state.db.lock() {
+                if let Some(conn) = lock_db(&state.db) {
                     let _ = crate::storage::provider_runtime_status::mark_success(&conn, &candidate.provider_id);
                 }
                 return Ok(response);
@@ -179,7 +179,7 @@ pub async fn handle_responses(
                 }));
 
                 // Mark failure + cooldown
-                if let Ok(conn) = state.db.lock() {
+                if let Some(conn) = lock_db(&state.db) {
                     let _ = crate::storage::provider_runtime_status::mark_failure(
                         &conn, &candidate.provider_id, &err.code, &err.message, candidate.cooldown_seconds,
                     );
@@ -493,7 +493,7 @@ pub async fn handle_chat_completions(
 
     let is_failover = selection.mode == "failover" && selection.candidates.len() > 1;
     let candidates = selection.candidates.clone();
-    let raw_body = sanitize_body(&body);
+    let _raw_body = sanitize_body(&body);
 
     let mut attempt_order: Vec<&crate::gateway::provider_selector::ProviderCandidate> = Vec::new();
     if let Some(primary) = candidates.iter().find(|c| c.provider_id == selection.provider.id) {
@@ -536,13 +536,13 @@ pub async fn handle_chat_completions(
 
         match result {
             Ok(response) => {
-                if let Ok(conn) = state.db.lock() {
+                if let Some(conn) = lock_db(&state.db) {
                     let _ = crate::storage::provider_runtime_status::mark_success(&conn, &candidate.provider_id);
                 }
                 return Ok(response);
             }
             Err(err) => {
-                if let Ok(conn) = state.db.lock() {
+                if let Some(conn) = lock_db(&state.db) {
                     let _ = crate::storage::provider_runtime_status::mark_failure(
                         &conn, &candidate.provider_id, &err.code, &err.message, candidate.cooldown_seconds,
                     );
@@ -721,6 +721,120 @@ mod tests {
         assert!(validate_auth(&headers).is_ok());
         cleanup(&temp);
     }
+
+    // ── truncate_str tests ──
+
+    #[test]
+    fn test_truncate_str_ascii() {
+        assert_eq!(truncate_str("hello", 10), "hello");
+        assert_eq!(truncate_str("hello world", 5), "hello");
+    }
+
+    #[test]
+    fn test_truncate_str_chinese() {
+        let s = "你好世界测试";
+        // Each Chinese char is 3 bytes. "你好" = 6 bytes.
+        // Truncate at 7 should land inside "世" → snap back to 6
+        assert_eq!(truncate_str(s, 7), "你好");
+        assert_eq!(truncate_str(s, 6), "你好");
+        assert_eq!(truncate_str(s, 100), s);
+    }
+
+    #[test]
+    fn test_truncate_str_emoji() {
+        let s = "hello 🎉 world";
+        // 🎉 is 4 bytes at position 6..10
+        assert_eq!(truncate_str(s, 7), "hello "); // snap back before emoji
+        assert_eq!(truncate_str(s, 10), "hello 🎉");
+    }
+
+    // ── sanitize_body tests ──
+
+    #[test]
+    fn test_sanitize_body_redacts_keys() {
+        let body = r#"{"key": "sk-abcdefghij1234567890"}"#;
+        let sanitized = sanitize_body(body);
+        assert!(!sanitized.contains("abcdefghij1234567890"));
+        assert!(sanitized.contains("sk-****"));
+    }
+
+    #[test]
+    fn test_sanitize_body_multiple_keys() {
+        let body = r#"sk-firstkeyvalue sk-secondkeyvalue"#;
+        let sanitized = sanitize_body(body);
+        assert_eq!(sanitized.matches("sk-****").count(), 2);
+    }
+
+    #[test]
+    fn test_sanitize_body_short_sk_not_redacted() {
+        let body = "sk-short";
+        let sanitized = sanitize_body(body);
+        assert_eq!(sanitized, "sk-short");
+    }
+
+    // ── GatewayError format tests ──
+
+    #[test]
+    fn test_gateway_error_has_type_field() {
+        let err = GatewayError(AppError::new("UPSTREAM_STREAM_ERROR", "Provider failed")
+            .with_detail("HTTP 502"));
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+    }
+
+    #[test]
+    fn test_gateway_error_status_mapping() {
+        assert_eq!(
+            GatewayError(AppError::new("RESPONSES_PARSE_ERROR", "bad")).into_response().status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            GatewayError(AppError::new("PROVIDER_API_KEY_MISSING", "no key")).into_response().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            GatewayError(AppError::new("ACTIVE_PROVIDER_NOT_FOUND", "none")).into_response().status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(
+            GatewayError(AppError::new("UNKNOWN_CODE", "wat")).into_response().status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn test_gateway_error_auth_status_codes() {
+        assert_eq!(
+            GatewayError(AppError::new("GATEWAY_AUTH_MISSING", "no auth")).into_response().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            GatewayError(AppError::new("GATEWAY_AUTH_INVALID", "bad token")).into_response().status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[test]
+    fn test_lock_db_normal() {
+        let conn = Connection::open_in_memory().unwrap();
+        let db = Arc::new(Mutex::new(conn));
+        assert!(lock_db(&db).is_some());
+    }
+
+    #[test]
+    fn test_lock_db_recovers_from_poison() {
+        let conn = Connection::open_in_memory().unwrap();
+        let db = Arc::new(Mutex::new(conn));
+        // Poison the mutex by panicking while holding the lock
+        let db2 = db.clone();
+        let _ = std::thread::spawn(move || {
+            let _guard = db2.lock().unwrap();
+            panic!("intentional panic to poison mutex");
+        }).join();
+        // Mutex is now poisoned — lock_db should recover
+        assert!(db.lock().is_err(), "Mutex should be poisoned");
+        assert!(lock_db(&db).is_some(), "lock_db should recover from poisoned mutex");
+    }
 }
 
 fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayError> {
@@ -747,22 +861,33 @@ fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayE
 fn sanitize_body(body: &str) -> String {
     // Simple api key sanitization in request bodies
     let mut s = body.to_string();
-    // Match patterns like sk-... or key-...
-    while let Some(start) = s.find("sk-") {
+    // Match patterns like sk-... and redact them
+    let mut search_from = 0;
+    while let Some(offset) = s[search_from..].find("sk-") {
+        let start = search_from + offset;
         let end = s[start..].find(|c: char| c.is_whitespace() || c == '"' || c == '\'')
             .map(|e| start + e)
             .unwrap_or(s.len());
         if end - start > 8 {
             s.replace_range(start..end, "sk-****");
+            search_from = start + 7; // skip past "sk-****"
         } else {
-            break;
+            search_from = end;
         }
     }
     truncate_str(&s, 50000)
 }
 
 fn truncate_str(s: &str, max: usize) -> String {
-    if s.len() <= max { s.to_string() } else { s[..max].to_string() }
+    if s.len() <= max {
+        return s.to_string();
+    }
+    // Find the last char boundary at or before `max` to avoid panic on multibyte chars
+    let mut boundary = max;
+    while boundary > 0 && !s.is_char_boundary(boundary) {
+        boundary -= 1;
+    }
+    s[..boundary].to_string()
 }
 
 fn extract_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i64>) {
@@ -788,6 +913,18 @@ fn log_request_error(
         latency_ms);
 }
 
+/// Lock the DB, recovering from a poisoned Mutex if necessary.
+fn lock_db(db: &Arc<Mutex<Connection>>) -> Option<std::sync::MutexGuard<'_, Connection>> {
+    match db.lock() {
+        Ok(guard) => Some(guard),
+        Err(poisoned) => {
+            // Recover from a poisoned Mutex (a previous thread panicked while holding it).
+            // The data may be in an inconsistent state, but SQLite WAL mode is resilient.
+            Some(poisoned.into_inner())
+        }
+    }
+}
+
 fn log_request_success(
     db: &Arc<Mutex<Connection>>,
     request_id: &str,
@@ -804,7 +941,7 @@ fn log_request_success(
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
 ) {
-    if let Ok(conn) = db.lock() {
+    if let Some(conn) = lock_db(db) {
         let _ = crate::storage::request_logs::insert(
             &conn, request_id, "Codex", provider, model,
             "/v1/responses", status_code, latency_ms,
@@ -833,7 +970,7 @@ fn log_request_error_full(
         "error_code": err.code,
         "suggestion": err.suggestion,
     }).to_string();
-    if let Ok(conn) = db.lock() {
+    if let Some(conn) = lock_db(db) {
         let _ = crate::storage::request_logs::insert(
             &conn, request_id, "Codex",
             if provider.is_empty() { "unknown" } else { provider },
@@ -863,16 +1000,26 @@ impl IntoResponse for GatewayError {
     fn into_response(self) -> Response {
         let status = match self.0.code.as_str() {
             "RESPONSES_PARSE_ERROR" | "TRANSFORM_ERROR" | "TOOL_OUTPUT_NOT_FOUND" | "TOOL_CALL_NOT_FOUND" => StatusCode::BAD_REQUEST,
-            "PROVIDER_API_KEY_MISSING" => StatusCode::UNAUTHORIZED,
+            "PROVIDER_API_KEY_MISSING" | "GATEWAY_AUTH_MISSING" | "GATEWAY_AUTH_INVALID" => StatusCode::UNAUTHORIZED,
             "ACTIVE_PROVIDER_NOT_FOUND" => StatusCode::SERVICE_UNAVAILABLE,
             c if c.starts_with("UPSTREAM") => StatusCode::BAD_GATEWAY,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
 
+        // Build error message with detail for better client display
+        let full_message = match &self.0.detail {
+            Some(detail) if !detail.is_empty() => format!("{}: {}", self.0.message, detail),
+            _ => self.0.message.clone(),
+        };
+
+        // Use OpenAI-compatible error format so clients (Codex, Claude Code, etc.)
+        // can parse and display the error message correctly.
+        // OpenAI expects: {"error": {"message": "...", "type": "...", "code": "..."}}
         let body = json!({
             "error": {
+                "message": full_message,
+                "type": self.0.code,
                 "code": self.0.code,
-                "message": self.0.message,
                 "detail": self.0.detail,
                 "suggestion": self.0.suggestion,
             }

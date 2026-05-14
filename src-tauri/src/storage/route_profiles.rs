@@ -222,33 +222,3 @@ pub fn reorder_providers(conn: &Connection, profile_id: &str, provider_ids: &[St
     Ok(())
 }
 
-pub fn update_route_provider(conn: &Connection, profile_id: &str, provider_id: &str, input: UpdateRouteProviderInput) -> Result<(), AppError> {
-    let now = chrono::Utc::now().to_rfc3339();
-    let mut sets = vec!["updated_at = ?1".to_string()];
-    let mut idx = 2;
-
-    if input.model_override.is_some() { sets.push(format!("model_override = ?{idx}")); idx += 1; }
-    if input.cooldown_seconds.is_some() { sets.push(format!("cooldown_seconds = ?{idx}")); idx += 1; }
-    if input.enabled.is_some() { sets.push(format!("enabled = ?{idx}")); idx += 1; }
-    if input.failover_on_status_codes.is_some() { sets.push(format!("failover_on_status_codes = ?{idx}")); idx += 1; }
-    if input.failover_on_error_keywords.is_some() { sets.push(format!("failover_on_error_keywords = ?{idx}")); idx += 1; }
-
-    let sql = format!(
-        "UPDATE route_profile_providers SET {} WHERE route_profile_id = ?{} AND provider_id = ?{}",
-        sets.join(", "), idx, idx + 1
-    );
-
-    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
-    param_values.push(Box::new(now));
-    if let Some(v) = input.model_override { param_values.push(Box::new(v)); }
-    if let Some(v) = input.cooldown_seconds { param_values.push(Box::new(v)); }
-    if let Some(v) = input.enabled { param_values.push(Box::new(v)); }
-    if let Some(v) = input.failover_on_status_codes { param_values.push(Box::new(v)); }
-    if let Some(v) = input.failover_on_error_keywords { param_values.push(Box::new(v)); }
-    param_values.push(Box::new(profile_id.to_string()));
-    param_values.push(Box::new(provider_id.to_string()));
-
-    let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
-    conn.execute(&sql, params_ref.as_slice())?;
-    Ok(())
-}

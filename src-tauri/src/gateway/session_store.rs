@@ -10,6 +10,7 @@ use std::sync::{Mutex, atomic::{AtomicU64, Ordering}};
 use crate::protocol::chat_completions::ChatMessage;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct StoredTurn {
     pub messages: Vec<ChatMessage>,
     pub assistant_messages: Vec<ChatMessage>,

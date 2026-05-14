@@ -35,9 +35,16 @@ fn next_counter() -> u64 {
 fn content_hash(text: &str) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    let mut h = DefaultHasher::new();
-    text.hash(&mut h);
-    format!("{:016x}", h.finish())
+    // Use two independent hash seeds to produce 128 bits, reducing collision probability
+    let mut h1 = DefaultHasher::new();
+    text.hash(&mut h1);
+    let hash1 = h1.finish();
+    let mut h2 = DefaultHasher::new();
+    hash1.hash(&mut h2);
+    text.hash(&mut h2);
+    let hash2 = h2.finish();
+    // Include text length as additional discriminator
+    format!("{:016x}{:016x}_{}", hash1, hash2, text.len())
 }
 
 /// Store reasoning_content keyed by assistant text hash and optionally by tool_call_ids.
@@ -190,5 +197,36 @@ mod tests {
         assert_eq!(lookup_by_tool_call_id("tc1"), Some("rc".to_string()));
         assert_eq!(lookup_by_tool_call_id("tc2"), Some("rc".to_string()));
         assert_eq!(lookup_by_content("text"), Some("rc".to_string()));
+    }
+
+    #[test]
+    fn test_content_hash_includes_length() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        // Two strings that differ only in length should have different hashes
+        let h1 = content_hash("hello");
+        let h2 = content_hash("hello!");
+        assert_ne!(h1, h2);
+        // Hash includes length suffix
+        assert!(h1.ends_with("_5"));
+        assert!(h2.ends_with("_6"));
+    }
+
+    #[test]
+    fn test_different_texts_produce_different_keys() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clear_store();
+        store("text_a", "reasoning_a", &[]);
+        store("text_b", "reasoning_b", &[]);
+        assert_eq!(lookup_by_content("text_a"), Some("reasoning_a".to_string()));
+        assert_eq!(lookup_by_content("text_b"), Some("reasoning_b".to_string()));
+    }
+
+    #[test]
+    fn test_chinese_content_hash_no_panic() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clear_store();
+        let chinese = "你好世界，这是一段中文测试内容";
+        store(chinese, "中文推理", &[]);
+        assert_eq!(lookup_by_content(chinese), Some("中文推理".to_string()));
     }
 }

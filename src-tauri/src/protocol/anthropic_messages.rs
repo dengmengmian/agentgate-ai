@@ -3,6 +3,7 @@ use serde_json::Value;
 
 /// Anthropic Messages API request (loosely typed for compatibility).
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct MessagesRequest {
     pub model: Option<String>,
     pub messages: Vec<AnthropicMessage>,

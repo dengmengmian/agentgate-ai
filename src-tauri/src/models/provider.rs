@@ -148,8 +148,7 @@ pub fn mask_api_key(key: &str) -> String {
     }
     let prefix = &key[..4];
     let suffix = &key[key.len() - 4..];
-    let masked = "*".repeat(key.len() - 8);
-    format!("{prefix}{masked}{suffix}")
+    format!("{prefix}****{suffix}")
 }
 
 #[cfg(test)]
@@ -166,7 +165,7 @@ mod tests {
     fn test_mask_api_key_long() {
         let key = "sk-1234567890abcdef";
         let masked = mask_api_key(key);
-        assert_eq!(masked, "sk-1***********cdef");
+        assert_eq!(masked, "sk-1****cdef");
     }
 
     #[test]
@@ -182,6 +181,7 @@ mod tests {
             supported_models: Some("[\"gpt-3\", \"gpt-4-turbo\"]".to_string()),
             model_mapping: None,
             extra_headers: None,
+            anthropic_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
@@ -211,6 +211,7 @@ mod tests {
             supported_models: None,
             model_mapping: Some(r#"{"gpt-5": "gpt-4-turbo", "custom": "gpt-3"}"#.to_string()),
             extra_headers: None,
+            anthropic_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
@@ -237,6 +238,7 @@ mod tests {
             supported_models: Some("[\"gpt-3\"]".to_string()),
             model_mapping: None,
             extra_headers: None,
+            anthropic_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
@@ -263,6 +265,7 @@ mod tests {
             supported_models: None,
             model_mapping: None,
             extra_headers: None,
+            anthropic_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),

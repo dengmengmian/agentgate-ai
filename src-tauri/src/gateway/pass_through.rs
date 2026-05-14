@@ -209,7 +209,7 @@ async fn handle_stream(
         }).to_string();
 
         let sanitized_sse = sanitize(&sse_log, &api_key);
-        if let Ok(conn) = db_clone.lock() {
+        if let Some(conn) = lock_db(&db_clone) {
             let _ = crate::storage::request_logs::insert(
                 &conn, &req_id, "Client", &provider_name, &model_clone,
                 "/v1/chat/completions", 200, latency,
@@ -237,6 +237,14 @@ async fn handle_stream(
         .unwrap())
 }
 
+/// Lock the DB, recovering from a poisoned Mutex if necessary.
+fn lock_db(db: &Arc<Mutex<Connection>>) -> Option<std::sync::MutexGuard<'_, Connection>> {
+    match db.lock() {
+        Ok(guard) => Some(guard),
+        Err(poisoned) => Some(poisoned.into_inner()),
+    }
+}
+
 fn sanitize(text: &str, api_key: &str) -> String {
     let mut s = text.to_string();
     if api_key.len() > 4 {
@@ -246,7 +254,15 @@ fn sanitize(text: &str, api_key: &str) -> String {
 }
 
 fn truncate(s: &str, max: usize) -> String {
-    if s.len() <= max { s.to_string() } else { format!("{}...(truncated)", &s[..max]) }
+    if s.len() <= max {
+        return s.to_string();
+    }
+    // Find the last char boundary at or before `max` to avoid panic on multibyte chars
+    let mut boundary = max;
+    while boundary > 0 && !s.is_char_boundary(boundary) {
+        boundary -= 1;
+    }
+    format!("{}...(truncated)", &s[..boundary])
 }
 
 fn log_to_db(
@@ -261,7 +277,7 @@ fn log_to_db(
     status_code: i64,
     latency_ms: i64,
 ) {
-    if let Ok(conn) = db.lock() {
+    if let Some(conn) = lock_db(db) {
         let _ = crate::storage::request_logs::insert(
             &conn, request_id, "Client", provider, model,
             "/v1/chat/completions", status_code, latency_ms,
@@ -294,7 +310,7 @@ pub async fn handle_anthropic(
     // Rewrite model using provider's resolve_model
     let mut body_json: serde_json::Value = serde_json::from_str(raw_body)
         .unwrap_or(serde_json::json!({}));
-    if let Some(requested) = body_json.get("model").and_then(|v| v.as_str()) {
+    if let Some(_requested) = body_json.get("model").and_then(|v| v.as_str()) {
         // Use model_mapping/supported_models/default_model resolution
         // We need the full Provider for resolve_model, but we only have ProviderConfig
         // Just use default_model as fallback since ProviderConfig doesn't have resolve_model
@@ -353,7 +369,7 @@ pub async fn handle_anthropic(
                 match chunk_result {
                     Ok(bytes) => {
                         let text = String::from_utf8_lossy(&bytes).to_string();
-                        if sse_size < MAX_SSE_LOG { sse_log.push_str(&text[..text.len().min(MAX_SSE_LOG - sse_size)]); sse_size += text.len(); }
+                        if sse_size < MAX_SSE_LOG { let to_add = text.len().min(MAX_SSE_LOG - sse_size); sse_log.push_str(&text[..to_add]); sse_size += to_add; }
                         let _ = tx.send(text).await;
                     }
                     Err(_) => break,
@@ -362,7 +378,7 @@ pub async fn handle_anthropic(
             let latency = start.elapsed().as_millis() as i64;
             let trace = json!({"mode":"anthropic_pass_through","target":&target,"stream":true}).to_string();
             let sanitized_sse = sanitize(&sse_log, &api_key);
-            if let Ok(conn) = db_clone.lock() {
+            if let Some(conn) = lock_db(&db_clone) {
                 let _ = crate::storage::request_logs::insert(
                     &conn, &req_id, "Claude Code", &provider_name, &model,
                     "/v1/messages", 200, latency,
@@ -447,5 +463,21 @@ mod tests {
     fn test_truncate_exact_limit() {
         let s = "x".repeat(50);
         assert_eq!(truncate(&s, 50), s);
+    }
+
+    #[test]
+    fn test_truncate_chinese_boundary() {
+        let s = "你好世界"; // 4 chars, 12 bytes
+        // Truncate at byte 7 — inside "世" (bytes 6..9) → snap back to 6
+        let result = truncate(s, 7);
+        assert_eq!(result, "你好...(truncated)");
+    }
+
+    #[test]
+    fn test_truncate_emoji_boundary() {
+        let s = "hi🎉ok"; // "hi" 2B + 🎉 4B + "ok" 2B = 8B
+        // Truncate at 3 — inside 🎉 → snap back to 2
+        let result = truncate(s, 3);
+        assert_eq!(result, "hi...(truncated)");
     }
 }

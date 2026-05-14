@@ -205,20 +205,21 @@ function CheckUpdateButton({ t }: { t: (key: string) => string }) {
     }
   };
 
+  const [installing, setInstalling] = useState(false);
+
   const handleInstall = async () => {
     setInstalling(true);
     try {
       const update = await check();
-      if (!update) return;
+      if (!update) { setInstalling(false); return; }
       await update.downloadAndInstall();
       setStatus("latest");
     } catch {
-      setInstalling(false);
       toast("error", t("update.install_failed"));
+    } finally {
+      setInstalling(false);
     }
   };
-
-  const [installing, setInstalling] = useState(false);
 
   return (
     <div className="flex items-center gap-2">

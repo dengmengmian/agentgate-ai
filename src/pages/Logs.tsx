@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ScrollText } from "lucide-react";
+import { ScrollText, RefreshCcw } from "lucide-react";
 import { RequestLogTable } from "@/components/logs/RequestLogTable";
 import { RequestDetailDrawer } from "@/components/logs/RequestDetailDrawer";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -22,6 +22,7 @@ export function Logs() {
   const [statusFilter, setStatusFilter] = useState("");
 
   const loadLogs = useCallback(async () => {
+    setLoading(true);
     try {
       const data = await api.listRequestLogs({
         keyword: keyword || undefined,
@@ -84,12 +85,22 @@ export function Logs() {
             <option value="error">{t("logs.error")}</option>
           </select>
         </div>
-        <button
-          onClick={() => setConfirmClear(true)}
-          className="rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-        >
-          {t("logs.clear")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={loadLogs}
+            disabled={loading}
+            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+          >
+            <RefreshCcw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+            {t("common.refresh")}
+          </button>
+          <button
+            onClick={() => setConfirmClear(true)}
+            className="rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+          >
+            {t("logs.clear")}
+          </button>
+        </div>
       </div>
 
       {loading ? (

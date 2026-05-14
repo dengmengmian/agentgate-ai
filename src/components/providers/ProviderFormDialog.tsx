@@ -41,6 +41,7 @@ export function ProviderFormDialog({
   const [enabled, setEnabled] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [fetchingModels, setFetchingModels] = useState(false);
+  const [newMappingClient, setNewMappingClient] = useState("");
 
   useEffect(() => {
     if (provider) {
@@ -258,19 +259,18 @@ export function ProviderFormDialog({
               ))}
             </div>
             <div className="mt-2 flex gap-2">
-              <select id="new-mapping-client" className="form-input flex-1" defaultValue="">
+              <select value={newMappingClient} onChange={(e) => setNewMappingClient(e.target.value)} className="form-input flex-1">
                 <option value="" disabled>{t("providers.select_client_model")}</option>
                 {["gpt-5.5","gpt-5.4","gpt-5.4-mini","gpt-5.3-codex","gpt-5.2","claude-sonnet-4-6","claude-opus-4-6","claude-haiku-4-5-20251001","o3","o4-mini"].filter(m => !(m in modelMapping)).map(m => (
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
               <button type="button" onClick={() => {
-                const sel = document.getElementById("new-mapping-client") as HTMLSelectElement;
-                if (sel.value) {
+                if (newMappingClient) {
                   let models: string[] = [];
                   try { models = supportedModels ? JSON.parse(supportedModels) : []; } catch { /* */ }
-                  setModelMapping({ ...modelMapping, [sel.value]: models[0] || defaultModel || "" });
-                  sel.value = "";
+                  setModelMapping({ ...modelMapping, [newMappingClient]: models[0] || defaultModel || "" });
+                  setNewMappingClient("");
                 }
               }} className="btn-secondary">{t("routes.add")}</button>
             </div>

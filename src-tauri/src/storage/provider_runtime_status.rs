@@ -109,11 +109,3 @@ pub fn reset_all(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
-pub fn is_in_cooldown(status: &ProviderRuntimeStatus) -> bool {
-    if let Some(ref until) = status.cooldown_until {
-        if let Ok(cd) = chrono::DateTime::parse_from_rfc3339(until) {
-            return cd > chrono::Utc::now();
-        }
-    }
-    false
-}

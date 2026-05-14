@@ -66,6 +66,7 @@ pub struct ToolCallFunction {
 // ── Stream chunk types ──
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct ChatCompletionChunk {
     pub id: Option<String>,
     pub choices: Option<Vec<ChunkChoice>>,
@@ -73,12 +74,14 @@ pub struct ChatCompletionChunk {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct ChunkChoice {
     pub delta: Option<ChunkDelta>,
     pub finish_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct ChunkDelta {
     pub role: Option<String>,
     pub content: Option<String>,
@@ -90,6 +93,7 @@ pub struct ChunkDelta {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct ChunkToolCall {
     pub index: Option<i64>,
     pub id: Option<String>,
@@ -107,6 +111,7 @@ pub struct ChunkToolCallFunction {
 // ── Non-stream response ──
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct ChatCompletionResponse {
     pub id: Option<String>,
     pub choices: Option<Vec<CompletionChoice>>,
@@ -114,12 +119,14 @@ pub struct ChatCompletionResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct CompletionChoice {
     pub message: Option<CompletionMessage>,
     pub finish_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct CompletionMessage {
     pub role: Option<String>,
     pub content: Option<String>,

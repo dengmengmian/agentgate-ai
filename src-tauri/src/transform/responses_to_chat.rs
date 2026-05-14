@@ -6,15 +6,6 @@ use crate::protocol::openai_responses::ResponsesRequest;
 use crate::transform::tool_calls;
 use crate::transform::reasoning_store;
 
-/// Convert a Responses API request to a Chat Completions request.
-pub fn convert(
-    req: &ResponsesRequest,
-    model: &str,
-    clean_for_deepseek: bool,
-) -> Result<ChatCompletionsRequest, AppError> {
-    convert_with_provider(req, model, clean_for_deepseek, "")
-}
-
 pub fn convert_with_provider(
     req: &ResponsesRequest,
     model: &str,
@@ -303,14 +294,7 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                     if o.is_string() { o.as_str().unwrap().to_string() }
                     else { o.to_string() }
                 }).unwrap_or_default();
-                // Truncate large tool outputs to prevent context overflow
-                let output = if raw_output.len() > 4000 {
-                    let head = &raw_output[..2000];
-                    let tail = &raw_output[raw_output.len()-1500..];
-                    Value::String(format!("{head}\n\n... [truncated {len} chars] ...\n\n{tail}", len = raw_output.len()))
-                } else {
-                    Value::String(raw_output)
-                };
+                let output = Value::String(raw_output);
 
                 messages.push(ChatMessage {
                     role: "tool".to_string(),
@@ -501,15 +485,40 @@ fn merge_consecutive_messages(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
 
 /// Split `<think>...</think>` tags from content into reasoning_content.
 /// Used for MiniMax-like providers that embed thinking in content.
+/// Handles multiple `<think>` blocks by extracting all of them.
 pub fn split_think_tags(content: &str) -> (String, Option<String>) {
-    if let Some(start) = content.find("<think>") {
-        if let Some(end) = content.find("</think>") {
-            let thinking = content[start + 7..end].trim().to_string();
-            let remaining = format!("{}{}", &content[..start], &content[end + 8..]).trim().to_string();
-            return (remaining, if thinking.is_empty() { None } else { Some(thinking) });
+    let mut remaining = String::new();
+    let mut thinking_parts = Vec::new();
+    let mut search_from = 0;
+
+    while let Some(start) = content[search_from..].find("<think>") {
+        let abs_start = search_from + start;
+        // Append text before this <think> tag
+        remaining.push_str(&content[search_from..abs_start]);
+
+        if let Some(end) = content[abs_start..].find("</think>") {
+            let abs_end = abs_start + end;
+            let block = content[abs_start + 7..abs_end].trim();
+            if !block.is_empty() {
+                thinking_parts.push(block.to_string());
+            }
+            search_from = abs_end + 8;
+        } else {
+            // No closing tag — keep the rest as-is
+            search_from = abs_start;
+            break;
         }
     }
-    (content.to_string(), None)
+    // Append any trailing text
+    remaining.push_str(&content[search_from..]);
+    let remaining = remaining.trim().to_string();
+
+    let thinking = if thinking_parts.is_empty() {
+        None
+    } else {
+        Some(thinking_parts.join("\n\n"))
+    };
+    (remaining, thinking)
 }
 
 #[cfg(test)]
@@ -531,12 +540,9 @@ mod tests {
             temperature: None,
             top_p: None,
             max_output_tokens: None,
-            parallel_tool_calls: None,
-            reasoning: None,
-            metadata: None,
-            extra: std::collections::HashMap::new(),
+            ..Default::default()
         };
-        let result = convert(&req, "gpt-4", false).unwrap();
+        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
         assert_eq!(result.model, "gpt-4");
         assert_eq!(result.messages.len(), 1);
         assert_eq!(result.messages[0].role, "user");
@@ -557,12 +563,9 @@ mod tests {
             temperature: None,
             top_p: None,
             max_output_tokens: None,
-            parallel_tool_calls: None,
-            reasoning: None,
-            metadata: None,
-            extra: std::collections::HashMap::new(),
+            ..Default::default()
         };
-        let result = convert(&req, "gpt-4", false).unwrap();
+        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
         assert_eq!(result.messages.len(), 2);
         assert_eq!(result.messages[0].role, "system");
         assert_eq!(result.messages[0].content, Some(json!("Be helpful")));
@@ -583,12 +586,9 @@ mod tests {
             temperature: None,
             top_p: None,
             max_output_tokens: None,
-            parallel_tool_calls: None,
-            reasoning: None,
-            metadata: None,
-            extra: std::collections::HashMap::new(),
+            ..Default::default()
         };
-        let result = convert(&req, "gpt-4", false).unwrap();
+        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
         assert_eq!(result.messages[0].content, Some(json!("Instr")));
     }
 
@@ -609,12 +609,9 @@ mod tests {
             temperature: None,
             top_p: None,
             max_output_tokens: None,
-            parallel_tool_calls: None,
-            reasoning: None,
-            metadata: None,
-            extra: std::collections::HashMap::new(),
+            ..Default::default()
         };
-        let result = convert(&req, "gpt-4", false).unwrap();
+        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
         assert_eq!(result.messages.len(), 2);
         assert_eq!(result.messages[0].role, "user");
         assert_eq!(result.messages[1].role, "assistant");
@@ -637,12 +634,9 @@ mod tests {
             temperature: None,
             top_p: None,
             max_output_tokens: None,
-            parallel_tool_calls: None,
-            reasoning: None,
-            metadata: None,
-            extra: std::collections::HashMap::new(),
+            ..Default::default()
         };
-        let result = convert(&req, "gpt-4", false).unwrap();
+        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
         assert_eq!(result.messages.len(), 2);
         assert_eq!(result.messages[0].role, "assistant");
         assert!(result.messages[0].tool_calls.is_some());
@@ -666,12 +660,9 @@ mod tests {
             temperature: None,
             top_p: None,
             max_output_tokens: None,
-            parallel_tool_calls: None,
-            reasoning: None,
-            metadata: None,
-            extra: std::collections::HashMap::new(),
+            ..Default::default()
         };
-        assert!(convert(&req, "gpt-4", false).is_err());
+        assert!(convert_with_provider(&req, "gpt-4", false, "").is_err());
     }
 
     #[test]
@@ -688,12 +679,9 @@ mod tests {
             temperature: None,
             top_p: None,
             max_output_tokens: None,
-            parallel_tool_calls: None,
-            reasoning: None,
-            metadata: None,
-            extra: std::collections::HashMap::new(),
+            ..Default::default()
         };
-        let result = convert(&req, "gpt-4", false).unwrap();
+        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
         assert!(result.stream);
         assert!(result.stream_options.is_some());
         assert_eq!(result.stream_options.unwrap()["include_usage"], true);
@@ -713,12 +701,9 @@ mod tests {
             temperature: Some(0.7),
             top_p: Some(0.9),
             max_output_tokens: Some(1024),
-            parallel_tool_calls: None,
-            reasoning: None,
-            metadata: None,
-            extra: std::collections::HashMap::new(),
+            ..Default::default()
         };
-        let result = convert(&req, "gpt-4", false).unwrap();
+        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
         assert_eq!(result.temperature, Some(0.7));
         assert_eq!(result.top_p, Some(0.9));
         assert_eq!(result.max_tokens, Some(1024));
@@ -889,10 +874,7 @@ mod tests {
             temperature: None,
             top_p: None,
             max_output_tokens: None,
-            parallel_tool_calls: None,
-            reasoning: None,
-            metadata: None,
-            extra: std::collections::HashMap::new(),
+            ..Default::default()
         };
         let result = convert_with_provider(&req, "kimi-k2", false, "kimi").unwrap();
         assert!(result.thinking.is_some());
@@ -973,5 +955,62 @@ mod tests {
         let input = json!(42);
         let result = convert_input(&input).unwrap();
         assert_eq!(result[0].content, Some(json!("42")));
+    }
+
+    // ── Tests for fixes ──
+
+    #[test]
+    fn test_split_think_tags_multiple_blocks() {
+        let (text, reasoning) = split_think_tags("<think>A</think> middle <think>B</think> end");
+        assert_eq!(text, "middle  end");
+        assert_eq!(reasoning, Some("A\n\nB".to_string()));
+    }
+
+    #[test]
+    fn test_split_think_tags_unclosed() {
+        let (text, reasoning) = split_think_tags("hello <think>unclosed");
+        assert_eq!(text, "hello <think>unclosed");
+        assert_eq!(reasoning, None);
+    }
+
+    #[test]
+    fn test_split_think_tags_adjacent() {
+        let (text, reasoning) = split_think_tags("<think>first</think><think>second</think>");
+        assert_eq!(reasoning, Some("first\n\nsecond".to_string()));
+        assert_eq!(text, "");
+    }
+
+    #[test]
+    fn test_large_tool_output_not_truncated() {
+        let big_output = "x".repeat(10000);
+        let req = ResponsesRequest {
+            model: Some("gpt-4".to_string()),
+            input: json!([
+                {"type": "function_call", "call_id": "c1", "name": "read", "arguments": "{}"},
+                {"type": "function_call_output", "call_id": "c1", "output": big_output}
+            ]),
+            ..Default::default()
+        };
+        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let tool_msg = &result.messages[1];
+        let content_str = tool_msg.content.as_ref().unwrap().as_str().unwrap();
+        assert_eq!(content_str.len(), 10000, "Tool output should not be truncated");
+    }
+
+    #[test]
+    fn test_chinese_tool_output_not_truncated() {
+        let chinese_output = "中文".repeat(3000); // 6000 chars, ~18000 bytes
+        let req = ResponsesRequest {
+            model: Some("gpt-4".to_string()),
+            input: json!([
+                {"type": "function_call", "call_id": "c1", "name": "read", "arguments": "{}"},
+                {"type": "function_call_output", "call_id": "c1", "output": chinese_output}
+            ]),
+            ..Default::default()
+        };
+        let result = convert_with_provider(&req, "gpt-4", false, "").unwrap();
+        let tool_msg = &result.messages[1];
+        let content_str = tool_msg.content.as_ref().unwrap().as_str().unwrap();
+        assert_eq!(content_str, chinese_output, "Chinese tool output should pass through intact");
     }
 }

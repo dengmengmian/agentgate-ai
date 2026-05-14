@@ -125,15 +125,6 @@ pub fn function_call_done(item_id: &str, output_index: usize, call_id: &str, nam
     sse("response.output_item.done", json!({ "type": "response.output_item.done", "output_index": output_index, "item": item }))
 }
 
-/// Annotation event for web search citations.
-pub fn annotation_added(item_id: &str, output_index: usize, content_index: usize, annotation: &Value) -> String {
-    sse("response.output_text.annotation.added", json!({
-        "type": "response.output_text.annotation.added",
-        "item_id": item_id, "output_index": output_index, "content_index": content_index,
-        "annotation": annotation,
-    }))
-}
-
 pub fn response_completed(response_id: &str, model: &str, usage: Option<&Value>) -> String {
     let default_usage = json!({
         "input_tokens": 0, "output_tokens": 0, "total_tokens": 0,

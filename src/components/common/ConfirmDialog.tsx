@@ -1,10 +1,12 @@
 import { AlertTriangle } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 interface ConfirmDialogProps {
   open: boolean;
   title: string;
   message: string;
   confirmLabel?: string;
+  cancelLabel?: string;
   variant?: "danger" | "default";
   onConfirm: () => void;
   onCancel: () => void;
@@ -14,11 +16,13 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = "Confirm",
+  confirmLabel,
+  cancelLabel,
   variant = "default",
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useI18n();
   if (!open) return null;
 
   return (
@@ -41,7 +45,7 @@ export function ConfirmDialog({
             onClick={onCancel}
             className="rounded-md bg-card-secondary px-4 py-2 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
           >
-            Cancel
+            {cancelLabel || t("common.cancel")}
           </button>
           <button
             onClick={onConfirm}
@@ -51,7 +55,7 @@ export function ConfirmDialog({
                 : "bg-accent hover:bg-accent/90"
             }`}
           >
-            {confirmLabel}
+            {confirmLabel || t("common.confirm")}
           </button>
         </div>
       </div>

@@ -2,6 +2,47 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.5] - 2025-05-14
+
+### Bug Fixes / 修复
+
+- **修复中文内容导致网关 panic** — 所有字符串截断函数（`truncate_str`、`truncate`）改用 `is_char_boundary` 安全截断，消除多字节字符边界 panic
+- **修复 tool output 截断导致 Codex 崩溃** — 移除网关层 4000 字节截断限制，tool output 原样透传给上游模型
+- **修复错误响应格式** — 错误 JSON 添加 `type` 字段，符合 OpenAI API 规范，客户端不再显示 "Unknown error"
+- **修复 Auth 返回 500** — `GATEWAY_AUTH_MISSING` / `GATEWAY_AUTH_INVALID` 正确返回 401
+- **修复 Mutex 中毒后日志永久丢失** — 所有 DB 锁操作改用 `lock_db()` 恢复 poisoned Mutex
+- **修复 SSE 事件日志溢出** — `events_size` 严格守住 1MB 上限
+- **修复 `sanitize_body` 重复扫描** — `sk-****` 替换后正确跳过已处理内容
+- **修复 `split_think_tags` 只处理首个块** — 改为循环提取所有 `<think>` 块
+- **修复 Provider 删除不级联** — 删除 Provider 时同步清理 route_profile_providers，消除孤儿数据
+- **修复 `reasoning_store` 哈希碰撞风险** — 改用双哈希 + 长度作为 key
+- **修复 Settings 页 `installing` 状态声明顺序** — 消除 temporal dead zone 错误
+- **修复 Dashboard 轮询无取消守卫** — 组件卸载后不再写状态
+- **修复 Gateway 端口无校验** — 保存前验证端口范围 1-65535
+- **修复 ConfirmDialog "Cancel" 硬编码英文** — 改用 i18n
+
+### Performance / 性能
+
+- **`get_stats` 查询优化** — 从 14 条独立 SQL 合并为 3 条（1 聚合 + 1 GROUP BY + 1 Top），减少锁持有时间
+- **添加 `request_logs.timestamp` 索引** — 加速按时间的统计查询
+
+### Improvements / 优化
+
+- **自检逻辑优化** — 未配置 AgentGate 的客户端（Codex/Claude Code）跳过检查，不再报 warning
+- **API 密钥显示优化** — 遮罩改为固定长度 `sk-1****cdef`，不再撑满整行
+- **日志页添加刷新按钮**
+- **`formatTimestamp` 支持 locale 参数** — 中文环境使用中文格式
+- **Routes/ProviderForm 改用受控 select** — 替换 `document.getElementById` 反模式
+
+### Code Quality / 代码质量
+
+- 清理 35+ 处死代码（`select`、`ConfigBackup`、`ResponsesResponse`、`ProviderAttempt` 等）
+- 编译零 warning、零 error
+- 新增 23 个单元测试（170 → 193），覆盖所有核心修复
+- 新增集成测试脚本 `scripts/test-integration.sh`（12 项端到端测试）
+
+---
+
 ## [0.1.4] - 2025-05-14
 
 ### Features / 功能
