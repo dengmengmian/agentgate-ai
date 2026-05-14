@@ -143,13 +143,15 @@ pub fn run() {
             commands::open_codex_config,
             // Claude Code
             commands::detect_claude_code_env,
-            commands::preview_claude_code_config,
             commands::apply_claude_code_config,
-            commands::backup_claude_code_config,
-            commands::list_claude_code_backups,
-            commands::restore_claude_code_backup,
+            commands::toggle_claude_code_provider,
             commands::open_claude_code_config,
             commands::generate_claude_code_env,
+            // OpenCode
+            commands::detect_opencode_config,
+            commands::apply_opencode_config,
+            commands::generate_opencode_config,
+            commands::open_opencode_config,
             // Route Profiles
             commands::list_route_profiles,
             commands::get_route_profile,

@@ -3,14 +3,10 @@ import {
   Terminal,
   Code,
   Braces,
-  Download,
   FolderOpen,
   AlertTriangle,
   Zap,
   Shield,
-  RotateCcw,
-  ChevronDown,
-  ChevronUp,
   ToggleLeft,
   ToggleRight,
 } from "lucide-react";
@@ -21,39 +17,30 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
-import type { ToolConfigView } from "@/types/tool";
-import type { CodexConfigStatus, ClaudeCodeEnvStatus } from "@/types/config";
-import type { ConfigBackup } from "@/types/config";
-
-const iconMap: Record<string, React.ElementType> = {
-  terminal: Terminal,
-  code: Code,
-  braces: Braces,
-};
+import type { CodexConfigStatus, ClaudeCodeEnvStatus, OpenCodeConfigStatus } from "@/types/config";
 
 export function Tools() {
   const { t } = useI18n();
-  const [tools, setTools] = useState<ToolConfigView[]>([]);
   const [codexStatus, setCodexStatus] = useState<CodexConfigStatus | null>(null);
   const [claudeEnv, setClaudeEnv] = useState<ClaudeCodeEnvStatus | null>(null);
   const [codexConfig, setCodexConfig] = useState("");
   const [claudeSnippet, setClaudeSnippet] = useState("");
   const [loading, setLoading] = useState(true);
+  const [openCodeStatus, setOpenCodeStatus] = useState<OpenCodeConfigStatus | null>(null);
   const [confirmApplyCodex, setConfirmApplyCodex] = useState(false);
   const [confirmApplyClaude, setConfirmApplyClaude] = useState(false);
-  const [claudeBackups, setClaudeBackups] = useState<ConfigBackup[]>([]);
-  const [showClaudeBackups, setShowClaudeBackups] = useState(false);
+  const [confirmApplyOpenCode, setConfirmApplyOpenCode] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [t, c, cc] = await Promise.all([
-        api.listTools(),
+      const [c, cc, oc] = await Promise.all([
         api.detectCodexConfig(),
         api.detectClaudeCodeEnv(),
+        api.detectOpenCodeConfig(),
       ]);
-      setTools(t);
       setCodexStatus(c);
       setClaudeEnv(cc);
+      setOpenCodeStatus(oc);
       const snippet = await api.generateCodexConfig();
       setCodexConfig(snippet);
     } catch (err) {
@@ -70,7 +57,6 @@ export function Tools() {
       const result = await api.applyCodexConfig();
       if (result.success) {
         toast("success", `Codex ${t("tools.config_written")} ${result.config_path}`);
-        if (result.backup_path) toast("success", `${t("tools.backup_saved")}: ${result.backup_path.split("/").pop()}`);
       }
       setConfirmApplyCodex(false);
       load();
@@ -93,30 +79,32 @@ export function Tools() {
       const result = await api.applyClaudeCodeConfig();
       if (result.success) {
         toast("success", `Claude Code ${t("tools.config_written")} ${result.config_path}`);
-        if (result.backup_path) toast("success", `${t("tools.backup_saved")}: ${result.backup_path.split("/").pop()}`);
       }
       setConfirmApplyClaude(false);
       load();
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
-  const handleBackupClaude = async () => {
-    try { await api.backupClaudeCodeConfig(); toast("success", `Claude Code ${t("tools.backed_up")}`); loadBackups(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
-  };
-
-  const loadBackups = async () => {
+  const handleToggleClaude = async () => {
     try {
-      const ccb = await api.listClaudeCodeBackups();
-      setClaudeBackups(ccb);
-    } catch { /* ignore */ }
+      const result = await api.toggleClaudeCodeProvider();
+      if (result.success) {
+        const label = result.new_provider === "agentgate" ? "AgentGate" : t("tools.official");
+        toast("success", `${t("tools.switched_to")} ${label}`);
+      }
+      load();
+    } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
-  useEffect(() => { loadBackups(); }, []);
-
-  const handleRestoreClaude = async (backupId: string) => {
-    try { await api.restoreClaudeCodeBackup(backupId); toast("success", t("tools.restored")); load(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+  const handleApplyOpenCode = async () => {
+    try {
+      const result = await api.applyOpenCodeConfig();
+      if (result.success) {
+        toast("success", `OpenCode ${t("tools.config_written")} ${result.config_path}`);
+      }
+      setConfirmApplyOpenCode(false);
+      load();
+    } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleGenerateClaudeSnippet = async () => {
@@ -185,7 +173,6 @@ export function Tools() {
           )}
           <CopyButton text={codexConfig} />
         </div>
-
       </div>
 
       {/* Claude Code Card */}
@@ -227,61 +214,62 @@ export function Tools() {
 
         <div className="mb-4 flex flex-wrap gap-2">
           <button onClick={() => setConfirmApplyClaude(true)} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
+          {claudeEnv?.has_agentgate && claudeEnv?.has_saved_official && (
+            <button onClick={handleToggleClaude} className="btn-secondary">
+              <ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}
+            </button>
+          )}
+          {!claudeEnv?.has_agentgate && claudeEnv?.has_saved_official && (
+            <button onClick={handleToggleClaude} className="btn-primary">
+              <ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}
+            </button>
+          )}
           {claudeEnv?.settings_exists && (
-            <>
-              <button onClick={handleBackupClaude} className="btn-secondary"><Download className="h-3 w-3" />{t("tools.backup")}</button>
-              <button onClick={() => api.openClaudeCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
-            </>
+            <button onClick={() => api.openClaudeCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
           )}
           <button onClick={handleGenerateClaudeSnippet} className="btn-secondary"><Code className="h-3 w-3" />{t("tools.env_snippet")}</button>
         </div>
 
         {claudeSnippet && <JsonCodeBlock title="Claude Code Environment" content={claudeSnippet} language="bash" />}
-
-        {claudeBackups.length > 0 && (
-          <div className="mt-4 border-t border-border pt-3">
-            <button onClick={() => setShowClaudeBackups(!showClaudeBackups)} className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary">
-              {showClaudeBackups ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              {t("tools.backup_history")} ({claudeBackups.length})
-            </button>
-            {showClaudeBackups && (
-              <div className="mt-2 space-y-1.5">
-                {claudeBackups.map(b => (
-                  <div key={b.id} className="flex items-center justify-between rounded-md bg-card-secondary px-3 py-2 text-xs">
-                    <div>
-                      <span className="text-text-primary">{b.backup_path.split("/").pop()}</span>
-                      <span className="ml-2 text-text-muted">{new Date(b.created_at).toLocaleString()}</span>
-                    </div>
-                    <button onClick={() => handleRestoreClaude(b.id)} className="btn-secondary text-[11px]">
-                      <RotateCcw className="h-3 w-3" />{t("tools.restore")}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* OpenCode Card */}
-      {tools.filter(t => t.slug === "opencode").map(tool => {
-        const Icon = iconMap[tool.icon] ?? Braces;
-        return (
-          <div key={tool.id} className="rounded-lg border border-border bg-card p-5">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10"><Icon className="h-5 w-5 text-accent" /></div>
-                <div><h3 className="text-sm font-semibold text-text-primary">{tool.name}</h3><p className="text-xs text-text-muted">{tool.description}</p></div>
-              </div>
-              <StatusBadge variant={tool.config_exists ? "success" : "muted"}>{tool.config_exists ? t("tools.config_found") : t("tools.no_config")}</StatusBadge>
+      <div className="rounded-lg border border-border bg-card p-5">
+        <div className="mb-4 flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+              <Braces className="h-5 w-5 text-accent" />
             </div>
-            <p className="mt-3 text-xs text-text-muted">Config: <span className="font-mono">{tool.config_path}</span></p>
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">{t("tools.opencode")}</h3>
+              <p className="text-xs text-text-muted">{t("tools.opencode_desc")}</p>
+            </div>
           </div>
-        );
-      })}
+          <StatusBadge variant={openCodeStatus?.has_agentgate ? "success" : openCodeStatus?.exists ? "warning" : "muted"}>
+            {openCodeStatus?.has_agentgate ? t("tools.agentgate_configured") : openCodeStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
+          </StatusBadge>
+        </div>
+
+        {openCodeStatus && (
+          <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
+            <div><span className="text-text-muted">opencode.json</span><p className="font-mono text-text-secondary text-[11px]">{openCodeStatus.config_path}</p></div>
+            <div><span className="text-text-muted">{t("logs.model")}</span><p className="text-text-primary">{openCodeStatus.current_model ?? "—"}</p></div>
+          </div>
+        )}
+
+        <p className="mb-3 text-[11px] text-text-muted">{t("tools.opencode_auth_desc")}</p>
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button onClick={() => setConfirmApplyOpenCode(true)} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
+          {openCodeStatus?.exists && (
+            <button onClick={() => api.openOpenCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
+          )}
+        </div>
+      </div>
 
       <ConfirmDialog open={confirmApplyCodex} title={t("tools.apply_codex_title")} message={t("tools.apply_codex_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyCodex} onCancel={() => setConfirmApplyCodex(false)} />
       <ConfirmDialog open={confirmApplyClaude} title={t("tools.apply_claude_title")} message={t("tools.apply_claude_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyClaude} onCancel={() => setConfirmApplyClaude(false)} />
+      <ConfirmDialog open={confirmApplyOpenCode} title={t("tools.apply_opencode_title")} message={t("tools.apply_opencode_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyOpenCode} onCancel={() => setConfirmApplyOpenCode(false)} />
     </div>
   );
 }

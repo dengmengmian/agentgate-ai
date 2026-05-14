@@ -7,11 +7,47 @@ use serde::Serialize;
 use crate::errors::AppError;
 use crate::security::local_token;
 
-#[derive(Debug, Clone, Serialize)]
-pub struct BackupResult {
-    pub backup_id: String,
-    pub backup_path: String,
-    pub source_path: String,
+/// Directory where we save the user's original settings.json.
+fn saved_dir() -> PathBuf {
+    local_token::token_dir().join("claude_code_official")
+}
+
+fn saved_settings_path() -> PathBuf {
+    saved_dir().join("settings.json")
+}
+
+/// Save original settings.json for restoring on toggle.
+fn save_official_settings() -> Result<(), AppError> {
+    let src = settings_path();
+    if !src.exists() {
+        return Ok(());
+    }
+    let dir = saved_dir();
+    fs::create_dir_all(&dir).map_err(|e| {
+        AppError::new("CLAUDE_SAVE_FAILED", format!("Cannot create dir: {e}"))
+    })?;
+    fs::copy(&src, saved_settings_path()).map_err(|e| {
+        AppError::new("CLAUDE_SAVE_FAILED", format!("Cannot save settings.json: {e}"))
+    })?;
+    Ok(())
+}
+
+/// Check if saved official settings exist.
+pub fn has_saved_official() -> bool {
+    saved_settings_path().exists()
+}
+
+/// Restore the saved original settings.json.
+fn restore_official_settings() -> Result<(), AppError> {
+    let saved = saved_settings_path();
+    if !saved.exists() {
+        return Err(AppError::new("CLAUDE_NO_SAVED_FILES",
+            "No saved official settings found."));
+    }
+    fs::copy(&saved, settings_path()).map_err(|e| {
+        AppError::new("CLAUDE_RESTORE_FAILED", format!("Cannot restore settings.json: {e}"))
+    })?;
+    Ok(())
 }
 
 const ENV_VARS: &[&str] = &[
@@ -40,6 +76,7 @@ pub struct ClaudeCodeEnvStatus {
     pub has_agentgate: bool,
     pub auth_mode: String,
     pub recommendations: Vec<String>,
+    pub has_saved_official: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -48,18 +85,6 @@ pub struct ProfileDetection {
     pub exists: bool,
     pub has_anthropic_vars: bool,
     pub var_count: usize,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct ClaudeCodeConfigPreview {
-    pub config_path: String,
-    pub exists: bool,
-    pub current_summary: Option<String>,
-    pub proposed_env: HashMap<String, String>,
-    pub warnings: Vec<String>,
-    pub conflicts: Vec<String>,
-    pub auth_mode: String,
-    pub masked_local_token: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -149,51 +174,15 @@ pub fn detect_env() -> ClaudeCodeEnvStatus {
         settings_path: sp_str, settings_exists, current_env, detected_profiles, conflicts,
         active_base_url, active_model, has_api_key, has_auth_token, has_agentgate,
         auth_mode: "inline_token".to_string(), recommendations,
+        has_saved_official: has_saved_official(),
     }
 }
 
-pub fn preview_config(host: &str, port: i64, model: &str) -> Result<ClaudeCodeConfigPreview, AppError> {
-    let token = local_token::ensure_token()?;
-    let masked = local_token::mask_token(&token);
-
-    let sp = settings_path();
-    let sp_str = sp.to_string_lossy().to_string();
-    let exists = sp.exists();
-
-    let mut warnings = Vec::new();
-    let mut conflicts = Vec::new();
-
-    let current_summary = if exists {
-        let content = fs::read_to_string(&sp).unwrap_or_default();
-        if content.contains("ANTHROPIC_AUTH_TOKEN") {
-            conflicts.push("Existing config has ANTHROPIC_AUTH_TOKEN which may conflict".to_string());
-        }
-        Some(format!("File exists ({} bytes)", content.len()))
-    } else {
-        warnings.push("Settings file does not exist, will be created".to_string());
-        None
-    };
-
-    let mut proposed_env = HashMap::new();
-    proposed_env.insert("ANTHROPIC_BASE_URL".to_string(), format!("http://{host}:{port}"));
-    proposed_env.insert("ANTHROPIC_API_KEY".to_string(), masked.clone());
-    proposed_env.insert("ANTHROPIC_MODEL".to_string(), model.to_string());
-    proposed_env.insert("ANTHROPIC_DEFAULT_SONNET_MODEL".to_string(), model.to_string());
-    proposed_env.insert("ANTHROPIC_DEFAULT_OPUS_MODEL".to_string(), model.to_string());
-    proposed_env.insert("ANTHROPIC_DEFAULT_HAIKU_MODEL".to_string(), model.to_string());
-
-    Ok(ClaudeCodeConfigPreview {
-        config_path: sp_str, exists, current_summary, proposed_env,
-        warnings, conflicts, auth_mode: "inline_token".to_string(), masked_local_token: masked,
-    })
-}
-
-pub fn apply_config(host: &str, port: i64, model: &str, backup_dir: &Path) -> Result<ApplyConfigResult, AppError> {
+pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, AppError> {
     let token = local_token::ensure_token()?;
 
     let sp = settings_path();
     let sp_str = sp.to_string_lossy().to_string();
-    let mut backup_path_str = None;
     let mut warnings = Vec::new();
 
     // Ensure parent dir
@@ -203,10 +192,10 @@ pub fn apply_config(host: &str, port: i64, model: &str, backup_dir: &Path) -> Re
         })?;
     }
 
-    // Backup if exists
-    if sp.exists() {
-        let bp = create_backup(&sp, backup_dir, "claude_code_settings")?;
-        backup_path_str = Some(bp);
+    // Save official settings for toggle restore (skip if already agentgate)
+    let status = detect_env();
+    if !status.has_agentgate && sp.exists() {
+        save_official_settings()?;
     }
 
     // Read existing or start fresh
@@ -216,12 +205,10 @@ pub fn apply_config(host: &str, port: i64, model: &str, backup_dir: &Path) -> Re
         "{}".to_string()
     };
 
-    // Parse JSON
     let mut doc: serde_json::Value = serde_json::from_str(&existing).map_err(|e| {
         AppError::new("CLAUDE_CONFIG_PARSE_ERROR", format!("Cannot parse settings.json: {e}"))
     })?;
 
-    // Ensure env object exists
     if doc.get("env").is_none() {
         doc["env"] = serde_json::json!({});
     }
@@ -230,7 +217,6 @@ pub fn apply_config(host: &str, port: i64, model: &str, backup_dir: &Path) -> Re
         AppError::new("CLAUDE_CONFIG_PARSE_ERROR", "env field is not an object")
     })?;
 
-    // Set AgentGate fields
     env.insert("ANTHROPIC_BASE_URL".to_string(), serde_json::json!(format!("http://{host}:{port}")));
     env.insert("ANTHROPIC_API_KEY".to_string(), serde_json::json!(token));
     env.insert("ANTHROPIC_MODEL".to_string(), serde_json::json!(model));
@@ -238,12 +224,10 @@ pub fn apply_config(host: &str, port: i64, model: &str, backup_dir: &Path) -> Re
     env.insert("ANTHROPIC_DEFAULT_OPUS_MODEL".to_string(), serde_json::json!(model));
     env.insert("ANTHROPIC_DEFAULT_HAIKU_MODEL".to_string(), serde_json::json!(model));
 
-    // Remove ANTHROPIC_AUTH_TOKEN to avoid conflict
     if env.remove("ANTHROPIC_AUTH_TOKEN").is_some() {
         warnings.push("Removed ANTHROPIC_AUTH_TOKEN to avoid conflict with ANTHROPIC_API_KEY".to_string());
     }
 
-    // Write
     let new_content = serde_json::to_string_pretty(&doc).map_err(|e| {
         AppError::new("CLAUDE_CONFIG_WRITE_FAILED", format!("Cannot serialize: {e}"))
     })?;
@@ -252,53 +236,54 @@ pub fn apply_config(host: &str, port: i64, model: &str, backup_dir: &Path) -> Re
     fs::write(&tmp_path, &new_content).map_err(|e| {
         AppError::new("CLAUDE_CONFIG_WRITE_FAILED", format!("Failed to write temp: {e}"))
     })?;
-
     fs::rename(&tmp_path, &sp).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
-        if let Some(ref bp) = backup_path_str {
-            let _ = fs::copy(bp, &sp);
-        }
         AppError::new("CLAUDE_CONFIG_WRITE_FAILED", format!("Failed to replace: {e}"))
     })?;
 
+    if has_saved_official() {
+        warnings.push("Original settings saved. Use toggle to switch back.".to_string());
+    }
+
     let changed_keys = vec![
         "ANTHROPIC_BASE_URL".to_string(), "ANTHROPIC_API_KEY".to_string(),
-        "ANTHROPIC_MODEL".to_string(), "ANTHROPIC_DEFAULT_SONNET_MODEL".to_string(),
-        "ANTHROPIC_DEFAULT_OPUS_MODEL".to_string(), "ANTHROPIC_DEFAULT_HAIKU_MODEL".to_string(),
+        "ANTHROPIC_MODEL".to_string(),
     ];
 
     Ok(ApplyConfigResult {
         success: true, config_path: sp_str,
-        backup_path: backup_path_str, changed_keys, warnings,
+        backup_path: None, changed_keys, warnings,
     })
 }
 
-pub fn backup_config(backup_dir: &Path) -> Result<BackupResult, AppError> {
-    let sp = settings_path();
-    if !sp.exists() {
-        return Err(AppError::new("CLAUDE_CONFIG_NOT_FOUND", "Claude Code settings.json does not exist"));
+/// Toggle between AgentGate and official config.
+pub fn toggle_provider(host: &str, port: i64, model: &str) -> Result<ToggleResult, AppError> {
+    let status = detect_env();
+
+    if status.has_agentgate {
+        // Switching TO official: restore saved settings.json
+        restore_official_settings()?;
+        Ok(ToggleResult {
+            success: true,
+            new_provider: "official".to_string(),
+            config_path: settings_path().to_string_lossy().to_string(),
+        })
+    } else {
+        // Switching TO agentgate: save current, apply agentgate
+        apply_config(host, port, model)?;
+        Ok(ToggleResult {
+            success: true,
+            new_provider: "agentgate".to_string(),
+            config_path: settings_path().to_string_lossy().to_string(),
+        })
     }
-    let bp = create_backup(&sp, backup_dir, "claude_code_settings")?;
-    Ok(BackupResult {
-        backup_id: String::new(),
-        backup_path: bp,
-        source_path: sp.to_string_lossy().to_string(),
-    })
 }
 
-pub fn restore_config(backup_path: &str, backup_dir: &Path) -> Result<(), AppError> {
-    let sp = settings_path();
-    let bp = Path::new(backup_path);
-    if !bp.exists() {
-        return Err(AppError::new("CLAUDE_CONFIG_RESTORE_FAILED", "Backup file does not exist"));
-    }
-    if sp.exists() {
-        let _ = create_backup(&sp, backup_dir, "claude_code_pre_restore");
-    }
-    fs::copy(bp, &sp).map_err(|e| {
-        AppError::new("CLAUDE_CONFIG_RESTORE_FAILED", format!("Failed to restore: {e}"))
-    })?;
-    Ok(())
+#[derive(Debug, Clone, Serialize)]
+pub struct ToggleResult {
+    pub success: bool,
+    pub new_provider: String,
+    pub config_path: String,
 }
 
 pub fn open_config() -> Result<(), AppError> {
@@ -337,20 +322,6 @@ pub(crate) fn mask_value(val: &str) -> String {
     }
 }
 
-fn create_backup(source: &Path, backup_dir: &Path, prefix: &str) -> Result<String, AppError> {
-    fs::create_dir_all(backup_dir).map_err(|e| {
-        AppError::new("CLAUDE_CONFIG_BACKUP_FAILED", format!("Cannot create backup dir: {e}"))
-    })?;
-    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-    let ext = source.extension().and_then(|e| e.to_str()).unwrap_or("bak");
-    let backup_name = format!("{prefix}_{timestamp}.{ext}");
-    let backup_path = backup_dir.join(&backup_name);
-    fs::copy(source, &backup_path).map_err(|e| {
-        AppError::new("CLAUDE_CONFIG_BACKUP_FAILED", format!("Failed to copy: {e}"))
-    })?;
-    Ok(backup_path.to_string_lossy().to_string())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,8 +354,7 @@ mod tests {
     fn test_apply_config_creates_new_file() {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
-        let backup_dir = temp.join("backups");
-        let result = apply_config("127.0.0.1", 9090, "claude-model", &backup_dir).unwrap();
+        let result = apply_config("127.0.0.1", 9090, "claude-model").unwrap();
         assert!(result.success);
         assert!(settings_path().exists());
         let content = std::fs::read_to_string(settings_path()).unwrap();
@@ -395,18 +365,27 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_config_updates_existing() {
+    fn test_apply_saves_and_toggle_restores() {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
-        let backup_dir = temp.join("backups");
+        // Pre-create settings with official config
         std::fs::create_dir_all(settings_path().parent().unwrap()).unwrap();
-        std::fs::write(settings_path(), r#"{"env":{"ANTHROPIC_MODEL":"old-model"}}"#).unwrap();
-        let result = apply_config("127.0.0.1", 9090, "new-model", &backup_dir).unwrap();
-        assert!(result.success);
-        assert!(result.backup_path.is_some());
+        std::fs::write(settings_path(), r#"{"env":{"ANTHROPIC_API_KEY":"sk-real"}}"#).unwrap();
+        // Apply agentgate
+        apply_config("127.0.0.1", 9090, "model").unwrap();
         let content = std::fs::read_to_string(settings_path()).unwrap();
-        assert!(content.contains("new-model"));
-        assert!(!content.contains("ANTHROPIC_AUTH_TOKEN"));
+        assert!(content.contains("ag_local_"));
+        assert!(has_saved_official());
+        // Toggle back to official
+        let result = toggle_provider("127.0.0.1", 9090, "model").unwrap();
+        assert_eq!(result.new_provider, "official");
+        let content = std::fs::read_to_string(settings_path()).unwrap();
+        assert!(content.contains("sk-real"));
+        // Toggle to agentgate again
+        let result = toggle_provider("127.0.0.1", 9090, "model").unwrap();
+        assert_eq!(result.new_provider, "agentgate");
+        let content = std::fs::read_to_string(settings_path()).unwrap();
+        assert!(content.contains("ag_local_"));
         cleanup(&temp);
     }
 
@@ -414,37 +393,13 @@ mod tests {
     fn test_apply_config_removes_auth_token() {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
-        let backup_dir = temp.join("backups");
         std::fs::create_dir_all(settings_path().parent().unwrap()).unwrap();
         std::fs::write(settings_path(), r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"secret"}}"#).unwrap();
-        let result = apply_config("127.0.0.1", 9090, "model", &backup_dir).unwrap();
+        let result = apply_config("127.0.0.1", 9090, "model").unwrap();
         assert!(result.success);
         assert!(result.warnings.iter().any(|w| w.contains("ANTHROPIC_AUTH_TOKEN")));
         let content = std::fs::read_to_string(settings_path()).unwrap();
         assert!(!content.contains("ANTHROPIC_AUTH_TOKEN"));
-        cleanup(&temp);
-    }
-
-    #[test]
-    fn test_preview_config_new_file() {
-        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let temp = setup_temp_home();
-        let preview = preview_config("127.0.0.1", 9090, "model").unwrap();
-        assert!(!preview.exists);
-        assert!(preview.warnings.iter().any(|w| w.contains("does not exist")));
-        assert_eq!(preview.proposed_env.get("ANTHROPIC_BASE_URL"), Some(&"http://127.0.0.1:9090".to_string()));
-        cleanup(&temp);
-    }
-
-    #[test]
-    fn test_preview_config_existing_file() {
-        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let temp = setup_temp_home();
-        std::fs::create_dir_all(settings_path().parent().unwrap()).unwrap();
-        std::fs::write(settings_path(), r#"{"env":{}}"#).unwrap();
-        let preview = preview_config("127.0.0.1", 9090, "model").unwrap();
-        assert!(preview.exists);
-        assert_eq!(preview.current_summary, Some("File exists (10 bytes)".to_string()));
         cleanup(&temp);
     }
 }

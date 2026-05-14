@@ -40,14 +40,11 @@ export interface ApplyConfigResult {
   warnings: string[];
 }
 
-export interface ConfigBackup {
-  id: string;
-  tool_type: string;
-  source_path: string;
-  backup_path: string;
-  backup_kind: string;
-  created_at: string;
-  metadata_json: string | null;
+export interface OpenCodeConfigStatus {
+  config_path: string;
+  exists: boolean;
+  has_agentgate: boolean;
+  current_model: string | null;
 }
 
 export interface ClaudeCodeEnvStatus {
@@ -63,6 +60,7 @@ export interface ClaudeCodeEnvStatus {
   has_agentgate: boolean;
   auth_mode: string;
   recommendations: string[];
+  has_saved_official: boolean;
 }
 
 export interface ProfileDetection {

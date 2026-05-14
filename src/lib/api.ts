@@ -161,7 +161,6 @@ import type {
   GatewayAuthSettings,
   CodexConfigStatus,
   ApplyConfigResult,
-  ConfigBackup,
   ClaudeCodeEnvStatus,
   ToggleResult,
 } from "@/types/config";
@@ -194,16 +193,8 @@ export async function applyClaudeCodeConfig(): Promise<ApplyConfigResult> {
   return cmd("apply_claude_code_config");
 }
 
-export async function backupClaudeCodeConfig(): Promise<ConfigBackup> {
-  return cmd("backup_claude_code_config");
-}
-
-export async function listClaudeCodeBackups(): Promise<ConfigBackup[]> {
-  return cmd("list_claude_code_backups");
-}
-
-export async function restoreClaudeCodeBackup(backupId: string): Promise<boolean> {
-  return cmd("restore_claude_code_backup", { backupId });
+export async function toggleClaudeCodeProvider(): Promise<ToggleResult> {
+  return cmd("toggle_claude_code_provider");
 }
 
 export async function openClaudeCodeConfig(): Promise<boolean> {
@@ -212,6 +203,26 @@ export async function openClaudeCodeConfig(): Promise<boolean> {
 
 export async function generateClaudeCodeEnv(): Promise<string> {
   return cmd("generate_claude_code_env");
+}
+
+// ── OpenCode Config ───────────────────────────────────────────
+
+import type { OpenCodeConfigStatus } from "@/types/config";
+
+export async function detectOpenCodeConfig(): Promise<OpenCodeConfigStatus> {
+  return cmd("detect_opencode_config");
+}
+
+export async function applyOpenCodeConfig(): Promise<ApplyConfigResult> {
+  return cmd("apply_opencode_config");
+}
+
+export async function generateOpenCodeConfig(): Promise<string> {
+  return cmd("generate_opencode_config");
+}
+
+export async function openOpenCodeConfig(): Promise<boolean> {
+  return cmd("open_opencode_config");
 }
 
 // ── Route Profiles ─────────────────────────────────────────────
