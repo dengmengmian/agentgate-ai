@@ -280,24 +280,11 @@ fn seed_sample_request_logs(conn: &Connection) -> Result<(), AppError> {
 }
 
 fn seed_default_route_profile(conn: &Connection) -> Result<(), AppError> {
-    let count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM route_profiles", [], |row| row.get(0))?;
-    if count > 0 {
-        return Ok(());
-    }
-
     let now = chrono::Utc::now().to_rfc3339();
-    let profile_id = uuid::Uuid::new_v4().to_string();
 
     let active_provider_id: Option<String> = conn
         .query_row("SELECT id FROM providers WHERE is_active = 1 LIMIT 1", [], |row| row.get(0))
         .ok();
-
-    conn.execute(
-        "INSERT INTO route_profiles (id, name, client_type, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at)
-         VALUES (?1, 'Codex Default', 'codex', 'openai_responses', 'manual', ?2, 1, 1, ?3, ?3)",
-        rusqlite::params![&profile_id, &active_provider_id, &now],
-    )?;
 
     let mut stmt = conn.prepare("SELECT id FROM providers WHERE enabled = 1 ORDER BY is_active DESC, created_at ASC")?;
     let provider_ids: Vec<String> = stmt.query_map([], |row| row.get(0))?
@@ -307,16 +294,40 @@ fn seed_default_route_profile(conn: &Connection) -> Result<(), AppError> {
     let default_codes = serde_json::json!([402, 429, 500, 502, 503, 504]).to_string();
     let default_kw = serde_json::json!(["quota", "insufficient balance", "rate limit", "too many requests", "timeout"]).to_string();
 
-    for (i, pid) in provider_ids.iter().enumerate() {
-        conn.execute(
-            "INSERT INTO route_profile_providers (id, route_profile_id, provider_id, priority, enabled, max_retries, cooldown_seconds, failover_on_status_codes, failover_on_error_keywords, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, 1, 0, 600, ?5, ?6, ?7, ?7)",
-            rusqlite::params![uuid::Uuid::new_v4().to_string(), &profile_id, pid, (i + 1) as i64, &default_codes, &default_kw, &now],
+    // Seed one default profile per protocol (skip if already exists for that protocol)
+    let profiles = [
+        ("Codex Default", "openai_responses"),
+        ("Claude Code Default", "anthropic_messages"),
+        ("OpenCode Default", "openai_chat_completions"),
+    ];
+
+    for (name, protocol) in profiles {
+        let exists: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM route_profiles WHERE input_protocol = ?1",
+            [protocol], |row| row.get(0),
         )?;
+        if exists > 0 {
+            continue;
+        }
+
+        let profile_id = uuid::Uuid::new_v4().to_string();
         conn.execute(
-            "INSERT OR IGNORE INTO provider_runtime_status (provider_id, available, consecutive_failures, quota_exhausted, updated_at) VALUES (?1, 1, 0, 0, ?2)",
-            rusqlite::params![pid, &now],
+            "INSERT INTO route_profiles (id, name, client_type, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at)
+             VALUES (?1, ?2, '', ?3, 'manual', ?4, 1, 1, ?5, ?5)",
+            rusqlite::params![&profile_id, name, protocol, &active_provider_id, &now],
         )?;
+
+        for (i, pid) in provider_ids.iter().enumerate() {
+            conn.execute(
+                "INSERT INTO route_profile_providers (id, route_profile_id, provider_id, priority, enabled, max_retries, cooldown_seconds, failover_on_status_codes, failover_on_error_keywords, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, 1, 0, 600, ?5, ?6, ?7, ?7)",
+                rusqlite::params![uuid::Uuid::new_v4().to_string(), &profile_id, pid, (i + 1) as i64, &default_codes, &default_kw, &now],
+            )?;
+            conn.execute(
+                "INSERT OR IGNORE INTO provider_runtime_status (provider_id, available, consecutive_failures, quota_exhausted, updated_at) VALUES (?1, 1, 0, 0, ?2)",
+                rusqlite::params![pid, &now],
+            )?;
+        }
     }
 
     Ok(())

@@ -194,6 +194,10 @@ const translations: Record<string, Record<Locale, string>> = {
   "routes.cooldown": { en: "cooldown", zh: "冷却中" },
   "routes.failures": { en: "failures", zh: "次失败" },
   "routes.mode": { en: "Mode", zh: "模式" },
+  "routes.create_profile": { en: "Create Profile", zh: "创建配置" },
+  "routes.profile_name": { en: "Profile Name", zh: "配置名称" },
+  "routes.protocol": { en: "Protocol", zh: "协议" },
+  "routes.created": { en: "Route profile created", zh: "路由配置已创建" },
 
   // ── Settings ──
   "settings.gateway_security": { en: "Gateway Security", zh: "网关安全" },

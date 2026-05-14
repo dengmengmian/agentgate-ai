@@ -5,7 +5,7 @@ use crate::models::route_profile::*;
 
 pub fn list_all(conn: &Connection) -> Result<Vec<RouteProfileView>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT rp.id, rp.name, rp.client_type, rp.input_protocol, rp.mode,
+        "SELECT rp.id, rp.name, rp.input_protocol, rp.mode,
                 rp.active_provider_id, rp.enabled, rp.is_default, rp.created_at, rp.updated_at,
                 p.name as provider_name,
                 (SELECT COUNT(*) FROM route_profile_providers WHERE route_profile_id = rp.id) as cnt
@@ -18,16 +18,15 @@ pub fn list_all(conn: &Connection) -> Result<Vec<RouteProfileView>, AppError> {
         Ok(RouteProfileView {
             id: row.get(0)?,
             name: row.get(1)?,
-            client_type: row.get(2)?,
-            input_protocol: row.get(3)?,
-            mode: row.get(4)?,
-            active_provider_id: row.get(5)?,
-            enabled: row.get(6)?,
-            is_default: row.get(7)?,
-            created_at: row.get(8)?,
-            updated_at: row.get(9)?,
-            active_provider_name: row.get(10)?,
-            providers_count: row.get(11)?,
+            input_protocol: row.get(2)?,
+            mode: row.get(3)?,
+            active_provider_id: row.get(4)?,
+            enabled: row.get(5)?,
+            is_default: row.get(6)?,
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
+            active_provider_name: row.get(9)?,
+            providers_count: row.get(10)?,
         })
     })?;
 
@@ -36,13 +35,13 @@ pub fn list_all(conn: &Connection) -> Result<Vec<RouteProfileView>, AppError> {
 
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<RouteProfile, AppError> {
     conn.query_row(
-        "SELECT id, name, client_type, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at
+        "SELECT id, name, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at
          FROM route_profiles WHERE id = ?1",
         [id],
         |row| Ok(RouteProfile {
-            id: row.get(0)?, name: row.get(1)?, client_type: row.get(2)?,
-            input_protocol: row.get(3)?, mode: row.get(4)?, active_provider_id: row.get(5)?,
-            enabled: row.get(6)?, is_default: row.get(7)?, created_at: row.get(8)?, updated_at: row.get(9)?,
+            id: row.get(0)?, name: row.get(1)?,
+            input_protocol: row.get(2)?, mode: row.get(3)?, active_provider_id: row.get(4)?,
+            enabled: row.get(5)?, is_default: row.get(6)?, created_at: row.get(7)?, updated_at: row.get(8)?,
         }),
     ).map_err(|e| match e {
         rusqlite::Error::QueryReturnedNoRows => AppError::new("ROUTE_PROFILE_NOT_FOUND", format!("Route profile '{id}' not found")),
@@ -52,13 +51,13 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<RouteProfile, AppError> 
 
 pub fn get_default_for_protocol(conn: &Connection, input_protocol: &str) -> Result<Option<RouteProfile>, AppError> {
     let result = conn.query_row(
-        "SELECT id, name, client_type, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at
+        "SELECT id, name, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at
          FROM route_profiles WHERE is_default = 1 AND input_protocol = ?1 AND enabled = 1 LIMIT 1",
         [input_protocol],
         |row| Ok(RouteProfile {
-            id: row.get(0)?, name: row.get(1)?, client_type: row.get(2)?,
-            input_protocol: row.get(3)?, mode: row.get(4)?, active_provider_id: row.get(5)?,
-            enabled: row.get(6)?, is_default: row.get(7)?, created_at: row.get(8)?, updated_at: row.get(9)?,
+            id: row.get(0)?, name: row.get(1)?,
+            input_protocol: row.get(2)?, mode: row.get(3)?, active_provider_id: row.get(4)?,
+            enabled: row.get(5)?, is_default: row.get(6)?, created_at: row.get(7)?, updated_at: row.get(8)?,
         }),
     );
     match result {
@@ -75,8 +74,8 @@ pub fn create(conn: &Connection, input: CreateRouteProfileInput) -> Result<Route
 
     conn.execute(
         "INSERT INTO route_profiles (id, name, client_type, input_protocol, mode, enabled, is_default, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 1, 0, ?6, ?6)",
-        params![&id, &input.name, &input.client_type, &input.input_protocol, &mode, &now],
+         VALUES (?1, ?2, '', ?3, ?4, 1, 0, ?5, ?5)",
+        params![&id, &input.name, &input.input_protocol, &mode, &now],
     )?;
     get_by_id(conn, &id)
 }
@@ -140,7 +139,7 @@ pub fn set_active_provider(conn: &Connection, profile_id: &str, provider_id: &st
 pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RouteProfileProviderView>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT rpp.id, rpp.provider_id, p.name, p.provider_type, rpp.priority, rpp.enabled,
-                rpp.model_override, rpp.max_retries, rpp.cooldown_seconds,
+                rpp.model_override, rpp.cooldown_seconds,
                 rpp.failover_on_status_codes, rpp.failover_on_error_keywords,
                 COALESCE(prs.available, 1), prs.cooldown_until, COALESCE(prs.consecutive_failures, 0)
          FROM route_profile_providers rpp
@@ -154,9 +153,9 @@ pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RoutePr
         Ok(RouteProfileProviderView {
             id: row.get(0)?, provider_id: row.get(1)?, provider_name: row.get(2)?,
             provider_type: row.get(3)?, priority: row.get(4)?, enabled: row.get(5)?,
-            model_override: row.get(6)?, max_retries: row.get(7)?, cooldown_seconds: row.get(8)?,
-            failover_on_status_codes: row.get(9)?, failover_on_error_keywords: row.get(10)?,
-            runtime_available: row.get(11)?, cooldown_until: row.get(12)?, consecutive_failures: row.get(13)?,
+            model_override: row.get(6)?, cooldown_seconds: row.get(7)?,
+            failover_on_status_codes: row.get(8)?, failover_on_error_keywords: row.get(9)?,
+            runtime_available: row.get(10)?, cooldown_until: row.get(11)?, consecutive_failures: row.get(12)?,
         })
     })?;
 
@@ -164,7 +163,6 @@ pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RoutePr
 }
 
 pub fn add_provider(conn: &Connection, profile_id: &str, provider_id: &str, input: AddProviderToRouteInput) -> Result<(), AppError> {
-    // Check for duplicates
     let dup: i64 = conn.query_row(
         "SELECT COUNT(*) FROM route_profile_providers WHERE route_profile_id=?1 AND provider_id=?2",
         params![profile_id, provider_id], |row| row.get(0),
@@ -186,18 +184,17 @@ pub fn add_provider(conn: &Connection, profile_id: &str, provider_id: &str, inpu
     let default_kw = serde_json::json!(["quota", "insufficient balance", "rate limit", "too many requests", "timeout"]).to_string();
 
     conn.execute(
-        "INSERT INTO route_profile_providers (id, route_profile_id, provider_id, priority, enabled, model_override, max_retries, cooldown_seconds, failover_on_status_codes, failover_on_error_keywords, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
+        "INSERT INTO route_profile_providers (id, route_profile_id, provider_id, priority, enabled, model_override, cooldown_seconds, failover_on_status_codes, failover_on_error_keywords, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6, ?7, ?8, ?9, ?9)",
         params![
             uuid::Uuid::new_v4().to_string(), profile_id, provider_id, priority,
-            input.model_override, input.max_retries.unwrap_or(0), input.cooldown_seconds.unwrap_or(600),
+            input.model_override, input.cooldown_seconds.unwrap_or(600),
             input.failover_on_status_codes.as_deref().unwrap_or(&default_codes),
             input.failover_on_error_keywords.as_deref().unwrap_or(&default_kw),
             &now,
         ],
     )?;
 
-    // Ensure runtime status
     conn.execute(
         "INSERT OR IGNORE INTO provider_runtime_status (provider_id, available, consecutive_failures, quota_exhausted, updated_at) VALUES (?1, 1, 0, 0, ?2)",
         params![provider_id, &now],
@@ -227,12 +224,10 @@ pub fn reorder_providers(conn: &Connection, profile_id: &str, provider_ids: &[St
 
 pub fn update_route_provider(conn: &Connection, profile_id: &str, provider_id: &str, input: UpdateRouteProviderInput) -> Result<(), AppError> {
     let now = chrono::Utc::now().to_rfc3339();
-    // Build dynamic update
     let mut sets = vec!["updated_at = ?1".to_string()];
     let mut idx = 2;
 
     if input.model_override.is_some() { sets.push(format!("model_override = ?{idx}")); idx += 1; }
-    if input.max_retries.is_some() { sets.push(format!("max_retries = ?{idx}")); idx += 1; }
     if input.cooldown_seconds.is_some() { sets.push(format!("cooldown_seconds = ?{idx}")); idx += 1; }
     if input.enabled.is_some() { sets.push(format!("enabled = ?{idx}")); idx += 1; }
     if input.failover_on_status_codes.is_some() { sets.push(format!("failover_on_status_codes = ?{idx}")); idx += 1; }
@@ -246,7 +241,6 @@ pub fn update_route_provider(conn: &Connection, profile_id: &str, provider_id: &
     let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     param_values.push(Box::new(now));
     if let Some(v) = input.model_override { param_values.push(Box::new(v)); }
-    if let Some(v) = input.max_retries { param_values.push(Box::new(v)); }
     if let Some(v) = input.cooldown_seconds { param_values.push(Box::new(v)); }
     if let Some(v) = input.enabled { param_values.push(Box::new(v)); }
     if let Some(v) = input.failover_on_status_codes { param_values.push(Box::new(v)); }

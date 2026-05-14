@@ -1,7 +1,6 @@
 export interface RouteProfileView {
   id: string;
   name: string;
-  client_type: string;
   input_protocol: string;
   mode: string;
   active_provider_id: string | null;
@@ -26,7 +25,6 @@ export interface RouteProfileProviderView {
   priority: number;
   enabled: boolean;
   model_override: string | null;
-  max_retries: number;
   cooldown_seconds: number;
   failover_on_status_codes: string | null;
   failover_on_error_keywords: string | null;
@@ -37,7 +35,6 @@ export interface RouteProfileProviderView {
 
 export interface CreateRouteProfileInput {
   name: string;
-  client_type: string;
   input_protocol: string;
   mode?: string;
 }
@@ -51,7 +48,6 @@ export interface UpdateRouteProfileInput {
 export interface AddProviderToRouteInput {
   priority?: number;
   model_override?: string;
-  max_retries?: number;
   cooldown_seconds?: number;
   failover_on_status_codes?: string;
   failover_on_error_keywords?: string;

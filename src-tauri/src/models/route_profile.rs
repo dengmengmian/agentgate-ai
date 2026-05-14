@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 pub struct RouteProfile {
     pub id: String,
     pub name: String,
-    pub client_type: String,
     pub input_protocol: String,
     pub mode: String, // "manual" | "failover"
     pub active_provider_id: Option<String>,
@@ -18,7 +17,6 @@ pub struct RouteProfile {
 pub struct RouteProfileView {
     pub id: String,
     pub name: String,
-    pub client_type: String,
     pub input_protocol: String,
     pub mode: String,
     pub active_provider_id: Option<String>,
@@ -44,7 +42,6 @@ pub struct RouteProfileProvider {
     pub priority: i64,
     pub enabled: bool,
     pub model_override: Option<String>,
-    pub max_retries: i64,
     pub cooldown_seconds: i64,
     pub failover_on_status_codes: Option<String>,
     pub failover_on_error_keywords: Option<String>,
@@ -61,7 +58,6 @@ pub struct RouteProfileProviderView {
     pub priority: i64,
     pub enabled: bool,
     pub model_override: Option<String>,
-    pub max_retries: i64,
     pub cooldown_seconds: i64,
     pub failover_on_status_codes: Option<String>,
     pub failover_on_error_keywords: Option<String>,
@@ -73,7 +69,6 @@ pub struct RouteProfileProviderView {
 #[derive(Debug, Clone, Deserialize)]
 pub struct CreateRouteProfileInput {
     pub name: String,
-    pub client_type: String,
     pub input_protocol: String,
     pub mode: Option<String>,
 }
@@ -89,7 +84,6 @@ pub struct UpdateRouteProfileInput {
 pub struct AddProviderToRouteInput {
     pub priority: Option<i64>,
     pub model_override: Option<String>,
-    pub max_retries: Option<i64>,
     pub cooldown_seconds: Option<i64>,
     pub failover_on_status_codes: Option<String>,
     pub failover_on_error_keywords: Option<String>,
@@ -98,7 +92,6 @@ pub struct AddProviderToRouteInput {
 #[derive(Debug, Clone, Deserialize)]
 pub struct UpdateRouteProviderInput {
     pub model_override: Option<String>,
-    pub max_retries: Option<i64>,
     pub cooldown_seconds: Option<i64>,
     pub enabled: Option<bool>,
     pub failover_on_status_codes: Option<String>,

@@ -472,8 +472,7 @@ pub fn get_route_profile(id: String, state: State<'_, AppState>) -> Result<crate
             storage::providers::get_by_id(&conn, pid).ok().map(|p| p.name)
         });
         crate::models::route_profile::RouteProfileView {
-            id: profile.id.clone(), name: profile.name, client_type: profile.client_type,
-            input_protocol: profile.input_protocol, mode: profile.mode,
+            id: profile.id.clone(), name: profile.name,             input_protocol: profile.input_protocol, mode: profile.mode,
             active_provider_id: profile.active_provider_id, active_provider_name: active_name,
             enabled: profile.enabled, is_default: profile.is_default,
             providers_count: providers.len() as i64,
@@ -488,8 +487,7 @@ pub fn create_route_profile(input: crate::models::route_profile::CreateRouteProf
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
     let profile = storage::route_profiles::create(&conn, input)?;
     Ok(crate::models::route_profile::RouteProfileView {
-        id: profile.id, name: profile.name, client_type: profile.client_type,
-        input_protocol: profile.input_protocol, mode: profile.mode,
+        id: profile.id, name: profile.name,         input_protocol: profile.input_protocol, mode: profile.mode,
         active_provider_id: profile.active_provider_id, active_provider_name: None,
         enabled: profile.enabled, is_default: profile.is_default, providers_count: 0,
         created_at: profile.created_at, updated_at: profile.updated_at,
@@ -502,8 +500,7 @@ pub fn update_route_profile(id: String, input: crate::models::route_profile::Upd
     let profile = storage::route_profiles::update(&conn, &id, input)?;
     let cnt: i64 = conn.query_row("SELECT COUNT(*) FROM route_profile_providers WHERE route_profile_id=?1", [&id], |r| r.get(0))?;
     Ok(crate::models::route_profile::RouteProfileView {
-        id: profile.id, name: profile.name, client_type: profile.client_type,
-        input_protocol: profile.input_protocol, mode: profile.mode,
+        id: profile.id, name: profile.name,         input_protocol: profile.input_protocol, mode: profile.mode,
         active_provider_id: profile.active_provider_id, active_provider_name: None,
         enabled: profile.enabled, is_default: profile.is_default, providers_count: cnt,
         created_at: profile.created_at, updated_at: profile.updated_at,

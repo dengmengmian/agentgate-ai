@@ -9,6 +9,7 @@ import {
   Shield,
   Zap,
   Inbox,
+  X,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -19,6 +20,16 @@ import * as api from "@/lib/api";
 import type { RouteProfileView, RouteProfileDetail } from "@/types/route-profile";
 import type { ProviderView } from "@/types/provider";
 
+const PROTOCOL_LABELS: Record<string, string> = {
+  openai_responses: "OpenAI Responses (Codex)",
+  anthropic_messages: "Anthropic Messages (Claude Code)",
+  openai_chat_completions: "Chat Completions (OpenCode)",
+};
+
+function protocolLabel(proto: string): string {
+  return PROTOCOL_LABELS[proto] ?? proto;
+}
+
 export function Routes() {
   const { t } = useI18n();
   const [profiles, setProfiles] = useState<RouteProfileView[]>([]);
@@ -26,6 +37,9 @@ export function Routes() {
   const [providers, setProviders] = useState<ProviderView[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<RouteProfileView | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newProtocol, setNewProtocol] = useState("openai_responses");
 
   const load = useCallback(async () => {
     try {
@@ -35,7 +49,6 @@ export function Routes() {
       ]);
       setProfiles(p);
       setProviders(prov);
-      // Auto-select first or keep current
       if (p.length > 0) {
         const currentId = detail?.profile.id;
         const toLoad = currentId && p.find((x) => x.id === currentId) ? currentId : p[0].id;
@@ -49,72 +62,41 @@ export function Routes() {
     }
   }, []);
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const selectProfile = async (id: string) => {
-    try {
-      const d = await api.getRouteProfile(id);
-      setDetail(d);
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
+    try { const d = await api.getRouteProfile(id); setDetail(d); }
+    catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleSetDefault = async (id: string) => {
-    try {
-      await api.setDefaultRouteProfile(id);
-      toast("success", t("routes.default_updated"));
-      load();
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
+    try { await api.setDefaultRouteProfile(id); toast("success", t("routes.default_updated")); load(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleToggleMode = async () => {
     if (!detail) return;
     const newMode = detail.profile.mode === "manual" ? "failover" : "manual";
-    try {
-      await api.setRouteProfileMode(detail.profile.id, newMode);
-      toast("success", `${t("routes.mode_changed")} ${newMode}`);
-      load();
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
+    try { await api.setRouteProfileMode(detail.profile.id, newMode); toast("success", `${t("routes.mode_changed")} ${newMode}`); load(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleSetActive = async (providerId: string) => {
     if (!detail) return;
-    try {
-      await api.setRouteActiveProvider(detail.profile.id, providerId);
-      toast("success", t("routes.active_updated"));
-      load();
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
+    try { await api.setRouteActiveProvider(detail.profile.id, providerId); toast("success", t("routes.active_updated")); load(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleAddProvider = async (providerId: string) => {
     if (!detail) return;
-    try {
-      await api.addProviderToRoute(detail.profile.id, providerId, {});
-      toast("success", t("routes.provider_added"));
-      load();
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
+    try { await api.addProviderToRoute(detail.profile.id, providerId, {}); toast("success", t("routes.provider_added")); load(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleRemoveProvider = async (providerId: string) => {
     if (!detail) return;
-    try {
-      await api.removeProviderFromRoute(detail.profile.id, providerId);
-      toast("success", t("routes.provider_removed"));
-      load();
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
+    try { await api.removeProviderFromRoute(detail.profile.id, providerId); toast("success", t("routes.provider_removed")); load(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleReorder = async (providerId: string, direction: "up" | "down") => {
@@ -125,38 +107,32 @@ export function Routes() {
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
     if (swapIdx < 0 || swapIdx >= ids.length) return;
     [ids[idx], ids[swapIdx]] = [ids[swapIdx], ids[idx]];
-    try {
-      await api.reorderRouteProviders(detail.profile.id, ids);
-      load();
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
+    try { await api.reorderRouteProviders(detail.profile.id, ids); load(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleResetCooldown = async (providerId: string) => {
-    try {
-      await api.resetProviderRuntimeStatus(providerId);
-      toast("success", t("routes.cooldown_reset"));
-      load();
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
+    try { await api.resetProviderRuntimeStatus(providerId); toast("success", t("routes.cooldown_reset")); load(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    try {
-      await api.deleteRouteProfile(deleteTarget.id);
-      toast("success", t("routes.deleted"));
-      setDeleteTarget(null);
-      setDetail(null);
-      load();
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
+    try { await api.deleteRouteProfile(deleteTarget.id); toast("success", t("routes.deleted")); setDeleteTarget(null); setDetail(null); load(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
   };
 
-  // Providers not yet in this route profile
+  const handleCreate = async () => {
+    if (!newName.trim()) return;
+    try {
+      await api.createRouteProfile({ name: newName.trim(), input_protocol: newProtocol });
+      toast("success", t("routes.created"));
+      setShowCreate(false);
+      setNewName("");
+      load();
+    } catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
   const availableProviders = detail
     ? providers.filter((p) => !detail.providers.some((rp) => rp.provider_id === p.id))
     : [];
@@ -165,12 +141,56 @@ export function Routes() {
 
   return (
     <div className="space-y-6">
-      {/* Profile list */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <p className="text-xs text-text-muted">
           {profiles.length} {t("routes.route_profiles")}
         </p>
+        <button
+          onClick={() => setShowCreate(true)}
+          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
+        >
+          <Plus className="h-3 w-3" />{t("routes.create_profile")}
+        </button>
       </div>
+
+      {/* Create form */}
+      {showCreate && (
+        <div className="rounded-lg border border-accent/30 bg-card p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="text-xs font-semibold text-text-primary">{t("routes.create_profile")}</h4>
+            <button onClick={() => setShowCreate(false)} className="text-text-muted hover:text-text-primary"><X className="h-3.5 w-3.5" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[11px] text-text-muted">{t("routes.profile_name")}</label>
+              <input
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="My Route"
+                className="form-input w-full"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] text-text-muted">{t("routes.protocol")}</label>
+              <select
+                value={newProtocol}
+                onChange={(e) => setNewProtocol(e.target.value)}
+                className="form-input w-full"
+              >
+                {Object.entries(PROTOCOL_LABELS).map(([val, label]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end gap-2">
+            <button onClick={() => setShowCreate(false)} className="btn-secondary">{t("common.cancel")}</button>
+            <button onClick={handleCreate} disabled={!newName.trim()} className="btn-primary">{t("common.save")}</button>
+          </div>
+        </div>
+      )}
 
       {profiles.length === 0 ? (
         <EmptyState icon={Inbox} title={t("routes.no_profiles")} description={t("routes.auto_created")} />
@@ -198,7 +218,7 @@ export function Routes() {
                   </div>
                 </div>
                 <p className="mt-1 text-[11px] text-text-muted">
-                  {p.client_type} · {p.providers_count} provider{p.providers_count !== 1 ? "s" : ""}
+                  {protocolLabel(p.input_protocol)} · {p.providers_count} provider{p.providers_count !== 1 ? "s" : ""}
                 </p>
               </button>
             ))}
@@ -213,7 +233,7 @@ export function Routes() {
                   <div>
                     <h3 className="text-sm font-semibold text-text-primary">{detail.profile.name}</h3>
                     <p className="text-[11px] text-text-muted">
-                      {detail.profile.client_type} · {detail.profile.input_protocol}
+                      {protocolLabel(detail.profile.input_protocol)}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -288,41 +308,22 @@ export function Routes() {
                         </div>
                         <div className="flex items-center gap-1">
                           {!isActive && (
-                            <button
-                              onClick={() => handleSetActive(rp.provider_id)}
-                              className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary"
-                              title="Set as active"
-                            >
+                            <button onClick={() => handleSetActive(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary" title="Set as active">
                               <Star className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <button
-                            onClick={() => handleReorder(rp.provider_id, "up")}
-                            disabled={idx === 0}
-                            className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30"
-                          >
+                          <button onClick={() => handleReorder(rp.provider_id, "up")} disabled={idx === 0} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30">
                             <ChevronUp className="h-3.5 w-3.5" />
                           </button>
-                          <button
-                            onClick={() => handleReorder(rp.provider_id, "down")}
-                            disabled={idx === detail.providers.length - 1}
-                            className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30"
-                          >
+                          <button onClick={() => handleReorder(rp.provider_id, "down")} disabled={idx === detail.providers.length - 1} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30">
                             <ChevronDown className="h-3.5 w-3.5" />
                           </button>
                           {isCooldown && (
-                            <button
-                              onClick={() => handleResetCooldown(rp.provider_id)}
-                              className="rounded p-1 text-text-muted hover:bg-border hover:text-warning"
-                              title="Reset cooldown"
-                            >
+                            <button onClick={() => handleResetCooldown(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-border hover:text-warning" title="Reset cooldown">
                               <RotateCcw className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <button
-                            onClick={() => handleRemoveProvider(rp.provider_id)}
-                            className="rounded p-1 text-text-muted hover:bg-error/20 hover:text-error"
-                          >
+                          <button onClick={() => handleRemoveProvider(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-error/20 hover:text-error">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -334,11 +335,7 @@ export function Routes() {
                 {/* Add provider */}
                 {availableProviders.length > 0 && (
                   <div className="mt-3 flex items-center gap-2">
-                    <select
-                      id="add-provider-select"
-                      className="form-input flex-1"
-                      defaultValue=""
-                    >
+                    <select id="add-provider-select" className="form-input flex-1" defaultValue="">
                       <option value="" disabled>{t("routes.add_provider")}</option>
                       {availableProviders.map((p) => (
                         <option key={p.id} value={p.id}>{p.name}</option>
