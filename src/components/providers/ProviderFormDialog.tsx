@@ -430,12 +430,12 @@ function ModelCombo({ value, onChange, models }: { value: string; onChange: (v: 
         className="form-input w-full"
       />
       {open && filtered.length > 0 && (
-        <ul className="absolute z-50 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
+        <ul className="absolute z-50 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-accent/30 bg-bg shadow-xl ring-1 ring-white/5">
           {filtered.map((m) => (
             <li
               key={m}
               onMouseDown={(e) => { e.preventDefault(); onChange(m); setFilter(""); setOpen(false); }}
-              className={`cursor-pointer px-3 py-1.5 text-xs transition-colors hover:bg-accent/10 ${m === value ? "bg-accent/5 text-accent" : "text-text-primary"}`}
+              className={`cursor-pointer px-3 py-1.5 text-xs transition-colors hover:bg-accent/20 hover:text-accent ${m === value ? "bg-accent/15 text-accent font-medium" : "text-text-secondary"}`}
             >
               {m}
             </li>
