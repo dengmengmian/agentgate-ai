@@ -60,8 +60,9 @@ impl super::ProviderTransform for DeepSeekProvider {
     }
 
     fn finalize_request(&self, req: &mut ChatCompletionsRequest, _tools: &Option<Vec<Value>>) {
-        // Always disable thinking — DeepSeek thinking mode ≠ Claude extended thinking
-        req.thinking = Some(json!({"type": "disabled"}));
+        // Don't send `thinking` field — it's MiMo-specific, DeepSeek ignores unknown fields.
+        // DeepSeek V4 reasoning is controlled by the model itself, not by a request parameter.
+        req.thinking = None;
         // DeepSeek doesn't support reasoning_effort
         req.reasoning_effort = None;
         // Downgrade json_schema to json_object (DeepSeek doesn't support json_schema)
