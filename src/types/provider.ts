@@ -49,6 +49,7 @@ export interface UpdateProviderInput {
   model_mapping?: string;
   extra_headers?: string;
   anthropic_base_url?: string;
+  responses_base_url?: string;
   protocol?: string;
   timeout_seconds?: number;
   enabled?: boolean;
