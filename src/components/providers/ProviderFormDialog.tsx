@@ -283,27 +283,11 @@ export function ProviderFormDialog({
                     }
                   }} className="form-input flex-1" />
                   <span className="text-text-muted">→</span>
-                  {(() => {
-                    let models: string[] = [];
-                    try { models = supportedModels ? JSON.parse(supportedModels) : []; } catch { /* */ }
-                    const listId = `provider-model-${clientModel}`;
-                    return (
-                      <>
-                        <input
-                          value={providerModel}
-                          onChange={(e) => setModelMapping({ ...modelMapping, [clientModel]: e.target.value })}
-                          list={models.length > 0 ? listId : undefined}
-                          placeholder="model-name"
-                          className="form-input flex-1"
-                        />
-                        {models.length > 0 && (
-                          <datalist id={listId}>
-                            {models.map((m) => <option key={m} value={m} />)}
-                          </datalist>
-                        )}
-                      </>
-                    );
-                  })()}
+                  <ModelCombo
+                    value={providerModel}
+                    onChange={(v) => setModelMapping({ ...modelMapping, [clientModel]: v })}
+                    models={(() => { try { return supportedModels ? JSON.parse(supportedModels) : []; } catch { return []; } })()}
+                  />
                   <button type="button" onClick={() => { const next = { ...modelMapping }; delete next[clientModel]; setModelMapping(next); }} className="text-text-muted hover:text-error text-xs">✕</button>
                 </div>
               ))}
@@ -426,6 +410,38 @@ function Field({ label, error, hint, children }: { label: string; error?: string
       {children}
       {hint && <p className="mt-1 text-[11px] text-text-muted">{hint}</p>}
       {error && <p className="mt-1 text-[11px] text-error">{error}</p>}
+    </div>
+  );
+}
+
+function ModelCombo({ value, onChange, models }: { value: string; onChange: (v: string) => void; models: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [filter, setFilter] = useState("");
+  const filtered = models.filter((m) => m.toLowerCase().includes((filter || value).toLowerCase()));
+
+  return (
+    <div className="relative flex-1">
+      <input
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setFilter(e.target.value); setOpen(true); }}
+        onFocus={() => { if (models.length > 0) setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="model-name"
+        className="form-input w-full"
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-50 mt-1 max-h-40 w-full overflow-y-auto rounded-md border border-border bg-card shadow-lg">
+          {filtered.map((m) => (
+            <li
+              key={m}
+              onMouseDown={(e) => { e.preventDefault(); onChange(m); setFilter(""); setOpen(false); }}
+              className={`cursor-pointer px-3 py-1.5 text-xs transition-colors hover:bg-accent/10 ${m === value ? "bg-accent/5 text-accent" : "text-text-primary"}`}
+            >
+              {m}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
