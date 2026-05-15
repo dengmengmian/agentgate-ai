@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.0] - 2026-05-15
+
+### Features / 功能
+
+- **模型映射下拉优化** — 映射目标模型和客户端模型选择统一使用自定义 ModelCombo 组件，支持下拉选择 + 手动输入
+- **macOS ad-hoc 签名** — CI 构建 macOS 包时自动 ad-hoc 签名，不再提示"应用已损坏"
+- **macOS 自动更新支持** — `createUpdaterArtifacts` 改为 `true`，生成 `.app.tar.gz` 更新包
+
+### Bug Fixes / 修复
+
+- **修复 ModelCombo 下拉只显示一个模型** — 无过滤词时显示全部模型
+- **修复深色主题下拉不可见** — 下拉背景、边框、高亮色调整，与深色主题统一
+
+---
+
 ## [0.1.9] - 2026-05-15
 
 ### Features / 功能
