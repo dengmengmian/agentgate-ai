@@ -59,10 +59,12 @@ export interface ProviderTestResult {
 }
 
 export const PROVIDER_TYPES = [
+  { value: "anthropic", label: "Anthropic (Claude)" },
   { value: "deepseek", label: "DeepSeek" },
   { value: "openai", label: "OpenAI" },
   { value: "openrouter", label: "OpenRouter" },
   { value: "kimi", label: "Kimi" },
+  { value: "minimax", label: "MiniMax" },
   { value: "custom_openai_compatible", label: "Custom OpenAI Compatible" },
 ] as const;
 
