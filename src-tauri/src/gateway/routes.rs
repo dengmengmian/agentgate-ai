@@ -252,6 +252,14 @@ async fn handle_non_stream_response(
             let mut tool_calls_json = String::new();
 
             if let Some(choices) = &chat_resp.choices {
+                if choices.is_empty() {
+                    // Empty choices — emit a placeholder message so Codex doesn't hang
+                    let msg_id = format!("msg_{}", &resp_id.replace("resp_", ""));
+                    output.push(json!({
+                        "id": msg_id, "type": "message", "status": "completed",
+                        "role": "assistant", "content": [{"type": "output_text", "text": ""}]
+                    }));
+                }
                 for choice in choices {
                     if let Some(msg) = &choice.message {
                         let text_content = msg.content.clone().unwrap_or_default();
