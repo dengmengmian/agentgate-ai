@@ -18,7 +18,6 @@ pub struct AccumulatedToolCall {
     pub id: String,
     pub name: String,
     pub arguments: String,
-    emitted_added: bool,
     last_args_len: usize,
     output_index: usize,
 }
@@ -162,7 +161,6 @@ pub async fn process_anthropic_stream(
                                 id: clamped_id.clone(),
                                 name: name.to_string(),
                                 arguments: String::new(),
-                                emitted_added: true,
                                 last_args_len: 0,
                                 output_index: oi,
                             });

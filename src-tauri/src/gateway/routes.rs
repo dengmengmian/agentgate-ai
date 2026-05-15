@@ -100,17 +100,39 @@ pub async fn handle_responses(
     let candidates = selection.candidates.clone();
     let raw_body = sanitize_body(&body);
 
+    // Detect if request contains images (for vision-aware routing)
+    let request_has_images = request_contains_images(&req);
+
     // Build ordered list: selected provider first, then remaining candidates
+    // Skip providers that don't support vision when request has images
     let mut attempt_order: Vec<&crate::gateway::provider_selector::ProviderCandidate> = Vec::new();
     // Primary
     if let Some(primary) = candidates.iter().find(|c| c.provider_id == selection.provider.id) {
-        attempt_order.push(primary);
+        if !request_has_images || primary.supports_vision != Some(false) {
+            attempt_order.push(primary);
+        }
     }
     // Remaining (for failover)
     if is_failover {
         for c in &candidates {
             if c.provider_id != selection.provider.id && !c.in_cooldown {
+                if request_has_images && c.supports_vision == Some(false) {
+                    continue; // Skip providers that explicitly don't support vision
+                }
                 attempt_order.push(c);
+            }
+        }
+    }
+    // If all candidates were skipped (all lack vision), fall back to original order
+    if attempt_order.is_empty() {
+        if let Some(primary) = candidates.iter().find(|c| c.provider_id == selection.provider.id) {
+            attempt_order.push(primary);
+        }
+        if is_failover {
+            for c in &candidates {
+                if c.provider_id != selection.provider.id && !c.in_cooldown {
+                    attempt_order.push(c);
+                }
             }
         }
     }
@@ -522,7 +544,7 @@ async fn handle_anthropic_non_stream_response(
 
             // Parse Claude response: {content: [...], stop_reason, usage}
             let mut output = Vec::new();
-            let mut tool_calls_json = String::new();
+            let tool_calls_json = String::new();
 
             if let Some(content) = upstream_json.get("content").and_then(|c| c.as_array()) {
                 let msg_id = format!("msg_{}", &resp_id.replace("resp_", ""));
@@ -1102,6 +1124,29 @@ fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayE
     })?;
 
     Ok(provider)
+}
+
+/// Check if a Responses API request contains image content in its input.
+fn request_contains_images(req: &ResponsesRequest) -> bool {
+    fn value_has_images(v: &Value) -> bool {
+        match v {
+            Value::Array(arr) => arr.iter().any(|item| {
+                let t = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                if t == "input_image" || t == "image_url" {
+                    return true;
+                }
+                // Check nested content arrays in message items
+                if t == "message" {
+                    if let Some(content) = item.get("content") {
+                        return value_has_images(content);
+                    }
+                }
+                false
+            }),
+            _ => false,
+        }
+    }
+    value_has_images(&req.input)
 }
 
 fn sanitize_body(body: &str) -> String {
