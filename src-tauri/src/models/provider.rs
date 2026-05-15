@@ -16,6 +16,7 @@ pub struct Provider {
     pub protocol: String,
     pub timeout_seconds: i64,
     pub status: String,
+    pub supports_vision: Option<bool>,
     pub enabled: bool,
     pub is_active: bool,
     pub created_at: String,
@@ -38,6 +39,7 @@ pub struct ProviderView {
     pub protocol: String,
     pub timeout_seconds: i64,
     pub status: String,
+    pub supports_vision: Option<bool>,
     pub enabled: bool,
     pub is_active: bool,
     pub created_at: String,
@@ -84,6 +86,7 @@ pub struct ProviderTestResult {
     pub status: String,
     pub message: String,
     pub latency_ms: Option<u64>,
+    pub supports_vision: Option<bool>,
 }
 
 impl Provider {
@@ -103,11 +106,28 @@ impl Provider {
             protocol: self.protocol.clone(),
             timeout_seconds: self.timeout_seconds,
             status: self.status.clone(),
+            supports_vision: self.supports_vision,
             enabled: self.enabled,
             is_active: self.is_active,
             created_at: self.created_at.clone(),
             updated_at: self.updated_at.clone(),
         }
+    }
+
+    /// Parse the protocol field as a JSON array. Falls back to treating it as a single value.
+    #[allow(dead_code)]
+    pub fn protocols(&self) -> Vec<String> {
+        if let Ok(list) = serde_json::from_str::<Vec<String>>(&self.protocol) {
+            list
+        } else {
+            vec![self.protocol.clone()]
+        }
+    }
+
+    /// Check if this provider supports a given protocol.
+    #[allow(dead_code)]
+    pub fn supports_protocol(&self, protocol: &str) -> bool {
+        self.protocols().iter().any(|p| p == protocol)
     }
 
     /// Check if a model name is known to this provider.
@@ -185,6 +205,7 @@ mod tests {
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
+            supports_vision: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -215,6 +236,7 @@ mod tests {
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
+            supports_vision: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -242,6 +264,7 @@ mod tests {
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
+            supports_vision: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -269,6 +292,7 @@ mod tests {
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
+            supports_vision: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
