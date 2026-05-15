@@ -293,31 +293,12 @@ export function ProviderFormDialog({
               ))}
             </div>
             <div className="mt-2 flex gap-2">
-              <div className="relative flex-1">
-                <input
-                  value={newMappingClient}
-                  onChange={(e) => setNewMappingClient(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      if (newMappingClient.trim() && !(newMappingClient.trim() in modelMapping)) {
-                        let models: string[] = [];
-                        try { models = supportedModels ? JSON.parse(supportedModels) : []; } catch { /* */ }
-                        setModelMapping({ ...modelMapping, [newMappingClient.trim()]: models[0] || defaultModel || "" });
-                        setNewMappingClient("");
-                      }
-                    }
-                  }}
-                  list="client-model-suggestions"
-                  placeholder={t("providers.select_client_model")}
-                  className="form-input w-full"
-                />
-                <datalist id="client-model-suggestions">
-                  {["gpt-5.5","gpt-5.4","gpt-5.4-mini","gpt-5.3-codex","gpt-5.2","claude-sonnet-4-6","claude-opus-4-6","claude-haiku-4-5-20251001","o3","o4-mini"].filter(m => !(m in modelMapping)).map(m => (
-                    <option key={m} value={m} />
-                  ))}
-                </datalist>
-              </div>
+              <ModelCombo
+                value={newMappingClient}
+                onChange={(v) => setNewMappingClient(v)}
+                models={["gpt-5.5","gpt-5.4","gpt-5.4-mini","gpt-5.3-codex","gpt-5.2","claude-sonnet-4-6","claude-opus-4-6","claude-haiku-4-5-20251001","o3","o4-mini"].filter(m => !(m in modelMapping))}
+                placeholder={t("providers.select_client_model")}
+              />
               <button type="button" onClick={() => {
                 if (newMappingClient.trim() && !(newMappingClient.trim() in modelMapping)) {
                   let models: string[] = [];
@@ -414,7 +395,7 @@ function Field({ label, error, hint, children }: { label: string; error?: string
   );
 }
 
-function ModelCombo({ value, onChange, models }: { value: string; onChange: (v: string) => void; models: string[] }) {
+function ModelCombo({ value, onChange, models, placeholder }: { value: string; onChange: (v: string) => void; models: string[]; placeholder?: string }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const filtered = filter ? models.filter((m) => m.toLowerCase().includes(filter.toLowerCase())) : models;
@@ -426,7 +407,7 @@ function ModelCombo({ value, onChange, models }: { value: string; onChange: (v: 
         onChange={(e) => { onChange(e.target.value); setFilter(e.target.value); setOpen(true); }}
         onFocus={() => { if (models.length > 0) setOpen(true); }}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        placeholder="model-name"
+        placeholder={placeholder || "model-name"}
         className="form-input w-full"
       />
       {open && filtered.length > 0 && (
