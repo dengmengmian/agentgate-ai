@@ -286,12 +286,22 @@ export function ProviderFormDialog({
                   {(() => {
                     let models: string[] = [];
                     try { models = supportedModels ? JSON.parse(supportedModels) : []; } catch { /* */ }
-                    return models.length > 0 ? (
-                      <select value={providerModel} onChange={(e) => setModelMapping({ ...modelMapping, [clientModel]: e.target.value })} className="form-input flex-1">
-                        {models.map((m) => <option key={m} value={m}>{m}</option>)}
-                      </select>
-                    ) : (
-                      <input value={providerModel} onChange={(e) => setModelMapping({ ...modelMapping, [clientModel]: e.target.value })} className="form-input flex-1" />
+                    const listId = `provider-model-${clientModel}`;
+                    return (
+                      <>
+                        <input
+                          value={providerModel}
+                          onChange={(e) => setModelMapping({ ...modelMapping, [clientModel]: e.target.value })}
+                          list={models.length > 0 ? listId : undefined}
+                          placeholder="model-name"
+                          className="form-input flex-1"
+                        />
+                        {models.length > 0 && (
+                          <datalist id={listId}>
+                            {models.map((m) => <option key={m} value={m} />)}
+                          </datalist>
+                        )}
+                      </>
                     );
                   })()}
                   <button type="button" onClick={() => { const next = { ...modelMapping }; delete next[clientModel]; setModelMapping(next); }} className="text-text-muted hover:text-error text-xs">✕</button>
