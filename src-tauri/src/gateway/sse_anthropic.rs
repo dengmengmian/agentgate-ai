@@ -1,0 +1,280 @@
+use std::collections::BTreeMap;
+use tokio::sync::mpsc;
+use serde_json::{json, Value};
+
+use crate::protocol::responses_events as ev;
+
+const MAX_EVENTS_LOG_SIZE: usize = 1_000_000;
+const MAX_CALL_ID_LEN: usize = 64;
+
+fn clamp_call_id(id: &str) -> String {
+    if id.len() <= MAX_CALL_ID_LEN { id.to_string() }
+    else { id[..MAX_CALL_ID_LEN].to_string() }
+}
+
+/// Accumulated tool call from Claude streaming.
+#[derive(Debug, Clone)]
+pub struct AccumulatedToolCall {
+    pub id: String,
+    pub name: String,
+    pub arguments: String,
+    emitted_added: bool,
+    last_args_len: usize,
+    output_index: usize,
+}
+
+/// State for converting Claude SSE stream to Responses API SSE events.
+pub struct AnthropicSseAccumulator {
+    pub response_id: String,
+    pub model: String,
+    pub full_text: String,
+    pub tool_calls: BTreeMap<usize, AccumulatedToolCall>,
+    pub reasoning_content: String,
+    pub usage: Option<Value>,
+    pub events_log: String,
+    events_size: usize,
+    next_output_index: usize,
+    text_item_emitted: bool,
+    msg_item_id: String,
+}
+
+impl AnthropicSseAccumulator {
+    pub fn new(response_id: String, model: String) -> Self {
+        let msg_item_id = format!("msg_{}", response_id.replace("resp_", ""));
+        Self {
+            response_id, model,
+            full_text: String::new(),
+            tool_calls: BTreeMap::new(),
+            reasoning_content: String::new(),
+            usage: None,
+            events_log: String::new(),
+            events_size: 0,
+            next_output_index: 0,
+            text_item_emitted: false,
+            msg_item_id,
+        }
+    }
+
+    pub fn tool_calls_list(&self) -> Vec<&AccumulatedToolCall> {
+        self.tool_calls.values().collect()
+    }
+}
+
+/// Process a Claude SSE stream and emit Responses API SSE events.
+pub async fn process_anthropic_stream(
+    response: reqwest::Response,
+    tx: mpsc::Sender<String>,
+    acc: &mut AnthropicSseAccumulator,
+) -> Result<(), String> {
+    use futures::StreamExt;
+
+    crate::protocol::responses_events::reset_sequence();
+
+    let mut buffer = String::new();
+    let mut current_event_type = String::new();
+    let mut stream = response.bytes_stream();
+
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("Stream error: {e}"))?;
+        buffer.push_str(&String::from_utf8_lossy(&chunk));
+
+        // Process complete SSE frames
+        while let Some(frame_end) = buffer.find("\n\n") {
+            let frame = buffer[..frame_end].to_string();
+            buffer = buffer[frame_end + 2..].to_string();
+
+            // Parse event type and data from frame
+            let mut event_type = String::new();
+            let mut data_str = String::new();
+
+            for line in frame.lines() {
+                if let Some(et) = line.strip_prefix("event: ") {
+                    event_type = et.trim().to_string();
+                } else if let Some(d) = line.strip_prefix("data: ") {
+                    data_str = d.to_string();
+                }
+            }
+
+            if event_type.is_empty() {
+                event_type = current_event_type.clone();
+            } else {
+                current_event_type = event_type.clone();
+            }
+
+            if data_str.is_empty() {
+                continue;
+            }
+
+            let data: Value = match serde_json::from_str(&data_str) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            // Log event
+            if acc.events_size < MAX_EVENTS_LOG_SIZE {
+                let entry = format!("event: {event_type} data: {data_str}\n");
+                acc.events_size += entry.len();
+                acc.events_log.push_str(&entry);
+            }
+
+            match event_type.as_str() {
+                "message_start" => {
+                    // Capture model and input usage
+                    if let Some(msg) = data.get("message") {
+                        if let Some(m) = msg.get("model").and_then(|m| m.as_str()) {
+                            acc.model = m.to_string();
+                        }
+                        if let Some(u) = msg.get("usage") {
+                            acc.usage = Some(json!({
+                                "input_tokens": u.get("input_tokens").and_then(|v| v.as_i64()).unwrap_or(0),
+                                "output_tokens": 0
+                            }));
+                        }
+                    }
+                    // Emit response.created + in_progress
+                    send(&tx, &ev::response_created(&acc.response_id, &acc.model)).await;
+                    send(&tx, &ev::response_in_progress(&acc.response_id, &acc.model)).await;
+                }
+                "content_block_start" => {
+                    let index = data.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+                    let empty = json!({});
+                    let block = data.get("content_block").unwrap_or(&empty);
+                    let block_type = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+                    match block_type {
+                        "text" => {
+                            if !acc.text_item_emitted {
+                                let oi = acc.next_output_index;
+                                acc.next_output_index += 1;
+                                send(&tx, &ev::output_item_added_message(&acc.msg_item_id, oi)).await;
+                                send(&tx, &ev::content_part_added(&acc.msg_item_id, oi, 0)).await;
+                                acc.text_item_emitted = true;
+                            }
+                        }
+                        "tool_use" => {
+                            let id = block.get("id").and_then(|i| i.as_str()).unwrap_or("");
+                            let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                            let clamped_id = clamp_call_id(id);
+                            let oi = acc.next_output_index;
+                            acc.next_output_index += 1;
+                            let item_id = format!("fc_{}", clamped_id);
+                            acc.tool_calls.insert(index, AccumulatedToolCall {
+                                id: clamped_id.clone(),
+                                name: name.to_string(),
+                                arguments: String::new(),
+                                emitted_added: true,
+                                last_args_len: 0,
+                                output_index: oi,
+                            });
+                            send(&tx, &ev::function_call_added(&item_id, oi, &clamped_id, name)).await;
+                        }
+                        "thinking" => {
+                            // Just track that we're in thinking mode — accumulate in deltas
+                        }
+                        _ => {}
+                    }
+                }
+                "content_block_delta" => {
+                    let index = data.get("index").and_then(|i| i.as_u64()).unwrap_or(0) as usize;
+                    let empty_delta = json!({});
+                    let delta = data.get("delta").unwrap_or(&empty_delta);
+                    let delta_type = delta.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+                    match delta_type {
+                        "text_delta" => {
+                            if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
+                                acc.full_text.push_str(text);
+                                if acc.text_item_emitted {
+                                    send(&tx, &ev::output_text_delta(&acc.msg_item_id, 0, 0, text)).await;
+                                }
+                            }
+                        }
+                        "input_json_delta" => {
+                            if let Some(partial) = delta.get("partial_json").and_then(|p| p.as_str()) {
+                                if let Some(tc) = acc.tool_calls.get_mut(&index) {
+                                    tc.arguments.push_str(partial);
+                                    let delta_args = &tc.arguments[tc.last_args_len..];
+                                    let item_id = format!("fc_{}", tc.id);
+                                    send(&tx, &ev::function_call_arguments_delta(&item_id, tc.output_index, delta_args)).await;
+                                    tc.last_args_len = tc.arguments.len();
+                                }
+                            }
+                        }
+                        "thinking_delta" => {
+                            if let Some(thinking) = delta.get("thinking").and_then(|t| t.as_str()) {
+                                if acc.reasoning_content.is_empty() {
+                                    acc.reasoning_content.push_str("**Thinking**\n\n");
+                                }
+                                acc.reasoning_content.push_str(thinking);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                "content_block_stop" => {
+                    // No specific action needed — finalize handles closing
+                }
+                "message_delta" => {
+                    if let Some(u) = data.get("usage") {
+                        let out_tokens = u.get("output_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
+                        if let Some(ref mut existing) = acc.usage {
+                            existing["output_tokens"] = json!(out_tokens);
+                        } else {
+                            acc.usage = Some(json!({"input_tokens": 0, "output_tokens": out_tokens}));
+                        }
+                    }
+                }
+                "message_stop" => {
+                    // Finalize
+                    finalize(acc, &tx).await;
+                }
+                "error" => {
+                    let err_msg = data.get("error")
+                        .and_then(|e| e.get("message"))
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("Unknown Claude API error");
+                    return Err(format!("Claude API error: {err_msg}"));
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // If message_stop wasn't received, finalize anyway
+    if !acc.full_text.is_empty() || !acc.tool_calls.is_empty() {
+        finalize(acc, &tx).await;
+    }
+
+    Ok(())
+}
+
+async fn finalize(acc: &mut AnthropicSseAccumulator, tx: &mpsc::Sender<String>) {
+    // Store reasoning for multi-turn
+    if !acc.reasoning_content.is_empty() {
+        let tc_ids: Vec<String> = acc.tool_calls.values().map(|tc| tc.id.clone()).collect();
+        crate::transform::reasoning_store::store(&acc.full_text, &acc.reasoning_content, &tc_ids);
+    }
+
+    // Text done events
+    if acc.text_item_emitted {
+        send(tx, &ev::output_text_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
+        send(tx, &ev::content_part_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
+        let rc = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.as_str()) };
+        send(tx, &ev::output_item_done_message(&acc.msg_item_id, 0, &acc.full_text, rc)).await;
+    }
+
+    // Tool call done events
+    for tc in acc.tool_calls.values() {
+        let item_id = format!("fc_{}", tc.id);
+        let rc = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.as_str()) };
+        send(tx, &ev::function_call_arguments_done(&item_id, tc.output_index, &tc.arguments)).await;
+        send(tx, &ev::function_call_done(&item_id, tc.output_index, &tc.id, &tc.name, &tc.arguments, rc)).await;
+    }
+
+    // response.completed
+    send(tx, &ev::response_completed(&acc.response_id, &acc.model, acc.usage.as_ref())).await;
+}
+
+async fn send(tx: &mpsc::Sender<String>, event: &str) {
+    let _ = tx.send(event.to_string()).await;
+}

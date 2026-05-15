@@ -7,11 +7,13 @@ mod deepseek;
 mod kimi;
 mod minimax;
 mod default;
+mod anthropic;
 
 pub use deepseek::DeepSeekProvider;
 pub use kimi::KimiProvider;
 pub use minimax::MiniMaxProvider;
 pub use default::DefaultProvider;
+pub use anthropic::AnthropicProvider;
 
 /// Per-provider hooks for transforming Responses API → Chat Completions API.
 ///
@@ -50,6 +52,8 @@ pub fn for_config(config: &ProviderConfig) -> Box<dyn ProviderTransform + Send +
         Box::new(KimiProvider)
     } else if pt == "minimax" || pt.contains("minimax") {
         Box::new(MiniMaxProvider)
+    } else if pt == "anthropic" || pt == "claude" {
+        Box::new(AnthropicProvider)
     } else {
         Box::new(DefaultProvider)
     }

@@ -46,6 +46,10 @@ impl ProviderConfig {
         self.provider_type == "deepseek"
     }
 
+    pub fn is_anthropic(&self) -> bool {
+        self.provider_type == "anthropic" || self.provider_type == "claude"
+    }
+
     /// Build the chat completions URL, avoiding double /v1.
     pub fn chat_completions_url(&self) -> String {
         let base = self.base_url.trim_end_matches('/');
@@ -53,6 +57,16 @@ impl ProviderConfig {
             format!("{base}/chat/completions")
         } else {
             format!("{base}/v1/chat/completions")
+        }
+    }
+
+    /// Build the Claude Messages API URL.
+    pub fn anthropic_messages_url(&self) -> String {
+        let base = self.base_url.trim_end_matches('/');
+        if base.ends_with("/v1") {
+            format!("{base}/messages")
+        } else {
+            format!("{base}/v1/messages")
         }
     }
 }
@@ -138,6 +152,94 @@ pub async fn send_stream(
         let sanitized = body_text.replace(&config.api_key, "sk-***REDACTED***");
         return Err(
             AppError::new("UPSTREAM_STREAM_ERROR", format!("Provider returned HTTP {status}"))
+                .with_detail(truncate(&sanitized, 2000)),
+        );
+    }
+
+    Ok(resp)
+}
+
+/// Send a non-streaming request to Claude Messages API.
+pub async fn send_anthropic_non_stream(
+    client: &Client,
+    config: &ProviderConfig,
+    body: &Value,
+) -> Result<Value, AppError> {
+    let url = config.anthropic_messages_url();
+
+    let mut req_builder = client
+        .post(&url)
+        .header("x-api-key", &config.api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("Content-Type", "application/json");
+
+    // Add anthropic-beta if thinking is enabled
+    if body.get("thinking").is_some() {
+        req_builder = req_builder.header("anthropic-beta", "interleaved-thinking-2025-05-14");
+    }
+
+    for (k, v) in &config.extra_headers {
+        req_builder = req_builder.header(k.as_str(), v.as_str());
+    }
+
+    let resp = req_builder
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Claude: {e}")))?;
+
+    let status = resp.status();
+    let body_text = resp.text().await.unwrap_or_default();
+    let sanitized = body_text.replace(&config.api_key, "sk-***REDACTED***");
+
+    if !status.is_success() {
+        return Err(
+            AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Claude returned HTTP {status}"))
+                .with_detail(truncate(&sanitized, 2000)),
+        );
+    }
+
+    serde_json::from_str(&sanitized).map_err(|e| {
+        AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse Claude response: {e}"))
+            .with_detail(truncate(&sanitized, 500))
+    })
+}
+
+/// Send a streaming request to Claude Messages API.
+pub async fn send_anthropic_stream(
+    client: &Client,
+    config: &ProviderConfig,
+    body: &Value,
+) -> Result<reqwest::Response, AppError> {
+    let url = config.anthropic_messages_url();
+
+    let mut req_builder = client
+        .post(&url)
+        .header("x-api-key", &config.api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("Content-Type", "application/json")
+        .header("Accept", "text/event-stream");
+
+    if body.get("thinking").is_some() {
+        req_builder = req_builder.header("anthropic-beta", "interleaved-thinking-2025-05-14");
+    }
+
+    for (k, v) in &config.extra_headers {
+        req_builder = req_builder.header(k.as_str(), v.as_str());
+    }
+
+    let resp = req_builder
+        .json(body)
+        .send()
+        .await
+        .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Claude: {e}")))?;
+
+    let status = resp.status();
+    if !status.is_success() {
+        let body_text = resp.text().await.unwrap_or_default();
+        let sanitized = body_text.replace(&config.api_key, "sk-***REDACTED***");
+        return Err(
+            AppError::new("UPSTREAM_STREAM_ERROR", format!("Claude returned HTTP {status}"))
                 .with_detail(truncate(&sanitized, 2000)),
         );
     }

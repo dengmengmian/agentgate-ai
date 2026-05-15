@@ -7,6 +7,16 @@ use crate::transform::reasoning_store;
 use crate::protocol::responses_events as ev;
 
 const MAX_EVENTS_LOG_SIZE: usize = 1_000_000; // 1MB
+const MAX_CALL_ID_LEN: usize = 64; // Responses API spec limit
+
+/// Truncate tool call ID to 64 chars (Responses API requirement).
+fn clamp_call_id(id: &str) -> String {
+    if id.len() <= MAX_CALL_ID_LEN {
+        id.to_string()
+    } else {
+        id[..MAX_CALL_ID_LEN].to_string()
+    }
+}
 
 /// Accumulated tool call from streaming deltas.
 #[derive(Debug, Clone)]
@@ -233,7 +243,7 @@ pub async fn process_upstream_stream(
                         // Accumulate id (only first delta usually has it)
                         if let Some(ref id) = tc_delta.id {
                             if tc.id.is_empty() {
-                                tc.id = id.clone();
+                                tc.id = clamp_call_id(id);
                             }
                         }
 

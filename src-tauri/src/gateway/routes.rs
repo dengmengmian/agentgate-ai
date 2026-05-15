@@ -16,8 +16,9 @@ use crate::models::provider::Provider;
 use crate::protocol::openai_responses::ResponsesRequest;
 use crate::protocol::chat_completions::{ChatCompletionResponse, ChatMessage};
 use crate::providers::adapter::{self, ProviderConfig};
-use crate::transform::responses_to_chat;
+use crate::transform::{responses_to_chat, responses_to_anthropic};
 use crate::gateway::sse::SseAccumulator;
+use crate::gateway::sse_anthropic::AnthropicSseAccumulator;
 use crate::security::local_token;
 
 /// Shared state for the gateway HTTP server.
@@ -136,23 +137,42 @@ pub async fn handle_responses(
         };
 
         let model = candidate.model.clone();
-        let provider_transform = crate::transform::providers::for_config(&config);
-        let chat_req = match responses_to_chat::convert_with_provider(&req, &model, provider_transform.as_ref()) {
-            Ok(r) => r,
-            Err(e) => {
-                attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));
-                last_error = Some(e);
-                break; // Transform errors are not retryable
+
+        let result = if config.is_anthropic() {
+            // Claude Messages API path
+            let anthropic_body = match responses_to_anthropic::convert(&req, &model) {
+                Ok(b) => b,
+                Err(e) => {
+                    attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));
+                    last_error = Some(e);
+                    break;
+                }
+            };
+            let converted_json = serde_json::to_string_pretty(&anthropic_body).unwrap_or_default();
+            let is_stream = req.stream.unwrap_or(false);
+            if is_stream {
+                handle_anthropic_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
+            } else {
+                handle_anthropic_non_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
             }
-        };
-
-        let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
-        let is_stream = chat_req.stream;
-
-        let result = if is_stream {
-            handle_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
         } else {
-            handle_non_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
+            // Chat Completions path (existing)
+            let provider_transform = crate::transform::providers::for_config(&config);
+            let chat_req = match responses_to_chat::convert_with_provider(&req, &model, provider_transform.as_ref()) {
+                Ok(r) => r,
+                Err(e) => {
+                    attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));
+                    last_error = Some(e);
+                    break;
+                }
+            };
+            let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
+            let is_stream = chat_req.stream;
+            if is_stream {
+                handle_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
+            } else {
+                handle_non_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
+            }
         };
 
         match result {
@@ -472,6 +492,189 @@ async fn handle_stream_response(
             Err(GatewayError(err))
         }
     }
+}
+
+// ── Anthropic (Claude Messages API) handlers ──────────────────
+
+async fn handle_anthropic_non_stream_response(
+    state: GatewayState,
+    config: ProviderConfig,
+    body: serde_json::Value,
+    request_id: String,
+    raw_request: String,
+    converted_request: String,
+    model: String,
+    start: Instant,
+) -> Result<Response, GatewayError> {
+    let result = adapter::send_anthropic_non_stream(&state.http_client, &config, &body).await;
+
+    match result {
+        Ok(upstream_json) => {
+            let resp_id = format!("resp_{}", &request_id[4..]);
+
+            // Parse Claude response: {content: [...], stop_reason, usage}
+            let mut output = Vec::new();
+            let mut tool_calls_json = String::new();
+
+            if let Some(content) = upstream_json.get("content").and_then(|c| c.as_array()) {
+                let msg_id = format!("msg_{}", &resp_id.replace("resp_", ""));
+                let mut text_parts = Vec::new();
+
+                for block in content {
+                    let block_type = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                    match block_type {
+                        "text" => {
+                            if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                                text_parts.push(text.to_string());
+                            }
+                        }
+                        "tool_use" => {
+                            let id = block.get("id").and_then(|i| i.as_str()).unwrap_or("");
+                            let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                            let empty_input = json!({});
+                            let input = block.get("input").unwrap_or(&empty_input);
+                            let arguments = serde_json::to_string(input).unwrap_or("{}".to_string());
+                            output.push(json!({
+                                "id": format!("fc_{id}"),
+                                "type": "function_call",
+                                "status": "completed",
+                                "call_id": id,
+                                "name": name,
+                                "arguments": arguments
+                            }));
+                        }
+                        _ => {}
+                    }
+                }
+
+                if !text_parts.is_empty() {
+                    let full_text = text_parts.join("");
+                    output.insert(0, json!({
+                        "id": msg_id,
+                        "type": "message",
+                        "status": "completed",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": full_text}]
+                    }));
+                }
+            }
+
+            let responses_resp = json!({
+                "id": resp_id,
+                "object": "response",
+                "created_at": chrono::Utc::now().timestamp(),
+                "status": "completed",
+                "model": model,
+                "output": output
+            });
+            let latency = start.elapsed().as_millis() as i64;
+            let (in_tok, out_tok) = extract_anthropic_usage(&upstream_json);
+
+            let trace = json!({"response_id": &resp_id, "stream": false, "protocol": "anthropic_messages"}).to_string();
+            log_request_success(
+                &state.db, &request_id, &raw_request, &converted_request,
+                &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
+                &serde_json::to_string_pretty(&responses_resp).unwrap_or_default(),
+                if tool_calls_json.is_empty() { None } else { Some(&tool_calls_json) },
+                &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok,
+            );
+
+            Ok(Json(responses_resp).into_response())
+        }
+        Err(err) => {
+            let latency = start.elapsed().as_millis() as i64;
+            log_request_error_full(&state.db, &request_id, &raw_request, &converted_request,
+                &config.name, &model, &err, 502, latency);
+            Err(GatewayError(err))
+        }
+    }
+}
+
+async fn handle_anthropic_stream_response(
+    state: GatewayState,
+    config: ProviderConfig,
+    body: serde_json::Value,
+    request_id: String,
+    raw_request: String,
+    converted_request: String,
+    model: String,
+    start: Instant,
+) -> Result<Response, GatewayError> {
+    let upstream_resp = adapter::send_anthropic_stream(&state.http_client, &config, &body).await;
+
+    match upstream_resp {
+        Ok(response) => {
+            let resp_id = format!("resp_{}", &request_id[4..]);
+            let (tx, rx) = mpsc::channel::<String>(256);
+
+            let db = state.db.clone();
+            let provider_name = config.name.clone();
+            let model_clone = model.clone();
+            let req_id = request_id.clone();
+            let raw_req = raw_request.clone();
+            let conv_req = converted_request.clone();
+
+            tokio::spawn(async move {
+                let mut acc = AnthropicSseAccumulator::new(resp_id, model_clone.clone());
+                let result = crate::gateway::sse_anthropic::process_anthropic_stream(response, tx, &mut acc).await;
+
+                let latency = start.elapsed().as_millis() as i64;
+                let tc_list = acc.tool_calls_list();
+
+                match result {
+                    Ok(()) => {
+                        let trace = json!({
+                            "response_id": &acc.response_id, "stream": true, "protocol": "anthropic_messages",
+                            "text_len": acc.full_text.len(), "tool_calls_count": tc_list.len(),
+                            "reasoning_len": acc.reasoning_content.len(),
+                        }).to_string();
+                        let (in_tok, out_tok) = acc.usage.as_ref().map(|u| {
+                            (u.get("input_tokens").and_then(|v| v.as_i64()),
+                             u.get("output_tokens").and_then(|v| v.as_i64()))
+                        }).unwrap_or((None, None));
+
+                        log_request_success(
+                            &db, &req_id, &raw_req, &conv_req, "",
+                            &truncate_str(&acc.full_text, 10000),
+                            None, &provider_name, &model_clone, 200, latency,
+                            Some(&trace), in_tok, out_tok,
+                        );
+                    }
+                    Err(err_msg) => {
+                        let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
+                        log_request_error_full(&db, &req_id, &raw_req, &conv_req,
+                            &provider_name, &model_clone, &err, 502, latency);
+                    }
+                }
+            });
+
+            let stream = ReceiverStream::new(rx);
+            let body = Body::from_stream(
+                tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
+            );
+
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "text/event-stream")
+                .header(header::CACHE_CONTROL, "no-cache")
+                .header(header::CONNECTION, "keep-alive")
+                .body(body)
+                .unwrap())
+        }
+        Err(err) => {
+            let latency = start.elapsed().as_millis() as i64;
+            log_request_error_full(&state.db, &request_id, &raw_request, &converted_request,
+                &config.name, &model, &err, 502, latency);
+            Err(GatewayError(err))
+        }
+    }
+}
+
+fn extract_anthropic_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i64>) {
+    let usage = upstream.get("usage");
+    let input = usage.and_then(|u| u.get("input_tokens")).and_then(|v| v.as_i64());
+    let output = usage.and_then(|u| u.get("output_tokens")).and_then(|v| v.as_i64());
+    (input, output)
 }
 
 // ── POST /v1/chat/completions ──────────────────────────────────

@@ -378,7 +378,7 @@ fn flush_tool_calls(messages: &mut Vec<ChatMessage>, pending: &mut Vec<ToolCall>
 /// Chat Completions tool role only accepts `content: string`, but Codex Responses API
 /// may send `output` as a ContentPart array (e.g. when a tool returns images + text).
 /// We extract text parts, drop images with a placeholder notice.
-fn flatten_tool_output(output: &Value) -> String {
+pub fn flatten_tool_output(output: &Value) -> String {
     if let Some(s) = output.as_str() {
         return s.to_string();
     }
