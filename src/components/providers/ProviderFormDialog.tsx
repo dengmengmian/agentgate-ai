@@ -417,7 +417,7 @@ function Field({ label, error, hint, children }: { label: string; error?: string
 function ModelCombo({ value, onChange, models }: { value: string; onChange: (v: string) => void; models: string[] }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
-  const filtered = models.filter((m) => m.toLowerCase().includes((filter || value).toLowerCase()));
+  const filtered = filter ? models.filter((m) => m.toLowerCase().includes(filter.toLowerCase())) : models;
 
   return (
     <div className="relative flex-1">
