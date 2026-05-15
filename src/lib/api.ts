@@ -81,6 +81,10 @@ export async function testProvider(id: string): Promise<ProviderTestResult> {
   return cmd("test_provider", { id });
 }
 
+export async function detectProviderVision(id: string): Promise<ProviderTestResult> {
+  return cmd("detect_provider_vision", { id });
+}
+
 // ── Gateway ────────────────────────────────────────────────────
 
 export async function getGatewayStatus(): Promise<GatewayStatus> {
@@ -145,6 +149,10 @@ export async function getGatewayAuthSettings(): Promise<GatewayAuthSettings> {
 
 export async function regenerateLocalAccessToken(): Promise<GatewayAuthSettings> {
   return cmd("regenerate_local_access_token");
+}
+
+export async function getLocalAccessToken(): Promise<string> {
+  return cmd("get_local_access_token");
 }
 
 export async function ensureLocalAccessToken(): Promise<GatewayAuthSettings> {

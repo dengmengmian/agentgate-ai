@@ -5,8 +5,8 @@ use crate::models::provider::{CreateProviderInput, Provider, UpdateProviderInput
 
 pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url,
-                protocol, timeout_seconds, status, enabled, is_active, created_at, updated_at
+        "SELECT id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url,
+                protocol, timeout_seconds, status, supports_vision, enabled, is_active, created_at, updated_at
          FROM providers ORDER BY is_active DESC, created_at ASC",
     )?;
 
@@ -23,13 +23,15 @@ pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
             model_mapping: row.get(8)?,
             extra_headers: row.get(9)?,
             anthropic_base_url: row.get(10)?,
-            protocol: row.get(11)?,
-            timeout_seconds: row.get(12)?,
-            status: row.get(13)?,
-            enabled: row.get(14)?,
-            is_active: row.get(15)?,
-            created_at: row.get(16)?,
-            updated_at: row.get(17)?,
+            responses_base_url: row.get(11)?,
+            protocol: row.get(12)?,
+            timeout_seconds: row.get(13)?,
+            status: row.get(14)?,
+            supports_vision: row.get(15)?,
+            enabled: row.get(16)?,
+            is_active: row.get(17)?,
+            created_at: row.get(18)?,
+            updated_at: row.get(19)?,
         })
     })?;
 
@@ -42,8 +44,8 @@ pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
 
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<Provider, AppError> {
     conn.query_row(
-        "SELECT id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url,
-                protocol, timeout_seconds, status, enabled, is_active, created_at, updated_at
+        "SELECT id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url,
+                protocol, timeout_seconds, status, supports_vision, enabled, is_active, created_at, updated_at
          FROM providers WHERE id = ?1",
         [id],
         |row| {
@@ -59,13 +61,15 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Provider, AppError> {
                 model_mapping: row.get(8)?,
                 extra_headers: row.get(9)?,
                 anthropic_base_url: row.get(10)?,
-                protocol: row.get(11)?,
-                timeout_seconds: row.get(12)?,
-                status: row.get(13)?,
-                enabled: row.get(14)?,
-                is_active: row.get(15)?,
-                created_at: row.get(16)?,
-                updated_at: row.get(17)?,
+                responses_base_url: row.get(11)?,
+                protocol: row.get(12)?,
+                timeout_seconds: row.get(13)?,
+                status: row.get(14)?,
+                supports_vision: row.get(15)?,
+                enabled: row.get(16)?,
+                is_active: row.get(17)?,
+                created_at: row.get(18)?,
+                updated_at: row.get(19)?,
             })
         },
     )
@@ -83,8 +87,8 @@ pub fn create(conn: &Connection, input: CreateProviderInput) -> Result<Provider,
 
     conn.execute(
         "INSERT INTO providers (id, name, provider_type, base_url, api_key, default_model, reasoning_model,
-                                supported_models, model_mapping, extra_headers, anthropic_base_url, protocol, timeout_seconds, status, enabled, is_active, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'not_tested', ?14, 0, ?15, ?15)",
+                                supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url, protocol, timeout_seconds, status, enabled, is_active, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tested', ?15, 0, ?16, ?16)",
         params![
             &id,
             &input.name,
@@ -97,6 +101,7 @@ pub fn create(conn: &Connection, input: CreateProviderInput) -> Result<Provider,
             &input.model_mapping,
             &input.extra_headers,
             &input.anthropic_base_url,
+            &input.responses_base_url,
             &input.protocol,
             timeout,
             enabled,
@@ -124,14 +129,15 @@ pub fn update(conn: &Connection, id: &str, input: UpdateProviderInput) -> Result
     let model_mapping = input.model_mapping.or(existing.model_mapping);
     let extra_headers = input.extra_headers.or(existing.extra_headers);
     let anthropic_base_url = input.anthropic_base_url.or(existing.anthropic_base_url);
+    let responses_base_url = input.responses_base_url.or(existing.responses_base_url);
     let protocol = input.protocol.unwrap_or(existing.protocol);
     let timeout_seconds = input.timeout_seconds.unwrap_or(existing.timeout_seconds);
     let enabled = input.enabled.unwrap_or(existing.enabled);
 
     conn.execute(
         "UPDATE providers SET name=?1, provider_type=?2, base_url=?3, api_key=?4, default_model=?5,
-                reasoning_model=?6, supported_models=?7, model_mapping=?8, extra_headers=?9, anthropic_base_url=?10, protocol=?11, timeout_seconds=?12, enabled=?13, updated_at=?14
-         WHERE id=?15",
+                reasoning_model=?6, supported_models=?7, model_mapping=?8, extra_headers=?9, anthropic_base_url=?10, responses_base_url=?11, protocol=?12, timeout_seconds=?13, enabled=?14, updated_at=?15
+         WHERE id=?16",
         params![
             &name,
             &provider_type,
@@ -143,6 +149,7 @@ pub fn update(conn: &Connection, id: &str, input: UpdateProviderInput) -> Result
             &model_mapping,
             &extra_headers,
             &anthropic_base_url,
+            &responses_base_url,
             &protocol,
             timeout_seconds,
             enabled,
@@ -227,6 +234,15 @@ pub fn update_status(conn: &Connection, id: &str, status: &str) -> Result<(), Ap
     conn.execute(
         "UPDATE providers SET status = ?1, updated_at = ?2 WHERE id = ?3",
         params![status, &now, id],
+    )?;
+    Ok(())
+}
+
+pub fn update_supports_vision(conn: &Connection, id: &str, supports_vision: bool) -> Result<(), AppError> {
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE providers SET supports_vision = ?1, updated_at = ?2 WHERE id = ?3",
+        params![supports_vision, &now, id],
     )?;
     Ok(())
 }

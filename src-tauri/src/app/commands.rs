@@ -195,6 +195,7 @@ pub async fn test_provider(
                 status: "failed".to_string(),
                 message: "API key is not set. Please configure your API key first.".to_string(),
                 latency_ms: None,
+                supports_vision: None,
             });
         }
     };
@@ -231,6 +232,7 @@ pub async fn test_provider(
                     status: "connected".to_string(),
                     message: format!("Connection successful via {url}"),
                     latency_ms: Some(latency),
+                    supports_vision: None,
                 });
             }
             Ok(resp) => {
@@ -256,6 +258,129 @@ pub async fn test_provider(
         status: "failed".to_string(),
         message: last_error,
         latency_ms: Some(latency),
+        supports_vision: None,
+    })
+}
+
+#[tauri::command]
+pub async fn detect_provider_vision(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<ProviderTestResult, AppError> {
+    let provider = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::providers::get_by_id(&conn, &id)?
+    };
+
+    let api_key = match provider.api_key {
+        Some(ref k) if !k.is_empty() => k.clone(),
+        _ => {
+            return Ok(ProviderTestResult {
+                success: false,
+                status: "failed".to_string(),
+                message: "API key is not set".to_string(),
+                latency_ms: None,
+                supports_vision: None,
+            });
+        }
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(provider.timeout_seconds as u64))
+        .build()
+        .map_err(|e| AppError::internal(format!("HTTP client error: {e}")))?;
+
+    // 1x1 red PNG, ~68 bytes base64
+    let tiny_image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==";
+
+    let probe_body = serde_json::json!({
+        "model": provider.default_model,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "hi"},
+                {"type": "image_url", "image_url": {"url": format!("data:image/png;base64,{tiny_image}")}}
+            ]
+        }],
+        "max_tokens": 1
+    });
+
+    let base = provider.base_url.trim_end_matches('/');
+    let url = if provider.protocol == "anthropic_messages" {
+        if let Some(ref abu) = provider.anthropic_base_url {
+            format!("{}/v1/messages", abu.trim_end_matches('/'))
+        } else {
+            format!("{}/v1/messages", base)
+        }
+    } else {
+        format!("{}/v1/chat/completions", base)
+    };
+
+    let start = Instant::now();
+
+    let mut req_builder = client.post(&url)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("Content-Type", "application/json");
+
+    // Add extra headers if configured
+    if let Some(ref eh) = provider.extra_headers {
+        if let Ok(headers) = serde_json::from_str::<std::collections::HashMap<String, String>>(eh) {
+            for (k, v) in headers {
+                if let (Ok(name), Ok(val)) = (
+                    reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                    reqwest::header::HeaderValue::from_str(&v),
+                ) {
+                    req_builder = req_builder.header(name, val);
+                }
+            }
+        }
+    }
+
+    let result = req_builder.json(&probe_body).send().await;
+
+    let latency = start.elapsed().as_millis() as u64;
+
+    let supports_vision = match result {
+        Ok(resp) => {
+            let status = resp.status();
+            if status.is_success() || status.as_u16() == 200 {
+                true
+            } else {
+                // 400 typically means the model doesn't support images
+                // Other errors (401, 403, 5xx) are inconclusive
+                status.as_u16() != 400
+            }
+        }
+        Err(_) => {
+            // Network error — inconclusive, don't update
+            return Ok(ProviderTestResult {
+                success: false,
+                status: "failed".to_string(),
+                message: "Vision detection failed: network error".to_string(),
+                latency_ms: Some(latency),
+                supports_vision: None,
+            });
+        }
+    };
+
+    // Save result
+    {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::providers::update_supports_vision(&conn, &id, supports_vision)?;
+    }
+
+    let message = if supports_vision {
+        "Vision supported".to_string()
+    } else {
+        "Vision not supported".to_string()
+    };
+
+    Ok(ProviderTestResult {
+        success: true,
+        status: "detected".to_string(),
+        message,
+        latency_ms: Some(latency),
+        supports_vision: Some(supports_vision),
     })
 }
 
@@ -611,6 +736,11 @@ pub fn regenerate_local_access_token() -> Result<crate::security::local_token::G
 pub fn ensure_local_access_token() -> Result<crate::security::local_token::GatewayAuthSettings, AppError> {
     crate::security::local_token::ensure_token()?;
     Ok(crate::security::local_token::get_auth_settings())
+}
+
+#[tauri::command]
+pub fn get_local_access_token() -> Result<String, AppError> {
+    crate::security::local_token::read_token()
 }
 
 #[tauri::command]

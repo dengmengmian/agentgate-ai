@@ -117,6 +117,7 @@ pub fn run() {
             commands::set_active_provider,
             commands::fetch_provider_models,
             commands::test_provider,
+            commands::detect_provider_vision,
             // Gateway
             commands::get_gateway_status,
             commands::get_gateway_settings,
@@ -135,6 +136,7 @@ pub fn run() {
             commands::get_gateway_auth_settings,
             commands::regenerate_local_access_token,
             commands::ensure_local_access_token,
+            commands::get_local_access_token,
             commands::open_token_folder,
             // Codex Config
             commands::detect_codex_config,

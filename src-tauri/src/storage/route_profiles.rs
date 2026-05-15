@@ -138,7 +138,10 @@ pub fn set_active_provider(conn: &Connection, profile_id: &str, provider_id: &st
 
 pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RouteProfileProviderView>, AppError> {
     let mut stmt = conn.prepare(
-        "SELECT rpp.id, rpp.provider_id, p.name, p.provider_type, rpp.priority, rpp.enabled,
+        "SELECT rpp.id, rpp.provider_id, p.name, p.provider_type, p.protocol,
+                CASE WHEN p.anthropic_base_url IS NOT NULL AND p.anthropic_base_url != '' THEN 1 ELSE 0 END,
+                p.supports_vision,
+                rpp.priority, rpp.enabled,
                 rpp.model_override, rpp.cooldown_seconds,
                 rpp.failover_on_status_codes, rpp.failover_on_error_keywords,
                 COALESCE(prs.available, 1), prs.cooldown_until, COALESCE(prs.consecutive_failures, 0)
@@ -152,10 +155,13 @@ pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RoutePr
     let rows = stmt.query_map([profile_id], |row| {
         Ok(RouteProfileProviderView {
             id: row.get(0)?, provider_id: row.get(1)?, provider_name: row.get(2)?,
-            provider_type: row.get(3)?, priority: row.get(4)?, enabled: row.get(5)?,
-            model_override: row.get(6)?, cooldown_seconds: row.get(7)?,
-            failover_on_status_codes: row.get(8)?, failover_on_error_keywords: row.get(9)?,
-            runtime_available: row.get(10)?, cooldown_until: row.get(11)?, consecutive_failures: row.get(12)?,
+            provider_type: row.get(3)?, provider_protocol: row.get(4)?,
+            has_anthropic_url: row.get(5)?,
+            supports_vision: row.get(6)?,
+            priority: row.get(7)?, enabled: row.get(8)?,
+            model_override: row.get(9)?, cooldown_seconds: row.get(10)?,
+            failover_on_status_codes: row.get(11)?, failover_on_error_keywords: row.get(12)?,
+            runtime_available: row.get(13)?, cooldown_until: row.get(14)?, consecutive_failures: row.get(15)?,
         })
     })?;
 

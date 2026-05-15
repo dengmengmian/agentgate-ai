@@ -147,8 +147,12 @@ fn convert_input(input: &Value, system_blocks: &mut Vec<Value>) -> Result<Vec<Va
         }
         Value::Array(items) => convert_input_array(items, system_blocks),
         Value::Object(_) => {
-            let text = extract_text(Some(input));
-            Ok(vec![json!({"role": "user", "content": [{"type": "text", "text": text}]})])
+            let blocks = extract_content_blocks(Some(input));
+            if blocks.is_empty() {
+                Ok(vec![json!({"role": "user", "content": [{"type": "text", "text": ""}]})])
+            } else {
+                Ok(vec![json!({"role": "user", "content": blocks})])
+            }
         }
         _ => {
             Ok(vec![json!({"role": "user", "content": [{"type": "text", "text": input.to_string()}]})])
@@ -208,10 +212,10 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                         }
                     }
                     _ => {
-                        // user
-                        let text = extract_text(item.get("content"));
-                        if !text.is_empty() {
-                            messages.push(json!({"role": "user", "content": [{"type": "text", "text": text}]}));
+                        // user — preserve images
+                        let blocks = extract_content_blocks(item.get("content"));
+                        if !blocks.is_empty() {
+                            messages.push(json!({"role": "user", "content": blocks}));
                         }
                     }
                 }
@@ -300,30 +304,108 @@ fn extract_text(content: Option<&Value>) -> String {
         None => String::new(),
         Some(Value::String(s)) => s.clone(),
         Some(Value::Array(arr)) => {
-            let texts: Vec<String> = arr.iter()
-                .filter_map(|part| {
-                    let pt = part.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                    match pt {
-                        "input_text" | "output_text" | "text" | "tool_call" => None,
-                        _ => None,
-                    }
-                    // Fallback: try "text" field
-                })
-                .collect();
-            if texts.is_empty() {
-                // Try all text fields
-                arr.iter()
-                    .filter_map(|p| p.get("text").and_then(|t| t.as_str()).map(String::from))
-                    .collect::<Vec<_>>()
-                    .join("")
-            } else {
-                texts.join("")
-            }
+            arr.iter()
+                .filter_map(|p| p.get("text").and_then(|t| t.as_str()).map(String::from))
+                .collect::<Vec<_>>()
+                .join("")
         }
         Some(Value::Object(obj)) => {
             obj.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string()
         }
         Some(other) => other.to_string(),
+    }
+}
+
+/// Extract content blocks for Claude Messages API, preserving images.
+/// Returns Vec of content blocks (text + image blocks).
+fn extract_content_blocks(content: Option<&Value>) -> Vec<Value> {
+    match content {
+        None => vec![],
+        Some(Value::String(s)) => {
+            if s.is_empty() { vec![] } else { vec![json!({"type": "text", "text": s})] }
+        }
+        Some(Value::Array(arr)) => {
+            let mut blocks = Vec::new();
+            for part in arr {
+                let pt = part.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                match pt {
+                    "input_text" | "output_text" | "text" => {
+                        if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                            if !text.is_empty() {
+                                blocks.push(json!({"type": "text", "text": text}));
+                            }
+                        }
+                    }
+                    "input_image" => {
+                        // Convert to Claude image block format
+                        if let Some(url) = part.get("image_url").and_then(|u| u.as_str())
+                            .or_else(|| part.get("image_url").and_then(|u| u.get("url")).and_then(|u| u.as_str()))
+                        {
+                            if let Some(b64_data) = url.strip_prefix("data:") {
+                                // Parse data URI: data:image/png;base64,<data>
+                                if let Some((media_info, data)) = b64_data.split_once(',') {
+                                    let media_type = media_info.replace(";base64", "");
+                                    blocks.push(json!({
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": media_type,
+                                            "data": data
+                                        }
+                                    }));
+                                }
+                            } else {
+                                // URL-based image
+                                blocks.push(json!({
+                                    "type": "image",
+                                    "source": {"type": "url", "url": url}
+                                }));
+                            }
+                        }
+                    }
+                    "image_url" => {
+                        // OpenAI Chat Completions format image_url
+                        if let Some(url) = part.get("image_url").and_then(|u| u.get("url")).and_then(|u| u.as_str()) {
+                            if let Some(b64_data) = url.strip_prefix("data:") {
+                                if let Some((media_info, data)) = b64_data.split_once(',') {
+                                    let media_type = media_info.replace(";base64", "");
+                                    blocks.push(json!({
+                                        "type": "image",
+                                        "source": {
+                                            "type": "base64",
+                                            "media_type": media_type,
+                                            "data": data
+                                        }
+                                    }));
+                                }
+                            } else {
+                                blocks.push(json!({
+                                    "type": "image",
+                                    "source": {"type": "url", "url": url}
+                                }));
+                            }
+                        }
+                    }
+                    "tool_call" => {} // handled separately
+                    _ => {
+                        if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                            if !text.is_empty() {
+                                blocks.push(json!({"type": "text", "text": text}));
+                            }
+                        }
+                    }
+                }
+            }
+            blocks
+        }
+        Some(Value::Object(obj)) => {
+            if let Some(text) = obj.get("text").and_then(|t| t.as_str()) {
+                vec![json!({"type": "text", "text": text})]
+            } else {
+                vec![]
+            }
+        }
+        Some(_) => vec![],
     }
 }
 
@@ -619,5 +701,68 @@ mod tests {
             {"type": "function_call_output", "call_id": "", "output": "result"}
         ]));
         assert!(convert(&req, "claude-3-5-sonnet").is_err());
+    }
+
+    // ── extract_content_blocks image tests ──
+
+    #[test]
+    fn test_extract_content_blocks_text_only() {
+        let content = json!([{"type": "input_text", "text": "hello"}]);
+        let blocks = extract_content_blocks(Some(&content));
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["type"], "text");
+        assert_eq!(blocks[0]["text"], "hello");
+    }
+
+    #[test]
+    fn test_extract_content_blocks_with_base64_image() {
+        let content = json!([
+            {"type": "input_text", "text": "describe"},
+            {"type": "input_image", "image_url": "data:image/png;base64,abc123"}
+        ]);
+        let blocks = extract_content_blocks(Some(&content));
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0]["type"], "text");
+        assert_eq!(blocks[1]["type"], "image");
+        assert_eq!(blocks[1]["source"]["type"], "base64");
+        assert_eq!(blocks[1]["source"]["media_type"], "image/png");
+        assert_eq!(blocks[1]["source"]["data"], "abc123");
+    }
+
+    #[test]
+    fn test_extract_content_blocks_with_url_image() {
+        let content = json!([
+            {"type": "input_image", "image_url": "https://example.com/photo.jpg"}
+        ]);
+        let blocks = extract_content_blocks(Some(&content));
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["type"], "image");
+        assert_eq!(blocks[0]["source"]["type"], "url");
+        assert_eq!(blocks[0]["source"]["url"], "https://example.com/photo.jpg");
+    }
+
+    #[test]
+    fn test_extract_content_blocks_image_url_type() {
+        let content = json!([
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,xyz"}}
+        ]);
+        let blocks = extract_content_blocks(Some(&content));
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["type"], "image");
+        assert_eq!(blocks[0]["source"]["media_type"], "image/jpeg");
+        assert_eq!(blocks[0]["source"]["data"], "xyz");
+    }
+
+    #[test]
+    fn test_extract_content_blocks_string_input() {
+        let blocks = extract_content_blocks(Some(&json!("hello")));
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["text"], "hello");
+    }
+
+    #[test]
+    fn test_extract_content_blocks_none() {
+        let blocks = extract_content_blocks(None);
+        assert!(blocks.is_empty());
     }
 }

@@ -37,9 +37,17 @@ export function ProviderCard({
             <p className="font-mono text-[11px] text-text-muted">{provider.base_url}</p>
           </div>
         </div>
-        <StatusBadge variant={provider.status === "connected" ? "success" : provider.status === "failed" ? "error" : "muted"}>
-          {provider.status}
-        </StatusBadge>
+        <div className="flex items-center gap-1.5">
+          <StatusBadge variant={provider.status === "connected" ? "success" : provider.status === "failed" ? "error" : "muted"}>
+            {provider.status === "connected" ? t("providers.status_connected") : provider.status === "failed" ? t("providers.status_failed") : t("providers.status_not_tested")}
+          </StatusBadge>
+          {provider.supports_vision === true && (
+            <StatusBadge variant="accent">{t("providers.vision_supported")}</StatusBadge>
+          )}
+          {provider.supports_vision === false && (
+            <StatusBadge variant="muted">{t("providers.vision_not_supported")}</StatusBadge>
+          )}
+        </div>
       </div>
 
       <div className="mb-4 grid grid-cols-2 gap-y-2.5 text-xs">
@@ -49,7 +57,20 @@ export function ProviderCard({
         </div>
         <div>
           <span className="text-text-muted">{t("providers.protocol")}</span>
-          <p className="text-text-primary">{provider.protocol}</p>
+          <p className="flex flex-wrap gap-1 text-text-primary">
+            {(() => {
+              let protocols: string[] = [];
+              try { protocols = JSON.parse(provider.protocol); } catch { protocols = [provider.protocol]; }
+              const labels: Record<string, string> = {
+                openai_chat_completions: "Chat Completions",
+                openai_responses: "Responses",
+                anthropic_messages: "Anthropic Messages",
+              };
+              return protocols.map((p) => (
+                <span key={p} className="rounded bg-card-secondary px-1.5 py-0.5 text-[11px]">{labels[p] || p}</span>
+              ));
+            })()}
+          </p>
         </div>
         <div>
           <span className="text-text-muted">{t("providers.api_key")}</span>

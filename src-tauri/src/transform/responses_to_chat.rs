@@ -162,6 +162,7 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                 // Check for embedded tool_calls in content array (Codex multi-turn history format)
                 let mut embedded_text = String::new();
                 let mut embedded_tool_calls: Vec<ToolCall> = Vec::new();
+                let mut has_embedded_tool_calls = false;
                 if let Some(Value::Array(parts)) = item.get("content") {
                     for part in parts {
                         let pt = part.get("type").and_then(|t| t.as_str()).unwrap_or("");
@@ -175,6 +176,7 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                                 }
                             }
                             "tool_call" => {
+                                has_embedded_tool_calls = true;
                                 embedded_tool_calls.push(ToolCall {
                                     id: part.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string(),
                                     call_type: "function".to_string(),
@@ -192,7 +194,7 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                     }
                 }
 
-                let content = if !embedded_tool_calls.is_empty() {
+                let content = if has_embedded_tool_calls {
                     Value::String(embedded_text)
                 } else {
                     extract_content(item.get("content"))
@@ -438,27 +440,58 @@ fn extract_content(content: Option<&Value>) -> Value {
         None => Value::String(String::new()),
         Some(Value::String(s)) => Value::String(s.clone()),
         Some(Value::Array(arr)) => {
-            let texts: Vec<String> = arr
-                .iter()
-                .filter_map(|part| {
-                    // Support input_text, output_text, text types
-                    let pt = part.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                    match pt {
-                        "input_text" | "output_text" | "text" => {
-                            part.get("text").and_then(|t| t.as_str()).map(String::from)
-                        }
-                        _ => {
-                            // Fallback: try "text" field anyway
-                            part.get("text").and_then(|t| t.as_str()).map(String::from)
+            let mut parts_out: Vec<Value> = Vec::new();
+            let mut has_image = false;
+
+            for part in arr {
+                let pt = part.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                match pt {
+                    "input_text" | "output_text" | "text" => {
+                        if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                            parts_out.push(serde_json::json!({"type": "text", "text": text}));
                         }
                     }
-                })
-                .collect();
-            if texts.is_empty() {
-                // If no text parts found, stringify the whole array
+                    "input_image" => {
+                        // Convert Responses API input_image to Chat Completions image_url format
+                        has_image = true;
+                        if let Some(url) = part.get("image_url").and_then(|u| u.as_str()) {
+                            parts_out.push(serde_json::json!({
+                                "type": "image_url",
+                                "image_url": {"url": url}
+                            }));
+                        } else if let Some(b64) = part.get("image_url").and_then(|u| u.get("url")).and_then(|u| u.as_str()) {
+                            parts_out.push(serde_json::json!({
+                                "type": "image_url",
+                                "image_url": {"url": b64}
+                            }));
+                        }
+                    }
+                    "image_url" => {
+                        // Already in Chat Completions format, pass through
+                        has_image = true;
+                        parts_out.push(part.clone());
+                    }
+                    _ => {
+                        // Fallback: try "text" field
+                        if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                            parts_out.push(serde_json::json!({"type": "text", "text": text}));
+                        }
+                    }
+                }
+            }
+
+            if parts_out.is_empty() {
                 Value::String(serde_json::to_string(arr).unwrap_or_default())
+            } else if has_image {
+                // Return multipart content array to preserve images
+                Value::Array(parts_out)
             } else {
-                Value::String(texts.join(""))
+                // Text-only: join into a single string for compatibility
+                let text = parts_out.iter()
+                    .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                    .collect::<Vec<_>>()
+                    .join("");
+                Value::String(text)
             }
         }
         Some(Value::Object(obj)) => {
@@ -1131,5 +1164,70 @@ mod tests {
         // Numbers, objects, etc. → JSON stringify
         assert_eq!(flatten_tool_output(&json!(42)), "42");
         assert_eq!(flatten_tool_output(&json!({"key": "val"})), "{\"key\":\"val\"}");
+    }
+
+    // ── extract_content image preservation tests ──
+
+    #[test]
+    fn test_extract_content_text_only() {
+        let content = json!([
+            {"type": "input_text", "text": "hello"},
+            {"type": "text", "text": " world"}
+        ]);
+        let result = extract_content(Some(&content));
+        // Text-only → joined string
+        assert_eq!(result, Value::String("hello world".to_string()));
+    }
+
+    #[test]
+    fn test_extract_content_with_image_preserves_array() {
+        let content = json!([
+            {"type": "input_text", "text": "describe this"},
+            {"type": "input_image", "image_url": "data:image/png;base64,abc123"}
+        ]);
+        let result = extract_content(Some(&content));
+        // Has image → returns array
+        assert!(result.is_array());
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["type"], "text");
+        assert_eq!(arr[0]["text"], "describe this");
+        assert_eq!(arr[1]["type"], "image_url");
+        assert_eq!(arr[1]["image_url"]["url"], "data:image/png;base64,abc123");
+    }
+
+    #[test]
+    fn test_extract_content_image_url_passthrough() {
+        let content = json!([
+            {"type": "text", "text": "hi"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,xyz"}}
+        ]);
+        let result = extract_content(Some(&content));
+        assert!(result.is_array());
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr[1]["type"], "image_url");
+    }
+
+    #[test]
+    fn test_extract_content_input_image_nested_url() {
+        let content = json!([
+            {"type": "input_image", "image_url": {"url": "data:image/jpeg;base64,abc"}}
+        ]);
+        let result = extract_content(Some(&content));
+        assert!(result.is_array());
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr[0]["image_url"]["url"], "data:image/jpeg;base64,abc");
+    }
+
+    #[test]
+    fn test_extract_content_string_unchanged() {
+        let result = extract_content(Some(&json!("plain text")));
+        assert_eq!(result, Value::String("plain text".to_string()));
+    }
+
+    #[test]
+    fn test_extract_content_none() {
+        let result = extract_content(None);
+        assert_eq!(result, Value::String(String::new()));
     }
 }

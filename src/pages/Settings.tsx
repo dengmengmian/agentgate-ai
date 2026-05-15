@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Shield, FolderOpen, RefreshCcw, Download } from "lucide-react";
+import { Shield, FolderOpen, RefreshCcw, Download, Copy } from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { getVersion } from "@tauri-apps/api/app";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -48,6 +48,14 @@ export function Settings() {
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
+  const handleCopyToken = async () => {
+    try {
+      const token = await api.getLocalAccessToken();
+      await navigator.clipboard.writeText(token);
+      toast("success", t("settings.token_copied"));
+    } catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
   const handleRegenToken = async () => {
     try {
       const a = await api.regenerateLocalAccessToken();
@@ -75,6 +83,7 @@ export function Settings() {
             <div className="flex justify-between"><span className="text-text-muted">{t("settings.claude_auth")}</span><span className="text-text-primary">{auth.claude_code_auth_type}</span></div>
           </div>
           <div className="mt-4 flex gap-2">
+            <button onClick={handleCopyToken} className="btn-secondary"><Copy className="h-3 w-3" />{t("settings.copy_token")}</button>
             <button onClick={() => setConfirmRegen(true)} className="btn-secondary"><RefreshCcw className="h-3 w-3" />{t("settings.regenerate_token")}</button>
             <button onClick={() => api.openTokenFolder()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("settings.open_token_folder")}</button>
           </div>

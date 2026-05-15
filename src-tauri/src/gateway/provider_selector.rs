@@ -28,6 +28,7 @@ pub struct ProviderCandidate {
     pub priority: i64,
     pub model: String,
     pub in_cooldown: bool,
+    pub supports_vision: Option<bool>,
     pub cooldown_seconds: i64,
     pub failover_on_status_codes: Vec<i64>,
     pub failover_on_error_keywords: Vec<String>,
@@ -73,12 +74,15 @@ fn build_candidates(
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or_default();
 
+        let supports_vision = provider_info.as_ref().and_then(|p| p.supports_vision);
+
         candidates.push(ProviderCandidate {
             provider_id: rpp.provider_id.clone(),
             provider_name: rpp.provider_name.clone(),
             priority: rpp.priority,
             model,
             in_cooldown,
+            supports_vision,
             cooldown_seconds: rpp.cooldown_seconds,
             failover_on_status_codes: status_codes,
             failover_on_error_keywords: keywords,
@@ -201,6 +205,7 @@ mod tests {
             priority: 0,
             model: "gpt-4".to_string(),
             in_cooldown: false,
+            supports_vision: None,
             cooldown_seconds: 60,
             failover_on_status_codes: vec![402, 429, 500, 502, 503, 504],
             failover_on_error_keywords: vec!["rate limit".to_string(), "timeout".to_string()],

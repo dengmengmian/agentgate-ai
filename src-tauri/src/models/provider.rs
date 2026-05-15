@@ -13,6 +13,7 @@ pub struct Provider {
     pub model_mapping: Option<String>,
     pub extra_headers: Option<String>,
     pub anthropic_base_url: Option<String>, // e.g. https://api.deepseek.com/anthropic
+    pub responses_base_url: Option<String>, // e.g. https://api.openai.com (for /v1/responses pass-through)
     pub protocol: String,
     pub timeout_seconds: i64,
     pub status: String,
@@ -36,6 +37,7 @@ pub struct ProviderView {
     pub model_mapping: Option<String>,
     pub extra_headers: Option<String>,
     pub anthropic_base_url: Option<String>,
+    pub responses_base_url: Option<String>,
     pub protocol: String,
     pub timeout_seconds: i64,
     pub status: String,
@@ -58,6 +60,7 @@ pub struct CreateProviderInput {
     pub model_mapping: Option<String>,
     pub extra_headers: Option<String>,
     pub anthropic_base_url: Option<String>,
+    pub responses_base_url: Option<String>,
     pub protocol: String,
     pub timeout_seconds: Option<i64>,
     pub enabled: Option<bool>,
@@ -75,6 +78,7 @@ pub struct UpdateProviderInput {
     pub model_mapping: Option<String>,
     pub extra_headers: Option<String>,
     pub anthropic_base_url: Option<String>,
+    pub responses_base_url: Option<String>,
     pub protocol: Option<String>,
     pub timeout_seconds: Option<i64>,
     pub enabled: Option<bool>,
@@ -103,6 +107,7 @@ impl Provider {
             model_mapping: self.model_mapping.clone(),
             extra_headers: self.extra_headers.clone(),
             anthropic_base_url: self.anthropic_base_url.clone(),
+            responses_base_url: self.responses_base_url.clone(),
             protocol: self.protocol.clone(),
             timeout_seconds: self.timeout_seconds,
             status: self.status.clone(),
@@ -202,6 +207,7 @@ mod tests {
             model_mapping: None,
             extra_headers: None,
             anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
@@ -233,6 +239,7 @@ mod tests {
             model_mapping: Some(r#"{"gpt-5": "gpt-4-turbo", "custom": "gpt-3"}"#.to_string()),
             extra_headers: None,
             anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
@@ -261,6 +268,7 @@ mod tests {
             model_mapping: None,
             extra_headers: None,
             anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
@@ -289,6 +297,7 @@ mod tests {
             model_mapping: None,
             extra_headers: None,
             anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
@@ -301,5 +310,54 @@ mod tests {
 
         let view = provider.to_view();
         assert_eq!(view.masked_api_key, Some("sk-s****t123".to_string()));
+    }
+
+    #[test]
+    fn test_protocols_json_array() {
+        let provider = Provider {
+            id: "1".to_string(), name: "Test".to_string(), provider_type: "openai".to_string(),
+            base_url: "https://api.openai.com".to_string(), api_key: None,
+            default_model: "gpt-4".to_string(), reasoning_model: None, supported_models: None,
+            model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
+            protocol: r#"["openai_chat_completions","openai_responses"]"#.to_string(),
+            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None,
+            enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
+        };
+        assert_eq!(provider.protocols(), vec!["openai_chat_completions", "openai_responses"]);
+        assert!(provider.supports_protocol("openai_chat_completions"));
+        assert!(provider.supports_protocol("openai_responses"));
+        assert!(!provider.supports_protocol("anthropic_messages"));
+    }
+
+    #[test]
+    fn test_protocols_single_string_fallback() {
+        let provider = Provider {
+            id: "1".to_string(), name: "Test".to_string(), provider_type: "deepseek".to_string(),
+            base_url: "https://api.deepseek.com".to_string(), api_key: None,
+            default_model: "deepseek-v4-flash".to_string(), reasoning_model: None, supported_models: None,
+            model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
+            protocol: "openai_chat_completions".to_string(),
+            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None,
+            enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
+        };
+        assert_eq!(provider.protocols(), vec!["openai_chat_completions"]);
+        assert!(provider.supports_protocol("openai_chat_completions"));
+        assert!(!provider.supports_protocol("openai_responses"));
+    }
+
+    #[test]
+    fn test_protocols_three_protocols() {
+        let provider = Provider {
+            id: "1".to_string(), name: "NewAPI".to_string(), provider_type: "custom_openai_compatible".to_string(),
+            base_url: "https://newapi.example.com".to_string(), api_key: None,
+            default_model: "gpt-4o".to_string(), reasoning_model: None, supported_models: None,
+            model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
+            protocol: r#"["openai_chat_completions","openai_responses","anthropic_messages"]"#.to_string(),
+            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None,
+            enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
+        };
+        assert!(provider.supports_protocol("openai_chat_completions"));
+        assert!(provider.supports_protocol("openai_responses"));
+        assert!(provider.supports_protocol("anthropic_messages"));
     }
 }

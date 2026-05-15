@@ -10,9 +10,11 @@ export interface ProviderView {
   model_mapping: string | null;
   extra_headers: string | null;
   anthropic_base_url: string | null;
+  responses_base_url: string | null;
   protocol: string;
   timeout_seconds: number;
   status: string;
+  supports_vision: boolean | null;
   enabled: boolean;
   is_active: boolean;
   created_at: string;
@@ -30,6 +32,7 @@ export interface CreateProviderInput {
   model_mapping?: string;
   extra_headers?: string;
   anthropic_base_url?: string;
+  responses_base_url?: string;
   protocol: string;
   timeout_seconds?: number;
   enabled?: boolean;
@@ -56,6 +59,7 @@ export interface ProviderTestResult {
   status: string;
   message: string;
   latency_ms: number | null;
+  supports_vision: boolean | null;
 }
 
 export const PROVIDER_TYPES = [

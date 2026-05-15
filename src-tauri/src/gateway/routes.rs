@@ -160,8 +160,14 @@ pub async fn handle_responses(
 
         let model = candidate.model.clone();
 
-        let result = if config.is_anthropic() {
-            // Claude Messages API path
+        let result = if config.has_responses_url() {
+            // Pass-through: provider has explicit Responses API endpoint
+            let target_url = config.responses_url();
+            crate::gateway::pass_through::handle(
+                &state.http_client, &state.db, &config, &target_url, &body, &request_id, start,
+            ).await.map_err(|e| GatewayError(e))
+        } else if config.is_anthropic() {
+            // Claude Messages API conversion (only for Anthropic-type providers)
             let anthropic_body = match responses_to_anthropic::convert(&req, &model) {
                 Ok(b) => b,
                 Err(e) => {
@@ -178,7 +184,7 @@ pub async fn handle_responses(
                 handle_anthropic_non_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
             }
         } else {
-            // Chat Completions path (existing)
+            // Chat Completions path (default: transform Responses → Chat Completions)
             let provider_transform = crate::transform::providers::for_config(&config);
             let chat_req = match responses_to_chat::convert_with_provider(&req, &model, provider_transform.as_ref()) {
                 Ok(r) => r,
@@ -824,9 +830,9 @@ pub async fn handle_messages(
     let raw = sanitize_body(&body);
 
     // If provider has anthropic_base_url, pass-through directly (no conversion)
-    if let Some(ref anthropic_url) = selection.provider.anthropic_base_url {
-        if !anthropic_url.is_empty() {
-            let target = format!("{}/v1/messages", anthropic_url.trim_end_matches('/'));
+    if config.has_anthropic_url() {
+        {
+            let target = config.anthropic_messages_url();
             return crate::gateway::pass_through::handle_anthropic(
                 &state.http_client, &state.db, &config, &target, &body, &request_id, start,
             ).await.map_err(|e| {

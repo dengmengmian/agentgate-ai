@@ -230,7 +230,7 @@ export function Routes() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-text-primary">{p.name}</span>
                   <StatusBadge variant={p.mode === "failover" ? "accent" : "muted"}>
-                    {p.mode}
+                    {p.mode === "failover" ? t("routes.mode_failover") : t("routes.mode_manual")}
                   </StatusBadge>
                 </div>
                 <p className="mt-1 text-[11px] text-text-muted">
@@ -304,7 +304,7 @@ export function Routes() {
                 </div>
                 <div className="flex gap-3 text-[11px]">
                   <span className="rounded-md bg-card-secondary px-2.5 py-1 text-text-secondary">
-                    {t("routes.mode")}: <span className={detail.profile.mode === "failover" ? "text-accent" : "text-text-primary"}>{detail.profile.mode}</span>
+                    {t("routes.mode")}: <span className={detail.profile.mode === "failover" ? "text-accent" : "text-text-primary"}>{detail.profile.mode === "failover" ? t("routes.mode_failover") : t("routes.mode_manual")}</span>
                   </span>
                   <span className="rounded-md bg-card-secondary px-2.5 py-1 text-text-secondary">
                     {t("routes.active")}: <span className="text-text-primary">{detail.profile.active_provider_name ?? t("common.none")}</span>
@@ -336,6 +336,22 @@ export function Routes() {
                               {rp.consecutive_failures > 0 && (
                                 <StatusBadge variant="error">{rp.consecutive_failures} {t("routes.failures")}</StatusBadge>
                               )}
+                              {(() => {
+                                const providerProtocols: string[] = (() => {
+                                  try { return JSON.parse(rp.provider_protocol); } catch { return [rp.provider_protocol]; }
+                                })();
+                                const inputProto = detail.profile.input_protocol;
+                                const isTransparent =
+                                  (inputProto === "openai_chat_completions" && providerProtocols.includes("openai_chat_completions")) ||
+                                  (inputProto === "anthropic_messages" && rp.has_anthropic_url) ||
+                                  (inputProto === "openai_responses" && providerProtocols.includes("openai_responses"));
+                                return (
+                                  <StatusBadge variant={isTransparent ? "muted" : "success"}>
+                                    {isTransparent ? t("routes.proxy_mode_transparent") : t("routes.proxy_mode_convert")}
+                                  </StatusBadge>
+                                );
+                              })()}
+                              {rp.supports_vision === true && <StatusBadge variant="accent">{t("providers.vision_supported")}</StatusBadge>}
                             </div>
                             <p className="text-[11px] text-text-muted">
                               {rp.provider_type}

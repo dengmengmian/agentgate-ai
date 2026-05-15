@@ -132,6 +132,18 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN anthropic_base_url TEXT;")?;
     }
 
+    // Migration: add supports_vision column to providers
+    let has_sv: bool = conn.prepare("SELECT supports_vision FROM providers LIMIT 0").is_ok();
+    if !has_sv {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN supports_vision INTEGER;")?;
+    }
+
+    // Migration: add responses_base_url column to providers
+    let has_rbu: bool = conn.prepare("SELECT responses_base_url FROM providers LIMIT 0").is_ok();
+    if !has_rbu {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN responses_base_url TEXT;")?;
+    }
+
     // Phase 7: config_backups table
     conn.execute_batch(
         "
@@ -177,6 +189,17 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         )?;
     }
 
+    // Migration: convert protocol from single string to JSON array
+    // e.g. "openai_chat_completions" → '["openai_chat_completions"]'
+    conn.execute_batch(
+        "UPDATE providers SET protocol = '[\"' || protocol || '\"]' WHERE protocol NOT LIKE '[%';",
+    )?;
+
+    // Migration: rename "OpenCode Default" route profile to "Chat Completions Default"
+    conn.execute_batch(
+        "UPDATE route_profiles SET name = 'Chat Completions Default' WHERE name = 'OpenCode Default' AND input_protocol = 'openai_chat_completions';",
+    )?;
+
     // Seed default providers on first run
     seed_default_providers(conn)?;
 
@@ -206,9 +229,9 @@ fn seed_default_providers(conn: &Connection) -> Result<(), AppError> {
             "DeepSeek",
             "deepseek",
             "https://api.deepseek.com",
-            "deepseek-chat",
-            "deepseek-reasoner",
-            "openai_chat_completions",
+            "deepseek-v4-flash",
+            "deepseek-v4-pro",
+            r#"["openai_chat_completions"]"#,
             120,
             "not_tested",
             &now,
@@ -224,7 +247,7 @@ fn seed_default_providers(conn: &Connection) -> Result<(), AppError> {
             "custom_openai_compatible",
             "http://localhost:8000",
             "custom-model",
-            "openai_chat_completions",
+            r#"["openai_chat_completions"]"#,
             120,
             "not_tested",
             &now,
@@ -259,11 +282,11 @@ fn seed_sample_request_logs(conn: &Connection) -> Result<(), AppError> {
 
     let now = chrono::Utc::now();
     let samples = vec![
-        ("Codex", "DeepSeek", "deepseek-chat", "/v1/responses", 200i64, 1120i64, None::<&str>),
+        ("Codex", "DeepSeek", "deepseek-v4-flash", "/v1/responses", 200i64, 1120i64, None::<&str>),
         ("Claude Code", "Anthropic", "claude-sonnet-4-6", "/v1/messages", 200, 890, None),
-        ("Codex", "DeepSeek", "deepseek-chat", "/v1/responses", 502, 5230, Some("Bad Gateway: upstream provider returned 502")),
-        ("OpenCode", "DeepSeek", "deepseek-reasoner", "/v1/chat/completions", 200, 2340, None),
-        ("Codex", "DeepSeek", "deepseek-chat", "/v1/responses", 200, 1560, None),
+        ("Codex", "DeepSeek", "deepseek-v4-flash", "/v1/responses", 502, 5230, Some("Bad Gateway: upstream provider returned 502")),
+        ("OpenCode", "DeepSeek", "deepseek-v4-pro", "/v1/chat/completions", 200, 2340, None),
+        ("Codex", "DeepSeek", "deepseek-v4-flash", "/v1/responses", 200, 1560, None),
     ];
 
     for (i, (client, provider, model, route, status, latency, error)) in samples.into_iter().enumerate() {
@@ -308,7 +331,7 @@ fn seed_default_route_profile(conn: &Connection) -> Result<(), AppError> {
     let profiles = [
         ("Codex Default", "openai_responses"),
         ("Claude Code Default", "anthropic_messages"),
-        ("OpenCode Default", "openai_chat_completions"),
+        ("Chat Completions Default", "openai_chat_completions"),
     ];
 
     for (name, protocol) in profiles {

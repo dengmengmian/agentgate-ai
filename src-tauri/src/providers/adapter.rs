@@ -17,6 +17,8 @@ pub struct ProviderConfig {
     pub reasoning_model: Option<String>,
     pub timeout_seconds: u64,
     pub extra_headers: std::collections::HashMap<String, String>,
+    pub anthropic_base_url: Option<String>,
+    pub responses_base_url: Option<String>,
 }
 
 impl ProviderConfig {
@@ -39,6 +41,8 @@ impl ProviderConfig {
             reasoning_model: p.reasoning_model.clone(),
             timeout_seconds: p.timeout_seconds as u64,
             extra_headers,
+            anthropic_base_url: p.anthropic_base_url.clone().filter(|s| !s.is_empty()),
+            responses_base_url: p.responses_base_url.clone().filter(|s| !s.is_empty()),
         })
     }
 
@@ -61,13 +65,29 @@ impl ProviderConfig {
     }
 
     /// Build the Claude Messages API URL.
+    /// Uses `anthropic_base_url` if set, otherwise falls back to `base_url`.
+    /// If the URL already ends with `/messages`, use it as-is.
     pub fn anthropic_messages_url(&self) -> String {
-        let base = self.base_url.trim_end_matches('/');
-        if base.ends_with("/v1") {
-            format!("{base}/messages")
-        } else {
-            format!("{base}/v1/messages")
-        }
+        let raw = self.anthropic_base_url.as_deref().unwrap_or(&self.base_url);
+        smart_append_path(raw, "/messages")
+    }
+
+    /// Build the Responses API URL for pass-through.
+    /// Uses `responses_base_url` if set, otherwise falls back to `base_url`.
+    /// If the URL already ends with `/responses`, use it as-is.
+    pub fn responses_url(&self) -> String {
+        let raw = self.responses_base_url.as_deref().unwrap_or(&self.base_url);
+        smart_append_path(raw, "/responses")
+    }
+
+    /// Whether this provider has an explicit Anthropic Messages endpoint configured.
+    pub fn has_anthropic_url(&self) -> bool {
+        self.anthropic_base_url.is_some()
+    }
+
+    /// Whether this provider has an explicit Responses API endpoint configured.
+    pub fn has_responses_url(&self) -> bool {
+        self.responses_base_url.is_some()
     }
 }
 
@@ -247,6 +267,22 @@ pub async fn send_anthropic_stream(
     Ok(resp)
 }
 
+/// Smart path appending: if URL already ends with the target path (e.g. `/messages`),
+/// use it as-is. Otherwise append `/v1/{path}` or `/{path}` depending on whether `/v1` is present.
+fn smart_append_path(url: &str, suffix: &str) -> String {
+    let base = url.trim_end_matches('/');
+    // Already complete URL (e.g. ends with /messages or /responses)
+    if base.ends_with(suffix) {
+        return base.to_string();
+    }
+    // Has /v1 prefix
+    if base.ends_with("/v1") {
+        return format!("{base}{suffix}");
+    }
+    // Default: append /v1/suffix
+    format!("{base}/v1{suffix}")
+}
+
 fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
@@ -277,9 +313,11 @@ mod tests {
             model_mapping: None,
             extra_headers: Some(r#"{"User-Agent":"TestAgent/1.0"}"#.to_string()),
             anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60,
             status: "ok".to_string(),
+            supports_vision: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
