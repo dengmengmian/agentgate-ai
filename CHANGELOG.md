@@ -2,7 +2,45 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.7] - 2025-05-14
+## [0.1.9] - 2026-05-15
+
+### Features / 功能
+
+- **Claude Messages API 原生支持** — 当 `provider_type` 为 `anthropic` 时，Codex 请求自动转换为 Claude 原生 Messages API 格式，完整支持 `tool_use`/`tool_result`、`input_schema`、`thinking.budget_tokens`，专用 Claude SSE 处理器
+- **URL 驱动的路由机制** — 新增 `responses_base_url` 字段，填写后 Codex 请求直接透传到上游 Responses API 端点；路由逻辑基于 URL 字段判断：`responses_base_url` 有值 → 透传，`provider_type` 为 anthropic → Claude 转换，其他 → Chat Completions 转换
+- **智能 URL 拼接** — 自动识别 `/messages`、`/responses` 后缀，填完整 URL 或 base URL 均可
+- **Provider 模块化重构** — 将 DeepSeek/Kimi/MiniMax/Anthropic 专有逻辑拆分为独立模块，`ProviderTransform` trait 实现可扩展的 provider 专有处理
+- **`local_shell` 工具转换** — Codex 内置 `local_shell` 工具转换为标准 `shell` function tool
+- **Tool output 数组展平** — `ContentPart[]` 数组提取文本、图片替换为占位说明
+- **Provider 类型新增** — 下拉新增 `Anthropic (Claude)` 和 `MiniMax`
+- **协议标签显示** — Provider 卡片协议改为友好标签（替代原始 JSON 字符串）
+- **Responses API 端点配置** — Provider 高级设置新增输入框，Provider 预设 OpenAI 自动填充
+
+### Bug Fixes / 修复
+
+- **修复 DeepSeek 发送无意义 `thinking` 字段** — 移除 MiMo 专属的 `thinking: {type: "disabled"}`，DeepSeek 直接忽略该字段
+- **修复非流式空 choices 导致 Codex 挂起** — upstream 返回 `choices: []` 时生成占位消息
+- **修复 Tool call ID 超长** — 截断至 64 字符（Responses API 规范限制）
+- **修复 `anthropic_base_url` 误触发 Claude 转换** — `/v1/responses` 路由仅在 `provider_type` 为 anthropic 时走 Claude 转换，`anthropic_base_url` 仅影响 `/v1/messages` 透传
+- **修复 pass-through 对非 OpenAI provider 返回 404** — 移除自动 pass-through 检测，改为显式 URL 字段控制
+
+### Docs / 文档
+
+- README（中英文）更新：Claude 原生转换说明、`responses_base_url` 配置、Provider 转换方式与专属处理、数据链路触发条件
+
+---
+
+## [0.1.8] - 2026-05-14
+
+### Features / 功能
+
+- **Provider 模块化重构** — 将 DeepSeek/Kimi/MiniMax 逻辑拆分到 `transform/providers/` 目录，`ProviderTransform` trait 分发
+- **`local_shell` 工具转换** — Codex 内置工具转换为标准 function tool
+- **Tool output 数组展平** — 提取文本部分，图片替换为占位说明
+
+---
+
+## [0.1.7] - 2026-05-14
 
 ### Bug Fixes / 修复
 
