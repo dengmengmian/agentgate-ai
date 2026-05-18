@@ -34,6 +34,7 @@ const DEFAULTS: &[(&str, &str, f64, f64)] = &[
     ("anthropic", "claude-haiku-4-5", 0.80, 4.00),
     // Kimi
     ("kimi", "kimi-k2", 1.00, 4.00),
+    ("kimi", "kimi-for-coding", 1.00, 4.00),
     // MiniMax
     ("minimax", "MiniMax-M1", 1.00, 8.00),
     // GLM
