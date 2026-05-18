@@ -102,12 +102,41 @@ Download the installer for your platform from the [Releases](../../releases) pag
 | Windows | `.msi` / `.exe` |
 | Linux | `.AppImage` / `.deb` |
 
-> **macOS users**: The app is not signed with an Apple Developer certificate. On first launch, macOS will block it. Go to **System Settings → Privacy & Security**, find AgentGate and click **Open Anyway**. Or run:
-> ```bash
-> xattr -d com.apple.quarantine /Applications/AgentGate.app
-> ```
+<details>
+<summary><b>macOS: "Cannot verify the developer"?</b> (click to expand)</summary>
 
-> **Windows users**: SmartScreen may show a warning on first run. Click **More info → Run anyway**.
+The app is ad-hoc signed (won't show "damaged"), but macOS Gatekeeper blocks unnotarized apps. Three ways to fix (pick one):
+
+**Option 1: System Settings (recommended)**
+1. Double-click AgentGate, click **Cancel** on the prompt
+2. Open **System Settings → Privacy & Security**
+3. Scroll down, find `"AgentGate" was blocked` → click **Open Anyway**
+4. Open AgentGate again, click **Open**
+
+**Option 2: Right-click open**
+1. Find AgentGate.app in Finder
+2. Hold **Control** and click (or right-click) → select **Open**
+3. Click **Open** on the prompt
+
+**Option 3: Terminal**
+```bash
+xattr -d com.apple.quarantine /Applications/AgentGate.app
+```
+
+> Only needed once.
+
+</details>
+
+<details>
+<summary><b>Windows SmartScreen warning?</b> (click to expand)</summary>
+
+On first run, SmartScreen may show a warning:
+1. Click **More info**
+2. Click **Run anyway**
+
+> Only needed once.
+
+</details>
 
 ### Build from Source
 
