@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.5] - 2026-05-18
+
+### CI / 发布
+
+- macOS Release 仅打包 GUI 主程序，不再自动发现和打包 headless CLI 二进制
+
+---
+
 ## [0.5.4] - 2026-05-18
 
 ### CI / 发布
