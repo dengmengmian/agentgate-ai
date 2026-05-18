@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.1] - 2026-05-18
+
+### CI / 发布
+
+- 修复 macOS Release 使用 Developer ID 证书签名和 notarization 的配置
+- 更新 GitHub Actions 到 Node.js 24 runtime，消除 Node.js 20 deprecation 警告
+
+---
+
 ## [0.5.0] - 2026-05-18
 
 ### Features / 功能
