@@ -20,8 +20,6 @@ const DEFAULTS: &[(&str, &str, f64, f64)] = &[
     // DeepSeek
     ("deepseek", "deepseek-v4-pro", 2.00, 8.00),
     ("deepseek", "deepseek-v4-flash", 0.50, 2.00),
-    ("deepseek", "deepseek-chat", 0.50, 2.00),
-    ("deepseek", "deepseek-reasoner", 2.00, 8.00),
     // OpenAI
     ("openai", "gpt-4o", 2.50, 10.00),
     ("openai", "gpt-4o-mini", 0.15, 0.60),
