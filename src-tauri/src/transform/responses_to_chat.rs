@@ -63,6 +63,8 @@ pub fn convert_with_provider(
             for tc in tcs {
                 if !tc.function.arguments.is_empty() {
                     if serde_json::from_str::<Value>(&tc.function.arguments).is_err() {
+                        eprintln!("[warn] Invalid JSON in tool call '{}' arguments, replaced with {{}}: {}",
+                            tc.function.name, tc.function.arguments);
                         tc.function.arguments = "{}".to_string();
                     }
                 }

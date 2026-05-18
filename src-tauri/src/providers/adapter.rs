@@ -56,12 +56,7 @@ impl ProviderConfig {
 
     /// Build the chat completions URL, avoiding double /v1.
     pub fn chat_completions_url(&self) -> String {
-        let base = self.base_url.trim_end_matches('/');
-        if base.ends_with("/v1") {
-            format!("{base}/chat/completions")
-        } else {
-            format!("{base}/v1/chat/completions")
-        }
+        smart_append_path(&self.base_url, "/chat/completions")
     }
 
     /// Build the Claude Messages API URL.
@@ -269,7 +264,7 @@ pub async fn send_anthropic_stream(
 
 /// Smart path appending: if URL already ends with the target path (e.g. `/messages`),
 /// use it as-is. Otherwise append `/v1/{path}` or `/{path}` depending on whether `/v1` is present.
-fn smart_append_path(url: &str, suffix: &str) -> String {
+pub fn smart_append_path(url: &str, suffix: &str) -> String {
     let base = url.trim_end_matches('/');
     // Already complete URL (e.g. ends with /messages or /responses)
     if base.ends_with(suffix) {

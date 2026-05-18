@@ -100,22 +100,12 @@ fn decide_with_protocols(
 
 /// Build the responses URL, avoiding double /v1.
 pub fn build_responses_url(base_url: &str) -> String {
-    let base = base_url.trim_end_matches('/');
-    if base.ends_with("/v1") {
-        format!("{base}/responses")
-    } else {
-        format!("{base}/v1/responses")
-    }
+    crate::providers::adapter::smart_append_path(base_url, "/responses")
 }
 
 /// Build the chat completions URL, avoiding double /v1.
 pub fn build_chat_completions_url(base_url: &str) -> String {
-    let base = base_url.trim_end_matches('/');
-    if base.ends_with("/v1") {
-        format!("{base}/chat/completions")
-    } else {
-        format!("{base}/v1/chat/completions")
-    }
+    crate::providers::adapter::smart_append_path(base_url, "/chat/completions")
 }
 
 #[cfg(test)]
