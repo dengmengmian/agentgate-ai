@@ -306,7 +306,81 @@ else
     SKIP=$((SKIP + 1))
 fi
 
-# ── 13. Deep Verification: Conversion Correctness ──
+# ── 13. Gemini Input Route ──
+echo ""
+echo "--- Gemini Input Route ---"
+if [ -n "$TOKEN" ]; then
+    # Non-streaming Gemini request
+    gemini_status=$(curl -sS -o /tmp/agentgate-gemini-test.json -w "%{http_code}" --max-time 30 \
+        -X POST "$BASE/v1beta/models/deepseek-chat:generateContent" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"contents":[{"role":"user","parts":[{"text":"Reply with exactly: GEMINI_OK"}]}]}' 2>/dev/null || echo "000")
+
+    if [ "$gemini_status" = "200" ]; then
+        green "  PASS  Gemini generateContent → 200"
+        PASS=$((PASS + 1))
+
+        # Verify response has Gemini format (candidates array)
+        if python3 -c "import json; d=json.load(open('/tmp/agentgate-gemini-test.json')); assert 'candidates' in d" 2>/dev/null; then
+            green "  PASS  Response has Gemini format (candidates)"
+            PASS=$((PASS + 1))
+        else
+            red "  FAIL  Response not in Gemini format"
+            FAIL=$((FAIL + 1))
+        fi
+
+        # Verify response has content.parts
+        if python3 -c "import json; d=json.load(open('/tmp/agentgate-gemini-test.json')); assert 'parts' in d['candidates'][0]['content']" 2>/dev/null; then
+            green "  PASS  Response has content.parts"
+            PASS=$((PASS + 1))
+        else
+            red "  FAIL  Response missing content.parts"
+            FAIL=$((FAIL + 1))
+        fi
+    else
+        red "  FAIL  Gemini generateContent → $gemini_status"
+        FAIL=$((FAIL + 1))
+        yellow "  SKIP  Skipping Gemini format checks"
+        SKIP=$((SKIP + 2))
+    fi
+
+    # Streaming Gemini request
+    gemini_stream=$(curl -sS --max-time 30 \
+        -X POST "$BASE/v1beta/models/deepseek-chat:streamGenerateContent" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"contents":[{"role":"user","parts":[{"text":"Reply OK"}]}]}' 2>/dev/null || echo "")
+
+    if echo "$gemini_stream" | grep -q '"candidates"'; then
+        green "  PASS  Gemini streaming has candidates in response"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  Gemini streaming missing candidates"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # Verify systemInstruction conversion
+    gemini_sys=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 \
+        -X POST "$BASE/v1beta/models/deepseek-chat:generateContent" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"systemInstruction":{"parts":[{"text":"You are a test bot"}]},"contents":[{"role":"user","parts":[{"text":"OK"}]}]}' 2>/dev/null || echo "000")
+
+    if [ "$gemini_sys" = "200" ]; then
+        green "  PASS  Gemini with systemInstruction → 200"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  Gemini with systemInstruction → $gemini_sys"
+        FAIL=$((FAIL + 1))
+    fi
+else
+    yellow "  SKIP  No token, skipping Gemini input tests"
+    SKIP=$((SKIP + 5))
+fi
+
+# ── 14. Deep Verification: Conversion Correctness ──
+# (renumbered from 13)
 echo ""
 echo "--- Deep Verification: Conversion + DB ---"
 if [ -n "$TOKEN" ] && [ -f "$DB" ]; then

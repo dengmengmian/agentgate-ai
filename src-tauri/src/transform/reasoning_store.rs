@@ -106,6 +106,7 @@ mod tests {
     use std::sync::Mutex;
 
     // Global lock to prevent concurrent access to the static store during tests
+    #[allow(dead_code)]
     static TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn clear_store() {
