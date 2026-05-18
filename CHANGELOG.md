@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.8] - 2026-05-18
+
+### CI / 发布
+
+- 修复独立 Linux CLI 产物构建缺少 GTK/GDK 系统依赖的问题
+
+---
+
 ## [0.5.7] - 2026-05-18
 
 ### CI / 发布
