@@ -474,12 +474,26 @@ const CONDITION_PRESETS: { key: string; icon: string; conditions: RoutingConditi
   { key: "tools", icon: "🔧", conditions: { has_tools: true } },
 ];
 
-function detectPreset(c: RoutingConditions): string {
-  for (const p of CONDITION_PRESETS) {
-    if (JSON.stringify(p.conditions) === JSON.stringify(c)) return p.key;
-  }
-  if (Object.keys(c).length === 0) return "none";
-  return "custom";
+function detectCheckedPresets(c: RoutingConditions): Set<string> {
+  const checked = new Set<string>();
+  if (c.has_images === true) checked.add("images");
+  if (c.has_tools === true) checked.add("tools");
+  if (c.min_input_chars && c.min_input_chars >= 100000) checked.add("long_text");
+  if (c.system_keywords?.some(k => ["reason", "think", "analyze", "推理"].includes(k))) checked.add("reasoning");
+  if (c.system_keywords?.some(k => ["background", "subagent", "后台"].includes(k))) checked.add("background");
+  return checked;
+}
+
+function mergePresetConditions(checked: Set<string>): RoutingConditions {
+  const c: RoutingConditions = {};
+  if (checked.has("images")) c.has_images = true;
+  if (checked.has("tools")) c.has_tools = true;
+  if (checked.has("long_text")) c.min_input_chars = 100000;
+  const allKeywords: string[] = [];
+  if (checked.has("reasoning")) allKeywords.push("reason", "think", "analyze", "深度", "推理");
+  if (checked.has("background")) allKeywords.push("background", "subagent", "后台");
+  if (allKeywords.length > 0) c.system_keywords = allKeywords;
+  return c;
 }
 
 function ConditionsDialog({ target, onSave, onClose }: {
@@ -488,42 +502,46 @@ function ConditionsDialog({ target, onSave, onClose }: {
   onClose: () => void;
 }) {
   const { t } = useI18n();
-  const [selected, setSelected] = useState(() => detectPreset(target.current));
-  const [showCustom, setShowCustom] = useState(() => detectPreset(target.current) === "custom");
+  const [checked, setChecked] = useState(() => detectCheckedPresets(target.current));
+  const [showCustom, setShowCustom] = useState(false);
+  const [modelOverride, setModelOverride] = useState(target.current.model_override ?? "");
 
-  // Custom fields
+  // Custom fields (only used in custom mode)
   const [minChars, setMinChars] = useState(target.current.min_input_chars?.toString() ?? "");
   const [maxChars, setMaxChars] = useState(target.current.max_input_chars?.toString() ?? "");
   const [hasImages, setHasImages] = useState<string>(target.current.has_images === true ? "true" : target.current.has_images === false ? "false" : "");
   const [hasTools, setHasTools] = useState<string>(target.current.has_tools === true ? "true" : target.current.has_tools === false ? "false" : "");
   const [keywords, setKeywords] = useState(target.current.system_keywords?.join(", ") ?? "");
-  const [modelOverride, setModelOverride] = useState(target.current.model_override ?? "");
+
+  const toggle = (key: string) => {
+    const next = new Set(checked);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    setChecked(next);
+  };
 
   const handleSave = () => {
-    if (selected === "none") { onSave({}); return; }
+    let c: RoutingConditions;
 
-    if (selected !== "custom") {
-      const preset = CONDITION_PRESETS.find(p => p.key === selected);
-      if (preset) {
-        const c = { ...preset.conditions };
-        if (modelOverride.trim()) c.model_override = modelOverride.trim();
-        onSave(c);
-        return;
-      }
+    if (showCustom) {
+      // Custom mode: build from raw fields
+      c = {};
+      if (minChars) c.min_input_chars = parseInt(minChars, 10) || null;
+      if (maxChars) c.max_input_chars = parseInt(maxChars, 10) || null;
+      if (hasImages === "true") c.has_images = true;
+      else if (hasImages === "false") c.has_images = false;
+      if (hasTools === "true") c.has_tools = true;
+      else if (hasTools === "false") c.has_tools = false;
+      if (keywords.trim()) c.system_keywords = keywords.split(",").map(s => s.trim()).filter(Boolean);
+    } else {
+      // Preset mode: merge checked presets
+      c = mergePresetConditions(checked);
     }
 
-    // Custom
-    const c: RoutingConditions = {};
-    if (minChars) c.min_input_chars = parseInt(minChars, 10) || null;
-    if (maxChars) c.max_input_chars = parseInt(maxChars, 10) || null;
-    if (hasImages === "true") c.has_images = true;
-    else if (hasImages === "false") c.has_images = false;
-    if (hasTools === "true") c.has_tools = true;
-    else if (hasTools === "false") c.has_tools = false;
-    if (keywords.trim()) c.system_keywords = keywords.split(",").map(s => s.trim()).filter(Boolean);
     if (modelOverride.trim()) c.model_override = modelOverride.trim();
     onSave(c);
   };
+
+  const hasAny = checked.size > 0 || showCustom;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center">
@@ -538,31 +556,24 @@ function ConditionsDialog({ target, onSave, onClose }: {
         <div className="space-y-3 p-5">
           <p className="text-[11px] text-text-muted">{t("routes.conditions_hint")}</p>
 
-          {/* Preset scene buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => { setSelected("none"); setShowCustom(false); }} className={`rounded-md border px-3 py-2 text-left text-xs transition-colors ${selected === "none" ? "border-accent bg-accent/10 text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
-              🚫 {t("routes.scene_none")}
-            </button>
-            {CONDITION_PRESETS.map(p => (
-              <button key={p.key} onClick={() => { setSelected(p.key); setShowCustom(false); }} className={`rounded-md border px-3 py-2 text-left text-xs transition-colors ${selected === p.key ? "border-accent bg-accent/10 text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
-                {p.icon} {t(`routes.scene_${p.key}`)}
-              </button>
-            ))}
-            <button onClick={() => { setSelected("custom"); setShowCustom(true); }} className={`rounded-md border px-3 py-2 text-left text-xs transition-colors ${selected === "custom" ? "border-accent bg-accent/10 text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
-              ⚙️ {t("routes.scene_custom")}
-            </button>
-          </div>
-
-          {/* Model override — always visible when a condition is selected */}
-          {selected !== "none" && (
-            <div>
-              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.condition_model_override")}</label>
-              <input value={modelOverride} onChange={(e) => setModelOverride(e.target.value)} placeholder="e.g. deepseek-v4-flash" className="form-input w-full" />
-              <p className="mt-0.5 text-[10px] text-text-muted">{t("routes.model_override_hint")}</p>
+          {/* Multi-select scene checkboxes */}
+          {!showCustom && (
+            <div className="grid grid-cols-2 gap-2">
+              {CONDITION_PRESETS.map(p => (
+                <label key={p.key} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors ${checked.has(p.key) ? "border-accent bg-accent/10 text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
+                  <input type="checkbox" checked={checked.has(p.key)} onChange={() => toggle(p.key)} className="accent-accent" />
+                  {p.icon} {t(`routes.scene_${p.key}`)}
+                </label>
+              ))}
             </div>
           )}
 
-          {/* Custom fields — only when "custom" selected */}
+          {/* Toggle custom mode */}
+          <button onClick={() => setShowCustom(!showCustom)} className="text-[11px] text-accent hover:text-accent/80">
+            {showCustom ? `← ${t("routes.back_to_presets")}` : `⚙️ ${t("routes.scene_custom")}`}
+          </button>
+
+          {/* Custom fields */}
           {showCustom && (
             <div className="space-y-3 rounded-md border border-border/50 bg-card-secondary p-3">
               <div className="grid grid-cols-2 gap-3">
@@ -600,9 +611,19 @@ function ConditionsDialog({ target, onSave, onClose }: {
               </div>
             </div>
           )}
+
+          {/* Model override */}
+          {hasAny && (
+            <div>
+              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.condition_model_override")}</label>
+              <input value={modelOverride} onChange={(e) => setModelOverride(e.target.value)} placeholder="e.g. deepseek-v4-flash" className="form-input w-full" />
+              <p className="mt-0.5 text-[10px] text-text-muted">{t("routes.model_override_hint")}</p>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
+          <button onClick={() => { onSave({}); }} className="rounded-md bg-card-secondary px-4 py-1.5 text-xs text-text-secondary hover:bg-border">{t("routes.clear_conditions")}</button>
           <button onClick={onClose} className="rounded-md bg-card-secondary px-4 py-1.5 text-xs text-text-secondary hover:bg-border">{t("common.cancel")}</button>
           <button onClick={handleSave} className="rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent/90">{t("common.save")}</button>
         </div>
