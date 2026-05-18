@@ -4,13 +4,27 @@
 
 <h1 align="center">AgentGate</h1>
 
-<p align="center">Local gateway for AI coding agents.</p>
-
 <p align="center">
-  <a href="./README_EN.md">English</a>
+  <b>面向 Codex / Claude Code / Gemini CLI / OpenCode / AtomCode 的本地 AI 网关</b><br>
+  协议转换 · 23+ Provider 预设 · 智能 Failover · Vision 感知路由 · 桌面应用
 </p>
 
-AgentGate 是面向 AI 编程 Agent 的本地模型网关与 Provider 切换工具。它为 Codex、Claude Code、OpenCode 等 CLI 工具提供统一的本地入口，支持协议转换、多 Provider 切换、智能转移和请求日志。
+<p align="center">
+  <a href="https://github.com/dengmengmian/AgentGate/releases"><img src="https://img.shields.io/github/v/release/dengmengmian/AgentGate?style=flat-square&color=blue" alt="Release"></a>
+  <a href="https://github.com/dengmengmian/AgentGate/stargazers"><img src="https://img.shields.io/github/stars/dengmengmian/AgentGate?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/dengmengmian/AgentGate/releases"><img src="https://img.shields.io/github/downloads/dengmengmian/AgentGate/total?style=flat-square&color=green" alt="Downloads"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/dengmengmian/AgentGate?style=flat-square" alt="License"></a>
+</p>
+
+<p align="center">
+  <a href="./README_EN.md">English</a> · <a href="https://github.com/dengmengmian/AgentGate/releases">下载安装</a> · <a href="#快速开始">快速开始</a>
+</p>
+
+---
+
+AgentGate 是面向 AI 编程 Agent 的**本地模型网关**。一个入口连接 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 五种客户端，支持 DeepSeek、OpenAI、Anthropic、Kimi、GLM、通义千问等 23+ Provider，自动协议转换、智能 failover 和 Vision 感知路由。
+
+**和手动改配置文件有什么区别？** AgentGate 是桌面应用，图形界面一键切换 Provider，不用碰命令行。支持多 Provider 优先级链——A 挂了自动切 B，含图片的请求自动跳过不支持视觉的 Provider。所有请求有日志、有统计、可诊断。
 
 ## 核心功能
 

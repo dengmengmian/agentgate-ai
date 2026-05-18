@@ -4,13 +4,27 @@
 
 <h1 align="center">AgentGate</h1>
 
-<p align="center">Local gateway for AI coding agents.</p>
-
 <p align="center">
-  <a href="./README.md">中文</a>
+  <b>Local AI Gateway for Codex, Claude Code, Gemini CLI, OpenCode & AtomCode</b><br>
+  Protocol conversion · 23+ provider presets · Smart failover · Vision-aware routing · Desktop app
 </p>
 
-AgentGate is a local model gateway and provider-switching tool for AI coding agents. It provides a unified local entry point for CLI tools like Codex, Claude Code, and OpenCode, with protocol conversion, multi-provider switching, automatic failover, and request logging.
+<p align="center">
+  <a href="https://github.com/dengmengmian/AgentGate/releases"><img src="https://img.shields.io/github/v/release/dengmengmian/AgentGate?style=flat-square&color=blue" alt="Release"></a>
+  <a href="https://github.com/dengmengmian/AgentGate/stargazers"><img src="https://img.shields.io/github/stars/dengmengmian/AgentGate?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/dengmengmian/AgentGate/releases"><img src="https://img.shields.io/github/downloads/dengmengmian/AgentGate/total?style=flat-square&color=green" alt="Downloads"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/dengmengmian/AgentGate?style=flat-square" alt="License"></a>
+</p>
+
+<p align="center">
+  <a href="./README.md">中文</a> · <a href="https://github.com/dengmengmian/AgentGate/releases">Download</a> · <a href="#getting-started">Getting Started</a>
+</p>
+
+---
+
+AgentGate is a **local model gateway** for AI coding agents. One entry point connects Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode to 23+ providers including DeepSeek, OpenAI, Anthropic, Kimi, GLM, and DashScope — with automatic protocol conversion, smart failover, and vision-aware routing.
+
+**Why not just edit config files?** AgentGate is a desktop app with a GUI — switch providers in one click, no command line needed. It supports multi-provider priority chains (A fails → auto-switch to B), image-aware routing (skip non-vision providers), request logging, token stats, and diagnostics.
 
 ## Features
 
