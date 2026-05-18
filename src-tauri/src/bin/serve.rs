@@ -11,165 +11,297 @@
 //!   AGENTGATE_PORT     — port (default: 9090)
 //!   AGENTGATE_DB_PATH  — SQLite database directory (default: ~/.agentgate)
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 #[derive(Parser)]
-#[command(name = "agentgate-serve", about = "AgentGate headless server", version)]
+#[command(name = "agentgate", about = "AgentGate — Local AI gateway for coding agents", version)]
 struct Cli {
-    /// Host to bind to
-    #[arg(long, env = "AGENTGATE_HOST", default_value = "127.0.0.1")]
-    host: String,
-
-    /// Port to listen on
-    #[arg(long, short, env = "AGENTGATE_PORT", default_value = "9090")]
-    port: u16,
-
     /// Database directory path
-    #[arg(long, env = "AGENTGATE_DB_PATH")]
+    #[arg(long, global = true, env = "AGENTGATE_DB_PATH")]
     db_path: Option<String>,
 
-    /// Quick-setup: provider type (deepseek, openai, anthropic, kimi, etc.)
-    #[arg(long, env = "AGENTGATE_PROVIDER")]
-    provider: Option<String>,
-
-    /// Quick-setup: API key
-    #[arg(long, env = "AGENTGATE_API_KEY")]
-    api_key: Option<String>,
-
-    /// Quick-setup: default model
-    #[arg(long, env = "AGENTGATE_MODEL")]
-    model: Option<String>,
-
-    /// Quick-setup: provider base URL (auto-filled from provider type if omitted)
-    #[arg(long, env = "AGENTGATE_BASE_URL")]
-    base_url: Option<String>,
+    #[command(subcommand)]
+    command: Option<Commands>,
 }
 
-#[tokio::main]
-async fn main() {
-    let cli = Cli::parse();
+#[derive(Subcommand)]
+enum Commands {
+    /// Start the gateway server
+    Serve {
+        /// Host to bind to
+        #[arg(long, env = "AGENTGATE_HOST", default_value = "127.0.0.1")]
+        host: String,
+        /// Port to listen on
+        #[arg(long, short, env = "AGENTGATE_PORT", default_value = "9090")]
+        port: u16,
+    },
+    /// Add a provider
+    #[command(name = "provider-add")]
+    ProviderAdd {
+        /// Provider type (deepseek, openai, anthropic, kimi, minimax, groq, etc.)
+        #[arg(long, short = 't')]
+        r#type: String,
+        /// Display name
+        #[arg(long, short)]
+        name: Option<String>,
+        /// API key
+        #[arg(long, short = 'k', env = "AGENTGATE_API_KEY")]
+        api_key: String,
+        /// Base URL (auto-filled from type if omitted)
+        #[arg(long)]
+        base_url: Option<String>,
+        /// Default model (auto-filled from type if omitted)
+        #[arg(long, short)]
+        model: Option<String>,
+        /// Set as active provider
+        #[arg(long, default_value = "true")]
+        active: bool,
+    },
+    /// List all providers
+    #[command(name = "provider-list")]
+    ProviderList,
+    /// Remove a provider by name
+    #[command(name = "provider-remove")]
+    ProviderRemove {
+        /// Provider name to remove
+        name: String,
+    },
+    /// Show the gateway access token
+    Token,
+    /// Regenerate the gateway access token
+    #[command(name = "token-regen")]
+    TokenRegen,
+    /// Show gateway status and config summary
+    Status,
+}
 
-    // Determine DB path
-    let db_dir = if let Some(ref path) = cli.db_path {
+fn get_db_dir(cli: &Cli) -> PathBuf {
+    if let Some(ref path) = cli.db_path {
         PathBuf::from(path)
     } else {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .unwrap_or_else(|_| ".".to_string());
         PathBuf::from(home).join(".agentgate")
-    };
+    }
+}
 
-    eprintln!("AgentGate headless server");
-    eprintln!("  Database: {}", db_dir.display());
-    eprintln!("  Binding:  {}:{}", cli.host, cli.port);
-
-    // Initialize database
-    let conn = match agentgate_lib::storage::db::init_database(&db_dir) {
+fn open_db(cli: &Cli) -> rusqlite::Connection {
+    let db_dir = get_db_dir(cli);
+    match agentgate_lib::storage::db::init_database(&db_dir) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Failed to initialize database: {}", e.message);
             std::process::exit(1);
         }
-    };
+    }
+}
 
+/// Provider type presets: (base_url, default_model)
+fn provider_presets() -> std::collections::HashMap<&'static str, (&'static str, &'static str)> {
+    [
+        ("deepseek", ("https://api.deepseek.com", "deepseek-v4-pro")),
+        ("openai", ("https://api.openai.com", "gpt-4o")),
+        ("anthropic", ("https://api.anthropic.com", "claude-sonnet-4-6")),
+        ("kimi", ("https://api.moonshot.cn", "kimi-k2")),
+        ("minimax", ("https://api.minimax.chat", "MiniMax-M1")),
+        ("groq", ("https://api.groq.com/openai", "llama-3.3-70b-versatile")),
+        ("together", ("https://api.together.xyz", "meta-llama/Llama-3.3-70B-Instruct-Turbo")),
+        ("google_gemini", ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash")),
+        ("xai", ("https://api.x.ai", "grok-3-latest")),
+        ("mistral", ("https://api.mistral.ai", "mistral-large-latest")),
+    ].into_iter().collect()
+}
+
+#[tokio::main]
+async fn main() {
+    let cli = Cli::parse();
+
+    match &cli.command {
+        Some(Commands::Serve { host, port }) => cmd_serve(&cli, host, *port).await,
+        Some(Commands::ProviderAdd { r#type, name, api_key, base_url, model, active }) => {
+            cmd_provider_add(&cli, r#type, name.as_deref(), api_key, base_url.as_deref(), model.as_deref(), *active);
+        }
+        Some(Commands::ProviderList) => cmd_provider_list(&cli),
+        Some(Commands::ProviderRemove { name }) => cmd_provider_remove(&cli, name),
+        Some(Commands::Token) => cmd_token(),
+        Some(Commands::TokenRegen) => cmd_token_regen(),
+        Some(Commands::Status) => cmd_status(&cli),
+        None => {
+            // Default: serve
+            cmd_serve(&cli, "127.0.0.1", 9090).await;
+        }
+    }
+}
+
+async fn cmd_serve(cli: &Cli, host: &str, port: u16) {
+    let db_dir = get_db_dir(cli);
+    let conn = open_db(cli);
     let db = Arc::new(Mutex::new(conn));
 
-    // Quick-setup: create provider from CLI args / env vars if no providers exist
-    if let Some(ref provider_type) = cli.provider {
-        let conn = db.lock().unwrap();
-        let existing = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
-        if existing.is_empty() || std::env::var("AGENTGATE_FORCE_SETUP").is_ok() {
-            let presets: std::collections::HashMap<&str, (&str, &str)> = [
-                ("deepseek", ("https://api.deepseek.com", "deepseek-v4-pro")),
-                ("openai", ("https://api.openai.com", "gpt-4o")),
-                ("anthropic", ("https://api.anthropic.com", "claude-sonnet-4-6")),
-                ("kimi", ("https://api.moonshot.cn", "kimi-k2")),
-                ("minimax", ("https://api.minimax.chat", "MiniMax-M1")),
-                ("groq", ("https://api.groq.com/openai", "llama-3.3-70b-versatile")),
-                ("together", ("https://api.together.xyz", "meta-llama/Llama-3.3-70B-Instruct-Turbo")),
-                ("google_gemini", ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash")),
-            ].into_iter().collect();
-
-            let (default_url, default_model) = presets.get(provider_type.as_str()).copied().unwrap_or(("", ""));
-            let base_url = cli.base_url.as_deref().unwrap_or(default_url);
-            let model = cli.model.as_deref().unwrap_or(default_model);
-
-            if base_url.is_empty() || model.is_empty() {
-                eprintln!("Error: --base-url and --model required for unknown provider type '{provider_type}'");
-                std::process::exit(1);
-            }
-
-            let api_key = cli.api_key.clone().or_else(|| std::env::var("AGENTGATE_API_KEY").ok());
-            if api_key.is_none() {
-                eprintln!("Error: --api-key or AGENTGATE_API_KEY required for quick setup");
-                std::process::exit(1);
-            }
-
-            let label = provider_type[..1].to_uppercase() + &provider_type[1..];
-            let input = agentgate_lib::models::provider::CreateProviderInput {
-                name: label.clone(),
-                provider_type: provider_type.clone(),
-                base_url: base_url.to_string(),
-                api_key,
-                default_model: model.to_string(),
-                reasoning_model: None,
-                supported_models: None,
-                model_mapping: None,
-                extra_headers: None,
-                anthropic_base_url: None,
-                responses_base_url: None,
-                auto_cache_control: None,
-                protocol: "openai_chat_completions".to_string(),
-                timeout_seconds: Some(120),
-                enabled: Some(true),
-            };
-
-            match agentgate_lib::storage::providers::create(&conn, input) {
-                Ok(p) => {
-                    let _ = agentgate_lib::storage::providers::set_active(&conn, &p.id);
-                    eprintln!("  Provider: {} ({}) → {} [auto-created]", label, provider_type, base_url);
-                }
-                Err(e) => eprintln!("  Warning: failed to create provider: {}", e.message),
-            }
-        } else {
-            eprintln!("  Provider: {} existing providers (skip quick-setup)", existing.len());
-        }
-        drop(conn);
-    }
-
-    // Ensure local access token exists
     let _ = agentgate_lib::security::local_token::ensure_token();
+    let token = agentgate_lib::security::local_token::read_token().unwrap_or_default();
 
-    let token = agentgate_lib::security::local_token::read_token()
-        .unwrap_or_else(|_| "unknown".to_string());
-    eprintln!("  Token:    {}...{}", &token[..8.min(token.len())], &token[token.len().saturating_sub(4)..]);
+    let provider_count = {
+        let c = db.lock().unwrap();
+        agentgate_lib::storage::providers::list_all(&c).map(|p| p.len()).unwrap_or(0)
+    };
+
+    eprintln!("AgentGate headless server");
+    eprintln!("  Database:   {}", db_dir.display());
+    eprintln!("  Providers:  {}", if provider_count > 0 { format!("{provider_count} configured") } else { "none (use `agentgate provider-add` to configure)".to_string() });
+    eprintln!("  Token:      {}...{}", &token[..8.min(token.len())], &token[token.len().saturating_sub(4)..]);
     eprintln!();
 
-    // Start the gateway server
-    match agentgate_lib::gateway::server::start(&cli.host, cli.port, db).await {
+    match agentgate_lib::gateway::server::start(host, port, db).await {
         Ok((_shutdown_tx, handle)) => {
-            eprintln!("Gateway running on http://{}:{}", cli.host, cli.port);
+            eprintln!("Gateway running on http://{host}:{port}");
             eprintln!("Press Ctrl+C to stop.");
             eprintln!();
-
-            // Wait for Ctrl+C
             tokio::signal::ctrl_c().await.ok();
             eprintln!("\nShutting down...");
-
-            // The handle will be dropped, stopping the server
             drop(handle);
         }
         Err(e) => {
-            eprintln!("Failed to start gateway: {}", e.message);
-            if let Some(ref detail) = e.detail {
-                eprintln!("  Detail: {detail}");
-            }
-            if let Some(ref suggestion) = e.suggestion {
-                eprintln!("  Suggestion: {suggestion}");
-            }
+            eprintln!("Failed to start: {}", e.message);
+            if let Some(ref s) = e.suggestion { eprintln!("  {s}"); }
             std::process::exit(1);
         }
     }
+}
+
+fn cmd_provider_add(cli: &Cli, provider_type: &str, name: Option<&str>, api_key: &str, base_url: Option<&str>, model: Option<&str>, active: bool) {
+    let conn = open_db(cli);
+    let presets = provider_presets();
+    let (default_url, default_model) = presets.get(provider_type).copied().unwrap_or(("", ""));
+
+    let base_url = base_url.unwrap_or(default_url);
+    let model = model.unwrap_or(default_model);
+
+    if base_url.is_empty() {
+        eprintln!("Error: --base-url required for provider type '{provider_type}'");
+        std::process::exit(1);
+    }
+    if model.is_empty() {
+        eprintln!("Error: --model required for provider type '{provider_type}'");
+        std::process::exit(1);
+    }
+
+    let label = if let Some(n) = name {
+        n.to_string()
+    } else {
+        let mut s = provider_type[..1].to_uppercase();
+        s.push_str(&provider_type[1..]);
+        s
+    };
+
+    let input = agentgate_lib::models::provider::CreateProviderInput {
+        name: label.clone(),
+        provider_type: provider_type.to_string(),
+        base_url: base_url.to_string(),
+        api_key: Some(api_key.to_string()),
+        default_model: model.to_string(),
+        reasoning_model: None,
+        supported_models: None,
+        model_mapping: None,
+        extra_headers: None,
+        anthropic_base_url: None,
+        responses_base_url: None,
+        auto_cache_control: None,
+        protocol: "openai_chat_completions".to_string(),
+        timeout_seconds: Some(120),
+        enabled: Some(true),
+    };
+
+    match agentgate_lib::storage::providers::create(&conn, input) {
+        Ok(p) => {
+            if active {
+                let _ = agentgate_lib::storage::providers::set_active(&conn, &p.id);
+            }
+            println!("✓ Provider '{}' created (type: {}, model: {}, active: {})", label, provider_type, model, active);
+        }
+        Err(e) => {
+            eprintln!("Failed to create provider: {}", e.message);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_provider_list(cli: &Cli) {
+    let conn = open_db(cli);
+    let providers = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
+
+    if providers.is_empty() {
+        println!("No providers configured. Use `agentgate provider-add` to add one.");
+        return;
+    }
+
+    println!("{:<4} {:<20} {:<15} {:<35} {:<25} {}", "#", "Name", "Type", "Base URL", "Model", "Status");
+    println!("{}", "-".repeat(110));
+    for (i, p) in providers.iter().enumerate() {
+        let active = if p.is_active { " *" } else { "" };
+        let key_status = if p.api_key.as_ref().map_or(false, |k| !k.is_empty()) { "✓ key" } else { "✗ no key" };
+        println!("{:<4} {:<20} {:<15} {:<35} {:<25} {}{}",
+            i + 1,
+            &p.name[..p.name.len().min(18)],
+            &p.provider_type[..p.provider_type.len().min(13)],
+            &p.base_url[..p.base_url.len().min(33)],
+            &p.default_model[..p.default_model.len().min(23)],
+            key_status,
+            active,
+        );
+    }
+    println!("\n  * = active provider");
+}
+
+fn cmd_provider_remove(cli: &Cli, name: &str) {
+    let conn = open_db(cli);
+    let providers = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
+    let target = providers.iter().find(|p| p.name.eq_ignore_ascii_case(name));
+
+    match target {
+        Some(p) => {
+            match agentgate_lib::storage::providers::delete(&conn, &p.id) {
+                Ok(_) => println!("✓ Provider '{}' removed", p.name),
+                Err(e) => { eprintln!("Failed: {}", e.message); std::process::exit(1); }
+            }
+        }
+        None => {
+            eprintln!("Provider '{}' not found. Use `agentgate provider-list` to see all.", name);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_token() {
+    let _ = agentgate_lib::security::local_token::ensure_token();
+    match agentgate_lib::security::local_token::read_token() {
+        Ok(token) => println!("{token}"),
+        Err(e) => { eprintln!("Failed to read token: {}", e.message); std::process::exit(1); }
+    }
+}
+
+fn cmd_token_regen() {
+    match agentgate_lib::security::local_token::regenerate_token() {
+        Ok(token) => println!("✓ New token: {token}"),
+        Err(e) => { eprintln!("Failed: {}", e.message); std::process::exit(1); }
+    }
+}
+
+fn cmd_status(cli: &Cli) {
+    let db_dir = get_db_dir(cli);
+    let conn = open_db(cli);
+    let providers = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
+    let active = providers.iter().find(|p| p.is_active);
+    let token = agentgate_lib::security::local_token::read_token().unwrap_or_default();
+
+    println!("AgentGate Status");
+    println!("  Database:   {}", db_dir.display());
+    println!("  Providers:  {} configured", providers.len());
+    if let Some(a) = active {
+        println!("  Active:     {} ({} → {})", a.name, a.provider_type, a.default_model);
+    }
+    println!("  Token:      {}...{}", &token[..8.min(token.len())], &token[token.len().saturating_sub(4)..]);
 }
