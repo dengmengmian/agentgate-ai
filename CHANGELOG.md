@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.2] - 2026-05-18
+
+### CI / 发布
+
+- 修复 macOS notarization 使用 App Store Connect API key 文件路径的问题
+
+---
+
 ## [0.5.1] - 2026-05-18
 
 ### CI / 发布

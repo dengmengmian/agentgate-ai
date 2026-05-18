@@ -67,10 +67,15 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_CONTENT: ${{ secrets.APPLE_API_KEY_CONTENT }}
         run: |
-          if [ -n "$APPLE_API_KEY" ] && [ -n "$APPLE_API_KEY_CONTENT" ]; then
-            mkdir -p private_keys
-            printf '%s' "$APPLE_API_KEY_CONTENT" > "private_keys/AuthKey_${APPLE_API_KEY}.p8"
+          if [ -z "$APPLE_API_KEY" ] || [ -z "$APPLE_API_KEY_CONTENT" ]; then
+            echo "APPLE_API_KEY and APPLE_API_KEY_CONTENT secrets are required for macOS notarization" >&2
+            exit 1
           fi
+
+          mkdir -p "$RUNNER_TEMP/private_keys"
+          api_key_path="$RUNNER_TEMP/private_keys/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s' "$APPLE_API_KEY_CONTENT" > "$api_key_path"
+          echo "APPLE_API_KEY_PATH=$api_key_path" >> "$GITHUB_ENV"
 
       - name: Extract release notes
         id: notes
@@ -96,7 +101,6 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY_PATH: private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
         with:
