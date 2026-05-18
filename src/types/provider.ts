@@ -64,12 +64,33 @@ export interface ProviderTestResult {
 }
 
 export const PROVIDER_TYPES = [
+  // Tier 1: Major providers
   { value: "anthropic", label: "Anthropic (Claude)" },
   { value: "deepseek", label: "DeepSeek" },
   { value: "openai", label: "OpenAI" },
-  { value: "openrouter", label: "OpenRouter" },
-  { value: "kimi", label: "Kimi" },
+  { value: "google_gemini", label: "Google Gemini" },
+  { value: "xai", label: "xAI (Grok)" },
+  { value: "mistral", label: "Mistral AI" },
+  // Tier 2: Inference providers
+  { value: "groq", label: "Groq" },
+  { value: "together", label: "Together AI" },
+  { value: "fireworks", label: "Fireworks AI" },
+  { value: "cerebras", label: "Cerebras" },
+  { value: "perplexity", label: "Perplexity" },
+  { value: "cohere", label: "Cohere" },
+  // China providers
+  { value: "kimi", label: "Kimi (月之暗面)" },
   { value: "minimax", label: "MiniMax" },
+  { value: "glm", label: "GLM (智谱)" },
+  { value: "dashscope", label: "通义千问 (DashScope)" },
+  { value: "siliconflow", label: "硅基流动 (SiliconFlow)" },
+  { value: "volcengine", label: "火山引擎 (豆包)" },
+  { value: "baichuan", label: "百川 (Baichuan)" },
+  { value: "stepfun", label: "阶跃星辰 (StepFun)" },
+  { value: "yi", label: "零一万物 (01.AI)" },
+  // Aggregators
+  { value: "openrouter", label: "OpenRouter" },
+  // Custom
   { value: "custom_openai_compatible", label: "Custom OpenAI Compatible" },
 ] as const;
 
