@@ -78,3 +78,11 @@ export interface GeminiCliConfigStatus {
   has_saved_official: boolean;
 }
 
+export interface AtomCodeConfigStatus {
+  config_path: string;
+  exists: boolean;
+  has_agentgate: boolean;
+  current_model: string | null;
+  has_saved_official: boolean;
+}
+

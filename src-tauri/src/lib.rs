@@ -160,6 +160,12 @@ pub fn run() {
             commands::generate_gemini_config,
             commands::toggle_gemini_provider,
             commands::open_gemini_config,
+            // AtomCode
+            commands::detect_atomcode_config,
+            commands::apply_atomcode_config,
+            commands::generate_atomcode_config,
+            commands::toggle_atomcode_provider,
+            commands::open_atomcode_config,
             // Route Profiles
             commands::list_route_profiles,
             commands::get_route_profile,

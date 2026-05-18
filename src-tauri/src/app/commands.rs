@@ -586,6 +586,15 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
             config_exists: std::path::Path::new(&format!("{}/.config/opencode/opencode.json", home)).exists(),
         },
         ToolConfigView {
+            id: "atomcode".to_string(),
+            name: "AtomCode".to_string(),
+            slug: "atomcode".to_string(),
+            icon: "atom".to_string(),
+            config_path: format!("{}/.atomcode/config.toml", home),
+            description: "Open-source AI coding agent in your terminal. Uses OpenAI-compatible API.".to_string(),
+            config_exists: std::path::Path::new(&format!("{}/.atomcode/config.toml", home)).exists(),
+        },
+        ToolConfigView {
             id: "gemini_cli".to_string(),
             name: "Gemini CLI".to_string(),
             slug: "gemini-cli".to_string(),
@@ -900,6 +909,52 @@ pub fn toggle_gemini_provider(state: State<'_, AppState>) -> Result<crate::tools
 #[tauri::command]
 pub fn open_gemini_config() -> Result<bool, AppError> {
     crate::tools::gemini_cli::open_config()?;
+    Ok(true)
+}
+
+// ── AtomCode Config Commands ──────────────────────────────────
+
+#[tauri::command]
+pub fn detect_atomcode_config() -> Result<crate::tools::atomcode::AtomCodeConfigStatus, AppError> {
+    Ok(crate::tools::atomcode::detect())
+}
+
+#[tauri::command]
+pub fn apply_atomcode_config(state: State<'_, AppState>) -> Result<crate::tools::atomcode::ApplyConfigResult, AppError> {
+    let (host, port, model) = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let settings = storage::gateway_settings::get(&conn)?;
+        let provider_id = settings.active_provider_id.clone().unwrap_or_default();
+        let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
+        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "deepseek-chat".to_string());
+        (settings.host, settings.port, model)
+    };
+    crate::tools::atomcode::apply(&host, port, &model)
+}
+
+#[tauri::command]
+pub fn generate_atomcode_config(state: State<'_, AppState>) -> Result<String, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let settings = storage::gateway_settings::get(&conn)?;
+    Ok(crate::tools::atomcode::generate_snippet(&settings.host, settings.port, "deepseek-chat"))
+}
+
+#[tauri::command]
+pub fn toggle_atomcode_provider(state: State<'_, AppState>) -> Result<crate::tools::atomcode::ToggleResult, AppError> {
+    let (host, port, model) = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let settings = storage::gateway_settings::get(&conn)?;
+        let provider_id = settings.active_provider_id.clone().unwrap_or_default();
+        let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
+        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "deepseek-chat".to_string());
+        (settings.host, settings.port, model)
+    };
+    crate::tools::atomcode::toggle(&host, port, &model)
+}
+
+#[tauri::command]
+pub fn open_atomcode_config() -> Result<bool, AppError> {
+    crate::tools::atomcode::open_config()?;
     Ok(true)
 }
 

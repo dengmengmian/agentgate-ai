@@ -3,6 +3,8 @@ import {
   Terminal,
   Code,
   Braces,
+  Sparkles,
+  Atom,
   FolderOpen,
   AlertTriangle,
   Zap,
@@ -17,7 +19,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
-import type { CodexConfigStatus, ClaudeCodeEnvStatus, OpenCodeConfigStatus } from "@/types/config";
+import type { CodexConfigStatus, ClaudeCodeEnvStatus, OpenCodeConfigStatus, GeminiCliConfigStatus, AtomCodeConfigStatus } from "@/types/config";
 
 export function Tools() {
   const { t } = useI18n();
@@ -27,20 +29,28 @@ export function Tools() {
   const [claudeSnippet, setClaudeSnippet] = useState("");
   const [loading, setLoading] = useState(true);
   const [openCodeStatus, setOpenCodeStatus] = useState<OpenCodeConfigStatus | null>(null);
+  const [geminiStatus, setGeminiStatus] = useState<GeminiCliConfigStatus | null>(null);
+  const [atomCodeStatus, setAtomCodeStatus] = useState<AtomCodeConfigStatus | null>(null);
   const [confirmApplyCodex, setConfirmApplyCodex] = useState(false);
   const [confirmApplyClaude, setConfirmApplyClaude] = useState(false);
   const [confirmApplyOpenCode, setConfirmApplyOpenCode] = useState(false);
+  const [confirmApplyGemini, setConfirmApplyGemini] = useState(false);
+  const [confirmApplyAtomCode, setConfirmApplyAtomCode] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [c, cc, oc] = await Promise.all([
+      const [c, cc, oc, gc, ac] = await Promise.all([
         api.detectCodexConfig(),
         api.detectClaudeCodeEnv(),
         api.detectOpenCodeConfig(),
+        api.detectGeminiConfig(),
+        api.detectAtomCodeConfig(),
       ]);
       setCodexStatus(c);
       setClaudeEnv(cc);
       setOpenCodeStatus(oc);
+      setGeminiStatus(gc);
+      setAtomCodeStatus(ac);
       const snippet = await api.generateCodexConfig();
       setCodexConfig(snippet);
     } catch (err) {
@@ -111,6 +121,46 @@ export function Tools() {
     try {
       const snippet = await api.generateClaudeCodeEnv();
       setClaudeSnippet(snippet);
+    } catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
+  const handleApplyGemini = async () => {
+    try {
+      const result = await api.applyGeminiConfig();
+      if (result.success) toast("success", `Gemini CLI ${t("tools.config_written")} ${result.config_path}`);
+      setConfirmApplyGemini(false);
+      load();
+    } catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
+  const handleToggleGemini = async () => {
+    try {
+      const result = await api.toggleGeminiProvider();
+      if (result.success) {
+        const label = result.new_provider === "agentgate" ? "AgentGate" : t("tools.official");
+        toast("success", `${t("tools.switched_to")} ${label}`);
+      }
+      load();
+    } catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
+  const handleApplyAtomCode = async () => {
+    try {
+      const result = await api.applyAtomCodeConfig();
+      if (result.success) toast("success", `AtomCode ${t("tools.config_written")} ${result.config_path}`);
+      setConfirmApplyAtomCode(false);
+      load();
+    } catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
+  const handleToggleAtomCode = async () => {
+    try {
+      const result = await api.toggleAtomCodeProvider();
+      if (result.success) {
+        const label = result.new_provider === "agentgate" ? "AgentGate" : t("tools.official");
+        toast("success", `${t("tools.switched_to")} ${label}`);
+      }
+      load();
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
@@ -267,9 +317,87 @@ export function Tools() {
         </div>
       </div>
 
+      {/* Gemini CLI Card */}
+      <div className="rounded-lg border border-border bg-card p-5">
+        <div className="mb-4 flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+              <Sparkles className="h-5 w-5 text-accent" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">Gemini CLI</h3>
+              <p className="text-xs text-text-muted">Google's AI coding CLI with Gemini API support.</p>
+            </div>
+          </div>
+          <StatusBadge variant={geminiStatus?.has_agentgate ? "success" : geminiStatus?.exists ? "warning" : "muted"}>
+            {geminiStatus?.has_agentgate ? t("tools.agentgate_configured") : geminiStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
+          </StatusBadge>
+        </div>
+
+        {geminiStatus && (
+          <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
+            <div><span className="text-text-muted">settings.json</span><p className="font-mono text-text-secondary text-[11px]">{geminiStatus.config_path}</p></div>
+            <div><span className="text-text-muted">{t("logs.model")}</span><p className="text-text-primary">{geminiStatus.current_model ?? "—"}</p></div>
+          </div>
+        )}
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button onClick={() => setConfirmApplyGemini(true)} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
+          {geminiStatus?.has_agentgate && geminiStatus?.has_saved_official && (
+            <button onClick={handleToggleGemini} className="btn-secondary"><ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}</button>
+          )}
+          {!geminiStatus?.has_agentgate && geminiStatus?.has_saved_official && (
+            <button onClick={handleToggleGemini} className="btn-primary"><ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}</button>
+          )}
+          {geminiStatus?.exists && (
+            <button onClick={() => api.openGeminiConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
+          )}
+        </div>
+      </div>
+
+      {/* AtomCode Card */}
+      <div className="rounded-lg border border-border bg-card p-5">
+        <div className="mb-4 flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+              <Atom className="h-5 w-5 text-accent" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">AtomCode</h3>
+              <p className="text-xs text-text-muted">Open-source AI coding agent in your terminal.</p>
+            </div>
+          </div>
+          <StatusBadge variant={atomCodeStatus?.has_agentgate ? "success" : atomCodeStatus?.exists ? "warning" : "muted"}>
+            {atomCodeStatus?.has_agentgate ? t("tools.agentgate_configured") : atomCodeStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
+          </StatusBadge>
+        </div>
+
+        {atomCodeStatus && (
+          <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
+            <div><span className="text-text-muted">config.toml</span><p className="font-mono text-text-secondary text-[11px]">{atomCodeStatus.config_path}</p></div>
+            <div><span className="text-text-muted">{t("logs.model")}</span><p className="text-text-primary">{atomCodeStatus.current_model ?? "—"}</p></div>
+          </div>
+        )}
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button onClick={() => setConfirmApplyAtomCode(true)} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
+          {atomCodeStatus?.has_agentgate && atomCodeStatus?.has_saved_official && (
+            <button onClick={handleToggleAtomCode} className="btn-secondary"><ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}</button>
+          )}
+          {!atomCodeStatus?.has_agentgate && atomCodeStatus?.has_saved_official && (
+            <button onClick={handleToggleAtomCode} className="btn-primary"><ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}</button>
+          )}
+          {atomCodeStatus?.exists && (
+            <button onClick={() => api.openAtomCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
+          )}
+        </div>
+      </div>
+
       <ConfirmDialog open={confirmApplyCodex} title={t("tools.apply_codex_title")} message={t("tools.apply_codex_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyCodex} onCancel={() => setConfirmApplyCodex(false)} />
       <ConfirmDialog open={confirmApplyClaude} title={t("tools.apply_claude_title")} message={t("tools.apply_claude_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyClaude} onCancel={() => setConfirmApplyClaude(false)} />
       <ConfirmDialog open={confirmApplyOpenCode} title={t("tools.apply_opencode_title")} message={t("tools.apply_opencode_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyOpenCode} onCancel={() => setConfirmApplyOpenCode(false)} />
+      <ConfirmDialog open={confirmApplyGemini} title="Apply Gemini CLI Config" message="This will write AgentGate settings to ~/.gemini/settings.json. Your current settings will be saved for restore." confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyGemini} onCancel={() => setConfirmApplyGemini(false)} />
+      <ConfirmDialog open={confirmApplyAtomCode} title="Apply AtomCode Config" message="This will write AgentGate settings to ~/.atomcode/config.toml. Your current config will be saved for restore." confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyAtomCode} onCancel={() => setConfirmApplyAtomCode(false)} />
     </div>
   );
 }
