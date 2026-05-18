@@ -596,4 +596,26 @@ mod tests {
         assert!(!result.contains("sk-secret2"));
         assert!(result.contains("sk-***REDACTED***"));
     }
+
+    // ── Retry logic tests ──
+
+    #[test]
+    fn test_is_retryable() {
+        assert!(is_retryable(429));
+        assert!(is_retryable(500));
+        assert!(is_retryable(502));
+        assert!(is_retryable(503));
+        assert!(!is_retryable(400));
+        assert!(!is_retryable(401));
+        assert!(!is_retryable(403));
+        assert!(!is_retryable(404));
+        assert!(!is_retryable(200));
+    }
+
+    #[test]
+    fn test_retry_constants() {
+        assert_eq!(MAX_RETRIES, 2);
+        assert_eq!(RETRY_BASE_MS, 1000);
+        assert_eq!(RETRYABLE_STATUS.len(), 4);
+    }
 }
