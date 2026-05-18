@@ -2,6 +2,31 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-05-18
+
+### Features / 功能
+
+- **费用追踪** — 22 个内置模型价格，每条请求自动计算费用（token × 价格），仪表盘展示总费用/今日费用/平均费用，设置页价格管理表格（内联编辑 + 自定义覆盖）
+- **多账号轮转** — 同一 Provider 支持多个 API Key（JSON 数组存储），请求自动 round-robin 轮转，UI 多 Key 列表管理
+- **Prompt Cache 注入** — 对 Codex → Anthropic 转换路径自动注入 `cache_control: {type: "ephemeral"}`（system 末尾 + tools 末尾 + 最后 assistant 消息），Provider 配置开关（推荐/实验性标签）
+- **Cache 能力自动探测** — 测试连接时发 2 次相同请求检查 `cache_read_input_tokens > 0`，Provider 卡片显示"支持缓存/不支持缓存"
+- **Provider 健康面板** — 卡片内嵌 1h/24h 成功率（绿/黄/红圆点）、平均延迟、P95 延迟、请求数
+- **请求重试** — 429/500/502/503 自动退避重试（1s→2s，最多 2 次），尊重 Retry-After，每次重试自动换 Key
+- **macOS/Windows 安装指引** — 可折叠分步指引（3 种 macOS 方式 + Windows SmartScreen）
+
+### Bug Fixes / 修复
+
+- **修复费用不计算** — Provider 名大小写不敏感匹配 + 启动时自动回填历史请求费用
+- **修复 kimi-for-coding 价格缺失** — 加入内置默认
+- **修复 Gemini CLI/AtomCode 硬编码文案** — 全部改用 i18n 双语
+
+### Tests / 测试
+
+- 单元测试 268 个（pricing 7, multi-key 5, cache 6, retry 2, 其他 248）
+- 集成测试 31 个：深度验证转换格式、DB 日志、token/cost 记录、SSE 事件生命周期、pass-through、pricing 表
+
+---
+
 ## [0.3.0] - 2026-05-18
 
 ### Features / 功能
