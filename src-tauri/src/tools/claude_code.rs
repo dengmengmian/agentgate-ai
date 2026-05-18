@@ -223,6 +223,9 @@ pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigRes
     env.insert("ANTHROPIC_DEFAULT_SONNET_MODEL".to_string(), serde_json::json!(model));
     env.insert("ANTHROPIC_DEFAULT_OPUS_MODEL".to_string(), serde_json::json!(model));
     env.insert("ANTHROPIC_DEFAULT_HAIKU_MODEL".to_string(), serde_json::json!(model));
+    // Disable CCH (Claude Code Attribution Header) to prevent random header
+    // strings from invalidating prompt cache on third-party models.
+    env.insert("CLAUDE_CODE_ATTRIBUTION_HEADER".to_string(), serde_json::json!("0"));
 
     if env.remove("ANTHROPIC_AUTH_TOKEN").is_some() {
         warnings.push("Removed ANTHROPIC_AUTH_TOKEN to avoid conflict with ANTHROPIC_API_KEY".to_string());
