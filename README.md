@@ -28,13 +28,27 @@ AgentGate is a **local model gateway** for AI coding agents. One entry point con
 
 ## Features
 
-**Protocol Conversion & Unified Entry Point**
-- OpenAI Responses API (`/v1/responses`) → Chat Completions conversion / Claude Messages native conversion / Responses pass-through, for Codex
-- Anthropic Messages API (`/v1/messages`) → Chat Completions conversion / Anthropic endpoint pass-through, for Claude Code
+**Protocol Conversion — 4 formats, bidirectional**
+- OpenAI Responses API (`/v1/responses`) → Chat Completions / Claude Messages / Gemini API, for Codex
+- Anthropic Messages API (`/v1/messages`) → Chat Completions conversion / Anthropic pass-through, for Claude Code
+- Google Gemini API (`/v1beta/models/:model:generateContent`) → Chat Completions conversion, for Gemini CLI
 - Chat Completions (`/v1/chat/completions`) pass-through forwarding
-- Native Anthropic Claude API support: `tool_use`/`tool_result`, `input_schema`, `thinking.budget_tokens`, SSE event stream conversion
+- Native Anthropic Claude API: `tool_use`/`tool_result`, `input_schema`, `thinking.budget_tokens`
+- Native Gemini API: `contents`/`functionCall`/`functionResponse`, `generationConfig`
 - Full DeepSeek reasoning_content (thinking mode) support without degradation
-- Tool call (function_call) streaming reassembly and multi-turn conversations
+- Automatic request retry (429/5xx, exponential backoff, Retry-After)
+
+**Cost Tracking & Multi-Key Pooling**
+- 22+ built-in model prices, auto-calculate cost per request
+- Dashboard: total/today/average cost cards
+- Settings: inline price editing, custom price overrides
+- Multi-API-key per provider: round-robin rotation, auto-switch on 429
+
+**Smart Routing**
+- Task-level routing conditions: route by input size, images, tools, system keywords
+- Preset scenes: Image Requests / Reasoning / Background / Long Text / Tool-Heavy
+- Prompt cache injection for Anthropic (auto `cache_control`, ~90% input cost savings)
+- Cache support auto-detection on provider test
 
 **Multimodal Support & Vision-Aware Routing**
 - Image content is fully preserved during protocol conversion, supporting `input_image`/`image_url` → Chat Completions `image_url` and Anthropic `image source` format conversion
@@ -164,6 +178,37 @@ pnpm tauri dev
 ```bash
 pnpm tauri build
 ```
+
+## Headless / Server Mode
+
+Run AgentGate without GUI — for servers, CI, Docker, and team deployments.
+
+```bash
+# Add a provider
+agentgate-serve provider-add -t deepseek -k sk-xxx
+
+# Start the gateway
+agentgate-serve serve --host 0.0.0.0 --port 9090
+
+# Other commands
+agentgate-serve provider-list          # list all providers
+agentgate-serve provider-remove NAME   # remove provider
+agentgate-serve token                  # show access token
+agentgate-serve status                 # show config summary
+```
+
+Provider presets auto-fill base URL and model for: `deepseek`, `openai`, `anthropic`, `kimi`, `minimax`, `groq`, `together`, `google_gemini`, `xai`, `mistral`.
+
+**Docker:**
+
+```bash
+docker compose up
+# or
+docker build -t agentgate . && docker run -p 9090:9090 \
+  -e AGENTGATE_PROVIDER=deepseek -e AGENTGATE_API_KEY=sk-xxx agentgate
+```
+
+**Environment variables:** `AGENTGATE_HOST`, `AGENTGATE_PORT`, `AGENTGATE_DB_PATH`, `AGENTGATE_PROVIDER`, `AGENTGATE_API_KEY`.
 
 ## Usage Guide
 

@@ -170,6 +170,30 @@ pnpm tauri dev
 pnpm tauri build
 ```
 
+## Headless / 服务器模式
+
+无 GUI 运行 AgentGate——适用于服务器、CI、Docker 和团队部署。
+
+```bash
+# 添加 Provider
+agentgate-serve provider-add -t deepseek -k sk-xxx
+
+# 启动网关
+agentgate-serve serve --host 0.0.0.0 --port 9090
+
+# 其他命令
+agentgate-serve provider-list          # 列出所有 Provider
+agentgate-serve provider-remove NAME   # 删除 Provider
+agentgate-serve token                  # 查看访问令牌
+agentgate-serve status                 # 查看配置状态
+```
+
+**Docker 部署：**
+
+```bash
+docker compose up
+```
+
 ## 使用指南
 
 ### 1. 添加 Provider

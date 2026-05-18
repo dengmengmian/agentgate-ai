@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-05-18
+
+### Features / 功能
+
+- **Gemini 原生格式支持** — Codex → Gemini API 转换（contents/functionCall/functionResponse/generationConfig），Gemini CLI → Chat Completions 双向转换，Gemini CLI 可通过 AgentGate 连接 DeepSeek/Kimi 等任意 Provider
+- **任务级智能路由** — 按请求特征（输入长度、图片、工具、系统关键词）自动选 Provider/模型，预设场景（图片/推理/后台/长文本/工具密集），支持多选组合
+- **Headless 服务模式** — `agentgate-serve` CLI 二进制，完整子命令管理（provider-add/list/remove、token、status、serve），Docker 部署支持，环境变量配置
+- **日志时间显示日期** — MM-DD HH:MM:SS 格式
+- **Gemini 模型映射建议** — gemini-2.5-flash、gemini-2.5-pro、gemini-3-pro-preview
+
+### Tests / 测试
+
+- 单元测试 289 个，集成测试 43 个（含 Gemini 入口 5 个 + CLI headless 7 个）
+- Gemini 转换：responses_to_gemini 7 个 + gemini_to_chat 6 个
+
+---
+
 ## [0.4.0] - 2026-05-18
 
 ### Features / 功能
