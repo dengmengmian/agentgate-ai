@@ -70,3 +70,11 @@ export interface ProfileDetection {
   var_count: number;
 }
 
+export interface GeminiCliConfigStatus {
+  config_path: string;
+  exists: boolean;
+  has_agentgate: boolean;
+  current_model: string | null;
+  has_saved_official: boolean;
+}
+

@@ -585,6 +585,15 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
             description: "Open-source terminal AI coding assistant. Supports multiple providers.".to_string(),
             config_exists: std::path::Path::new(&format!("{}/.config/opencode/opencode.json", home)).exists(),
         },
+        ToolConfigView {
+            id: "gemini_cli".to_string(),
+            name: "Gemini CLI".to_string(),
+            slug: "gemini-cli".to_string(),
+            icon: "sparkles".to_string(),
+            config_path: format!("{}/.gemini/settings.json", home),
+            description: "Google's AI coding CLI. Uses Gemini API with OpenAI-compatible endpoint support.".to_string(),
+            config_exists: std::path::Path::new(&format!("{}/.gemini/settings.json", home)).exists(),
+        },
     ];
 
     Ok(tools)
@@ -845,6 +854,52 @@ pub fn generate_opencode_config(state: State<'_, AppState>) -> Result<String, Ap
 #[tauri::command]
 pub fn open_opencode_config() -> Result<bool, AppError> {
     crate::tools::opencode::open_config()?;
+    Ok(true)
+}
+
+// ── Gemini CLI Config Commands ─────────────────────────────────
+
+#[tauri::command]
+pub fn detect_gemini_config() -> Result<crate::tools::gemini_cli::GeminiCliConfigStatus, AppError> {
+    Ok(crate::tools::gemini_cli::detect())
+}
+
+#[tauri::command]
+pub fn apply_gemini_config(state: State<'_, AppState>) -> Result<crate::tools::gemini_cli::ApplyConfigResult, AppError> {
+    let (host, port, model) = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let settings = storage::gateway_settings::get(&conn)?;
+        let provider_id = settings.active_provider_id.clone().unwrap_or_default();
+        let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
+        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gemini-2.5-flash".to_string());
+        (settings.host, settings.port, model)
+    };
+    crate::tools::gemini_cli::apply(&host, port, &model)
+}
+
+#[tauri::command]
+pub fn generate_gemini_config(state: State<'_, AppState>) -> Result<String, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let settings = storage::gateway_settings::get(&conn)?;
+    Ok(crate::tools::gemini_cli::generate_snippet(&settings.host, settings.port, "gemini-2.5-flash"))
+}
+
+#[tauri::command]
+pub fn toggle_gemini_provider(state: State<'_, AppState>) -> Result<crate::tools::gemini_cli::ToggleResult, AppError> {
+    let (host, port, model) = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let settings = storage::gateway_settings::get(&conn)?;
+        let provider_id = settings.active_provider_id.clone().unwrap_or_default();
+        let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
+        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gemini-2.5-flash".to_string());
+        (settings.host, settings.port, model)
+    };
+    crate::tools::gemini_cli::toggle(&host, port, &model)
+}
+
+#[tauri::command]
+pub fn open_gemini_config() -> Result<bool, AppError> {
+    crate::tools::gemini_cli::open_config()?;
     Ok(true)
 }
 

@@ -154,6 +154,12 @@ pub fn run() {
             commands::apply_opencode_config,
             commands::generate_opencode_config,
             commands::open_opencode_config,
+            // Gemini CLI
+            commands::detect_gemini_config,
+            commands::apply_gemini_config,
+            commands::generate_gemini_config,
+            commands::toggle_gemini_provider,
+            commands::open_gemini_config,
             // Route Profiles
             commands::list_route_profiles,
             commands::get_route_profile,

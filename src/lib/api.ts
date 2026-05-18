@@ -215,7 +215,7 @@ export async function generateClaudeCodeEnv(): Promise<string> {
 
 // ── OpenCode Config ───────────────────────────────────────────
 
-import type { OpenCodeConfigStatus } from "@/types/config";
+import type { OpenCodeConfigStatus, GeminiCliConfigStatus } from "@/types/config";
 
 export async function detectOpenCodeConfig(): Promise<OpenCodeConfigStatus> {
   return cmd("detect_opencode_config");
@@ -231,6 +231,28 @@ export async function generateOpenCodeConfig(): Promise<string> {
 
 export async function openOpenCodeConfig(): Promise<boolean> {
   return cmd("open_opencode_config");
+}
+
+// ── Gemini CLI ────────────────────────────────────────────────
+
+export async function detectGeminiConfig(): Promise<GeminiCliConfigStatus> {
+  return cmd("detect_gemini_config");
+}
+
+export async function applyGeminiConfig(): Promise<ApplyConfigResult> {
+  return cmd("apply_gemini_config");
+}
+
+export async function generateGeminiConfig(): Promise<string> {
+  return cmd("generate_gemini_config");
+}
+
+export async function toggleGeminiProvider(): Promise<ToggleResult> {
+  return cmd("toggle_gemini_provider");
+}
+
+export async function openGeminiConfig(): Promise<boolean> {
+  return cmd("open_gemini_config");
 }
 
 // ── Route Profiles ─────────────────────────────────────────────
