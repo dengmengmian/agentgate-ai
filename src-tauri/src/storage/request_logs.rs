@@ -286,6 +286,89 @@ pub struct ProviderStat {
     pub count: i64,
 }
 
+/// Get health stats for a specific provider.
+pub fn get_provider_health(conn: &Connection, provider_name: &str) -> Result<ProviderHealth, AppError> {
+    let now = chrono::Utc::now();
+    let one_hour_ago = (now - chrono::Duration::hours(1)).to_rfc3339();
+    let one_day_ago = (now - chrono::Duration::hours(24)).to_rfc3339();
+
+    // 1h stats
+    let (h1_total, h1_success, h1_avg_latency, h1_p95_latency): (i64, i64, f64, f64) = conn.query_row(
+        "SELECT
+            COUNT(*),
+            SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END),
+            COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0),
+            COALESCE((SELECT latency_ms FROM request_logs
+                WHERE provider = ?1 AND timestamp >= ?2 AND status_code >= 200 AND status_code < 300
+                ORDER BY latency_ms DESC LIMIT 1 OFFSET (
+                    SELECT MAX(0, CAST(COUNT(*) * 0.05 AS INTEGER)) FROM request_logs
+                    WHERE provider = ?1 AND timestamp >= ?2 AND status_code >= 200 AND status_code < 300
+                )), 0)
+         FROM request_logs WHERE provider = ?1 AND timestamp >= ?2",
+        rusqlite::params![provider_name, &one_hour_ago],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+    )?;
+
+    // 24h stats
+    let (h24_total, h24_success, h24_avg_latency): (i64, i64, f64) = conn.query_row(
+        "SELECT
+            COUNT(*),
+            SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END),
+            COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0)
+         FROM request_logs WHERE provider = ?1 AND timestamp >= ?2",
+        rusqlite::params![provider_name, &one_day_ago],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+
+    // Recent errors (last 10)
+    let mut stmt = conn.prepare(
+        "SELECT timestamp, status_code, error_message FROM request_logs
+         WHERE provider = ?1 AND (status_code >= 400 OR status_code < 200) AND error_message IS NOT NULL
+         ORDER BY timestamp DESC LIMIT 10"
+    )?;
+    let recent_errors: Vec<RecentError> = stmt.query_map(rusqlite::params![provider_name], |r| {
+        Ok(RecentError {
+            timestamp: r.get(0)?,
+            status_code: r.get(1)?,
+            message: r.get::<_, String>(2).unwrap_or_default(),
+        })
+    })?.filter_map(|r| r.ok()).collect();
+
+    Ok(ProviderHealth {
+        provider: provider_name.to_string(),
+        h1_total, h1_success,
+        h1_success_rate: if h1_total > 0 { (h1_success as f64 / h1_total as f64 * 100.0).round() } else { 0.0 },
+        h1_avg_latency_ms: h1_avg_latency.round() as i64,
+        h1_p95_latency_ms: h1_p95_latency.round() as i64,
+        h24_total, h24_success,
+        h24_success_rate: if h24_total > 0 { (h24_success as f64 / h24_total as f64 * 100.0).round() } else { 0.0 },
+        h24_avg_latency_ms: h24_avg_latency.round() as i64,
+        recent_errors,
+    })
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ProviderHealth {
+    pub provider: String,
+    pub h1_total: i64,
+    pub h1_success: i64,
+    pub h1_success_rate: f64,
+    pub h1_avg_latency_ms: i64,
+    pub h1_p95_latency_ms: i64,
+    pub h24_total: i64,
+    pub h24_success: i64,
+    pub h24_success_rate: f64,
+    pub h24_avg_latency_ms: i64,
+    pub recent_errors: Vec<RecentError>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RecentError {
+    pub timestamp: String,
+    pub status_code: i64,
+    pub message: String,
+}
+
 /// Delete logs older than `retention_days`. Returns the number of deleted rows.
 pub fn cleanup_older_than(conn: &Connection, retention_days: i64) -> Result<usize, AppError> {
     let cutoff = (chrono::Utc::now() - chrono::Duration::days(retention_days)).to_rfc3339();

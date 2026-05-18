@@ -31,6 +31,26 @@ export interface ProviderStat {
   count: number;
 }
 
+export interface ProviderHealth {
+  provider: string;
+  h1_total: number;
+  h1_success: number;
+  h1_success_rate: number;
+  h1_avg_latency_ms: number;
+  h1_p95_latency_ms: number;
+  h24_total: number;
+  h24_success: number;
+  h24_success_rate: number;
+  h24_avg_latency_ms: number;
+  recent_errors: RecentError[];
+}
+
+export interface RecentError {
+  timestamp: string;
+  status_code: number;
+  message: string;
+}
+
 export interface ModelPricing {
   id: string;
   provider: string;

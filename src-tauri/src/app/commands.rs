@@ -1123,6 +1123,14 @@ pub fn open_atomcode_config() -> Result<bool, AppError> {
     Ok(true)
 }
 
+// ── Provider Health Commands ──────────────────────────────────
+
+#[tauri::command]
+pub fn get_provider_health(state: State<'_, AppState>, provider: String) -> Result<crate::storage::request_logs::ProviderHealth, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    crate::storage::request_logs::get_provider_health(&conn, &provider)
+}
+
 // ── Pricing Commands ──────────────────────────────────────────
 
 #[tauri::command]

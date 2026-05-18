@@ -350,10 +350,14 @@ export async function resetAllProviderRuntimeStatus(): Promise<boolean> {
 
 // ── Stats ──────────────────────────────────────────────────────
 
-import type { RequestStats, ModelPricing } from "@/types/stats";
+import type { RequestStats, ModelPricing, ProviderHealth } from "@/types/stats";
 
 export async function getRequestStats(): Promise<RequestStats> {
   return cmd("get_request_stats");
+}
+
+export async function getProviderHealth(provider: string): Promise<ProviderHealth> {
+  return cmd("get_provider_health", { provider });
 }
 
 // ── Pricing ───────────────────────────────────────────────────

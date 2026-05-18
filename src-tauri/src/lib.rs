@@ -161,6 +161,7 @@ pub fn run() {
             commands::toggle_gemini_provider,
             commands::open_gemini_config,
             commands::detect_provider_cache,
+            commands::get_provider_health,
             // Pricing
             commands::list_model_pricing,
             commands::upsert_model_pricing,
