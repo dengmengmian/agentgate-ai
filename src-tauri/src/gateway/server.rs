@@ -42,6 +42,8 @@ pub async fn start(
         .route("/chat/completions", post(routes::handle_chat_completions))
         .route("/v1/messages", post(routes::handle_messages))
         .route("/messages", post(routes::handle_messages))
+        .route("/v1beta/models/{model}:generateContent", post(routes::handle_gemini_generate))
+        .route("/v1beta/models/{model}:streamGenerateContent", post(routes::handle_gemini_generate))
         .with_state(state);
 
     let addr: SocketAddr = format!("{host}:{port}").parse().map_err(|e| {

@@ -16,7 +16,7 @@ use crate::models::provider::Provider;
 use crate::protocol::openai_responses::ResponsesRequest;
 use crate::protocol::chat_completions::{ChatCompletionResponse, ChatMessage};
 use crate::providers::adapter::{self, ProviderConfig};
-use crate::transform::{responses_to_chat, responses_to_anthropic, responses_to_gemini};
+use crate::transform::{responses_to_chat, responses_to_anthropic, responses_to_gemini, gemini_to_chat};
 use crate::gateway::sse::SseAccumulator;
 use crate::gateway::sse_anthropic::AnthropicSseAccumulator;
 use crate::gateway::sse_gemini::GeminiSseAccumulator;
@@ -898,6 +898,156 @@ fn extract_gemini_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i6
     let input = usage.and_then(|u| u.get("promptTokenCount")).and_then(|v| v.as_i64());
     let output = usage.and_then(|u| u.get("candidatesTokenCount")).and_then(|v| v.as_i64());
     (input, output)
+}
+
+// ── POST /v1beta/models/:model:generateContent (Gemini CLI input) ──
+
+pub async fn handle_gemini_generate(
+    headers: HeaderMap,
+    axum::extract::Path(model_path): axum::extract::Path<String>,
+    AxumState(state): AxumState<GatewayState>,
+    body: String,
+) -> Result<Response, GatewayError> {
+    validate_auth(&headers)?;
+    let start = Instant::now();
+    let request_id = format!("req_{}", uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string());
+
+    // Extract model name from path (e.g. "gemini-2.5-flash" from "gemini-2.5-flash:generateContent")
+    let model_name = model_path.split(':').next().unwrap_or(&model_path).to_string();
+    let is_stream = model_path.contains("streamGenerateContent");
+
+    let gemini_body: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+        let err = AppError::new("GEMINI_PARSE_ERROR", format!("Failed to parse Gemini request: {e}"));
+        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &err, start.elapsed().as_millis() as i64);
+        err
+    })?;
+
+    // Select provider (use openai_responses route profile since Gemini CLI is a coding agent)
+    let selection = crate::gateway::provider_selector::select_for_failover(
+        &state.db, "openai_responses", Some(&model_name), None,
+    ).or_else(|_| crate::gateway::provider_selector::select_for_failover(
+        &state.db, "openai_chat_completions", None, None,
+    )).map_err(|e| {
+        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        GatewayError(e)
+    })?;
+
+    let config = ProviderConfig::from_provider(&selection.provider).map_err(|e| {
+        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        GatewayError(e)
+    })?;
+
+    let resolved_model = selection.model.clone();
+    let raw_body = sanitize_body(&body);
+
+    // Convert Gemini → Chat Completions
+    let mut chat_req = gemini_to_chat::convert(&gemini_body, &resolved_model).map_err(|e| {
+        log_request_error(&state.db, &request_id, &raw_body, None, &e, start.elapsed().as_millis() as i64);
+        GatewayError(e)
+    })?;
+    chat_req.stream = is_stream;
+
+    let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
+
+    if is_stream {
+        // Stream: Chat Completions SSE → convert each chunk to Gemini SSE format
+        let upstream_resp = adapter::send_stream(&state.http_client, &config, &chat_req).await.map_err(|e| {
+            let latency = start.elapsed().as_millis() as i64;
+            log_request_error_full(&state.db, &request_id, &raw_body, &converted_json, &config.name, &resolved_model, &e, 502, latency);
+            GatewayError(e)
+        })?;
+
+        let (tx, rx) = mpsc::channel::<String>(256);
+        let db = state.db.clone();
+        let provider_name = config.name.clone();
+        let model_clone = resolved_model.clone();
+        let req_id = request_id.clone();
+        let raw_req = raw_body.clone();
+        let conv_req = converted_json.clone();
+
+        tokio::spawn(async move {
+            use futures::StreamExt;
+            let mut stream = upstream_resp.bytes_stream();
+            let mut buffer = String::new();
+            let mut full_text = String::new();
+
+            while let Some(chunk) = stream.next().await {
+                let chunk = match chunk {
+                    Ok(b) => b,
+                    Err(_) => break,
+                };
+                buffer.push_str(&String::from_utf8_lossy(&chunk));
+                buffer = buffer.replace("\r\n", "\n");
+
+                while let Some(line_end) = buffer.find('\n') {
+                    let line = buffer[..line_end].trim_end_matches('\r').to_string();
+                    buffer = buffer[line_end + 1..].to_string();
+
+                    if line.is_empty() || line.starts_with(':') { continue; }
+                    let Some(data) = line.strip_prefix("data:").map(|d| d.trim()) else { continue };
+                    if data == "[DONE]" { break; }
+
+                    if let Ok(chunk_json) = serde_json::from_str::<Value>(data) {
+                        // Accumulate text
+                        if let Some(delta) = chunk_json.get("choices")
+                            .and_then(|c| c.as_array())
+                            .and_then(|a| a.first())
+                            .and_then(|c| c.get("delta"))
+                        {
+                            if let Some(text) = delta.get("content").and_then(|c| c.as_str()) {
+                                full_text.push_str(text);
+                            }
+                        }
+
+                        if let Some(gemini_sse) = gemini_to_chat::chunk_to_gemini(&chunk_json) {
+                            let _ = tx.send(gemini_sse).await;
+                        }
+                    }
+                }
+            }
+
+            let latency = start.elapsed().as_millis() as i64;
+            let trace = json!({"response_id": &req_id, "stream": true, "protocol": "gemini_input"}).to_string();
+            log_request_success(&db, &req_id, &raw_req, &conv_req, "", &full_text[..full_text.len().min(10000)],
+                None, &provider_name, &model_clone, 200, latency, Some(&trace), None, None);
+        });
+
+        let stream = ReceiverStream::new(rx);
+        let body = Body::from_stream(
+            tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
+        );
+
+        Ok(Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/event-stream")
+            .header(header::CACHE_CONTROL, "no-cache")
+            .body(body)
+            .unwrap())
+    } else {
+        // Non-stream
+        chat_req.stream = false;
+        let result = adapter::send_non_stream(&state.http_client, &config, &chat_req).await;
+
+        match result {
+            Ok(upstream_json) => {
+                let gemini_resp = gemini_to_chat::response_to_gemini(&upstream_json, &resolved_model);
+                let latency = start.elapsed().as_millis() as i64;
+                let (in_tok, out_tok) = extract_usage(&upstream_json);
+                let trace = json!({"protocol": "gemini_input"}).to_string();
+                log_request_success(&state.db, &request_id, &raw_body, &converted_json,
+                    &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
+                    &serde_json::to_string_pretty(&gemini_resp).unwrap_or_default(),
+                    None, &config.name, &resolved_model, 200, latency, Some(&trace), in_tok, out_tok);
+                Ok(Json(gemini_resp).into_response())
+            }
+            Err(err) => {
+                let latency = start.elapsed().as_millis() as i64;
+                log_request_error_full(&state.db, &request_id, &raw_body, &converted_json,
+                    &config.name, &resolved_model, &err, 502, latency);
+                Err(GatewayError(err))
+            }
+        }
+    }
 }
 
 // ── POST /v1/chat/completions ──────────────────────────────────
