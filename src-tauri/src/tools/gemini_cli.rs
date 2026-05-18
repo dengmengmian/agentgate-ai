@@ -14,6 +14,14 @@ pub fn settings_path() -> PathBuf {
     PathBuf::from(home).join(".gemini").join("settings.json")
 }
 
+/// Gemini CLI .env file path (Gemini CLI loads env vars from ~/.gemini/.env)
+pub fn env_file_path() -> PathBuf {
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_default();
+    PathBuf::from(home).join(".gemini").join(".env")
+}
+
 /// Directory where we save the user's original settings.json.
 fn saved_dir() -> PathBuf {
     local_token::token_dir().join("gemini_cli_official")
@@ -23,18 +31,27 @@ fn saved_settings_path() -> PathBuf {
     saved_dir().join("settings.json")
 }
 
+fn saved_env_path() -> PathBuf {
+    saved_dir().join(".env")
+}
+
 fn save_official_settings() -> Result<(), AppError> {
-    let src = settings_path();
-    if !src.exists() {
-        return Ok(());
-    }
     let dir = saved_dir();
     fs::create_dir_all(&dir).map_err(|e| {
         AppError::new("GEMINI_SAVE_FAILED", format!("Cannot create dir: {e}"))
     })?;
-    fs::copy(&src, saved_settings_path()).map_err(|e| {
-        AppError::new("GEMINI_SAVE_FAILED", format!("Cannot save settings.json: {e}"))
-    })?;
+    let src = settings_path();
+    if src.exists() {
+        fs::copy(&src, saved_settings_path()).map_err(|e| {
+            AppError::new("GEMINI_SAVE_FAILED", format!("Cannot save settings.json: {e}"))
+        })?;
+    }
+    let env_src = env_file_path();
+    if env_src.exists() {
+        fs::copy(&env_src, saved_env_path()).map_err(|e| {
+            AppError::new("GEMINI_SAVE_FAILED", format!("Cannot save .env: {e}"))
+        })?;
+    }
     Ok(())
 }
 
@@ -51,6 +68,16 @@ fn restore_official_settings() -> Result<(), AppError> {
     fs::copy(&saved, settings_path()).map_err(|e| {
         AppError::new("GEMINI_RESTORE_FAILED", format!("Cannot restore settings.json: {e}"))
     })?;
+    // Restore .env (or remove the AgentGate one)
+    let saved_env = saved_env_path();
+    if saved_env.exists() {
+        fs::copy(&saved_env, env_file_path()).map_err(|e| {
+            AppError::new("GEMINI_RESTORE_FAILED", format!("Cannot restore .env: {e}"))
+        })?;
+    } else {
+        // No original .env — remove the AgentGate one
+        let _ = fs::remove_file(env_file_path());
+    }
     Ok(())
 }
 
@@ -85,7 +112,9 @@ pub fn detect() -> GeminiCliConfigStatus {
 
     let (has_agentgate, current_model) = if exists {
         let content = fs::read_to_string(&sp).unwrap_or_default();
-        let has_ag = content.contains("ag_local_") || content.contains("agentgate");
+        let env_content = fs::read_to_string(env_file_path()).unwrap_or_default();
+        let has_ag = content.contains("ag_local_") || content.contains("agentgate")
+            || env_content.contains("ag_local_") || env_content.contains("agentgate");
         let model = serde_json::from_str::<serde_json::Value>(&content)
             .ok()
             .and_then(|v| v.get("model")?.get("name")?.as_str().map(String::from));
@@ -140,19 +169,12 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
     }
     doc["model"]["name"] = serde_json::json!(model);
 
-    // Set env vars for API routing
-    if doc.get("env").is_none() {
-        doc["env"] = serde_json::json!({});
+    // Remove stale "env" field if present (Gemini CLI doesn't use it)
+    if let Some(obj) = doc.as_object_mut() {
+        obj.remove("env");
     }
-    let env = doc["env"].as_object_mut().ok_or_else(|| {
-        AppError::new("GEMINI_CONFIG_PARSE_ERROR", "env field is not an object")
-    })?;
 
-    // Gemini CLI uses GEMINI_API_KEY + GOOGLE_GEMINI_BASE_URL
-    env.insert("GEMINI_API_KEY".to_string(), serde_json::json!(token));
-    env.insert("GOOGLE_GEMINI_BASE_URL".to_string(), serde_json::json!(format!("http://{host}:{port}")));
-
-    // Write atomically
+    // Write settings.json atomically
     let new_content = serde_json::to_string_pretty(&doc).map_err(|e| {
         AppError::new("GEMINI_CONFIG_WRITE_FAILED", format!("Cannot serialize: {e}"))
     })?;
@@ -166,6 +188,15 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
         AppError::new("GEMINI_CONFIG_WRITE_FAILED", format!("Failed to replace: {e}"))
     })?;
 
+    // Write .env file in ~/.gemini/ (Gemini CLI loads env from here)
+    let env_path = env_file_path();
+    let env_content = format!(
+        "# AgentGate configuration — do not edit manually\nGEMINI_API_KEY={token}\nGOOGLE_GEMINI_BASE_URL=http://{host}:{port}\n"
+    );
+    fs::write(&env_path, &env_content).map_err(|e| {
+        AppError::new("GEMINI_CONFIG_WRITE_FAILED", format!("Failed to write .env: {e}"))
+    })?;
+
     if has_saved_official() {
         warnings.push("Original settings saved. Use toggle to switch back.".to_string());
     }
@@ -173,7 +204,7 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
     Ok(ApplyConfigResult {
         success: true,
         config_path: sp_str,
-        changed_keys: vec!["model.name".to_string(), "env.GEMINI_API_KEY".to_string(), "env.GOOGLE_GEMINI_BASE_URL".to_string()],
+        changed_keys: vec!["model.name".to_string(), ".env GEMINI_API_KEY".to_string(), ".env GOOGLE_GEMINI_BASE_URL".to_string()],
         warnings,
     })
 }
@@ -242,10 +273,12 @@ mod tests {
         let result = apply("127.0.0.1", 9090, "gemini-2.5-flash").unwrap();
         assert!(result.success);
         assert!(settings_path().exists());
-        let content = std::fs::read_to_string(settings_path()).unwrap();
-        assert!(content.contains("ag_local_"));
-        assert!(content.contains("GOOGLE_GEMINI_BASE_URL"));
-        assert!(content.contains("gemini-2.5-flash"));
+        assert!(env_file_path().exists());
+        let settings = std::fs::read_to_string(settings_path()).unwrap();
+        assert!(settings.contains("gemini-2.5-flash"));
+        let env = std::fs::read_to_string(env_file_path()).unwrap();
+        assert!(env.contains("ag_local_"));
+        assert!(env.contains("GOOGLE_GEMINI_BASE_URL"));
         cleanup(&temp);
     }
 
@@ -257,9 +290,10 @@ mod tests {
         std::fs::write(settings_path(), r#"{"general":{"vimMode":true}}"#).unwrap();
         let result = apply("127.0.0.1", 9090, "gemini-2.5-flash").unwrap();
         assert!(result.success);
-        let content = std::fs::read_to_string(settings_path()).unwrap();
-        assert!(content.contains("vimMode"));
-        assert!(content.contains("ag_local_"));
+        let settings = std::fs::read_to_string(settings_path()).unwrap();
+        assert!(settings.contains("vimMode"));
+        let env = std::fs::read_to_string(env_file_path()).unwrap();
+        assert!(env.contains("ag_local_"));
         cleanup(&temp);
     }
 
@@ -268,17 +302,18 @@ mod tests {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         std::fs::create_dir_all(settings_path().parent().unwrap()).unwrap();
-        std::fs::write(settings_path(), r#"{"env":{"GEMINI_API_KEY":"real-key"}}"#).unwrap();
+        std::fs::write(settings_path(), r#"{"model":{"name":"gemini-pro"}}"#).unwrap();
+        std::fs::write(env_file_path(), "GEMINI_API_KEY=real-key\n").unwrap();
         // Toggle to agentgate
         let result = toggle("127.0.0.1", 9090, "gemini-2.5-flash").unwrap();
         assert_eq!(result.new_provider, "agentgate");
-        let content = std::fs::read_to_string(settings_path()).unwrap();
-        assert!(content.contains("ag_local_"));
+        let env = std::fs::read_to_string(env_file_path()).unwrap();
+        assert!(env.contains("ag_local_"));
         // Toggle back to official
         let result = toggle("127.0.0.1", 9090, "gemini-2.5-flash").unwrap();
         assert_eq!(result.new_provider, "official");
-        let content = std::fs::read_to_string(settings_path()).unwrap();
-        assert!(content.contains("real-key"));
+        let env = std::fs::read_to_string(env_file_path()).unwrap();
+        assert!(env.contains("real-key"));
         cleanup(&temp);
     }
 }
