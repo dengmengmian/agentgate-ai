@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.3.0] - 2026-05-18
+
+### Features / 功能
+
+- **23 个 Provider 预设**（原 7 个）— 新增 Google Gemini、xAI、Mistral、Groq、Together、Fireworks、Cerebras、Perplexity、Cohere、智谱 GLM、通义千问、硅基流动、火山引擎、百川、阶跃星辰、零一万物，选择类型自动填充 Base URL 和默认模型
+- **Gemini CLI 客户端支持** — 写入 `~/.gemini/.env`（GEMINI_API_KEY + GOOGLE_GEMINI_BASE_URL）+ `settings.json`（model + auth type），支持一键切换官方/AgentGate
+- **AtomCode 客户端支持** — 写入 `~/.atomcode/config.toml`（default_provider + providers 段），支持一键切换
+- **客户端总计 6 个**：Codex、Claude Code、OpenCode、Gemini CLI、AtomCode（新增 2 个）
+- **README SEO 重做** — 徽章（版本/Stars/下载量/License）、价值主张重写、快速导航链接、GitHub Topics 17 个、repo description 更新
+
+### Bug Fixes / 修复
+
+- **修复 Anthropic SSE 流断开不通知客户端** — 流错误、Claude API 错误、空内容流结束三种场景均发送 `response.failed` 事件
+- **修复 SSE 帧解析** — 兼容 `\r\n\r\n` 分帧和 `event:X`（无空格）格式
+- **修复识图后请求不切回原 Provider** — Vision 感知路由只检查最后一条用户消息
+- **修复 Gemini CLI 配置不生效** — 环境变量写入 `.env` 文件（非 settings.json 的 env 字段）；auth type 设为 `gemini-api-key`（OAuth 模式忽略 .env）
+- **修复 AtomCode 报"未配置活跃 Provider"** — 加入 `default_provider` 顶层字段
+- **修复工具参数静默替换无日志** — 无效 JSON 参数替换为 `{}` 时打印警告日志
+- **统一 URL 构建逻辑** — `adapter.rs` 和 `route_decision.rs` 共用 `smart_append_path()`
+
+---
+
 ## [0.2.2] - 2026-05-18
 
 ### Features / 功能
