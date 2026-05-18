@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-05-18
+
+### Bug Fixes / 修复
+
+- **修复识图后请求不切回原 Provider** — Vision 感知路由只检查最后一条用户消息是否含图片，不再扫描历史消息，修复识图请求后后续纯文本请求一直走 KimiCoding 的问题
+
+---
+
 ## [0.2.0] - 2026-05-15
 
 ### Features / 功能
