@@ -11,6 +11,7 @@ import { Gateway } from "@/pages/Gateway";
 import { Logs } from "@/pages/Logs";
 import { Diagnostics } from "@/pages/Diagnostics";
 import { Settings } from "@/pages/Settings";
+import { Mcp } from "@/pages/Mcp";
 
 export function App() {
   return (
@@ -24,6 +25,7 @@ export function App() {
             <Route path="/routes" element={<RoutesPage />} />
             <Route path="/gateway" element={<Gateway />} />
             <Route path="/logs" element={<Logs />} />
+            <Route path="/mcp" element={<Mcp />} />
             <Route path="/diagnostics" element={<Diagnostics />} />
             <Route path="/settings" element={<Settings />} />
           </Route>

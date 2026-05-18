@@ -281,6 +281,26 @@ export async function openAtomCodeConfig(): Promise<boolean> {
   return cmd("open_atomcode_config");
 }
 
+// ── MCP ───────────────────────────────────────────────────────
+
+import type { McpOverview } from "@/types/mcp";
+
+export async function getMcpOverview(): Promise<McpOverview> {
+  return cmd("get_mcp_overview");
+}
+
+export async function addMcpServer(client: string, name: string, command: string, args: string[], timeout?: number): Promise<boolean> {
+  return cmd("add_mcp_server", { client, name, command, args, timeout });
+}
+
+export async function removeMcpServer(client: string, name: string): Promise<boolean> {
+  return cmd("remove_mcp_server", { client, name });
+}
+
+export async function toggleMcpServer(client: string, name: string, enabled: boolean): Promise<boolean> {
+  return cmd("toggle_mcp_server", { client, name, enabled });
+}
+
 // ── Route Profiles ─────────────────────────────────────────────
 
 import type {
