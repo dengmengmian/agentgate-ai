@@ -43,6 +43,7 @@ Thumbs.db
 
 # Tauri updater signing keys
 src-tauri/keys/
+.tauri-keys/
 
 # AgentGate runtime data
 *.db

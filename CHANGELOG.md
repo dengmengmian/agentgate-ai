@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.4] - 2026-05-18
+
+### CI / 发布
+
+- 重新生成 Tauri updater 签名密钥并更新内置 public key
+
+---
+
 ## [0.5.3] - 2026-05-18
 
 ### CI / 发布
