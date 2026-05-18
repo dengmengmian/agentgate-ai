@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.6] - 2026-05-18
+
+### CI / 发布
+
+- 将 headless CLI 源文件移出 Cargo/Tauri 自动发现目录，避免 Linux AppImage/deb 打包寻找未构建的 `serve` 二进制
+
+---
+
 ## [0.5.5] - 2026-05-18
 
 ### CI / 发布
