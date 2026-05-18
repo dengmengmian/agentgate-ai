@@ -123,7 +123,24 @@ impl ProviderConfig {
     }
 }
 
-/// Send a non-streaming chat completions request.
+/// Status codes that are safe to retry (transient errors).
+const RETRYABLE_STATUS: &[u16] = &[429, 500, 502, 503];
+const MAX_RETRIES: usize = 2;
+const RETRY_BASE_MS: u64 = 1000;
+
+/// Check if a status code is retryable.
+fn is_retryable(status: u16) -> bool {
+    RETRYABLE_STATUS.contains(&status)
+}
+
+/// Parse Retry-After header (seconds).
+fn parse_retry_after(resp: &reqwest::Response) -> Option<u64> {
+    resp.headers().get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+}
+
+/// Send a non-streaming chat completions request with automatic retry.
 pub async fn send_non_stream(
     client: &Client,
     config: &ProviderConfig,
@@ -133,44 +150,61 @@ pub async fn send_non_stream(
     let body = serde_json::to_value(request)
         .map_err(|e| AppError::new("TRANSFORM_ERROR", format!("Failed to serialize request: {e}")))?;
 
-    let mut req_builder = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", config.select_api_key()))
-        .header("Content-Type", "application/json");
+    let mut last_err = None;
 
-    // Inject provider extra_headers (e.g. User-Agent for Kimi)
-    for (k, v) in &config.extra_headers {
-        req_builder = req_builder.header(k.as_str(), v.as_str());
-    }
+    for attempt in 0..=MAX_RETRIES {
+        let mut req_builder = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", config.select_api_key()))
+            .header("Content-Type", "application/json");
 
-    let resp = req_builder
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| {
-            AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to provider: {e}"))
-        })?;
+        for (k, v) in &config.extra_headers {
+            req_builder = req_builder.header(k.as_str(), v.as_str());
+        }
 
-    let status = resp.status();
-    let body_text = resp.text().await.unwrap_or_default();
+        let resp = req_builder
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to provider: {e}"))
+            })?;
 
-    // Sanitize api key from response
-    let sanitized = config.sanitize(&body_text);
+        let status = resp.status();
 
-    if !status.is_success() {
+        if status.is_success() {
+            let body_text = resp.text().await.unwrap_or_default();
+            let sanitized = config.sanitize(&body_text);
+            return serde_json::from_str(&sanitized).map_err(|e| {
+                AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse provider response: {e}"))
+                    .with_detail(truncate(&sanitized, 500))
+            });
+        }
+
+        let status_code = status.as_u16();
+        let retry_after = parse_retry_after(&resp);
+        let body_text = resp.text().await.unwrap_or_default();
+        let sanitized = config.sanitize(&body_text);
+
+        if is_retryable(status_code) && attempt < MAX_RETRIES {
+            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            last_err = Some(AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Provider returned HTTP {status}"))
+                .with_detail(truncate(&sanitized, 2000)));
+            continue;
+        }
+
         return Err(
             AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Provider returned HTTP {status}"))
                 .with_detail(truncate(&sanitized, 2000)),
         );
     }
 
-    serde_json::from_str(&sanitized).map_err(|e| {
-        AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse provider response: {e}"))
-            .with_detail(truncate(&sanitized, 500))
-    })
+    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
 }
 
-/// Send a streaming chat completions request, returning the raw response for SSE processing.
+/// Send a streaming chat completions request with automatic retry.
 pub async fn send_stream(
     client: &Client,
     config: &ProviderConfig,
@@ -180,123 +214,175 @@ pub async fn send_stream(
     let body = serde_json::to_value(request)
         .map_err(|e| AppError::new("TRANSFORM_ERROR", format!("Failed to serialize request: {e}")))?;
 
-    let mut req_builder = client
-        .post(&url)
-        .header("Authorization", format!("Bearer {}", config.select_api_key()))
-        .header("Content-Type", "application/json")
-        .header("Accept", "text/event-stream");
+    let mut last_err = None;
 
-    for (k, v) in &config.extra_headers {
-        req_builder = req_builder.header(k.as_str(), v.as_str());
-    }
+    for attempt in 0..=MAX_RETRIES {
+        let mut req_builder = client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", config.select_api_key()))
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream");
 
-    let resp = req_builder
-        .json(&body)
-        .send()
-        .await
-        .map_err(|e| {
-            AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to provider: {e}"))
-        })?;
+        for (k, v) in &config.extra_headers {
+            req_builder = req_builder.header(k.as_str(), v.as_str());
+        }
 
-    let status = resp.status();
-    if !status.is_success() {
+        let resp = req_builder
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| {
+                AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to provider: {e}"))
+            })?;
+
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(resp);
+        }
+
+        let status_code = status.as_u16();
+        let retry_after = parse_retry_after(&resp);
         let body_text = resp.text().await.unwrap_or_default();
         let sanitized = config.sanitize(&body_text);
+
+        if is_retryable(status_code) && attempt < MAX_RETRIES {
+            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            last_err = Some(AppError::new("UPSTREAM_STREAM_ERROR", format!("Provider returned HTTP {status}"))
+                .with_detail(truncate(&sanitized, 2000)));
+            continue;
+        }
+
         return Err(
             AppError::new("UPSTREAM_STREAM_ERROR", format!("Provider returned HTTP {status}"))
                 .with_detail(truncate(&sanitized, 2000)),
         );
     }
 
-    Ok(resp)
+    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))
 }
 
-/// Send a non-streaming request to Claude Messages API.
+/// Send a non-streaming request to Claude Messages API with automatic retry.
 pub async fn send_anthropic_non_stream(
     client: &Client,
     config: &ProviderConfig,
     body: &Value,
 ) -> Result<Value, AppError> {
     let url = config.anthropic_messages_url();
+    let has_thinking = body.get("thinking").is_some();
+    let mut last_err = None;
 
-    let mut req_builder = client
-        .post(&url)
-        .header("x-api-key", config.select_api_key())
-        .header("anthropic-version", "2023-06-01")
-        .header("Content-Type", "application/json");
+    for attempt in 0..=MAX_RETRIES {
+        let mut req_builder = client
+            .post(&url)
+            .header("x-api-key", config.select_api_key())
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json");
 
-    // Add anthropic-beta if thinking is enabled
-    if body.get("thinking").is_some() {
-        req_builder = req_builder.header("anthropic-beta", "interleaved-thinking-2025-05-14");
-    }
+        if has_thinking {
+            req_builder = req_builder.header("anthropic-beta", "interleaved-thinking-2025-05-14");
+        }
+        for (k, v) in &config.extra_headers {
+            req_builder = req_builder.header(k.as_str(), v.as_str());
+        }
 
-    for (k, v) in &config.extra_headers {
-        req_builder = req_builder.header(k.as_str(), v.as_str());
-    }
+        let resp = req_builder
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Claude: {e}")))?;
 
-    let resp = req_builder
-        .json(body)
-        .send()
-        .await
-        .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Claude: {e}")))?;
+        let status = resp.status();
+        if status.is_success() {
+            let body_text = resp.text().await.unwrap_or_default();
+            let sanitized = config.sanitize(&body_text);
+            return serde_json::from_str(&sanitized).map_err(|e| {
+                AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse Claude response: {e}"))
+                    .with_detail(truncate(&sanitized, 500))
+            });
+        }
 
-    let status = resp.status();
-    let body_text = resp.text().await.unwrap_or_default();
-    let sanitized = config.sanitize(&body_text);
+        let status_code = status.as_u16();
+        let retry_after = parse_retry_after(&resp);
+        let body_text = resp.text().await.unwrap_or_default();
+        let sanitized = config.sanitize(&body_text);
 
-    if !status.is_success() {
+        if is_retryable(status_code) && attempt < MAX_RETRIES {
+            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            last_err = Some(AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Claude returned HTTP {status}"))
+                .with_detail(truncate(&sanitized, 2000)));
+            continue;
+        }
+
         return Err(
             AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Claude returned HTTP {status}"))
                 .with_detail(truncate(&sanitized, 2000)),
         );
     }
 
-    serde_json::from_str(&sanitized).map_err(|e| {
-        AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse Claude response: {e}"))
-            .with_detail(truncate(&sanitized, 500))
-    })
+    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
 }
 
-/// Send a streaming request to Claude Messages API.
+/// Send a streaming request to Claude Messages API with automatic retry.
 pub async fn send_anthropic_stream(
     client: &Client,
     config: &ProviderConfig,
     body: &Value,
 ) -> Result<reqwest::Response, AppError> {
     let url = config.anthropic_messages_url();
+    let has_thinking = body.get("thinking").is_some();
+    let mut last_err = None;
 
-    let mut req_builder = client
-        .post(&url)
-        .header("x-api-key", config.select_api_key())
-        .header("anthropic-version", "2023-06-01")
-        .header("Content-Type", "application/json")
-        .header("Accept", "text/event-stream");
+    for attempt in 0..=MAX_RETRIES {
+        let mut req_builder = client
+            .post(&url)
+            .header("x-api-key", config.select_api_key())
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream");
 
-    if body.get("thinking").is_some() {
-        req_builder = req_builder.header("anthropic-beta", "interleaved-thinking-2025-05-14");
-    }
+        if has_thinking {
+            req_builder = req_builder.header("anthropic-beta", "interleaved-thinking-2025-05-14");
+        }
+        for (k, v) in &config.extra_headers {
+            req_builder = req_builder.header(k.as_str(), v.as_str());
+        }
 
-    for (k, v) in &config.extra_headers {
-        req_builder = req_builder.header(k.as_str(), v.as_str());
-    }
+        let resp = req_builder
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Claude: {e}")))?;
 
-    let resp = req_builder
-        .json(body)
-        .send()
-        .await
-        .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Claude: {e}")))?;
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(resp);
+        }
 
-    let status = resp.status();
-    if !status.is_success() {
+        let status_code = status.as_u16();
+        let retry_after = parse_retry_after(&resp);
         let body_text = resp.text().await.unwrap_or_default();
         let sanitized = config.sanitize(&body_text);
+
+        if is_retryable(status_code) && attempt < MAX_RETRIES {
+            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            last_err = Some(AppError::new("UPSTREAM_STREAM_ERROR", format!("Claude returned HTTP {status}"))
+                .with_detail(truncate(&sanitized, 2000)));
+            continue;
+        }
+
         return Err(
             AppError::new("UPSTREAM_STREAM_ERROR", format!("Claude returned HTTP {status}"))
                 .with_detail(truncate(&sanitized, 2000)),
         );
     }
 
-    Ok(resp)
+    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))
 }
 
 /// Parse api_key field: JSON array → Vec<String>, plain string → vec![string].
