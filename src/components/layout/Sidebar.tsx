@@ -9,7 +9,6 @@ import {
   ScrollText,
   Stethoscope,
   Settings,
-  Plug,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { cn } from "@/lib/utils";
@@ -21,7 +20,6 @@ const navItems = [
   { to: "/routes", labelKey: "nav.routes", icon: GitBranch },
   { to: "/gateway", labelKey: "nav.gateway", icon: Radio },
   { to: "/tools", labelKey: "nav.clients", icon: Monitor },
-  { to: "/mcp", labelKey: "nav.mcp", icon: Plug },
   { to: "/logs", labelKey: "nav.logs", icon: ScrollText },
   { to: "/diagnostics", labelKey: "nav.diagnostics", icon: Stethoscope },
   { to: "/settings", labelKey: "nav.settings", icon: Settings },

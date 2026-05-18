@@ -15,7 +15,6 @@ export function Topbar() {
     "/providers": "nav.providers",
     "/routes": "nav.routes",
     "/gateway": "nav.gateway",
-    "/mcp": "nav.mcp",
     "/logs": "nav.logs",
     "/diagnostics": "nav.diagnostics",
     "/settings": "nav.settings",

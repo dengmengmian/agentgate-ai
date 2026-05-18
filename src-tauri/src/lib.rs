@@ -163,10 +163,6 @@ pub fn run() {
             commands::detect_provider_cache,
             commands::get_provider_health,
             commands::update_route_provider_conditions,
-            commands::get_mcp_overview,
-            commands::add_mcp_server,
-            commands::remove_mcp_server,
-            commands::toggle_mcp_server,
             // Pricing
             commands::list_model_pricing,
             commands::upsert_model_pricing,

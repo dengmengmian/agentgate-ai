@@ -1135,31 +1135,6 @@ pub fn open_atomcode_config() -> Result<bool, AppError> {
     Ok(true)
 }
 
-// ── MCP Commands ─────────────────────────────────────────────
-
-#[tauri::command]
-pub fn get_mcp_overview() -> Result<crate::tools::mcp::McpOverview, AppError> {
-    Ok(crate::tools::mcp::get_overview())
-}
-
-#[tauri::command]
-pub fn add_mcp_server(client: String, name: String, command: String, args: Vec<String>, timeout: Option<i64>) -> Result<bool, AppError> {
-    crate::tools::mcp::add_server(&client, &name, &command, &args, timeout)?;
-    Ok(true)
-}
-
-#[tauri::command]
-pub fn remove_mcp_server(client: String, name: String) -> Result<bool, AppError> {
-    crate::tools::mcp::remove_server(&client, &name)?;
-    Ok(true)
-}
-
-#[tauri::command]
-pub fn toggle_mcp_server(client: String, name: String, enabled: bool) -> Result<bool, AppError> {
-    crate::tools::mcp::toggle_server(&client, &name, enabled)?;
-    Ok(true)
-}
-
 // ── Provider Health Commands ──────────────────────────────────
 
 #[tauri::command]
