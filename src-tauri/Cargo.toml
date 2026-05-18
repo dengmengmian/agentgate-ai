@@ -1,10 +1,14 @@
 [package]
 name = "agentgate"
-version = "0.5.2"
+version = "0.5.3"
 description = "Local gateway for AI coding agents"
 authors = ["dengmengmian"]
 edition = "2021"
 default-run = "agentgate"
+
+[features]
+default = []
+cli = []
 
 [lib]
 name = "agentgate_lib"
@@ -17,6 +21,7 @@ path = "src/main.rs"
 [[bin]]
 name = "agentgate-serve"
 path = "src/bin/serve.rs"
+required-features = ["cli"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

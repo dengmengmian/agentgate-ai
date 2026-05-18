@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.3] - 2026-05-18
+
+### CI / 发布
+
+- 修复 macOS x86_64 Release 中 `agentgate-serve` 子程序未签名导致 `.app` 签名失败的问题
+
+---
+
 ## [0.5.2] - 2026-05-18
 
 ### CI / 发布
