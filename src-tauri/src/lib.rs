@@ -1,14 +1,14 @@
 mod app;
 mod diagnostics;
-mod errors;
-mod gateway;
+pub mod errors;
+pub mod gateway;
 mod models;
-mod protocol;
-mod providers;
-mod security;
-mod storage;
+pub mod protocol;
+pub mod providers;
+pub mod security;
+pub mod storage;
 mod tools;
-mod transform;
+pub mod transform;
 
 use std::sync::{Arc, Mutex};
 use tauri::Manager;

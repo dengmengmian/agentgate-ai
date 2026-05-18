@@ -1,0 +1,13 @@
+services:
+  agentgate:
+    build: .
+    ports:
+      - "9090:9090"
+    volumes:
+      - agentgate-data:/data
+    environment:
+      - AGENTGATE_HOST=0.0.0.0
+      - AGENTGATE_PORT=9090
+
+volumes:
+  agentgate-data:

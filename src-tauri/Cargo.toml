@@ -9,6 +9,10 @@ edition = "2021"
 name = "agentgate_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "agentgate-serve"
+path = "src/bin/serve.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -32,3 +36,4 @@ toml_edit = "0.22"
 open = "5"
 rand = "0.9"
 tauri-plugin-updater = "2.10.1"
+clap = { version = "4", features = ["derive", "env"] }

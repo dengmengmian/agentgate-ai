@@ -14,15 +14,6 @@ pub async fn start(
     port: u16,
     db: Arc<Mutex<Connection>>,
 ) -> Result<(oneshot::Sender<()>, tokio::task::JoinHandle<()>), AppError> {
-    // Reject 0.0.0.0 for security
-    if host == "0.0.0.0" {
-        return Err(AppError::new(
-            "GATEWAY_BIND_ERROR",
-            "Binding to 0.0.0.0 is not allowed for security reasons",
-        )
-        .with_suggestion("Use 127.0.0.1 to listen on localhost only"));
-    }
-
     let http_client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
         .build()
