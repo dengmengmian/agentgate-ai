@@ -325,8 +325,8 @@ export function Tools() {
               <Sparkles className="h-5 w-5 text-accent" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-text-primary">Gemini CLI</h3>
-              <p className="text-xs text-text-muted">Google's AI coding CLI with Gemini API support.</p>
+              <h3 className="text-sm font-semibold text-text-primary">{t("tools.gemini_cli")}</h3>
+              <p className="text-xs text-text-muted">{t("tools.gemini_cli_desc")}</p>
             </div>
           </div>
           <StatusBadge variant={geminiStatus?.has_agentgate ? "success" : geminiStatus?.exists ? "warning" : "muted"}>
@@ -337,10 +337,10 @@ export function Tools() {
         <div className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-3">
           <div className="flex items-center gap-2 text-xs font-medium text-warning">
             <AlertTriangle className="h-3.5 w-3.5" />
-            Gemini CLI 使用 Google 原生 API 格式，暂不支持协议转换
+            {t("tools.gemini_cli_notice_title")}
           </div>
           <p className="mt-1 text-[11px] text-text-secondary">
-            配置写入仅切换 API Key 和 Base URL。适用于直连 Gemini API 或通过支持 Gemini 格式的代理（如 LiteLLM）转发。AgentGate 协议转换（Chat Completions）暂不适用于 Gemini CLI。
+            {t("tools.gemini_cli_notice_body")}
           </p>
         </div>
 
@@ -373,8 +373,8 @@ export function Tools() {
               <Atom className="h-5 w-5 text-accent" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-text-primary">AtomCode</h3>
-              <p className="text-xs text-text-muted">Open-source AI coding agent in your terminal.</p>
+              <h3 className="text-sm font-semibold text-text-primary">{t("tools.atomcode")}</h3>
+              <p className="text-xs text-text-muted">{t("tools.atomcode_desc")}</p>
             </div>
           </div>
           <StatusBadge variant={atomCodeStatus?.has_agentgate ? "success" : atomCodeStatus?.exists ? "warning" : "muted"}>
@@ -406,8 +406,8 @@ export function Tools() {
       <ConfirmDialog open={confirmApplyCodex} title={t("tools.apply_codex_title")} message={t("tools.apply_codex_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyCodex} onCancel={() => setConfirmApplyCodex(false)} />
       <ConfirmDialog open={confirmApplyClaude} title={t("tools.apply_claude_title")} message={t("tools.apply_claude_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyClaude} onCancel={() => setConfirmApplyClaude(false)} />
       <ConfirmDialog open={confirmApplyOpenCode} title={t("tools.apply_opencode_title")} message={t("tools.apply_opencode_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyOpenCode} onCancel={() => setConfirmApplyOpenCode(false)} />
-      <ConfirmDialog open={confirmApplyGemini} title="Apply Gemini CLI Config" message="This will write AgentGate settings to ~/.gemini/settings.json. Your current settings will be saved for restore." confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyGemini} onCancel={() => setConfirmApplyGemini(false)} />
-      <ConfirmDialog open={confirmApplyAtomCode} title="Apply AtomCode Config" message="This will write AgentGate settings to ~/.atomcode/config.toml. Your current config will be saved for restore." confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyAtomCode} onCancel={() => setConfirmApplyAtomCode(false)} />
+      <ConfirmDialog open={confirmApplyGemini} title={t("tools.apply_gemini_title")} message={t("tools.apply_gemini_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyGemini} onCancel={() => setConfirmApplyGemini(false)} />
+      <ConfirmDialog open={confirmApplyAtomCode} title={t("tools.apply_atomcode_title")} message={t("tools.apply_atomcode_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyAtomCode} onCancel={() => setConfirmApplyAtomCode(false)} />
     </div>
   );
 }
