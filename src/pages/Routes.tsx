@@ -12,6 +12,7 @@ import {
   X,
   Pencil,
   Check,
+  Filter,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -19,7 +20,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
-import type { RouteProfileView, RouteProfileDetail } from "@/types/route-profile";
+import type { RouteProfileView, RouteProfileDetail, RoutingConditions } from "@/types/route-profile";
 import type { ProviderView } from "@/types/provider";
 
 const PROTOCOL_LABELS: Record<string, string> = {
@@ -46,6 +47,7 @@ export function Routes() {
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState("");
   const [addProviderId, setAddProviderId] = useState("");
+  const [conditionsTarget, setConditionsTarget] = useState<{ profileId: string; providerId: string; providerName: string; current: RoutingConditions } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -352,14 +354,36 @@ export function Routes() {
                                 );
                               })()}
                               {rp.supports_vision === true && <StatusBadge variant="accent">{t("providers.vision_supported")}</StatusBadge>}
+                              {rp.routing_conditions && (
+                                <StatusBadge variant="success"><Filter className="inline h-2.5 w-2.5 mr-0.5" />{t("routes.has_conditions")}</StatusBadge>
+                              )}
                             </div>
                             <p className="text-[11px] text-text-muted">
                               {rp.provider_type}
                               {rp.model_override && <> · model: {rp.model_override}</>}
+                              {rp.routing_conditions && (() => {
+                                try {
+                                  const c: RoutingConditions = JSON.parse(rp.routing_conditions);
+                                  const parts: string[] = [];
+                                  if (c.has_images === true) parts.push("images");
+                                  if (c.has_tools === true) parts.push("tools");
+                                  if (c.min_input_chars) parts.push(`≥${(c.min_input_chars/1000).toFixed(0)}K chars`);
+                                  if (c.system_keywords?.length) parts.push(`keywords: ${c.system_keywords.join(",")}`);
+                                  if (c.model_override) parts.push(`→ ${c.model_override}`);
+                                  return parts.length > 0 ? <> · <span className="text-accent">{parts.join(" + ")}</span></> : null;
+                                } catch { return null; }
+                              })()}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
+                          <button onClick={() => {
+                            let current: RoutingConditions = {};
+                            try { if (rp.routing_conditions) current = JSON.parse(rp.routing_conditions); } catch {}
+                            setConditionsTarget({ profileId: detail.profile.id, providerId: rp.provider_id, providerName: rp.provider_name, current });
+                          }} className="rounded p-1 text-text-muted hover:bg-border hover:text-accent" title={t("routes.edit_conditions")}>
+                            <Filter className="h-3.5 w-3.5" />
+                          </button>
                           {!isActive && (
                             <button onClick={() => handleSetActive(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary" title="Set as active">
                               <Star className="h-3.5 w-3.5" />
@@ -419,6 +443,115 @@ export function Routes() {
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {/* Routing Conditions Dialog */}
+      {conditionsTarget && (
+        <ConditionsDialog
+          target={conditionsTarget}
+          onSave={async (conditions) => {
+            const json = Object.values(conditions).some(v => v != null && v !== "" && !(Array.isArray(v) && v.length === 0))
+              ? JSON.stringify(conditions)
+              : null;
+            try {
+              await api.updateRouteProviderConditions(conditionsTarget.profileId, conditionsTarget.providerId, json);
+              toast("success", t("routes.conditions_saved"));
+              setConditionsTarget(null);
+              load();
+            } catch (err) { toast("error", (err as api.AppError).message); }
+          }}
+          onClose={() => setConditionsTarget(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function ConditionsDialog({ target, onSave, onClose }: {
+  target: { providerName: string; current: RoutingConditions };
+  onSave: (c: RoutingConditions) => void;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const [minChars, setMinChars] = useState(target.current.min_input_chars?.toString() ?? "");
+  const [maxChars, setMaxChars] = useState(target.current.max_input_chars?.toString() ?? "");
+  const [hasImages, setHasImages] = useState<string>(target.current.has_images === true ? "true" : target.current.has_images === false ? "false" : "");
+  const [hasTools, setHasTools] = useState<string>(target.current.has_tools === true ? "true" : target.current.has_tools === false ? "false" : "");
+  const [keywords, setKeywords] = useState(target.current.system_keywords?.join(", ") ?? "");
+  const [modelOverride, setModelOverride] = useState(target.current.model_override ?? "");
+
+  const handleSave = () => {
+    const c: RoutingConditions = {};
+    if (minChars) c.min_input_chars = parseInt(minChars, 10) || null;
+    if (maxChars) c.max_input_chars = parseInt(maxChars, 10) || null;
+    if (hasImages === "true") c.has_images = true;
+    else if (hasImages === "false") c.has_images = false;
+    if (hasTools === "true") c.has_tools = true;
+    else if (hasTools === "false") c.has_tools = false;
+    if (keywords.trim()) c.system_keywords = keywords.split(",").map(s => s.trim()).filter(Boolean);
+    if (modelOverride.trim()) c.model_override = modelOverride.trim();
+    onSave(c);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-card shadow-xl">
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h3 className="text-sm font-semibold text-text-primary">
+            {t("routes.edit_conditions")} — {target.providerName}
+          </h3>
+          <button onClick={onClose} className="rounded p-1 text-text-muted hover:text-text-primary"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="space-y-3 p-5">
+          <p className="text-[11px] text-text-muted">{t("routes.conditions_hint")}</p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.min_chars")}</label>
+              <input type="number" value={minChars} onChange={(e) => setMinChars(e.target.value)} placeholder="e.g. 100000" className="form-input w-full" />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.max_chars")}</label>
+              <input type="number" value={maxChars} onChange={(e) => setMaxChars(e.target.value)} placeholder="e.g. 500000" className="form-input w-full" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.has_images")}</label>
+              <select value={hasImages} onChange={(e) => setHasImages(e.target.value)} className="form-input w-full">
+                <option value="">{t("routes.any")}</option>
+                <option value="true">{t("routes.required")}</option>
+                <option value="false">{t("routes.excluded")}</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.has_tools")}</label>
+              <select value={hasTools} onChange={(e) => setHasTools(e.target.value)} className="form-input w-full">
+                <option value="">{t("routes.any")}</option>
+                <option value="true">{t("routes.required")}</option>
+                <option value="false">{t("routes.excluded")}</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[10px] text-text-muted">{t("routes.system_keywords")}</label>
+            <input value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="background, subagent, reason" className="form-input w-full" />
+            <p className="mt-0.5 text-[10px] text-text-muted">{t("routes.keywords_hint")}</p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-[10px] text-text-muted">{t("routes.condition_model_override")}</label>
+            <input value={modelOverride} onChange={(e) => setModelOverride(e.target.value)} placeholder="e.g. deepseek-v4-flash" className="form-input w-full" />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
+          <button onClick={() => { onSave({}); }} className="rounded-md bg-card-secondary px-4 py-1.5 text-xs text-text-secondary hover:bg-border">{t("routes.clear_conditions")}</button>
+          <button onClick={handleSave} className="rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent/90">{t("common.save")}</button>
+        </div>
+      </div>
     </div>
   );
 }

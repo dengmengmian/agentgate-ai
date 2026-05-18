@@ -31,6 +31,7 @@ export interface RouteProfileProviderView {
   cooldown_seconds: number;
   failover_on_status_codes: string | null;
   failover_on_error_keywords: string | null;
+  routing_conditions: string | null;
   runtime_available: boolean;
   cooldown_until: string | null;
   consecutive_failures: number;
@@ -54,6 +55,16 @@ export interface AddProviderToRouteInput {
   cooldown_seconds?: number;
   failover_on_status_codes?: string;
   failover_on_error_keywords?: string;
+  routing_conditions?: string;
+}
+
+export interface RoutingConditions {
+  min_input_chars?: number | null;
+  max_input_chars?: number | null;
+  has_images?: boolean | null;
+  has_tools?: boolean | null;
+  system_keywords?: string[] | null;
+  model_override?: string | null;
 }
 
 export interface ProviderRuntimeStatus {

@@ -884,6 +884,18 @@ pub fn reorder_route_providers(route_profile_id: String, provider_ids: Vec<Strin
 }
 
 #[tauri::command]
+pub fn update_route_provider_conditions(
+    route_profile_id: String,
+    provider_id: String,
+    routing_conditions: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::route_profiles::update_provider_conditions(&conn, &route_profile_id, &provider_id, routing_conditions.as_deref())?;
+    Ok(true)
+}
+
+#[tauri::command]
 pub fn list_provider_runtime_status(state: State<'_, AppState>) -> Result<Vec<crate::models::route_profile::ProviderRuntimeStatus>, AppError> {
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
     storage::provider_runtime_status::list_all(&conn)

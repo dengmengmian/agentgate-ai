@@ -230,3 +230,17 @@ pub fn reorder_providers(conn: &Connection, profile_id: &str, provider_ids: &[St
     Ok(())
 }
 
+pub fn update_provider_conditions(
+    conn: &Connection,
+    profile_id: &str,
+    provider_id: &str,
+    routing_conditions: Option<&str>,
+) -> Result<(), AppError> {
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE route_profile_providers SET routing_conditions=?1, updated_at=?2 WHERE route_profile_id=?3 AND provider_id=?4",
+        params![routing_conditions, &now, profile_id, provider_id],
+    )?;
+    Ok(())
+}
+

@@ -336,6 +336,10 @@ export async function reorderRouteProviders(routeProfileId: string, providerIds:
   return cmd("reorder_route_providers", { routeProfileId, providerIds });
 }
 
+export async function updateRouteProviderConditions(routeProfileId: string, providerId: string, routingConditions: string | null): Promise<boolean> {
+  return cmd("update_route_provider_conditions", { routeProfileId, providerId, routingConditions });
+}
+
 export async function listProviderRuntimeStatus(): Promise<ProviderRuntimeStatus[]> {
   return cmd("list_provider_runtime_status");
 }
