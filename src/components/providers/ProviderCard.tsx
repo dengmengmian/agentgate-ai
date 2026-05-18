@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Cloud, Key, ExternalLink, Pencil, Trash2, Star, Loader2, Activity } from "lucide-react";
+import { Cloud, Key, ExternalLink, Pencil, Trash2, Star, Loader2 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
@@ -116,44 +116,20 @@ export function ProviderCard({
         </div>
       </div>
 
-      {/* Health Stats */}
+      {/* Health Stats — compact inline */}
       {health && health.h24_total > 0 && (
-        <div className="mb-4 rounded-md border border-border/50 bg-card-secondary p-3">
-          <div className="mb-2 flex items-center gap-1.5 text-[11px] font-medium text-text-muted">
-            <Activity className="h-3 w-3" />{t("providers.health")}
-          </div>
-          <div className="grid grid-cols-4 gap-3 text-[11px]">
-            <div>
-              <span className="text-text-muted">1h {t("providers.health_success")}</span>
-              <p className={`font-medium ${health.h1_success_rate >= 95 ? "text-green-400" : health.h1_success_rate >= 80 ? "text-yellow-400" : "text-red-400"}`}>
-                {health.h1_success_rate}% <span className="text-text-muted font-normal">({health.h1_total})</span>
-              </p>
-            </div>
-            <div>
-              <span className="text-text-muted">24h {t("providers.health_success")}</span>
-              <p className={`font-medium ${health.h24_success_rate >= 95 ? "text-green-400" : health.h24_success_rate >= 80 ? "text-yellow-400" : "text-red-400"}`}>
-                {health.h24_success_rate}% <span className="text-text-muted font-normal">({health.h24_total})</span>
-              </p>
-            </div>
-            <div>
-              <span className="text-text-muted">{t("providers.health_avg_latency")}</span>
-              <p className="text-text-primary">{health.h1_avg_latency_ms}ms</p>
-            </div>
-            <div>
-              <span className="text-text-muted">P95</span>
-              <p className="text-text-primary">{health.h1_p95_latency_ms}ms</p>
-            </div>
-          </div>
-          {health.recent_errors.length > 0 && (
-            <div className="mt-2 border-t border-border/30 pt-2">
-              <span className="text-[10px] text-text-muted">{t("providers.health_recent_errors")}</span>
-              {health.recent_errors.slice(0, 3).map((e, i) => (
-                <p key={i} className="mt-0.5 truncate text-[10px] text-red-400/80">
-                  [{e.status_code}] {e.message}
-                </p>
-              ))}
-            </div>
-          )}
+        <div className="mb-3 flex items-center gap-3 text-[11px] text-text-muted">
+          <span className="flex items-center gap-1">
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.h1_success_rate >= 95 ? "bg-green-400" : health.h1_success_rate >= 80 ? "bg-yellow-400" : "bg-red-400"}`} />
+            1h {health.h1_success_rate}%
+          </span>
+          <span className="flex items-center gap-1">
+            <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.h24_success_rate >= 95 ? "bg-green-400" : health.h24_success_rate >= 80 ? "bg-yellow-400" : "bg-red-400"}`} />
+            24h {health.h24_success_rate}%
+          </span>
+          <span>{health.h1_avg_latency_ms}ms avg</span>
+          <span>P95 {health.h1_p95_latency_ms}ms</span>
+          <span>{health.h24_total} reqs</span>
         </div>
       )}
 
