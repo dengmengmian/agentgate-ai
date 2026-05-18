@@ -334,6 +334,16 @@ export function Tools() {
           </StatusBadge>
         </div>
 
+        <div className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-3">
+          <div className="flex items-center gap-2 text-xs font-medium text-warning">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Gemini CLI 使用 Google 原生 API 格式，暂不支持协议转换
+          </div>
+          <p className="mt-1 text-[11px] text-text-secondary">
+            配置写入仅切换 API Key 和 Base URL。适用于直连 Gemini API 或通过支持 Gemini 格式的代理（如 LiteLLM）转发。AgentGate 协议转换（Chat Completions）暂不适用于 Gemini CLI。
+          </p>
+        </div>
+
         {geminiStatus && (
           <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
             <div><span className="text-text-muted">settings.json</span><p className="font-mono text-text-secondary text-[11px]">{geminiStatus.config_path}</p></div>
