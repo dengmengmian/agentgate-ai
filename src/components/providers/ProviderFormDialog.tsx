@@ -37,6 +37,7 @@ export function ProviderFormDialog({
   const [extraHeaders, setExtraHeaders] = useState("");
   const [anthropicBaseUrl, setAnthropicBaseUrl] = useState("");
   const [responsesBaseUrl, setResponsesBaseUrl] = useState("");
+  const [autoCacheControl, setAutoCacheControl] = useState(true);
   const [protocols, setProtocols] = useState<string[]>(["openai_chat_completions"]);
   const [timeoutSeconds, setTimeoutSeconds] = useState("120");
   const [enabled, setEnabled] = useState(true);
@@ -105,6 +106,7 @@ export function ProviderFormDialog({
       setExtraHeaders(provider.extra_headers ?? "");
       setAnthropicBaseUrl(provider.anthropic_base_url ?? "");
       setResponsesBaseUrl(provider.responses_base_url ?? "");
+      setAutoCacheControl(provider.auto_cache_control ?? true);
       try { setProtocols(JSON.parse(provider.protocol)); } catch { setProtocols([provider.protocol]); }
       setTimeoutSeconds(String(provider.timeout_seconds));
       setEnabled(provider.enabled);
@@ -120,6 +122,7 @@ export function ProviderFormDialog({
       setExtraHeaders("");
       setAnthropicBaseUrl("");
       setResponsesBaseUrl("");
+      setAutoCacheControl(true);
       setProtocols(["openai_chat_completions"]);
       setTimeoutSeconds("120");
       setEnabled(true);
@@ -153,6 +156,7 @@ export function ProviderFormDialog({
         name, provider_type: providerType, base_url: baseUrl,
         default_model: defaultModel, reasoning_model: reasoningModel || undefined,
         supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: abuStr, responses_base_url: rbuStr,
+        auto_cache_control: autoCacheControl,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
       const validKeys = apiKeys.filter(k => k.trim());
@@ -164,6 +168,7 @@ export function ProviderFormDialog({
         name, provider_type: providerType, base_url: baseUrl,
         default_model: defaultModel, reasoning_model: reasoningModel || undefined,
         supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: abuStr, responses_base_url: rbuStr,
+        auto_cache_control: autoCacheControl,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
       const validKeys = apiKeys.filter(k => k.trim());
@@ -399,6 +404,20 @@ export function ProviderFormDialog({
                 <Field label={t("providers.extra_headers")} hint={t("providers.extra_headers_hint")}>
                   <input value={extraHeaders} onChange={(e) => setExtraHeaders(e.target.value)} placeholder='{"User-Agent":"KimiCLI/1.40.0"}' className="form-input" />
                 </Field>
+
+                {/* Cache control toggle — show for Anthropic or providers with anthropic_base_url */}
+                {(providerType === "anthropic" || anthropicBaseUrl) && (
+                  <Field label={t("providers.auto_cache")} hint={providerType === "anthropic" ? t("providers.auto_cache_hint_native") : t("providers.auto_cache_hint_compat")}>
+                    <label className="mt-1 flex cursor-pointer items-center gap-2">
+                      <input type="checkbox" checked={autoCacheControl} onChange={(e) => setAutoCacheControl(e.target.checked)} className="accent-accent" />
+                      <span className="text-xs text-text-secondary">
+                        {autoCacheControl ? t("providers.enabled") : t("providers.disabled")}
+                        {providerType === "anthropic" && <span className="ml-1 text-[10px] text-green-400">[{t("providers.recommended")}]</span>}
+                        {providerType !== "anthropic" && anthropicBaseUrl && <span className="ml-1 text-[10px] text-yellow-400">[{t("providers.experimental")}]</span>}
+                      </span>
+                    </label>
+                  </Field>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <Field label={t("providers.timeout")} error={errors.timeoutSeconds}>

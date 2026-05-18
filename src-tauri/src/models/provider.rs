@@ -67,6 +67,7 @@ pub struct CreateProviderInput {
     pub responses_base_url: Option<String>,
     pub protocol: String,
     pub timeout_seconds: Option<i64>,
+    pub auto_cache_control: Option<bool>,
     pub enabled: Option<bool>,
 }
 
@@ -83,6 +84,7 @@ pub struct UpdateProviderInput {
     pub extra_headers: Option<String>,
     pub anthropic_base_url: Option<String>,
     pub responses_base_url: Option<String>,
+    pub auto_cache_control: Option<bool>,
     pub protocol: Option<String>,
     pub timeout_seconds: Option<i64>,
     pub enabled: Option<bool>,

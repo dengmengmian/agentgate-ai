@@ -91,8 +91,8 @@ pub fn create(conn: &Connection, input: CreateProviderInput) -> Result<Provider,
 
     conn.execute(
         "INSERT INTO providers (id, name, provider_type, base_url, api_key, default_model, reasoning_model,
-                                supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url, protocol, timeout_seconds, status, enabled, is_active, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tested', ?15, 0, ?16, ?16)",
+                                supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url, protocol, timeout_seconds, status, auto_cache_control, enabled, is_active, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tested', ?15, ?16, 0, ?17, ?17)",
         params![
             &id,
             &input.name,
@@ -108,6 +108,7 @@ pub fn create(conn: &Connection, input: CreateProviderInput) -> Result<Provider,
             &input.responses_base_url,
             &input.protocol,
             timeout,
+            &input.auto_cache_control,
             enabled,
             &now,
         ],
@@ -136,12 +137,13 @@ pub fn update(conn: &Connection, id: &str, input: UpdateProviderInput) -> Result
     let responses_base_url = input.responses_base_url.or(existing.responses_base_url);
     let protocol = input.protocol.unwrap_or(existing.protocol);
     let timeout_seconds = input.timeout_seconds.unwrap_or(existing.timeout_seconds);
+    let auto_cache_control = input.auto_cache_control.or(existing.auto_cache_control);
     let enabled = input.enabled.unwrap_or(existing.enabled);
 
     conn.execute(
         "UPDATE providers SET name=?1, provider_type=?2, base_url=?3, api_key=?4, default_model=?5,
-                reasoning_model=?6, supported_models=?7, model_mapping=?8, extra_headers=?9, anthropic_base_url=?10, responses_base_url=?11, protocol=?12, timeout_seconds=?13, enabled=?14, updated_at=?15
-         WHERE id=?16",
+                reasoning_model=?6, supported_models=?7, model_mapping=?8, extra_headers=?9, anthropic_base_url=?10, responses_base_url=?11, protocol=?12, timeout_seconds=?13, auto_cache_control=?14, enabled=?15, updated_at=?16
+         WHERE id=?17",
         params![
             &name,
             &provider_type,
@@ -156,6 +158,7 @@ pub fn update(conn: &Connection, id: &str, input: UpdateProviderInput) -> Result
             &responses_base_url,
             &protocol,
             timeout_seconds,
+            auto_cache_control,
             enabled,
             &now,
             id,

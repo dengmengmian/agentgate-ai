@@ -15,6 +15,8 @@ export interface ProviderView {
   timeout_seconds: number;
   status: string;
   supports_vision: boolean | null;
+  auto_cache_control: boolean | null;
+  supports_cache: boolean | null;
   enabled: boolean;
   is_active: boolean;
   created_at: string;
@@ -33,6 +35,7 @@ export interface CreateProviderInput {
   extra_headers?: string;
   anthropic_base_url?: string;
   responses_base_url?: string;
+  auto_cache_control?: boolean;
   protocol: string;
   timeout_seconds?: number;
   enabled?: boolean;
@@ -50,6 +53,7 @@ export interface UpdateProviderInput {
   extra_headers?: string;
   anthropic_base_url?: string;
   responses_base_url?: string;
+  auto_cache_control?: boolean;
   protocol?: string;
   timeout_seconds?: number;
   enabled?: boolean;
