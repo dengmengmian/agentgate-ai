@@ -4,7 +4,8 @@ use crate::errors::AppError;
 use crate::protocol::openai_responses::ResponsesRequest;
 
 /// Convert a Responses API request into a Claude Messages API request body.
-pub fn convert(req: &ResponsesRequest, model: &str) -> Result<Value, AppError> {
+/// `auto_cache`: if true, inject cache_control breakpoints for prompt caching.
+pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<Value, AppError> {
     // 1. System prompt (separate field in Claude, NOT in messages)
     let mut system_blocks: Vec<Value> = Vec::new();
     let system_text = req.instructions.as_ref().or(req.system.as_ref());
@@ -136,7 +137,57 @@ pub fn convert(req: &ResponsesRequest, model: &str) -> Result<Value, AppError> {
         body["stop_sequences"] = stop.clone();
     }
 
+    // 11. Inject cache_control for prompt caching (if enabled)
+    if auto_cache {
+        inject_cache_control(&mut body);
+    }
+
     Ok(body)
+}
+
+/// Inject `cache_control: {type: "ephemeral"}` at Anthropic's recommended breakpoints.
+///
+/// 3 breakpoints (out of max 4):
+/// 1. Last system block
+/// 2. Last tool definition
+/// 3. Last assistant message's last non-thinking block
+fn inject_cache_control(body: &mut Value) {
+    let marker = json!({"type": "ephemeral"});
+
+    // 1. System: last block
+    if let Some(system) = body.get_mut("system").and_then(|s| s.as_array_mut()) {
+        if let Some(last) = system.last_mut() {
+            last["cache_control"] = marker.clone();
+        }
+    }
+
+    // 2. Tools: last item
+    if let Some(tools) = body.get_mut("tools").and_then(|t| t.as_array_mut()) {
+        if let Some(last) = tools.last_mut() {
+            last["cache_control"] = marker.clone();
+        }
+    }
+
+    // 3. Messages: last assistant message's last non-thinking block
+    if let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
+        // Reverse iterate to find the last assistant message
+        for msg in messages.iter_mut().rev() {
+            if msg.get("role").and_then(|r| r.as_str()) != Some("assistant") {
+                continue;
+            }
+            if let Some(content) = msg.get_mut("content").and_then(|c| c.as_array_mut()) {
+                // Find last non-thinking block
+                for block in content.iter_mut().rev() {
+                    let block_type = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                    if block_type != "thinking" && block_type != "redacted_thinking" {
+                        block["cache_control"] = marker;
+                        return;
+                    }
+                }
+            }
+            break; // Only process the last assistant message
+        }
+    }
 }
 
 /// Convert the Responses API `input` field to Claude messages.
@@ -582,7 +633,7 @@ mod tests {
     #[test]
     fn test_convert_simple_string_input() {
         let req = make_req(json!("hello"));
-        let result = convert(&req, "claude-3-5-sonnet").unwrap();
+        let result = convert(&req, "claude-3-5-sonnet", false).unwrap();
         assert_eq!(result["model"], "claude-3-5-sonnet");
         assert_eq!(result["max_tokens"], 8192);
         let msgs = result["messages"].as_array().unwrap();
@@ -596,7 +647,7 @@ mod tests {
     fn test_convert_with_instructions() {
         let mut req = make_req(json!("hello"));
         req.instructions = Some("Be helpful".to_string());
-        let result = convert(&req, "claude-3-5-sonnet").unwrap();
+        let result = convert(&req, "claude-3-5-sonnet", false).unwrap();
         let sys = result["system"].as_array().unwrap();
         assert_eq!(sys.len(), 1);
         assert_eq!(sys[0]["text"], "Be helpful");
@@ -608,7 +659,7 @@ mod tests {
             {"type": "function_call", "call_id": "call_1", "name": "search", "arguments": "{\"q\":\"hi\"}"},
             {"type": "function_call_output", "call_id": "call_1", "output": "result"}
         ]));
-        let result = convert(&req, "claude-3-5-sonnet").unwrap();
+        let result = convert(&req, "claude-3-5-sonnet", false).unwrap();
         let msgs = result["messages"].as_array().unwrap();
         // assistant with tool_use, then user with tool_result
         assert_eq!(msgs[0]["role"], "assistant");
@@ -648,7 +699,7 @@ mod tests {
     #[test]
     fn test_convert_max_tokens_default() {
         let req = make_req(json!("hi"));
-        let result = convert(&req, "claude-3-5-sonnet").unwrap();
+        let result = convert(&req, "claude-3-5-sonnet", false).unwrap();
         assert_eq!(result["max_tokens"], 8192);
     }
 
@@ -656,7 +707,7 @@ mod tests {
     fn test_convert_max_tokens_custom() {
         let mut req = make_req(json!("hi"));
         req.max_output_tokens = Some(4096);
-        let result = convert(&req, "claude-3-5-sonnet").unwrap();
+        let result = convert(&req, "claude-3-5-sonnet", false).unwrap();
         assert_eq!(result["max_tokens"], 4096);
     }
 
@@ -686,7 +737,7 @@ mod tests {
             {"type": "message", "role": "system", "content": "sys prompt"},
             {"type": "message", "role": "user", "content": "hello"}
         ]));
-        let result = convert(&req, "claude-3-5-sonnet").unwrap();
+        let result = convert(&req, "claude-3-5-sonnet", false).unwrap();
         let sys = result["system"].as_array().unwrap();
         assert_eq!(sys[0]["text"], "sys prompt");
         // Messages should only have user, no system
@@ -700,7 +751,7 @@ mod tests {
         let req = make_req(json!([
             {"type": "function_call_output", "call_id": "", "output": "result"}
         ]));
-        assert!(convert(&req, "claude-3-5-sonnet").is_err());
+        assert!(convert(&req, "claude-3-5-sonnet", false).is_err());
     }
 
     // ── extract_content_blocks image tests ──
@@ -764,5 +815,98 @@ mod tests {
     fn test_extract_content_blocks_none() {
         let blocks = extract_content_blocks(None);
         assert!(blocks.is_empty());
+    }
+
+    // ── cache_control injection tests ──
+
+    #[test]
+    fn test_inject_cache_control_system_and_tools() {
+        let mut body = json!({
+            "system": [{"type": "text", "text": "Be helpful"}],
+            "tools": [
+                {"name": "search", "input_schema": {}},
+                {"name": "read", "input_schema": {}}
+            ],
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        });
+        inject_cache_control(&mut body);
+        // System last block has cache_control
+        assert_eq!(body["system"][0]["cache_control"]["type"], "ephemeral");
+        // Tools last item has cache_control
+        assert!(body["tools"][0].get("cache_control").is_none());
+        assert_eq!(body["tools"][1]["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
+    fn test_inject_cache_control_assistant_message() {
+        let mut body = json!({
+            "system": [{"type": "text", "text": "sys"}],
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "q1"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "a1"}]},
+                {"role": "user", "content": [{"type": "text", "text": "q2"}]}
+            ]
+        });
+        inject_cache_control(&mut body);
+        // Last assistant message's text block gets cache_control
+        assert_eq!(body["messages"][1]["content"][0]["cache_control"]["type"], "ephemeral");
+        // User messages don't get cache_control
+        assert!(body["messages"][2]["content"][0].get("cache_control").is_none());
+    }
+
+    #[test]
+    fn test_inject_cache_control_skips_thinking_blocks() {
+        let mut body = json!({
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "q"}]},
+                {"role": "assistant", "content": [
+                    {"type": "text", "text": "answer"},
+                    {"type": "thinking", "thinking": "..."},
+                ]}
+            ]
+        });
+        inject_cache_control(&mut body);
+        // Should mark the text block, not the thinking block
+        assert_eq!(body["messages"][1]["content"][0]["cache_control"]["type"], "ephemeral");
+        assert!(body["messages"][1]["content"][1].get("cache_control").is_none());
+    }
+
+    #[test]
+    fn test_inject_cache_control_no_assistant_messages() {
+        let mut body = json!({
+            "system": [{"type": "text", "text": "sys"}],
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "first message"}]}]
+        });
+        inject_cache_control(&mut body);
+        // System still gets marked, no assistant to mark
+        assert_eq!(body["system"][0]["cache_control"]["type"], "ephemeral");
+        assert!(body["messages"][0]["content"][0].get("cache_control").is_none());
+    }
+
+    #[test]
+    fn test_convert_with_auto_cache_enabled() {
+        let req = make_req(json!([
+            {"type": "message", "role": "user", "content": "q1"},
+            {"type": "message", "role": "assistant", "content": "a1"},
+            {"type": "message", "role": "user", "content": "q2"}
+        ]));
+        let result = convert(&req, "claude-3-5-sonnet", true).unwrap();
+        // With auto_cache=true, last assistant message should have cache_control
+        let msgs = result["messages"].as_array().unwrap();
+        let asst = &msgs[1];
+        assert_eq!(asst["content"][0]["cache_control"]["type"], "ephemeral");
+    }
+
+    #[test]
+    fn test_convert_with_auto_cache_disabled() {
+        let req = make_req(json!([
+            {"type": "message", "role": "user", "content": "q1"},
+            {"type": "message", "role": "assistant", "content": "a1"},
+            {"type": "message", "role": "user", "content": "q2"}
+        ]));
+        let result = convert(&req, "claude-3-5-sonnet", false).unwrap();
+        // With auto_cache=false, no cache_control anywhere
+        let msgs = result["messages"].as_array().unwrap();
+        assert!(msgs[1]["content"][0].get("cache_control").is_none());
     }
 }

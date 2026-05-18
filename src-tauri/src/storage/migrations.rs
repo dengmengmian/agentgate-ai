@@ -164,6 +164,16 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     if !has_cost {
         conn.execute_batch("ALTER TABLE request_logs ADD COLUMN cost REAL;")?;
     }
+    // Migration: add auto_cache_control and supports_cache columns
+    let has_acc: bool = conn.prepare("SELECT auto_cache_control FROM providers LIMIT 0").is_ok();
+    if !has_acc {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN auto_cache_control INTEGER;")?;
+    }
+    let has_sc: bool = conn.prepare("SELECT supports_cache FROM providers LIMIT 0").is_ok();
+    if !has_sc {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN supports_cache INTEGER;")?;
+    }
+
     // Backfill cost for logs that have tokens but no cost (runs on every startup,
     // catches newly added pricing defaults and previously unmatched models)
     let _ = crate::storage::pricing::backfill_costs(conn);

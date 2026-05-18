@@ -168,7 +168,9 @@ pub async fn handle_responses(
             ).await.map_err(|e| GatewayError(e))
         } else if config.is_anthropic() {
             // Claude Messages API conversion (only for Anthropic-type providers)
-            let anthropic_body = match responses_to_anthropic::convert(&req, &model) {
+            // auto_cache_control: default true unless provider explicitly set false
+            let auto_cache = provider.auto_cache_control.unwrap_or(true);
+            let anthropic_body = match responses_to_anthropic::convert(&req, &model, auto_cache) {
                 Ok(b) => b,
                 Err(e) => {
                     attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));

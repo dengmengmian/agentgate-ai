@@ -6,7 +6,7 @@ use crate::models::provider::{CreateProviderInput, Provider, UpdateProviderInput
 pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url,
-                protocol, timeout_seconds, status, supports_vision, enabled, is_active, created_at, updated_at
+                protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, enabled, is_active, created_at, updated_at
          FROM providers ORDER BY is_active DESC, created_at ASC",
     )?;
 
@@ -28,10 +28,12 @@ pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
             timeout_seconds: row.get(13)?,
             status: row.get(14)?,
             supports_vision: row.get(15)?,
-            enabled: row.get(16)?,
-            is_active: row.get(17)?,
-            created_at: row.get(18)?,
-            updated_at: row.get(19)?,
+            auto_cache_control: row.get(16)?,
+            supports_cache: row.get(17)?,
+            enabled: row.get(18)?,
+            is_active: row.get(19)?,
+            created_at: row.get(20)?,
+            updated_at: row.get(21)?,
         })
     })?;
 
@@ -45,7 +47,7 @@ pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<Provider, AppError> {
     conn.query_row(
         "SELECT id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url,
-                protocol, timeout_seconds, status, supports_vision, enabled, is_active, created_at, updated_at
+                protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, enabled, is_active, created_at, updated_at
          FROM providers WHERE id = ?1",
         [id],
         |row| {
@@ -66,10 +68,12 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Provider, AppError> {
                 timeout_seconds: row.get(13)?,
                 status: row.get(14)?,
                 supports_vision: row.get(15)?,
-                enabled: row.get(16)?,
-                is_active: row.get(17)?,
-                created_at: row.get(18)?,
-                updated_at: row.get(19)?,
+                auto_cache_control: row.get(16)?,
+                supports_cache: row.get(17)?,
+                enabled: row.get(18)?,
+                is_active: row.get(19)?,
+                created_at: row.get(20)?,
+                updated_at: row.get(21)?,
             })
         },
     )

@@ -367,6 +367,8 @@ mod tests {
             timeout_seconds: 60,
             status: "ok".to_string(),
             supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
