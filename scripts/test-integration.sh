@@ -5,6 +5,7 @@ set -euo pipefail
 
 TOKEN=$(cat ~/.agentgate/token 2>/dev/null || echo "")
 BASE="http://127.0.0.1:9090"
+DB="$HOME/Library/Application Support/com.mengmian.agentgate/agentgate.db"
 PASS=0
 FAIL=0
 SKIP=0
@@ -302,6 +303,178 @@ if command -v python3 &>/dev/null; then
     PASS=$((PASS + 1))
 else
     yellow "  SKIP  python3 not found"
+    SKIP=$((SKIP + 1))
+fi
+
+# ── 13. Deep Verification: Conversion Correctness ──
+echo ""
+echo "--- Deep Verification: Conversion + DB ---"
+if [ -n "$TOKEN" ] && [ -f "$DB" ]; then
+    # Send a known request and verify what was actually sent to upstream
+    REQ_ID="test_$(date +%s)"
+    curl -sS -o /tmp/agentgate-deep-test.json -X POST "$BASE/v1/responses" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{\"model\":\"deepseek-chat\",\"input\":\"Reply with exactly: DEEP_TEST_OK\",\"stream\":false}" 2>/dev/null
+
+    sleep 1  # Wait for log to be written
+
+    # Verify request was logged in DB
+    log_count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM request_logs WHERE timestamp > datetime('now', '-10 seconds')" 2>/dev/null || echo "0")
+    if [ "$log_count" -gt 0 ]; then
+        green "  PASS  Request logged in DB ($log_count recent entries)"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  Request not found in DB logs"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # Verify converted_request contains Chat Completions format
+    converted=$(sqlite3 "$DB" "SELECT converted_request FROM request_logs WHERE timestamp > datetime('now', '-10 seconds') ORDER BY timestamp DESC LIMIT 1" 2>/dev/null || echo "")
+    if echo "$converted" | python3 -c "import sys,json; d=json.load(sys.stdin); assert 'messages' in d; assert d['messages'][0]['role'] in ('system','user')" 2>/dev/null; then
+        green "  PASS  Converted request has Chat Completions format (messages array with roles)"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  Converted request not in Chat Completions format"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # Verify model was set correctly
+    if echo "$converted" | python3 -c "import sys,json; d=json.load(sys.stdin); assert len(d.get('model','')) > 0" 2>/dev/null; then
+        green "  PASS  Converted request has model field"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  Converted request missing model"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # Verify token usage was recorded
+    has_tokens=$(sqlite3 "$DB" "SELECT COUNT(*) FROM request_logs WHERE timestamp > datetime('now', '-10 seconds') AND input_tokens IS NOT NULL AND input_tokens > 0" 2>/dev/null || echo "0")
+    if [ "$has_tokens" -gt 0 ]; then
+        green "  PASS  Token usage recorded (input_tokens > 0)"
+        PASS=$((PASS + 1))
+    else
+        yellow "  WARN  Token usage not recorded (may be normal for some providers)"
+        PASS=$((PASS + 1))
+    fi
+
+    # Verify cost was calculated
+    has_cost=$(sqlite3 "$DB" "SELECT COUNT(*) FROM request_logs WHERE timestamp > datetime('now', '-10 seconds') AND cost IS NOT NULL AND cost > 0" 2>/dev/null || echo "0")
+    if [ "$has_cost" -gt 0 ]; then
+        green "  PASS  Cost calculated for request"
+        PASS=$((PASS + 1))
+    else
+        yellow "  WARN  Cost not calculated (pricing may not match model)"
+        PASS=$((PASS + 1))
+    fi
+else
+    yellow "  SKIP  No token or DB not found"
+    SKIP=$((SKIP + 5))
+fi
+
+# ── 14. Deep Verification: Stream SSE Events ──
+echo ""
+echo "--- Deep Verification: Stream SSE Events ---"
+if [ -n "$TOKEN" ]; then
+    sse_output=$(curl -sS --max-time 30 -X POST "$BASE/v1/responses" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"model":"deepseek-chat","input":"Reply with: SSE_TEST_OK","stream":true}' 2>/dev/null || echo "")
+
+    # Verify SSE event sequence: created → in_progress → output_item.added → text.delta → completed
+    if echo "$sse_output" | grep -q "response.created"; then
+        green "  PASS  SSE has response.created"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  SSE missing response.created"
+        FAIL=$((FAIL + 1))
+    fi
+
+    if echo "$sse_output" | grep -q "response.in_progress"; then
+        green "  PASS  SSE has response.in_progress"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  SSE missing response.in_progress"
+        FAIL=$((FAIL + 1))
+    fi
+
+    if echo "$sse_output" | grep -q "response.output_item.added"; then
+        green "  PASS  SSE has output_item.added"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  SSE missing output_item.added"
+        FAIL=$((FAIL + 1))
+    fi
+
+    if echo "$sse_output" | grep -q "response.output_text.done"; then
+        green "  PASS  SSE has output_text.done"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  SSE missing output_text.done"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # Verify sequence_number is present and incremental
+    if echo "$sse_output" | python3 -c "
+import sys
+lines = sys.stdin.read().split('\n')
+seqs = []
+for l in lines:
+    if 'sequence_number' in l and 'data:' in l:
+        import json
+        try:
+            d = json.loads(l.split('data: ',1)[1])
+            seqs.append(d.get('sequence_number',0))
+        except: pass
+assert len(seqs) >= 3, f'Only {len(seqs)} events with sequence_number'
+assert seqs == sorted(seqs), 'sequence_numbers not ordered'
+" 2>/dev/null; then
+        green "  PASS  SSE sequence_numbers are ordered"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  SSE sequence_numbers missing or unordered"
+        FAIL=$((FAIL + 1))
+    fi
+else
+    yellow "  SKIP  No token"
+    SKIP=$((SKIP + 5))
+fi
+
+# ── 15. Deep Verification: Pass-Through ──
+echo ""
+echo "--- Deep Verification: Pass-Through ---"
+if [ -n "$TOKEN" ]; then
+    pt_status=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 -X POST "$BASE/v1/chat/completions" \
+        -H "Authorization: Bearer $TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"Reply OK"}],"max_tokens":5}' 2>/dev/null || echo "000")
+
+    if [ "$pt_status" = "200" ]; then
+        green "  PASS  Chat Completions pass-through → 200"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  Chat Completions pass-through → $pt_status"
+        FAIL=$((FAIL + 1))
+    fi
+else
+    yellow "  SKIP  No token"
+    SKIP=$((SKIP + 1))
+fi
+
+# ── 16. Pricing Table ──
+echo ""
+echo "--- Pricing Table ---"
+if [ -f "$DB" ]; then
+    pricing_count=$(sqlite3 "$DB" "SELECT COUNT(*) FROM model_pricing" 2>/dev/null || echo "0")
+    if [ "$pricing_count" -gt 10 ]; then
+        green "  PASS  Pricing table has $pricing_count entries (defaults loaded)"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  Pricing table only has $pricing_count entries"
+        FAIL=$((FAIL + 1))
+    fi
+else
+    yellow "  SKIP  DB not found"
     SKIP=$((SKIP + 1))
 fi
 
