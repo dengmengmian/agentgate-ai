@@ -256,6 +256,10 @@ const translations: Record<string, Record<Locale, string>> = {
   "stats.input_tokens": { en: "Input Tokens", zh: "输入 Token" },
   "stats.output_tokens": { en: "Output Tokens", zh: "输出 Token" },
   "stats.total_tokens": { en: "Total Tokens", zh: "总 Token" },
+  "stats.total_cost": { en: "Total Cost", zh: "总费用" },
+  "stats.today_cost": { en: "Today's Cost", zh: "今日费用" },
+  "stats.avg_cost": { en: "Avg Cost", zh: "平均费用" },
+  "stats.per_request": { en: "per request", zh: "每次请求" },
   "stats.requests": { en: "Requests", zh: "请求" },
 
   // ── Diagnostics ──

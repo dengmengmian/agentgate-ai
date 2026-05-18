@@ -160,6 +160,10 @@ pub fn run() {
             commands::generate_gemini_config,
             commands::toggle_gemini_provider,
             commands::open_gemini_config,
+            // Pricing
+            commands::list_model_pricing,
+            commands::upsert_model_pricing,
+            commands::delete_model_pricing,
             // AtomCode
             commands::detect_atomcode_config,
             commands::apply_atomcode_config,

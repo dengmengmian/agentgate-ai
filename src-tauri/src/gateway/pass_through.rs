@@ -218,7 +218,7 @@ async fn handle_stream(
                 Some(&truncate(&sanitized_sse, MAX_SSE_LOG)),
                 None, None,
                 Some(&trace),
-                None, None,
+                None, None, None, // no cost for pass-through
             );
         }
     });
@@ -286,7 +286,7 @@ fn log_to_db(
             None, None, None,
             error_message,
             Some(trace_json),
-            None, None,
+            None, None, None,
         );
     }
 }
@@ -383,7 +383,7 @@ pub async fn handle_anthropic(
                     &conn, &req_id, "Claude Code", &provider_name, &model,
                     "/v1/messages", 200, latency,
                     Some(&raw_req), None, None, None,
-                    Some(&truncate(&sanitized_sse, MAX_SSE_LOG)), None, None, Some(&trace), None, None,
+                    Some(&truncate(&sanitized_sse, MAX_SSE_LOG)), None, None, Some(&trace), None, None, None,
                 );
             }
         });

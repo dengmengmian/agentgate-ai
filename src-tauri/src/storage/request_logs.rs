@@ -146,6 +146,7 @@ pub fn insert(
     trace_json: Option<&str>,
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
+    cost: Option<f64>,
 ) -> Result<(), AppError> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -154,13 +155,13 @@ pub fn insert(
         "INSERT INTO request_logs (id, request_id, timestamp, client, provider, model, route,
                 status_code, latency_ms, raw_request, converted_request, raw_response,
                 converted_response, sse_events, tool_calls, error_message, trace_json,
-                input_tokens, output_tokens)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+                input_tokens, output_tokens, cost)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
         rusqlite::params![
             &id, request_id, &now, client, provider, model, route,
             status_code, latency_ms, raw_request, converted_request, raw_response,
             converted_response, sse_events, tool_calls, error_message, trace_json,
-            input_tokens, output_tokens,
+            input_tokens, output_tokens, cost,
         ],
     )?;
     Ok(())
@@ -179,7 +180,8 @@ pub fn get_stats(conn: &Connection) -> Result<RequestStats, AppError> {
 
     // Single query for all global + today aggregates
     let (total, success, errors, avg_latency, total_input_tokens, total_output_tokens,
-         today_total, today_errors, today_input_tokens, today_output_tokens): (i64, i64, i64, f64, i64, i64, i64, i64, i64, i64) =
+         today_total, today_errors, today_input_tokens, today_output_tokens,
+         total_cost, today_cost): (i64, i64, i64, f64, i64, i64, i64, i64, i64, i64, f64, f64) =
         conn.query_row(
             "SELECT
                 COUNT(*),
@@ -191,38 +193,41 @@ pub fn get_stats(conn: &Connection) -> Result<RequestStats, AppError> {
                 SUM(CASE WHEN timestamp LIKE ?1 THEN 1 ELSE 0 END),
                 SUM(CASE WHEN timestamp LIKE ?1 AND (status_code >= 400 OR status_code < 200) THEN 1 ELSE 0 END),
                 COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN input_tokens ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN output_tokens ELSE 0 END), 0)
+                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN output_tokens ELSE 0 END), 0),
+                COALESCE(SUM(cost), 0.0),
+                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN cost ELSE 0.0 END), 0.0)
             FROM request_logs",
             [&today_prefix],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?)),
         )?;
 
     // Daily stats (last 7 days) — single query with GROUP BY
     let seven_days_ago = (chrono::Utc::now() - chrono::Duration::days(6)).format("%Y-%m-%d").to_string();
-    let mut daily_map = std::collections::HashMap::new();
+    let mut daily_map: std::collections::HashMap<String, (i64, i64, i64, i64, f64)> = std::collections::HashMap::new();
     let mut stmt = conn.prepare(
         "SELECT substr(timestamp, 1, 10) as day,
                 COUNT(*),
                 SUM(CASE WHEN status_code >= 400 OR status_code < 200 THEN 1 ELSE 0 END),
                 COALESCE(SUM(input_tokens), 0),
-                COALESCE(SUM(output_tokens), 0)
+                COALESCE(SUM(output_tokens), 0),
+                COALESCE(SUM(cost), 0.0)
          FROM request_logs
          WHERE timestamp >= ?1
          GROUP BY day"
     )?;
     let rows = stmt.query_map([&seven_days_ago], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?))
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?, r.get::<_, f64>(5)?))
     })?;
     for row in rows {
-        if let Ok((day, count, errs, inp, outp)) = row {
-            daily_map.insert(day, (count, errs, inp, outp));
+        if let Ok((day, count, errs, inp, outp, cost)) = row {
+            daily_map.insert(day, (count, errs, inp, outp, cost));
         }
     }
     let mut daily = Vec::new();
     for i in (0..7).rev() {
         let day = (chrono::Utc::now() - chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
-        let (count, errs, inp, outp) = daily_map.get(&day).copied().unwrap_or((0, 0, 0, 0));
-        daily.push(DailyStat { date: day, total: count, errors: errs, success: count - errs, input_tokens: inp, output_tokens: outp });
+        let (count, errs, inp, outp, cost) = daily_map.get(&day).copied().unwrap_or((0, 0, 0, 0, 0.0));
+        daily.push(DailyStat { date: day, total: count, errors: errs, success: count - errs, input_tokens: inp, output_tokens: outp, cost });
     }
 
     // Top providers
@@ -238,6 +243,7 @@ pub fn get_stats(conn: &Connection) -> Result<RequestStats, AppError> {
         today_total, today_errors,
         total_input_tokens, total_output_tokens,
         today_input_tokens, today_output_tokens,
+        total_cost, today_cost,
         daily, providers,
     })
 }
@@ -257,6 +263,8 @@ pub struct RequestStats {
     pub total_output_tokens: i64,
     pub today_input_tokens: i64,
     pub today_output_tokens: i64,
+    pub total_cost: f64,
+    pub today_cost: f64,
     pub daily: Vec<DailyStat>,
     pub providers: Vec<ProviderStat>,
 }
@@ -269,6 +277,7 @@ pub struct DailyStat {
     pub success: i64,
     pub input_tokens: i64,
     pub output_tokens: i64,
+    pub cost: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]

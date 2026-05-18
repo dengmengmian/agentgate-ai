@@ -1245,6 +1245,10 @@ fn log_request_success(
     output_tokens: Option<i64>,
 ) {
     if let Some(conn) = lock_db(db) {
+        // Calculate cost from pricing table
+        let cost = crate::storage::pricing::calculate_cost_for_request(
+            &conn, provider, model, input_tokens, output_tokens,
+        );
         let _ = crate::storage::request_logs::insert(
             &conn, request_id, "Codex", provider, model,
             "/v1/responses", status_code, latency_ms,
@@ -1252,7 +1256,7 @@ fn log_request_success(
             if raw_response.is_empty() { None } else { Some(raw_response) },
             if converted_response.is_empty() { None } else { Some(converted_response) },
             None, tool_calls, None, trace_json,
-            input_tokens, output_tokens,
+            input_tokens, output_tokens, cost,
         );
     }
 }
@@ -1284,7 +1288,7 @@ fn log_request_error_full(
             None, None, None, None,
             Some(&error_msg),
             Some(&trace),
-            None, None,
+            None, None, None, // no cost for errors
         );
     }
 }

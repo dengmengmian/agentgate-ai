@@ -144,6 +144,27 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN responses_base_url TEXT;")?;
     }
 
+    // Phase 7b: model_pricing table
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS model_pricing (
+            id TEXT PRIMARY KEY,
+            provider TEXT NOT NULL,
+            model_pattern TEXT NOT NULL,
+            input_price REAL NOT NULL,
+            output_price REAL NOT NULL,
+            is_custom INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL
+        )"
+    )?;
+    // Populate defaults
+    crate::storage::pricing::ensure_defaults(conn)?;
+
+    // Migration: add cost column to request_logs
+    let has_cost: bool = conn.prepare("SELECT cost FROM request_logs LIMIT 0").is_ok();
+    if !has_cost {
+        conn.execute_batch("ALTER TABLE request_logs ADD COLUMN cost REAL;")?;
+    }
+
     // Phase 7: config_backups table
     conn.execute_batch(
         "

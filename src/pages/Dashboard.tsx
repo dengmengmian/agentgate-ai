@@ -11,6 +11,7 @@ import {
   BarChart3,
   ArrowDownToLine,
   ArrowUpFromLine,
+  DollarSign,
 } from "lucide-react";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { RecentRequests } from "@/components/dashboard/RecentRequests";
@@ -28,6 +29,12 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
+}
+
+function formatCost(n: number): string {
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  if (n < 1) return `$${n.toFixed(3)}`;
+  return `$${n.toFixed(2)}`;
 }
 
 export function Dashboard() {
@@ -118,6 +125,15 @@ export function Dashboard() {
           <MetricCard label={t("stats.input_tokens")} value={formatTokens(stats.total_input_tokens)} icon={ArrowDownToLine} trend={`${t("stats.today")}: ${formatTokens(stats.today_input_tokens)}`} />
           <MetricCard label={t("stats.output_tokens")} value={formatTokens(stats.total_output_tokens)} icon={ArrowUpFromLine} trend={`${t("stats.today")}: ${formatTokens(stats.today_output_tokens)}`} />
           <MetricCard label={t("stats.total_tokens")} value={formatTokens(stats.total_input_tokens + stats.total_output_tokens)} icon={Zap} />
+        </div>
+      )}
+
+      {/* Cost Stats */}
+      {stats && (stats.total_cost > 0 || stats.today_cost > 0) && (
+        <div className="grid grid-cols-3 gap-4">
+          <MetricCard label={t("stats.total_cost")} value={formatCost(stats.total_cost)} icon={DollarSign} trend={`${t("stats.today")}: ${formatCost(stats.today_cost)}`} />
+          <MetricCard label={t("stats.today_cost")} value={formatCost(stats.today_cost)} icon={DollarSign} />
+          <MetricCard label={t("stats.avg_cost")} value={stats.total > 0 ? formatCost(stats.total_cost / stats.total) : "$0"} icon={DollarSign} trend={t("stats.per_request")} />
         </div>
       )}
 

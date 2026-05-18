@@ -10,6 +10,8 @@ export interface RequestStats {
   total_output_tokens: number;
   today_input_tokens: number;
   today_output_tokens: number;
+  total_cost: number;
+  today_cost: number;
   daily: DailyStat[];
   providers: ProviderStat[];
 }
@@ -21,9 +23,20 @@ export interface DailyStat {
   success: number;
   input_tokens: number;
   output_tokens: number;
+  cost: number;
 }
 
 export interface ProviderStat {
   name: string;
   count: number;
+}
+
+export interface ModelPricing {
+  id: string;
+  provider: string;
+  model_pattern: string;
+  input_price: number;
+  output_price: number;
+  is_custom: boolean;
+  updated_at: string;
 }

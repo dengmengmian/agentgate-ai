@@ -346,10 +346,24 @@ export async function resetAllProviderRuntimeStatus(): Promise<boolean> {
 
 // ── Stats ──────────────────────────────────────────────────────
 
-import type { RequestStats } from "@/types/stats";
+import type { RequestStats, ModelPricing } from "@/types/stats";
 
 export async function getRequestStats(): Promise<RequestStats> {
   return cmd("get_request_stats");
+}
+
+// ── Pricing ───────────────────────────────────────────────────
+
+export async function listModelPricing(): Promise<ModelPricing[]> {
+  return cmd("list_model_pricing");
+}
+
+export async function upsertModelPricing(provider: string, model_pattern: string, input_price: number, output_price: number): Promise<ModelPricing> {
+  return cmd("upsert_model_pricing", { provider, modelPattern: model_pattern, inputPrice: input_price, outputPrice: output_price });
+}
+
+export async function deleteModelPricing(id: string): Promise<boolean> {
+  return cmd("delete_model_pricing", { id });
 }
 
 // ── Diagnostics ────────────────────────────────────────────────
