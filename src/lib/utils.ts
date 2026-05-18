@@ -7,12 +7,15 @@ export function cn(...inputs: ClassValue[]) {
 export function formatTimestamp(iso: string, locale: string = "en-US"): string {
   const d = new Date(iso);
   const loc = locale === "zh" ? "zh-CN" : locale;
-  return d.toLocaleTimeString(loc, {
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const time = d.toLocaleTimeString(loc, {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
     hour12: false,
   });
+  return `${month}-${day} ${time}`;
 }
 
 export function formatDate(iso: string, locale: string = "en-US"): string {
