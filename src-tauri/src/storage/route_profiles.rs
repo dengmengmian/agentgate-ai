@@ -143,7 +143,7 @@ pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RoutePr
                 p.supports_vision,
                 rpp.priority, rpp.enabled,
                 rpp.model_override, rpp.cooldown_seconds,
-                rpp.failover_on_status_codes, rpp.failover_on_error_keywords,
+                rpp.failover_on_status_codes, rpp.failover_on_error_keywords, rpp.routing_conditions,
                 COALESCE(prs.available, 1), prs.cooldown_until, COALESCE(prs.consecutive_failures, 0)
          FROM route_profile_providers rpp
          JOIN providers p ON p.id = rpp.provider_id
@@ -161,7 +161,8 @@ pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RoutePr
             priority: row.get(7)?, enabled: row.get(8)?,
             model_override: row.get(9)?, cooldown_seconds: row.get(10)?,
             failover_on_status_codes: row.get(11)?, failover_on_error_keywords: row.get(12)?,
-            runtime_available: row.get(13)?, cooldown_until: row.get(14)?, consecutive_failures: row.get(15)?,
+            routing_conditions: row.get(13)?,
+            runtime_available: row.get(14)?, cooldown_until: row.get(15)?, consecutive_failures: row.get(16)?,
         })
     })?;
 
@@ -190,13 +191,14 @@ pub fn add_provider(conn: &Connection, profile_id: &str, provider_id: &str, inpu
     let default_kw = serde_json::json!(["quota", "insufficient balance", "rate limit", "too many requests", "timeout"]).to_string();
 
     conn.execute(
-        "INSERT INTO route_profile_providers (id, route_profile_id, provider_id, priority, enabled, model_override, cooldown_seconds, failover_on_status_codes, failover_on_error_keywords, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6, ?7, ?8, ?9, ?9)",
+        "INSERT INTO route_profile_providers (id, route_profile_id, provider_id, priority, enabled, model_override, cooldown_seconds, failover_on_status_codes, failover_on_error_keywords, routing_conditions, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 1, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
         params![
             uuid::Uuid::new_v4().to_string(), profile_id, provider_id, priority,
             input.model_override, input.cooldown_seconds.unwrap_or(600),
             input.failover_on_status_codes.as_deref().unwrap_or(&default_codes),
             input.failover_on_error_keywords.as_deref().unwrap_or(&default_kw),
+            input.routing_conditions,
             &now,
         ],
     )?;

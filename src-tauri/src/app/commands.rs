@@ -63,7 +63,7 @@ pub fn create_provider(
             crate::models::route_profile::AddProviderToRouteInput {
                 priority: None, model_override: None,
                 cooldown_seconds: None, failover_on_status_codes: None,
-                failover_on_error_keywords: None,
+                failover_on_error_keywords: None, routing_conditions: None,
             },
         );
     }

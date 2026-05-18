@@ -174,6 +174,12 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN supports_cache INTEGER;")?;
     }
 
+    // Migration: add routing_conditions to route_profile_providers
+    let has_rc: bool = conn.prepare("SELECT routing_conditions FROM route_profile_providers LIMIT 0").is_ok();
+    if !has_rc {
+        conn.execute_batch("ALTER TABLE route_profile_providers ADD COLUMN routing_conditions TEXT;")?;
+    }
+
     // Backfill cost for logs that have tokens but no cost (runs on every startup,
     // catches newly added pricing defaults and previously unmatched models)
     let _ = crate::storage::pricing::backfill_costs(conn);

@@ -1,9 +1,12 @@
 use rusqlite::Connection;
+use serde::Deserialize;
+use serde_json::Value;
 use std::sync::{Arc, Mutex};
 
 use crate::errors::AppError;
 use crate::models::provider::Provider;
 use crate::models::route_profile::RouteProfileProviderView;
+use crate::protocol::openai_responses::ResponsesRequest;
 use crate::storage;
 
 /// The result of selecting a provider for a request.
@@ -34,10 +37,91 @@ pub struct ProviderCandidate {
     pub failover_on_error_keywords: Vec<String>,
 }
 
+/// Request characteristics for condition matching.
+#[derive(Debug, Clone)]
+pub struct RequestAnalysis {
+    pub input_char_count: usize,
+    pub has_images: bool,
+    pub has_tools: bool,
+    #[allow(dead_code)]
+    pub tool_count: usize,
+    pub system_text: String,
+    #[allow(dead_code)]
+    pub message_count: usize,
+}
+
+/// Analyze a ResponsesRequest to extract routing-relevant characteristics.
+pub fn analyze_request(req: &ResponsesRequest) -> RequestAnalysis {
+    let input_str = req.input.to_string();
+    let input_char_count = input_str.len();
+
+    let has_images = crate::gateway::routes::request_contains_images_pub(req);
+
+    let has_tools = req.tools.as_ref().map_or(false, |t| !t.is_empty());
+    let tool_count = req.tools.as_ref().map_or(0, |t| t.len());
+
+    let system_text = req.instructions.clone()
+        .or_else(|| req.system.clone())
+        .unwrap_or_default();
+
+    let message_count = match &req.input {
+        Value::Array(items) => items.iter().filter(|i| {
+            i.get("type").and_then(|t| t.as_str()) == Some("message")
+        }).count(),
+        _ => 1,
+    };
+
+    RequestAnalysis {
+        input_char_count,
+        has_images,
+        has_tools,
+        tool_count,
+        system_text,
+        message_count,
+    }
+}
+
+/// Routing conditions that can be attached to a provider in a route profile.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct RoutingConditions {
+    pub min_input_chars: Option<usize>,
+    pub max_input_chars: Option<usize>,
+    pub has_images: Option<bool>,
+    pub has_tools: Option<bool>,
+    pub system_keywords: Option<Vec<String>>,
+    pub model_override: Option<String>,
+}
+
+/// Check if all non-null conditions match the request analysis.
+fn matches_conditions(conditions: &RoutingConditions, analysis: &RequestAnalysis) -> bool {
+    if let Some(min) = conditions.min_input_chars {
+        if analysis.input_char_count < min { return false; }
+    }
+    if let Some(max) = conditions.max_input_chars {
+        if analysis.input_char_count > max { return false; }
+    }
+    if let Some(img) = conditions.has_images {
+        if analysis.has_images != img { return false; }
+    }
+    if let Some(tools) = conditions.has_tools {
+        if analysis.has_tools != tools { return false; }
+    }
+    if let Some(ref keywords) = conditions.system_keywords {
+        if !keywords.is_empty() {
+            let lower = analysis.system_text.to_lowercase();
+            if !keywords.iter().any(|kw| lower.contains(&kw.to_lowercase())) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
 fn build_candidates(
     conn: &Connection,
     rp_providers: &[RouteProfileProviderView],
     requested_model: Option<&str>,
+    analysis: Option<&RequestAnalysis>,
 ) -> Result<Vec<ProviderCandidate>, AppError> {
     let mut candidates = Vec::new();
 
@@ -46,10 +130,21 @@ fn build_candidates(
             continue;
         }
 
-        // Model resolution: model_override → model_mapping → supported_models → default_model
+        // Check routing conditions (if analysis available and conditions configured)
+        let mut condition_model_override: Option<String> = None;
+        if let (Some(ref cond_json), Some(ref req_analysis)) = (&rpp.routing_conditions, &analysis) {
+            if let Ok(conditions) = serde_json::from_str::<RoutingConditions>(cond_json) {
+                if !matches_conditions(&conditions, req_analysis) {
+                    continue; // Skip this provider — conditions not met
+                }
+                condition_model_override = conditions.model_override.clone();
+            }
+        }
+
+        // Model resolution: condition_model_override → model_override → model_mapping → supported_models → default_model
         let provider_info = storage::providers::get_by_id(conn, &rpp.provider_id).ok();
 
-        let model = rpp.model_override.clone().unwrap_or_else(|| {
+        let model = condition_model_override.or_else(|| rpp.model_override.clone()).unwrap_or_else(|| {
             if let Some(ref p) = provider_info {
                 if let Some(req) = requested_model {
                     return p.resolve_model(req);
@@ -121,10 +216,12 @@ fn select_global_fallback(
 }
 
 /// Select provider for failover mode. Returns the ordered list of providers to try.
+/// If `request` is provided, routing conditions on providers will be evaluated.
 pub fn select_for_failover(
     db: &Arc<Mutex<Connection>>,
     input_protocol: &str,
     requested_model: Option<&str>,
+    request: Option<&ResponsesRequest>,
 ) -> Result<ProviderSelection, AppError> {
     let conn = db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
 
@@ -136,7 +233,8 @@ pub fn select_for_failover(
             return Err(AppError::new("ROUTE_PROFILE_EMPTY", "Route profile has no providers"));
         }
 
-        let candidates = build_candidates(&conn, &rp_providers, requested_model)?;
+        let analysis = request.map(analyze_request);
+        let candidates = build_candidates(&conn, &rp_providers, requested_model, analysis.as_ref())?;
         if candidates.is_empty() {
             return Err(AppError::new("NO_PROVIDER_CANDIDATE", "No available provider candidate"));
         }
@@ -272,6 +370,83 @@ mod tests {
         c.failover_on_error_keywords = vec![];
         assert!(!should_failover(Some(500), "error", &c));
         assert!(!should_failover(None, "error", &c));
+    }
+
+    // ── Routing conditions tests ──
+
+    fn test_analysis(chars: usize, images: bool, tools: bool, system: &str) -> RequestAnalysis {
+        RequestAnalysis {
+            input_char_count: chars, has_images: images, has_tools: tools,
+            tool_count: 0, system_text: system.to_string(), message_count: 1,
+        }
+    }
+
+    #[test]
+    fn test_matches_conditions_empty() {
+        let cond = RoutingConditions::default();
+        let analysis = test_analysis(100, false, false, "");
+        assert!(matches_conditions(&cond, &analysis));
+    }
+
+    #[test]
+    fn test_matches_conditions_min_chars() {
+        let cond = RoutingConditions { min_input_chars: Some(1000), ..Default::default() };
+        assert!(!matches_conditions(&cond, &test_analysis(500, false, false, "")));
+        assert!(matches_conditions(&cond, &test_analysis(1000, false, false, "")));
+        assert!(matches_conditions(&cond, &test_analysis(5000, false, false, "")));
+    }
+
+    #[test]
+    fn test_matches_conditions_max_chars() {
+        let cond = RoutingConditions { max_input_chars: Some(1000), ..Default::default() };
+        assert!(matches_conditions(&cond, &test_analysis(500, false, false, "")));
+        assert!(matches_conditions(&cond, &test_analysis(1000, false, false, "")));
+        assert!(!matches_conditions(&cond, &test_analysis(5000, false, false, "")));
+    }
+
+    #[test]
+    fn test_matches_conditions_has_images() {
+        let cond = RoutingConditions { has_images: Some(true), ..Default::default() };
+        assert!(!matches_conditions(&cond, &test_analysis(100, false, false, "")));
+        assert!(matches_conditions(&cond, &test_analysis(100, true, false, "")));
+    }
+
+    #[test]
+    fn test_matches_conditions_has_tools() {
+        let cond = RoutingConditions { has_tools: Some(true), ..Default::default() };
+        assert!(!matches_conditions(&cond, &test_analysis(100, false, false, "")));
+        assert!(matches_conditions(&cond, &test_analysis(100, false, true, "")));
+    }
+
+    #[test]
+    fn test_matches_conditions_system_keywords() {
+        let cond = RoutingConditions {
+            system_keywords: Some(vec!["background".to_string(), "subagent".to_string()]),
+            ..Default::default()
+        };
+        assert!(!matches_conditions(&cond, &test_analysis(100, false, false, "You are a helpful assistant")));
+        assert!(matches_conditions(&cond, &test_analysis(100, false, false, "Run this in background mode")));
+        assert!(matches_conditions(&cond, &test_analysis(100, false, false, "This is a SUBAGENT task")));
+    }
+
+    #[test]
+    fn test_matches_conditions_combined() {
+        let cond = RoutingConditions {
+            min_input_chars: Some(1000),
+            has_images: Some(true),
+            ..Default::default()
+        };
+        assert!(!matches_conditions(&cond, &test_analysis(500, true, false, ""))); // chars too low
+        assert!(!matches_conditions(&cond, &test_analysis(2000, false, false, ""))); // no images
+        assert!(matches_conditions(&cond, &test_analysis(2000, true, false, ""))); // both match
+    }
+
+    #[test]
+    fn test_matches_conditions_parse_json() {
+        let json = r#"{"has_images": true, "system_keywords": ["background"]}"#;
+        let cond: RoutingConditions = serde_json::from_str(json).unwrap();
+        assert!(matches_conditions(&cond, &test_analysis(100, true, false, "background task")));
+        assert!(!matches_conditions(&cond, &test_analysis(100, false, false, "background task")));
     }
 
     #[test]

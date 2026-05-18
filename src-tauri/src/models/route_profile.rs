@@ -49,6 +49,7 @@ pub struct RouteProfileProviderView {
     pub cooldown_seconds: i64,
     pub failover_on_status_codes: Option<String>,
     pub failover_on_error_keywords: Option<String>,
+    pub routing_conditions: Option<String>,
     pub runtime_available: bool,
     pub cooldown_until: Option<String>,
     pub consecutive_failures: i64,
@@ -75,6 +76,7 @@ pub struct AddProviderToRouteInput {
     pub cooldown_seconds: Option<i64>,
     pub failover_on_status_codes: Option<String>,
     pub failover_on_error_keywords: Option<String>,
+    pub routing_conditions: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

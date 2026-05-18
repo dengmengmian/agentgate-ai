@@ -90,7 +90,7 @@ pub async fn handle_responses(
 
     // 2. Select provider via route profile (with failover candidates)
     let selection = crate::gateway::provider_selector::select_for_failover(
-        &state.db, "openai_responses", req.model.as_deref(),
+        &state.db, "openai_responses", req.model.as_deref(), Some(&req),
     ).map_err(|e| {
         log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
@@ -727,7 +727,7 @@ pub async fn handle_chat_completions(
     let request_id = format!("req_{}", &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]);
 
     let selection = crate::gateway::provider_selector::select_for_failover(
-        &state.db, "openai_chat_completions", None,
+        &state.db, "openai_chat_completions", None, None,
     ).map_err(|e| {
         log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
@@ -816,9 +816,9 @@ pub async fn handle_messages(
 
     // Select provider — try anthropic_messages protocol first, then openai_responses as fallback
     let selection = crate::gateway::provider_selector::select_for_failover(
-        &state.db, "anthropic_messages", None,
+        &state.db, "anthropic_messages", None, None,
     ).or_else(|_| crate::gateway::provider_selector::select_for_failover(
-        &state.db, "openai_responses", None,
+        &state.db, "openai_responses", None, None,
     )).map_err(|e| {
         log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
@@ -1135,6 +1135,11 @@ fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayE
 }
 
 /// Check if a Responses API request contains image content in its input.
+/// Check if the last user message in the request contains images.
+pub fn request_contains_images_pub(req: &ResponsesRequest) -> bool {
+    request_contains_images(req)
+}
+
 fn request_contains_images(req: &ResponsesRequest) -> bool {
     fn content_has_images(v: &Value) -> bool {
         match v {
