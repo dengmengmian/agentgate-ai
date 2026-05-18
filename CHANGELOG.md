@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.2] - 2026-05-18
+
+### Features / 功能
+
+- **23 个 Provider 预设**（原 7 个）— 新增 Google Gemini、xAI (Grok)、Mistral AI、Groq、Together AI、Fireworks AI、Cerebras、Perplexity、Cohere、智谱 GLM、通义千问、硅基流动、火山引擎、百川、阶跃星辰、零一万物，选择类型自动填充 Base URL 和默认模型
+
+### Bug Fixes / 修复
+
+- **修复 Anthropic SSE 流断开不通知客户端** — 流错误、Claude API 错误、空内容流结束三种场景均发送 `response.failed` 事件
+- **修复 SSE 帧解析** — 兼容 `\r\n\r\n` 分帧和 `event:X`（无空格）格式
+- **修复工具参数静默替换无日志** — 无效 JSON 参数替换为 `{}` 时打印警告日志
+- **统一 URL 构建逻辑** — `adapter.rs` 和 `route_decision.rs` 共用 `smart_append_path()`，消除重复代码
+
+---
+
 ## [0.2.1] - 2026-05-18
 
 ### Bug Fixes / 修复
