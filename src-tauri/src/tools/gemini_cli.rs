@@ -174,6 +174,10 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
         obj.remove("env");
     }
 
+    // Set auth type to gemini-api-key (required for GEMINI_API_KEY + GOOGLE_GEMINI_BASE_URL to work)
+    // Without this, Gemini CLI may use OAuth and ignore .env completely
+    doc["security"]["auth"]["selectedType"] = serde_json::json!("gemini-api-key");
+
     // Write settings.json atomically
     let new_content = serde_json::to_string_pretty(&doc).map_err(|e| {
         AppError::new("GEMINI_CONFIG_WRITE_FAILED", format!("Cannot serialize: {e}"))
