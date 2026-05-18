@@ -2,7 +2,7 @@ mod app;
 mod diagnostics;
 pub mod errors;
 pub mod gateway;
-mod models;
+pub mod models;
 pub mod protocol;
 pub mod providers;
 pub mod security;
