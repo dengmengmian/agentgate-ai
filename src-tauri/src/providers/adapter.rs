@@ -91,6 +91,35 @@ impl ProviderConfig {
         self.provider_type == "anthropic" || self.provider_type == "claude"
     }
 
+    pub fn is_gemini(&self) -> bool {
+        self.provider_type == "google_gemini"
+    }
+
+    /// Build the Gemini generateContent URL (includes model name in path).
+    pub fn gemini_generate_url(&self, model: &str) -> String {
+        let base = self.base_url.trim_end_matches('/');
+        // If base already ends with the full path, use as-is
+        if base.ends_with(":generateContent") {
+            return base.to_string();
+        }
+        if base.contains("/models/") {
+            return format!("{base}:generateContent");
+        }
+        format!("{base}/v1beta/models/{model}:generateContent")
+    }
+
+    /// Build the Gemini streamGenerateContent URL.
+    pub fn gemini_stream_url(&self, model: &str) -> String {
+        let base = self.base_url.trim_end_matches('/');
+        if base.ends_with(":streamGenerateContent") {
+            return base.to_string();
+        }
+        if base.contains("/models/") {
+            return format!("{base}:streamGenerateContent?alt=sse");
+        }
+        format!("{base}/v1beta/models/{model}:streamGenerateContent?alt=sse")
+    }
+
     /// Build the chat completions URL, avoiding double /v1.
     pub fn chat_completions_url(&self) -> String {
         smart_append_path(&self.base_url, "/chat/completions")
@@ -380,6 +409,102 @@ pub async fn send_anthropic_stream(
             AppError::new("UPSTREAM_STREAM_ERROR", format!("Claude returned HTTP {status}"))
                 .with_detail(truncate(&sanitized, 2000)),
         );
+    }
+
+    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))
+}
+
+/// Send a non-streaming request to Gemini API with retry.
+pub async fn send_gemini_non_stream(
+    client: &Client,
+    config: &ProviderConfig,
+    body: &Value,
+    model: &str,
+) -> Result<Value, AppError> {
+    let url = config.gemini_generate_url(model);
+    let mut last_err = None;
+
+    for attempt in 0..=MAX_RETRIES {
+        let resp = client.post(&url)
+            .header("Authorization", format!("Bearer {}", config.select_api_key()))
+            .header("Content-Type", "application/json")
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Gemini: {e}")))?;
+
+        let status = resp.status();
+        if status.is_success() {
+            let body_text = resp.text().await.unwrap_or_default();
+            let sanitized = config.sanitize(&body_text);
+            return serde_json::from_str(&sanitized).map_err(|e| {
+                AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse Gemini response: {e}"))
+                    .with_detail(truncate(&sanitized, 500))
+            });
+        }
+
+        let status_code = status.as_u16();
+        let retry_after = parse_retry_after(&resp);
+        let body_text = resp.text().await.unwrap_or_default();
+        let sanitized = config.sanitize(&body_text);
+
+        if is_retryable(status_code) && attempt < MAX_RETRIES {
+            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            last_err = Some(AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Gemini returned HTTP {status}"))
+                .with_detail(truncate(&sanitized, 2000)));
+            continue;
+        }
+
+        return Err(AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Gemini returned HTTP {status}"))
+            .with_detail(truncate(&sanitized, 2000)));
+    }
+
+    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
+}
+
+/// Send a streaming request to Gemini API with retry.
+pub async fn send_gemini_stream(
+    client: &Client,
+    config: &ProviderConfig,
+    body: &Value,
+    model: &str,
+) -> Result<reqwest::Response, AppError> {
+    let url = config.gemini_stream_url(model);
+    let mut last_err = None;
+
+    for attempt in 0..=MAX_RETRIES {
+        let resp = client.post(&url)
+            .header("Authorization", format!("Bearer {}", config.select_api_key()))
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream")
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Gemini: {e}")))?;
+
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(resp);
+        }
+
+        let status_code = status.as_u16();
+        let retry_after = parse_retry_after(&resp);
+        let body_text = resp.text().await.unwrap_or_default();
+        let sanitized = config.sanitize(&body_text);
+
+        if is_retryable(status_code) && attempt < MAX_RETRIES {
+            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            last_err = Some(AppError::new("UPSTREAM_STREAM_ERROR", format!("Gemini returned HTTP {status}"))
+                .with_detail(truncate(&sanitized, 2000)));
+            continue;
+        }
+
+        return Err(AppError::new("UPSTREAM_STREAM_ERROR", format!("Gemini returned HTTP {status}"))
+            .with_detail(truncate(&sanitized, 2000)));
     }
 
     Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))

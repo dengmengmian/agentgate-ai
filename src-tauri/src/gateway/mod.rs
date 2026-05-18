@@ -2,6 +2,7 @@ pub mod server;
 pub mod routes;
 pub mod sse;
 pub mod sse_anthropic;
+pub mod sse_gemini;
 pub mod route_decision;
 pub mod pass_through;
 pub mod provider_selector;
