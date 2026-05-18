@@ -384,6 +384,171 @@ pub async fn detect_provider_vision(
     })
 }
 
+#[tauri::command]
+pub async fn detect_provider_cache(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<ProviderTestResult, AppError> {
+    let provider = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::providers::get_by_id(&conn, &id)?
+    };
+
+    // Cache probe only works for providers with anthropic_base_url or anthropic type
+    let anthropic_url = if provider.provider_type == "anthropic" || provider.provider_type == "claude" {
+        let base = provider.base_url.trim_end_matches('/');
+        Some(crate::providers::adapter::smart_append_path(base, "/messages"))
+    } else if let Some(ref abu) = provider.anthropic_base_url {
+        if !abu.is_empty() {
+            Some(crate::providers::adapter::smart_append_path(abu, "/messages"))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let url = match anthropic_url {
+        Some(u) => u,
+        None => {
+            return Ok(ProviderTestResult {
+                success: false,
+                status: "skipped".to_string(),
+                message: "Cache probe only works for Anthropic or providers with Anthropic endpoint".to_string(),
+                latency_ms: None,
+                supports_vision: None,
+            });
+        }
+    };
+
+    let api_key = match provider.api_key {
+        Some(ref k) if !k.is_empty() => {
+            // Parse multi-key, use first
+            let trimmed = k.trim();
+            if trimmed.starts_with('[') {
+                serde_json::from_str::<Vec<String>>(trimmed)
+                    .ok()
+                    .and_then(|v| v.into_iter().find(|s| !s.is_empty()))
+                    .unwrap_or_else(|| trimmed.to_string())
+            } else {
+                trimmed.to_string()
+            }
+        }
+        _ => {
+            return Ok(ProviderTestResult {
+                success: false, status: "failed".to_string(),
+                message: "API key is not set".to_string(),
+                latency_ms: None, supports_vision: None,
+            });
+        }
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(provider.timeout_seconds as u64))
+        .build()
+        .map_err(|e| AppError::internal(format!("HTTP client error: {e}")))?;
+
+    // Build a large enough system prompt (>1024 tokens for cache eligibility)
+    let long_system = "You are a helpful assistant. ".repeat(100); // ~600 words, >1024 tokens
+    let probe_body = serde_json::json!({
+        "model": provider.default_model,
+        "system": [{"type": "text", "text": long_system, "cache_control": {"type": "ephemeral"}}],
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 1
+    });
+
+    let is_anthropic_type = provider.provider_type == "anthropic" || provider.provider_type == "claude";
+
+    let build_req = |client: &reqwest::Client| {
+        let mut rb = client.post(&url)
+            .header("Content-Type", "application/json");
+        if is_anthropic_type {
+            rb = rb.header("x-api-key", &api_key)
+                .header("anthropic-version", "2023-06-01");
+        } else {
+            rb = rb.header("Authorization", format!("Bearer {api_key}"));
+        }
+        if let Some(ref eh) = provider.extra_headers {
+            if let Ok(headers) = serde_json::from_str::<std::collections::HashMap<String, String>>(eh) {
+                for (k, v) in headers {
+                    if let (Ok(name), Ok(val)) = (
+                        reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                        reqwest::header::HeaderValue::from_str(&v),
+                    ) {
+                        rb = rb.header(name, val);
+                    }
+                }
+            }
+        }
+        rb.json(&probe_body)
+    };
+
+    let start = Instant::now();
+
+    // First request: creates cache
+    let resp1 = build_req(&client).send().await;
+    if let Err(e) = resp1 {
+        return Ok(ProviderTestResult {
+            success: false, status: "failed".to_string(),
+            message: format!("Cache probe request 1 failed: {e}"),
+            latency_ms: Some(start.elapsed().as_millis() as u64), supports_vision: None,
+        });
+    }
+    let resp1 = resp1.unwrap();
+    if !resp1.status().is_success() {
+        let body = resp1.text().await.unwrap_or_default();
+        let sanitized = body.replace(&api_key, "sk-***REDACTED***");
+        return Ok(ProviderTestResult {
+            success: false, status: "failed".to_string(),
+            message: format!("Cache probe request 1 HTTP error: {}", &sanitized[..sanitized.len().min(500)]),
+            latency_ms: Some(start.elapsed().as_millis() as u64), supports_vision: None,
+        });
+    }
+    // Consume body
+    let _ = resp1.text().await;
+
+    // Second request: should hit cache
+    let resp2 = build_req(&client).send().await;
+    let latency = start.elapsed().as_millis() as u64;
+
+    let supports_cache = match resp2 {
+        Ok(resp) if resp.status().is_success() => {
+            let body = resp.text().await.unwrap_or_default();
+            // Check for cache_read_input_tokens > 0
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
+                let cache_read = json.get("usage")
+                    .and_then(|u| u.get("cache_read_input_tokens"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                cache_read > 0
+            } else {
+                false
+            }
+        }
+        _ => false,
+    };
+
+    // Save result
+    {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::providers::update_supports_cache(&conn, &id, supports_cache)?;
+    }
+
+    let message = if supports_cache {
+        "Cache supported — cache_read_input_tokens > 0 on second request".to_string()
+    } else {
+        "Cache not detected — cache_read_input_tokens was 0 on second request".to_string()
+    };
+
+    Ok(ProviderTestResult {
+        success: true,
+        status: "detected".to_string(),
+        message,
+        latency_ms: Some(latency),
+        supports_vision: None, // reuse struct, this field unused here
+    })
+}
+
 // ── Gateway Commands ───────────────────────────────────────────
 
 #[tauri::command]

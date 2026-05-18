@@ -85,6 +85,10 @@ export async function detectProviderVision(id: string): Promise<ProviderTestResu
   return cmd("detect_provider_vision", { id });
 }
 
+export async function detectProviderCache(id: string): Promise<ProviderTestResult> {
+  return cmd("detect_provider_cache", { id });
+}
+
 // ── Gateway ────────────────────────────────────────────────────
 
 export async function getGatewayStatus(): Promise<GatewayStatus> {

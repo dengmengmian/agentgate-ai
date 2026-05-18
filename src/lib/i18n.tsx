@@ -54,6 +54,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.auto_cache_hint_native": { en: "Inject cache_control for Anthropic prompt caching. Reduces input cost by ~90% on cache hits.", zh: "自动注入 cache_control 实现 Anthropic prompt 缓存，缓存命中时输入成本降低约 90%。" },
   "providers.auto_cache_hint_compat": { en: "Inject cache_control for Anthropic-compatible endpoint. Whether caching works depends on upstream implementation. Check cache_read_tokens in request logs to verify.", zh: "为 Anthropic 兼容端点注入 cache_control。是否生效取决于上游实现，可通过请求日志的 cache_read_tokens 字段验证。" },
   "providers.cache_enabled": { en: "Cache", zh: "缓存" },
+  "providers.cache_supported": { en: "Cache ✓", zh: "支持缓存" },
+  "providers.cache_not_supported": { en: "No Cache", zh: "不支持缓存" },
   "providers.recommended": { en: "Recommended", zh: "推荐" },
   "providers.experimental": { en: "Experimental", zh: "实验性" },
   "providers.default_model": { en: "Default Model", zh: "默认模型" },

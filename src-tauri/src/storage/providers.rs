@@ -253,3 +253,12 @@ pub fn update_supports_vision(conn: &Connection, id: &str, supports_vision: bool
     )?;
     Ok(())
 }
+
+pub fn update_supports_cache(conn: &Connection, id: &str, supports_cache: bool) -> Result<(), AppError> {
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE providers SET supports_cache = ?1, updated_at = ?2 WHERE id = ?3",
+        params![supports_cache, &now, id],
+    )?;
+    Ok(())
+}

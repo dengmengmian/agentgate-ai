@@ -44,6 +44,7 @@ export function Providers() {
       setFormOpen(false);
       // Auto-detect vision support for new provider
       api.detectProviderVision(created.id).catch(() => {});
+      api.detectProviderCache(created.id).catch(() => {});
       loadProviders();
     } catch (err) {
       toast("error", (err as api.AppError).message);
@@ -64,6 +65,7 @@ export function Providers() {
       setEditTarget(null);
       // Auto-detect vision support after update
       api.detectProviderVision(editTarget.id).catch(() => {});
+      api.detectProviderCache(editTarget.id).catch(() => {});
       loadProviders();
     } catch (err) {
       toast("error", (err as api.AppError).message);
@@ -98,13 +100,15 @@ export function Providers() {
       const result = await api.testProvider(provider.id);
       if (result.success) {
         toast("success", result.message);
-        // Auto-detect vision support after successful connection test
+        // Auto-detect vision + cache support after successful connection test
         try {
           const visionResult = await api.detectProviderVision(provider.id);
           toast("success", visionResult.message);
-        } catch {
-          // Vision detection is best-effort, don't block on failure
-        }
+        } catch { /* best-effort */ }
+        try {
+          const cacheResult = await api.detectProviderCache(provider.id);
+          if (cacheResult.success) toast("success", cacheResult.message);
+        } catch { /* best-effort */ }
       } else {
         toast("error", result.message);
       }

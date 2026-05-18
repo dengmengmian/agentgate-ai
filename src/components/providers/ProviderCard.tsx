@@ -47,7 +47,13 @@ export function ProviderCard({
           {provider.supports_vision === false && (
             <StatusBadge variant="muted">{t("providers.vision_not_supported")}</StatusBadge>
           )}
-          {provider.auto_cache_control !== false && (provider.provider_type === "anthropic" || provider.anthropic_base_url) && (
+          {provider.supports_cache === true && (
+            <StatusBadge variant="accent">{t("providers.cache_supported")}</StatusBadge>
+          )}
+          {provider.supports_cache === false && (provider.provider_type === "anthropic" || provider.anthropic_base_url) && (
+            <StatusBadge variant="muted">{t("providers.cache_not_supported")}</StatusBadge>
+          )}
+          {provider.supports_cache == null && provider.auto_cache_control !== false && (provider.provider_type === "anthropic" || provider.anthropic_base_url) && (
             <StatusBadge variant="accent">{t("providers.cache_enabled")}</StatusBadge>
           )}
         </div>
