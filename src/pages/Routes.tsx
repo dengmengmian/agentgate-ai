@@ -466,12 +466,32 @@ export function Routes() {
   );
 }
 
+const CONDITION_PRESETS: { key: string; icon: string; conditions: RoutingConditions }[] = [
+  { key: "images", icon: "🖼", conditions: { has_images: true } },
+  { key: "reasoning", icon: "🧠", conditions: { system_keywords: ["reason", "think", "analyze", "深度", "推理"] } },
+  { key: "background", icon: "🏃", conditions: { system_keywords: ["background", "subagent", "后台"] } },
+  { key: "long_text", icon: "📄", conditions: { min_input_chars: 100000 } },
+  { key: "tools", icon: "🔧", conditions: { has_tools: true } },
+];
+
+function detectPreset(c: RoutingConditions): string {
+  for (const p of CONDITION_PRESETS) {
+    if (JSON.stringify(p.conditions) === JSON.stringify(c)) return p.key;
+  }
+  if (Object.keys(c).length === 0) return "none";
+  return "custom";
+}
+
 function ConditionsDialog({ target, onSave, onClose }: {
   target: { providerName: string; current: RoutingConditions };
   onSave: (c: RoutingConditions) => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
+  const [selected, setSelected] = useState(() => detectPreset(target.current));
+  const [showCustom, setShowCustom] = useState(() => detectPreset(target.current) === "custom");
+
+  // Custom fields
   const [minChars, setMinChars] = useState(target.current.min_input_chars?.toString() ?? "");
   const [maxChars, setMaxChars] = useState(target.current.max_input_chars?.toString() ?? "");
   const [hasImages, setHasImages] = useState<string>(target.current.has_images === true ? "true" : target.current.has_images === false ? "false" : "");
@@ -480,6 +500,19 @@ function ConditionsDialog({ target, onSave, onClose }: {
   const [modelOverride, setModelOverride] = useState(target.current.model_override ?? "");
 
   const handleSave = () => {
+    if (selected === "none") { onSave({}); return; }
+
+    if (selected !== "custom") {
+      const preset = CONDITION_PRESETS.find(p => p.key === selected);
+      if (preset) {
+        const c = { ...preset.conditions };
+        if (modelOverride.trim()) c.model_override = modelOverride.trim();
+        onSave(c);
+        return;
+      }
+    }
+
+    // Custom
     const c: RoutingConditions = {};
     if (minChars) c.min_input_chars = parseInt(minChars, 10) || null;
     if (maxChars) c.max_input_chars = parseInt(maxChars, 10) || null;
@@ -505,50 +538,72 @@ function ConditionsDialog({ target, onSave, onClose }: {
         <div className="space-y-3 p-5">
           <p className="text-[11px] text-text-muted">{t("routes.conditions_hint")}</p>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.min_chars")}</label>
-              <input type="number" value={minChars} onChange={(e) => setMinChars(e.target.value)} placeholder="e.g. 100000" className="form-input w-full" />
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.max_chars")}</label>
-              <input type="number" value={maxChars} onChange={(e) => setMaxChars(e.target.value)} placeholder="e.g. 500000" className="form-input w-full" />
-            </div>
+          {/* Preset scene buttons */}
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => { setSelected("none"); setShowCustom(false); }} className={`rounded-md border px-3 py-2 text-left text-xs transition-colors ${selected === "none" ? "border-accent bg-accent/10 text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
+              🚫 {t("routes.scene_none")}
+            </button>
+            {CONDITION_PRESETS.map(p => (
+              <button key={p.key} onClick={() => { setSelected(p.key); setShowCustom(false); }} className={`rounded-md border px-3 py-2 text-left text-xs transition-colors ${selected === p.key ? "border-accent bg-accent/10 text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
+                {p.icon} {t(`routes.scene_${p.key}`)}
+              </button>
+            ))}
+            <button onClick={() => { setSelected("custom"); setShowCustom(true); }} className={`rounded-md border px-3 py-2 text-left text-xs transition-colors ${selected === "custom" ? "border-accent bg-accent/10 text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
+              ⚙️ {t("routes.scene_custom")}
+            </button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* Model override — always visible when a condition is selected */}
+          {selected !== "none" && (
             <div>
-              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.has_images")}</label>
-              <select value={hasImages} onChange={(e) => setHasImages(e.target.value)} className="form-input w-full">
-                <option value="">{t("routes.any")}</option>
-                <option value="true">{t("routes.required")}</option>
-                <option value="false">{t("routes.excluded")}</option>
-              </select>
+              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.condition_model_override")}</label>
+              <input value={modelOverride} onChange={(e) => setModelOverride(e.target.value)} placeholder="e.g. deepseek-v4-flash" className="form-input w-full" />
+              <p className="mt-0.5 text-[10px] text-text-muted">{t("routes.model_override_hint")}</p>
             </div>
-            <div>
-              <label className="mb-1 block text-[10px] text-text-muted">{t("routes.has_tools")}</label>
-              <select value={hasTools} onChange={(e) => setHasTools(e.target.value)} className="form-input w-full">
-                <option value="">{t("routes.any")}</option>
-                <option value="true">{t("routes.required")}</option>
-                <option value="false">{t("routes.excluded")}</option>
-              </select>
+          )}
+
+          {/* Custom fields — only when "custom" selected */}
+          {showCustom && (
+            <div className="space-y-3 rounded-md border border-border/50 bg-card-secondary p-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-[10px] text-text-muted">{t("routes.min_chars")}</label>
+                  <input type="number" value={minChars} onChange={(e) => setMinChars(e.target.value)} placeholder="100000" className="form-input w-full" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] text-text-muted">{t("routes.max_chars")}</label>
+                  <input type="number" value={maxChars} onChange={(e) => setMaxChars(e.target.value)} placeholder="500000" className="form-input w-full" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1 block text-[10px] text-text-muted">{t("routes.has_images")}</label>
+                  <select value={hasImages} onChange={(e) => setHasImages(e.target.value)} className="form-input w-full">
+                    <option value="">{t("routes.any")}</option>
+                    <option value="true">{t("routes.required")}</option>
+                    <option value="false">{t("routes.excluded")}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] text-text-muted">{t("routes.has_tools")}</label>
+                  <select value={hasTools} onChange={(e) => setHasTools(e.target.value)} className="form-input w-full">
+                    <option value="">{t("routes.any")}</option>
+                    <option value="true">{t("routes.required")}</option>
+                    <option value="false">{t("routes.excluded")}</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] text-text-muted">{t("routes.system_keywords")}</label>
+                <input value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="background, subagent" className="form-input w-full" />
+                <p className="mt-0.5 text-[10px] text-text-muted">{t("routes.keywords_hint")}</p>
+              </div>
             </div>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[10px] text-text-muted">{t("routes.system_keywords")}</label>
-            <input value={keywords} onChange={(e) => setKeywords(e.target.value)} placeholder="background, subagent, reason" className="form-input w-full" />
-            <p className="mt-0.5 text-[10px] text-text-muted">{t("routes.keywords_hint")}</p>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[10px] text-text-muted">{t("routes.condition_model_override")}</label>
-            <input value={modelOverride} onChange={(e) => setModelOverride(e.target.value)} placeholder="e.g. deepseek-v4-flash" className="form-input w-full" />
-          </div>
+          )}
         </div>
 
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
-          <button onClick={() => { onSave({}); }} className="rounded-md bg-card-secondary px-4 py-1.5 text-xs text-text-secondary hover:bg-border">{t("routes.clear_conditions")}</button>
+          <button onClick={onClose} className="rounded-md bg-card-secondary px-4 py-1.5 text-xs text-text-secondary hover:bg-border">{t("common.cancel")}</button>
           <button onClick={handleSave} className="rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-accent/90">{t("common.save")}</button>
         </div>
       </div>
