@@ -69,12 +69,14 @@ pub fn ensure_defaults(conn: &Connection) -> Result<(), AppError> {
 /// Get the price for a specific provider + model.
 /// Priority: exact custom match → exact default match → wildcard custom → wildcard default → None.
 pub fn get_price(conn: &Connection, provider: &str, model: &str) -> Option<(f64, f64)> {
-    // 1. Exact match (custom first)
+    let provider_lower = provider.to_lowercase();
+
+    // 1. Exact match (custom first, case-insensitive on provider)
     if let Ok(row) = conn.query_row(
         "SELECT input_price, output_price FROM model_pricing
-         WHERE provider = ?1 AND model_pattern = ?2
+         WHERE LOWER(provider) = ?1 AND model_pattern = ?2
          ORDER BY is_custom DESC LIMIT 1",
-        params![provider, model],
+        params![&provider_lower, model],
         |row| Ok((row.get::<_, f64>(0)?, row.get::<_, f64>(1)?)),
     ) {
         return Some(row);
@@ -83,9 +85,9 @@ pub fn get_price(conn: &Connection, provider: &str, model: &str) -> Option<(f64,
     // 2. Wildcard match
     if let Ok(row) = conn.query_row(
         "SELECT input_price, output_price FROM model_pricing
-         WHERE provider = ?1 AND model_pattern = '*'
+         WHERE LOWER(provider) = ?1 AND model_pattern = '*'
          ORDER BY is_custom DESC LIMIT 1",
-        params![provider],
+        params![&provider_lower],
         |row| Ok((row.get::<_, f64>(0)?, row.get::<_, f64>(1)?)),
     ) {
         return Some(row);
@@ -112,6 +114,25 @@ pub fn calculate_cost_for_request(
     let (input_price, output_price) = get_price(conn, provider, model)?;
     let cost = calculate_cost(input_tokens, output_tokens, input_price, output_price);
     Some(cost)
+}
+
+/// Backfill cost for existing request_logs that have tokens but no cost.
+pub fn backfill_costs(conn: &Connection) -> Result<u64, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, provider, model, input_tokens, output_tokens FROM request_logs WHERE cost IS NULL AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL)"
+    )?;
+    let rows: Vec<(String, String, String, Option<i64>, Option<i64>)> = stmt.query_map([], |r| {
+        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+    })?.filter_map(|r| r.ok()).collect();
+
+    let mut updated = 0u64;
+    for (id, provider, model, input_tokens, output_tokens) in &rows {
+        if let Some(cost) = calculate_cost_for_request(conn, provider, model, *input_tokens, *output_tokens) {
+            conn.execute("UPDATE request_logs SET cost = ?1 WHERE id = ?2", params![cost, id])?;
+            updated += 1;
+        }
+    }
+    Ok(updated)
 }
 
 /// List all pricing entries (default + custom).

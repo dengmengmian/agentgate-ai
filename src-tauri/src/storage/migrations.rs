@@ -159,11 +159,13 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     // Populate defaults
     crate::storage::pricing::ensure_defaults(conn)?;
 
-    // Migration: add cost column to request_logs
+    // Migration: add cost column to request_logs + backfill existing
     let has_cost: bool = conn.prepare("SELECT cost FROM request_logs LIMIT 0").is_ok();
     if !has_cost {
         conn.execute_batch("ALTER TABLE request_logs ADD COLUMN cost REAL;")?;
     }
+    // Backfill cost for existing logs that have tokens but no cost
+    let _ = crate::storage::pricing::backfill_costs(conn);
 
     // Phase 7: config_backups table
     conn.execute_batch(
