@@ -49,6 +49,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.type": { en: "Type", zh: "类型" },
   "providers.protocol": { en: "Protocol", zh: "协议" },
   "providers.api_key": { en: "API Key", zh: "API 密钥" },
+  "providers.add_key": { en: "Add Key", zh: "添加密钥" },
   "providers.default_model": { en: "Default Model", zh: "默认模型" },
   "providers.reasoning_model": { en: "Reasoning Model", zh: "推理模型" },
   "providers.timeout": { en: "Timeout", zh: "超时" },

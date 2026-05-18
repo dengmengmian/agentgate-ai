@@ -29,7 +29,7 @@ export function ProviderFormDialog({
   const [name, setName] = useState("");
   const [providerType, setProviderType] = useState("deepseek");
   const [baseUrl, setBaseUrl] = useState("");
-  const [apiKey, setApiKey] = useState("");
+  const [apiKeys, setApiKeys] = useState<string[]>([""]);
   const [defaultModel, setDefaultModel] = useState("");
   const [reasoningModel, setReasoningModel] = useState("");
   const [supportedModels, setSupportedModels] = useState("");
@@ -97,7 +97,7 @@ export function ProviderFormDialog({
       setName(provider.name);
       setProviderType(provider.provider_type);
       setBaseUrl(provider.base_url);
-      setApiKey("");
+      setApiKeys([""]);
       setDefaultModel(provider.default_model);
       setReasoningModel(provider.reasoning_model ?? "");
       setSupportedModels(provider.supported_models ?? "");
@@ -112,7 +112,7 @@ export function ProviderFormDialog({
       setName("");
       setProviderType("deepseek");
       setBaseUrl("");
-      setApiKey("");
+      setApiKeys([""]);
       setDefaultModel("");
       setReasoningModel("");
       setSupportedModels("");
@@ -155,7 +155,9 @@ export function ProviderFormDialog({
         supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: abuStr, responses_base_url: rbuStr,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
-      if (apiKey) input.api_key = apiKey;
+      const validKeys = apiKeys.filter(k => k.trim());
+      if (validKeys.length === 1) input.api_key = validKeys[0];
+      else if (validKeys.length > 1) input.api_key = JSON.stringify(validKeys);
       onSubmit(input);
     } else {
       const input: CreateProviderInput = {
@@ -164,7 +166,9 @@ export function ProviderFormDialog({
         supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: abuStr, responses_base_url: rbuStr,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
-      if (apiKey) input.api_key = apiKey;
+      const validKeys = apiKeys.filter(k => k.trim());
+      if (validKeys.length === 1) input.api_key = validKeys[0];
+      else if (validKeys.length > 1) input.api_key = JSON.stringify(validKeys);
       onSubmit(input);
     }
   };
@@ -203,9 +207,29 @@ export function ProviderFormDialog({
             </Field>
           </div>
 
-          <Field label={t("providers.api_key")} hint={isEdit && provider?.masked_api_key ? `Current: ${provider.masked_api_key}` : undefined}>
-            <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={isEdit ? t("providers.api_key") : "sk-..."} className="form-input" />
-          </Field>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-text-secondary">
+              {t("providers.api_key")} {apiKeys.filter(k => k).length > 1 && <span className="text-text-muted">({apiKeys.filter(k => k).length} keys)</span>}
+            </label>
+            {isEdit && provider?.masked_api_key && <p className="mb-1 text-[11px] text-text-muted">Current: {provider.masked_api_key}</p>}
+            <div className="space-y-1.5">
+              {apiKeys.map((key, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <input
+                    type="password"
+                    value={key}
+                    onChange={(e) => { const next = [...apiKeys]; next[i] = e.target.value; setApiKeys(next); }}
+                    placeholder={i === 0 ? "sk-..." : `Key ${i + 1}`}
+                    className="form-input flex-1"
+                  />
+                  {apiKeys.length > 1 && (
+                    <button type="button" onClick={() => setApiKeys(apiKeys.filter((_, j) => j !== i))} className="text-text-muted hover:text-error text-xs">&times;</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => setApiKeys([...apiKeys, ""])} className="mt-1.5 text-[11px] text-accent hover:text-accent/80">+ {t("providers.add_key")}</button>
+          </div>
 
           {/* Supported Models — fetch from provider */}
           <div>
@@ -217,7 +241,9 @@ export function ProviderFormDialog({
                   try {
                     // Auto-save API key / base_url before fetching so backend has latest values
                     const saveInput: UpdateProviderInput = {};
-                    if (apiKey) saveInput.api_key = apiKey;
+                    const vk = apiKeys.filter(k => k.trim());
+                    if (vk.length === 1) saveInput.api_key = vk[0];
+                    else if (vk.length > 1) saveInput.api_key = JSON.stringify(vk);
                     if (baseUrl && baseUrl !== provider.base_url) saveInput.base_url = baseUrl;
                     if (Object.keys(saveInput).length > 0) {
                       await api.updateProvider(provider.id, saveInput);

@@ -167,7 +167,26 @@ impl Provider {
     }
 }
 
-pub fn mask_api_key(key: &str) -> String {
+pub fn mask_api_key(raw: &str) -> String {
+    let trimmed = raw.trim();
+    // JSON array: show first key masked + count
+    if trimmed.starts_with('[') {
+        if let Ok(keys) = serde_json::from_str::<Vec<String>>(trimmed) {
+            let valid: Vec<&String> = keys.iter().filter(|k| !k.is_empty()).collect();
+            if valid.is_empty() {
+                return "***".to_string();
+            }
+            let first = mask_single_key(valid[0]);
+            if valid.len() == 1 {
+                return first;
+            }
+            return format!("{first} (+{} more)", valid.len() - 1);
+        }
+    }
+    mask_single_key(trimmed)
+}
+
+fn mask_single_key(key: &str) -> String {
     if key.len() <= 8 {
         return "*".repeat(key.len());
     }

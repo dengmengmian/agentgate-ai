@@ -60,7 +60,7 @@ async fn handle_non_stream(
 ) -> Result<Response, AppError> {
     let resp = http_client
         .post(target_url)
-        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Authorization", format!("Bearer {}", config.select_api_key()))
         .header("Content-Type", "application/json")
         .body(raw_body.to_string())
         .send()
@@ -71,7 +71,7 @@ async fn handle_non_stream(
 
     let upstream_status = resp.status();
     let body_text = resp.text().await.unwrap_or_default();
-    let sanitized_response = sanitize(&body_text, &config.api_key);
+    let sanitized_response = sanitize(&body_text, config.api_key());
     let latency = start.elapsed().as_millis() as i64;
 
     let trace = json!({
@@ -92,7 +92,7 @@ async fn handle_non_stream(
 
     log_to_db(
         db, request_id, &config.name, model,
-        &sanitize(raw_body, &config.api_key),
+        &sanitize(raw_body, config.api_key()),
         &sanitized_response,
         error_msg.as_deref(),
         &trace,
@@ -121,7 +121,7 @@ async fn handle_stream(
 ) -> Result<Response, AppError> {
     let resp = http_client
         .post(target_url)
-        .header("Authorization", format!("Bearer {}", config.api_key))
+        .header("Authorization", format!("Bearer {}", config.select_api_key()))
         .header("Content-Type", "application/json")
         .header("Accept", "text/event-stream")
         .body(raw_body.to_string())
@@ -134,7 +134,7 @@ async fn handle_stream(
     let upstream_status = resp.status();
     if !upstream_status.is_success() {
         let body_text = resp.text().await.unwrap_or_default();
-        let sanitized = sanitize(&body_text, &config.api_key);
+        let sanitized = sanitize(&body_text, config.api_key());
         let latency = start.elapsed().as_millis() as i64;
 
         let trace = json!({
@@ -148,7 +148,7 @@ async fn handle_stream(
 
         log_to_db(
             db, request_id, &config.name, model,
-            &sanitize(raw_body, &config.api_key),
+            &sanitize(raw_body, config.api_key()),
             "", Some(&truncate(&sanitized, 2000)),
             &trace, upstream_status.as_u16() as i64, latency,
         );
@@ -169,9 +169,9 @@ async fn handle_stream(
     let provider_name = config.name.clone();
     let model_clone = model.to_string();
     let req_id = request_id.to_string();
-    let raw_req = sanitize(raw_body, &config.api_key);
+    let raw_req = sanitize(raw_body, config.api_key());
     let target = target_url.to_string();
-    let api_key = config.api_key.clone();
+    let api_key = config.api_key().to_string();
 
     tokio::spawn(async move {
         let mut stream = resp.bytes_stream();
@@ -322,7 +322,7 @@ pub async fn handle_anthropic(
     // Anthropic uses x-api-key header instead of Bearer
     let mut req_builder = http_client
         .post(target_url)
-        .header("x-api-key", &config.api_key)
+        .header("x-api-key", config.select_api_key())
         .header("content-type", "application/json")
         .header("anthropic-version", "2023-06-01");
 
@@ -339,10 +339,10 @@ pub async fn handle_anthropic(
         let status = resp.status();
         if !status.is_success() {
             let body_text = resp.text().await.unwrap_or_default();
-            let sanitized = sanitize(&body_text, &config.api_key);
+            let sanitized = sanitize(&body_text, config.api_key());
             let latency = start.elapsed().as_millis() as i64;
             log_to_db(db, request_id, &config.name, &config.default_model,
-                &sanitize(raw_body, &config.api_key), "", Some(&truncate(&sanitized, 2000)),
+                &sanitize(raw_body, config.api_key()), "", Some(&truncate(&sanitized, 2000)),
                 &json!({"mode":"anthropic_pass_through","target":target_url}).to_string(),
                 status.as_u16() as i64, latency);
             let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -357,9 +357,9 @@ pub async fn handle_anthropic(
         let provider_name = config.name.clone();
         let model = config.default_model.clone();
         let req_id = request_id.to_string();
-        let raw_req = sanitize(raw_body, &config.api_key);
+        let raw_req = sanitize(raw_body, config.api_key());
         let target = target_url.to_string();
-        let api_key = config.api_key.clone();
+        let api_key = config.api_key().to_string();
 
         tokio::spawn(async move {
             let mut stream = resp.bytes_stream();
@@ -402,12 +402,12 @@ pub async fn handle_anthropic(
             .map_err(|e| AppError::new("PASS_THROUGH_REQUEST_FAILED", format!("Failed: {e}")))?;
         let status = resp.status();
         let body_text = resp.text().await.unwrap_or_default();
-        let sanitized = sanitize(&body_text, &config.api_key);
+        let sanitized = sanitize(&body_text, config.api_key());
         let latency = start.elapsed().as_millis() as i64;
         let trace = json!({"mode":"anthropic_pass_through","target":target_url}).to_string();
         let err_msg = if status.is_success() { None } else { Some(truncate(&sanitized, 2000)) };
         log_to_db(db, request_id, &config.name, &config.default_model,
-            &sanitize(raw_body, &config.api_key), &sanitized,
+            &sanitize(raw_body, config.api_key()), &sanitized,
             err_msg.as_deref(),
             &trace, status.as_u16() as i64, latency);
         let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
