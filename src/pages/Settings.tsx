@@ -171,26 +171,17 @@ export function Settings() {
             </thead>
             <tbody>
               {pricing.map((p) => (
-                <tr key={p.id} className="border-b border-border/50 last:border-0">
-                  <td className="px-3 py-1.5 text-text-primary">{p.provider}</td>
-                  <td className="px-3 py-1.5 font-mono text-text-secondary">{p.model_pattern}</td>
-                  <td className="px-3 py-1.5 text-right text-text-primary">{p.input_price.toFixed(2)}</td>
-                  <td className="px-3 py-1.5 text-right text-text-primary">{p.output_price.toFixed(2)}</td>
-                  <td className="px-3 py-1.5 text-center">
-                    <span className={`rounded px-1.5 py-0.5 text-[10px] ${p.is_custom ? "bg-accent/10 text-accent" : "bg-card-secondary text-text-muted"}`}>
-                      {p.is_custom ? t("settings.custom") : t("settings.builtin")}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1.5 text-center">
-                    {p.is_custom && (
-                      <button onClick={async () => {
-                        await api.deleteModelPricing(p.id);
-                        setPricing(pricing.filter(x => x.id !== p.id));
-                        toast("success", t("common.deleted"));
-                      }} className="text-text-muted hover:text-error"><Trash2 className="h-3 w-3" /></button>
-                    )}
-                  </td>
-                </tr>
+                <PricingRow key={p.id} item={p} onUpdate={async (inputPrice, outputPrice) => {
+                  try {
+                    const updated = await api.upsertModelPricing(p.provider, p.model_pattern, inputPrice, outputPrice);
+                    setPricing(pricing.map(x => x.id === p.id || x.id === updated.id ? updated : x).sort((a, b) => `${a.provider}${a.model_pattern}`.localeCompare(`${b.provider}${b.model_pattern}`)));
+                    toast("success", t("settings.pricing_saved"));
+                  } catch (err) { toast("error", (err as api.AppError).message); }
+                }} onDelete={async () => {
+                  await api.deleteModelPricing(p.id);
+                  setPricing(pricing.filter(x => x.id !== p.id));
+                  toast("success", t("common.deleted"));
+                }} />
               ))}
             </tbody>
           </table>
@@ -306,6 +297,53 @@ function CheckUpdateButton({ t }: { t: (key: string) => string }) {
         <span className="text-xs text-green-400">{t("update.is_latest")}</span>
       )}
     </div>
+  );
+}
+
+function PricingRow({ item, onUpdate, onDelete }: { item: ModelPricing; onUpdate: (inputPrice: number, outputPrice: number) => void; onDelete: () => void }) {
+  const { t } = useI18n();
+  const [editInput, setEditInput] = useState(String(item.input_price));
+  const [editOutput, setEditOutput] = useState(String(item.output_price));
+  const [editing, setEditing] = useState(false);
+
+  const save = () => {
+    const inp = parseFloat(editInput);
+    const outp = parseFloat(editOutput);
+    if (!isNaN(inp) && !isNaN(outp) && (inp !== item.input_price || outp !== item.output_price)) {
+      onUpdate(inp, outp);
+    }
+    setEditing(false);
+  };
+
+  return (
+    <tr className="border-b border-border/50 last:border-0">
+      <td className="px-3 py-1.5 text-text-primary">{item.provider}</td>
+      <td className="px-3 py-1.5 font-mono text-text-secondary">{item.model_pattern}</td>
+      <td className="px-3 py-1.5 text-right">
+        {editing ? (
+          <input type="number" step="0.01" value={editInput} onChange={(e) => setEditInput(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} className="w-20 rounded border border-accent/50 bg-bg px-1.5 py-0.5 text-right text-xs text-text-primary outline-none" autoFocus />
+        ) : (
+          <span className="cursor-pointer text-text-primary hover:text-accent" onClick={() => setEditing(true)}>{item.input_price.toFixed(2)}</span>
+        )}
+      </td>
+      <td className="px-3 py-1.5 text-right">
+        {editing ? (
+          <input type="number" step="0.01" value={editOutput} onChange={(e) => setEditOutput(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} className="w-20 rounded border border-accent/50 bg-bg px-1.5 py-0.5 text-right text-xs text-text-primary outline-none" />
+        ) : (
+          <span className="cursor-pointer text-text-primary hover:text-accent" onClick={() => setEditing(true)}>{item.output_price.toFixed(2)}</span>
+        )}
+      </td>
+      <td className="px-3 py-1.5 text-center">
+        <span className={`rounded px-1.5 py-0.5 text-[10px] ${item.is_custom ? "bg-accent/10 text-accent" : "bg-card-secondary text-text-muted"}`}>
+          {item.is_custom ? t("settings.custom") : t("settings.builtin")}
+        </span>
+      </td>
+      <td className="px-3 py-1.5 text-center">
+        {item.is_custom && (
+          <button onClick={onDelete} className="text-text-muted hover:text-error"><Trash2 className="h-3 w-3" /></button>
+        )}
+      </td>
+    </tr>
   );
 }
 

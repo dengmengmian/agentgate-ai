@@ -129,11 +129,11 @@ export function Dashboard() {
       )}
 
       {/* Cost Stats */}
-      {stats && (stats.total_cost > 0 || stats.today_cost > 0) && (
+      {stats && (
         <div className="grid grid-cols-3 gap-4">
           <MetricCard label={t("stats.total_cost")} value={formatCost(stats.total_cost)} icon={DollarSign} trend={`${t("stats.today")}: ${formatCost(stats.today_cost)}`} />
           <MetricCard label={t("stats.today_cost")} value={formatCost(stats.today_cost)} icon={DollarSign} />
-          <MetricCard label={t("stats.avg_cost")} value={stats.total > 0 ? formatCost(stats.total_cost / stats.total) : "$0"} icon={DollarSign} trend={t("stats.per_request")} />
+          <MetricCard label={t("stats.avg_cost")} value={stats.total > 0 ? formatCost(stats.total_cost / stats.total) : "$0.00"} icon={DollarSign} trend={t("stats.per_request")} />
         </div>
       )}
 
