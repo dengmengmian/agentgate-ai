@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Shield, FolderOpen, RefreshCcw, Download, Copy } from "lucide-react";
+import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2 } from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { getVersion } from "@tauri-apps/api/app";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -8,23 +8,27 @@ import { useI18n, type Locale } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import type { GatewaySettings as GatewaySettingsType } from "@/types/gateway";
 import type { GatewayAuthSettings } from "@/types/config";
+import type { ModelPricing } from "@/types/stats";
 
 export function Settings() {
   const { t, locale, setLocale } = useI18n();
   const [settings, setSettings] = useState<GatewaySettingsType | null>(null);
   const [auth, setAuth] = useState<GatewayAuthSettings | null>(null);
   const [confirmRegen, setConfirmRegen] = useState(false);
+  const [pricing, setPricing] = useState<ModelPricing[]>([]);
   const [appVersion, setAppVersion] = useState("");
   useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
 
   const load = useCallback(async () => {
     try {
-      const [s, a] = await Promise.all([
+      const [s, a, p] = await Promise.all([
         api.getGatewaySettings(),
         api.getGatewayAuthSettings(),
+        api.listModelPricing(),
       ]);
       setSettings(s);
       setAuth(a);
+      setPricing(p);
     } catch (err) {
       toast("error", (err as api.AppError).message);
     }
@@ -146,6 +150,61 @@ export function Settings() {
         </div>
       </section>
 
+      {/* Model Pricing */}
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
+          <DollarSign className="h-4 w-4 text-accent" />{t("settings.model_pricing")}
+        </h3>
+        <p className="mb-3 text-[11px] text-text-muted">{t("settings.model_pricing_desc")}</p>
+
+        <div className="overflow-hidden rounded-md border border-border">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border bg-card-secondary">
+                <th className="px-3 py-2 text-left font-medium text-text-muted">Provider</th>
+                <th className="px-3 py-2 text-left font-medium text-text-muted">Model</th>
+                <th className="px-3 py-2 text-right font-medium text-text-muted">Input ($/1M)</th>
+                <th className="px-3 py-2 text-right font-medium text-text-muted">Output ($/1M)</th>
+                <th className="px-3 py-2 text-center font-medium text-text-muted">{t("settings.source")}</th>
+                <th className="px-3 py-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {pricing.map((p) => (
+                <tr key={p.id} className="border-b border-border/50 last:border-0">
+                  <td className="px-3 py-1.5 text-text-primary">{p.provider}</td>
+                  <td className="px-3 py-1.5 font-mono text-text-secondary">{p.model_pattern}</td>
+                  <td className="px-3 py-1.5 text-right text-text-primary">{p.input_price.toFixed(2)}</td>
+                  <td className="px-3 py-1.5 text-right text-text-primary">{p.output_price.toFixed(2)}</td>
+                  <td className="px-3 py-1.5 text-center">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] ${p.is_custom ? "bg-accent/10 text-accent" : "bg-card-secondary text-text-muted"}`}>
+                      {p.is_custom ? t("settings.custom") : t("settings.builtin")}
+                    </span>
+                  </td>
+                  <td className="px-3 py-1.5 text-center">
+                    {p.is_custom && (
+                      <button onClick={async () => {
+                        await api.deleteModelPricing(p.id);
+                        setPricing(pricing.filter(x => x.id !== p.id));
+                        toast("success", t("common.deleted"));
+                      }} className="text-text-muted hover:text-error"><Trash2 className="h-3 w-3" /></button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <PricingAddForm onAdd={async (provider, model, inputPrice, outputPrice) => {
+          try {
+            const p = await api.upsertModelPricing(provider, model, inputPrice, outputPrice);
+            setPricing([...pricing.filter(x => x.id !== p.id), p].sort((a, b) => `${a.provider}${a.model_pattern}`.localeCompare(`${b.provider}${b.model_pattern}`)));
+            toast("success", t("settings.pricing_saved"));
+          } catch (err) { toast("error", (err as api.AppError).message); }
+        }} />
+      </section>
+
       {/* About */}
       <section className="rounded-lg border border-border bg-card p-5">
         <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.about")}</h3>
@@ -246,6 +305,48 @@ function CheckUpdateButton({ t }: { t: (key: string) => string }) {
       {status === "latest" && (
         <span className="text-xs text-green-400">{t("update.is_latest")}</span>
       )}
+    </div>
+  );
+}
+
+function PricingAddForm({ onAdd }: { onAdd: (provider: string, model: string, inputPrice: number, outputPrice: number) => void }) {
+  const { t } = useI18n();
+  const [provider, setProvider] = useState("");
+  const [model, setModel] = useState("");
+  const [inputPrice, setInputPrice] = useState("");
+  const [outputPrice, setOutputPrice] = useState("");
+
+  const handleSubmit = () => {
+    if (!provider.trim() || !model.trim()) return;
+    const inp = parseFloat(inputPrice);
+    const outp = parseFloat(outputPrice);
+    if (isNaN(inp) || isNaN(outp)) return;
+    onAdd(provider.trim(), model.trim(), inp, outp);
+    setProvider("");
+    setModel("");
+    setInputPrice("");
+    setOutputPrice("");
+  };
+
+  return (
+    <div className="mt-3 flex items-end gap-2">
+      <div className="flex-1">
+        <label className="mb-1 block text-[10px] text-text-muted">Provider</label>
+        <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="deepseek" className="form-input w-full" />
+      </div>
+      <div className="flex-1">
+        <label className="mb-1 block text-[10px] text-text-muted">Model</label>
+        <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="model-name or *" className="form-input w-full" />
+      </div>
+      <div className="w-24">
+        <label className="mb-1 block text-[10px] text-text-muted">Input $/1M</label>
+        <input type="number" step="0.01" value={inputPrice} onChange={(e) => setInputPrice(e.target.value)} placeholder="0.00" className="form-input w-full" />
+      </div>
+      <div className="w-24">
+        <label className="mb-1 block text-[10px] text-text-muted">Output $/1M</label>
+        <input type="number" step="0.01" value={outputPrice} onChange={(e) => setOutputPrice(e.target.value)} placeholder="0.00" className="form-input w-full" />
+      </div>
+      <button onClick={handleSubmit} className="btn-primary mb-0.5"><Plus className="h-3 w-3" />{t("routes.add")}</button>
     </div>
   );
 }
