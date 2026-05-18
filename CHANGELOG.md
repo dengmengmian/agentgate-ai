@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.7] - 2026-05-18
+
+### CI / 发布
+
+- 增加独立 `agentgate-serve` CLI 发布产物，GUI 安装包继续只包含桌面应用
+
+---
+
 ## [0.5.6] - 2026-05-18
 
 ### CI / 发布

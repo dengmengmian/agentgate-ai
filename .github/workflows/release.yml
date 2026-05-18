@@ -110,3 +110,73 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+  cli:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            archive: agentgate-serve-aarch64-apple-darwin.tar.gz
+            bin: agentgate-serve
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            archive: agentgate-serve-x86_64-apple-darwin.tar.gz
+            bin: agentgate-serve
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            archive: agentgate-serve-x86_64-unknown-linux-gnu.tar.gz
+            bin: agentgate-serve
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: agentgate-serve-x86_64-pc-windows-msvc.zip
+            bin: agentgate-serve.exe
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: cli-${{ matrix.target }}
+
+      - name: Enable CLI target
+        shell: bash
+        run: |
+          cat >> src-tauri/Cargo.toml <<'EOF'
+
+          [[bin]]
+          name = "agentgate-serve"
+          path = "src/cli/serve.rs"
+          EOF
+
+      - name: Build CLI
+        run: cargo build --manifest-path src-tauri/Cargo.toml --release --target ${{ matrix.target }} --bin agentgate-serve
+
+      - name: Package CLI (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -C "src-tauri/target/${{ matrix.target }}/release" -czf "dist/${{ matrix.archive }}" "${{ matrix.bin }}"
+
+      - name: Package CLI (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path "src-tauri/target/${{ matrix.target }}/release/${{ matrix.bin }}" -DestinationPath "dist/${{ matrix.archive }}"
+
+      - name: Upload CLI to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" "dist/${{ matrix.archive }}" --clobber
