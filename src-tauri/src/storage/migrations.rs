@@ -243,8 +243,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     // Seed default providers on first run
     seed_default_providers(conn)?;
 
-    // Seed sample request logs on first run
-    seed_sample_request_logs(conn)?;
+    // Remove demo request logs seeded by older builds. Real gateway request IDs
+    // are UUIDs, while these sample rows used a stable req-seed-* prefix.
+    conn.execute("DELETE FROM request_logs WHERE request_id LIKE 'req-seed-%'", [])?;
 
     // Seed default route profile on first run
     seed_default_route_profile(conn)?;
@@ -307,45 +308,6 @@ fn seed_default_providers(conn: &Connection) -> Result<(), AppError> {
         conn.execute(
             "UPDATE gateway_settings SET active_provider_id = ?1, updated_at = ?2 WHERE id = 1",
             rusqlite::params![&id, &now],
-        )?;
-    }
-
-    Ok(())
-}
-
-fn seed_sample_request_logs(conn: &Connection) -> Result<(), AppError> {
-    let count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM request_logs", [], |row| row.get(0))?;
-    if count > 0 {
-        return Ok(());
-    }
-
-    let now = chrono::Utc::now();
-    let samples = vec![
-        ("Codex", "DeepSeek", "deepseek-v4-flash", "/v1/responses", 200i64, 1120i64, None::<&str>),
-        ("Claude Code", "Anthropic", "claude-sonnet-4-6", "/v1/messages", 200, 890, None),
-        ("Codex", "DeepSeek", "deepseek-v4-flash", "/v1/responses", 502, 5230, Some("Bad Gateway: upstream provider returned 502")),
-        ("OpenCode", "DeepSeek", "deepseek-v4-pro", "/v1/chat/completions", 200, 2340, None),
-        ("Codex", "DeepSeek", "deepseek-v4-flash", "/v1/responses", 200, 1560, None),
-    ];
-
-    for (i, (client, provider, model, route, status, latency, error)) in samples.into_iter().enumerate() {
-        let ts = now - chrono::Duration::minutes(i as i64 * 2);
-        conn.execute(
-            "INSERT INTO request_logs (id, request_id, timestamp, client, provider, model, route, status_code, latency_ms, error_message)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            rusqlite::params![
-                uuid::Uuid::new_v4().to_string(),
-                format!("req-seed-{:03}", i + 1),
-                ts.to_rfc3339(),
-                client,
-                provider,
-                model,
-                route,
-                status,
-                latency,
-                error,
-            ],
         )?;
     }
 

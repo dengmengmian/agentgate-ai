@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.9] - 2026-05-19
+
+### Fixes / 修复
+
+- 移除启动时自动插入的示例请求日志，并清理旧版 `req-seed-*` 假数据
+- 修复 macOS 从 Dock/Finder 启动时托盘菜单没有识别中文系统语言的问题
+
+---
+
 ## [0.5.8] - 2026-05-18
 
 ### CI / 发布

@@ -218,11 +218,40 @@ pub fn run() {
 }
 
 fn is_chinese_locale() -> bool {
-    std::env::var("LANG")
-        .or_else(|_| std::env::var("LC_ALL"))
-        .or_else(|_| std::env::var("LC_MESSAGES"))
-        .map(|v| v.starts_with("zh"))
+    ["LC_ALL", "LC_MESSAGES", "LANG"]
+        .iter()
+        .filter_map(|key| std::env::var(key).ok())
+        .any(|value| locale_value_is_chinese(&value))
+        || macos_system_locale_is_chinese()
+}
+
+fn locale_value_is_chinese(value: &str) -> bool {
+    let value = value.to_ascii_lowercase();
+    value.starts_with("zh") || value.contains("zh-hans") || value.contains("zh-hant")
+}
+
+#[cfg(target_os = "macos")]
+fn macos_system_locale_is_chinese() -> bool {
+    fn defaults_value(key: &str) -> Option<String> {
+        let output = std::process::Command::new("defaults")
+            .args(["read", "-g", key])
+            .output()
+            .ok()?;
+        if !output.status.success() {
+            return None;
+        }
+        String::from_utf8(output.stdout).ok()
+    }
+
+    defaults_value("AppleLocale")
+        .or_else(|| defaults_value("AppleLanguages"))
+        .map(|value| locale_value_is_chinese(&value))
         .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn macos_system_locale_is_chinese() -> bool {
+    false
 }
 
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
@@ -245,7 +274,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let _tray = TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
-        .tooltip(if is_chinese_locale() { "AgentGate - 网关已停止" } else { "AgentGate - Gateway Stopped" })
+        .tooltip(if zh { "AgentGate - 网关已停止" } else { "AgentGate - Gateway Stopped" })
         .menu(&menu)
         .on_menu_event(move |app, event| {
             match event.id().as_ref() {
