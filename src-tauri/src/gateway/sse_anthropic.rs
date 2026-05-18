@@ -74,10 +74,20 @@ pub async fn process_anthropic_stream(
     let mut stream = response.bytes_stream();
 
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("Stream error: {e}"))?;
+        let chunk = match chunk {
+            Ok(b) => b,
+            Err(e) => {
+                let err_msg = format!("Stream error: {e}");
+                send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &err_msg)).await;
+                return Err(err_msg);
+            }
+        };
         buffer.push_str(&String::from_utf8_lossy(&chunk));
 
-        // Process complete SSE frames
+        // Process complete SSE frames (handle both \n\n and \r\n\r\n)
+        // Normalize \r\n to \n for consistent parsing
+        buffer = buffer.replace("\r\n", "\n");
+
         while let Some(frame_end) = buffer.find("\n\n") {
             let frame = buffer[..frame_end].to_string();
             buffer = buffer[frame_end + 2..].to_string();
@@ -87,9 +97,10 @@ pub async fn process_anthropic_stream(
             let mut data_str = String::new();
 
             for line in frame.lines() {
-                if let Some(et) = line.strip_prefix("event: ") {
-                    event_type = et.trim().to_string();
-                } else if let Some(d) = line.strip_prefix("data: ") {
+                // Handle both "event: X" and "event:X"
+                if let Some(et) = line.strip_prefix("event:").map(|s| s.trim()) {
+                    event_type = et.to_string();
+                } else if let Some(d) = line.strip_prefix("data:").map(|s| s.trim()) {
                     data_str = d.to_string();
                 }
             }
@@ -231,7 +242,9 @@ pub async fn process_anthropic_stream(
                         .and_then(|e| e.get("message"))
                         .and_then(|m| m.as_str())
                         .unwrap_or("Unknown Claude API error");
-                    return Err(format!("Claude API error: {err_msg}"));
+                    let full_err = format!("Claude API error: {err_msg}");
+                    send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &full_err)).await;
+                    return Err(full_err);
                 }
                 _ => {}
             }
@@ -241,6 +254,9 @@ pub async fn process_anthropic_stream(
     // If message_stop wasn't received, finalize anyway
     if !acc.full_text.is_empty() || !acc.tool_calls.is_empty() {
         finalize(acc, &tx).await;
+    } else {
+        // Stream ended with no content at all — notify client
+        send(&tx, &ev::response_failed(&acc.response_id, &acc.model, "Stream ended unexpectedly")).await;
     }
 
     Ok(())
