@@ -1134,25 +1134,31 @@ fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayE
 
 /// Check if a Responses API request contains image content in its input.
 fn request_contains_images(req: &ResponsesRequest) -> bool {
-    fn value_has_images(v: &Value) -> bool {
+    fn content_has_images(v: &Value) -> bool {
         match v {
             Value::Array(arr) => arr.iter().any(|item| {
                 let t = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                if t == "input_image" || t == "image_url" {
-                    return true;
-                }
-                // Check nested content arrays in message items
-                if t == "message" {
-                    if let Some(content) = item.get("content") {
-                        return value_has_images(content);
-                    }
-                }
-                false
+                t == "input_image" || t == "image_url"
             }),
             _ => false,
         }
     }
-    value_has_images(&req.input)
+
+    match &req.input {
+        Value::Array(items) => {
+            // Only check the LAST user message — not the entire history.
+            // Codex includes previous messages (some with images) in multi-turn input.
+            // We only care if the NEW message has images.
+            items.iter().rev().find(|item| {
+                let t = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                let role = item.get("role").and_then(|r| r.as_str()).unwrap_or("");
+                t == "message" && role == "user"
+            }).map(|msg| {
+                msg.get("content").map(content_has_images).unwrap_or(false)
+            }).unwrap_or(false)
+        }
+        _ => false,
+    }
 }
 
 fn sanitize_body(body: &str) -> String {
