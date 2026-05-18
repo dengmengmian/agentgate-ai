@@ -4,10 +4,15 @@ version = "0.5.0"
 description = "Local gateway for AI coding agents"
 authors = ["dengmengmian"]
 edition = "2021"
+default-run = "agentgate"
 
 [lib]
 name = "agentgate_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "agentgate"
+path = "src/main.rs"
 
 [[bin]]
 name = "agentgate-serve"
