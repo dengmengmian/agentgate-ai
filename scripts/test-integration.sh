@@ -552,6 +552,98 @@ else
     SKIP=$((SKIP + 1))
 fi
 
+# ── 18. CLI Headless Mode ──
+echo ""
+echo "--- CLI Headless Mode ---"
+CLI="$( cd "$(dirname "$0")/../src-tauri" && pwd )/target/debug/agentgate-serve"
+if [ -x "$CLI" ]; then
+    TMPDB=$(mktemp -d)
+
+    # CLI help
+    if "$CLI" --help 2>&1 | grep -q "provider-add"; then
+        green "  PASS  CLI has provider-add subcommand"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  CLI missing provider-add subcommand"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # provider-list works
+    list_output=$("$CLI" --db-path "$TMPDB" provider-list 2>&1)
+    if echo "$list_output" | grep -q "Name\|No providers"; then
+        green "  PASS  provider-list runs successfully"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  provider-list failed"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # provider-add with preset
+    add_output=$("$CLI" --db-path "$TMPDB" provider-add -t groq -k sk-test-key-12345678 -n TestGroq 2>&1)
+    if echo "$add_output" | grep -q "created"; then
+        green "  PASS  provider-add creates provider"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  provider-add failed: $add_output"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # provider-list shows the new provider
+    list_output=$("$CLI" --db-path "$TMPDB" provider-list 2>&1)
+    if echo "$list_output" | grep -q "TestGroq"; then
+        green "  PASS  provider-list shows created provider"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  provider-list doesn't show provider"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # status shows configured count
+    status_output=$("$CLI" --db-path "$TMPDB" status 2>&1)
+    if echo "$status_output" | grep -q "configured"; then
+        green "  PASS  status shows provider count"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  status doesn't show provider count"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # token
+    token_output=$("$CLI" token 2>&1)
+    if echo "$token_output" | grep -q "ag_local_"; then
+        green "  PASS  token command outputs token"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  token command failed"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # provider-remove
+    remove_output=$("$CLI" --db-path "$TMPDB" provider-remove TestGroq 2>&1)
+    if echo "$remove_output" | grep -q "removed"; then
+        green "  PASS  provider-remove works"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  provider-remove failed: $remove_output"
+        FAIL=$((FAIL + 1))
+    fi
+
+    # Verify removed provider no longer in list
+    list_output=$("$CLI" --db-path "$TMPDB" provider-list 2>&1)
+    if ! echo "$list_output" | grep -q "TestGroq"; then
+        green "  PASS  Removed provider no longer in list"
+        PASS=$((PASS + 1))
+    else
+        red "  FAIL  Removed provider still in list"
+        FAIL=$((FAIL + 1))
+    fi
+
+    rm -rf "$TMPDB"
+else
+    yellow "  SKIP  CLI binary not built (run: cargo build --bin agentgate-serve)"
+    SKIP=$((SKIP + 8))
+fi
+
 # ── Summary ──
 echo ""
 echo "=========================================="
