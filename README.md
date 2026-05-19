@@ -101,17 +101,29 @@ AgentGate is a **local model gateway** for AI coding agents. One entry point con
 
 ## Screenshots
 
-| Overview | Client Configuration |
+| Overview | Providers |
 |:---:|:---:|
-| ![Overview](docs/screenshots/dashboard.png) | ![Clients](docs/screenshots/tools.png) |
+| ![Overview](docs/screenshots/dashboard.png) | ![Providers](docs/screenshots/providers.png) |
 
-| Provider Management | Route Configuration |
+| Routes | Gateway |
 |:---:|:---:|
-| ![Providers](docs/screenshots/providers.png) | ![Routes](docs/screenshots/routes.png) |
+| ![Routes](docs/screenshots/routes.png) | ![Gateway](docs/screenshots/gateway.png) |
 
-| Gateway Details | Request Logs |
+| Clients | Logs |
 |:---:|:---:|
-| ![Gateway](docs/screenshots/gateway.png) | ![Logs](docs/screenshots/logs.png) |
+| ![Clients](docs/screenshots/tools.png) | ![Logs](docs/screenshots/logs.png) |
+
+| Diagnostics | Settings |
+|:---:|:---:|
+| ![Diagnostics](docs/screenshots/diagnostics.png) | ![Settings](docs/screenshots/settings.png) |
+
+| Quick Setup | Pet Settings |
+|:---:|:---:|
+| ![Quick Setup](docs/screenshots/quick-setup.png) | ![Pet Settings](docs/screenshots/pet-settings.png) |
+
+| Desktop Pet |
+|:---:|
+| ![Pet](docs/screenshots/pet.png) |
 
 ## Tech Stack
 
