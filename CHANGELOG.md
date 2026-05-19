@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.3] - 2026-05-19
+
+### Fixes / 修复
+
+- 修复前端缺少 `updater:default` capability 导致检查更新可能被拦截的问题
+- 修复 macOS release 没有生成 app updater 包，导致 `latest.json` 缺少 `darwin-*` 平台的问题
+
+### CI / 发布
+
+- release 流程改为构建完成后统一发布合并版 `latest.json`，避免多平台 matrix 互相覆盖
+
+---
+
 ## [0.8.2] - 2026-05-19
 
 ### Fixes / 修复

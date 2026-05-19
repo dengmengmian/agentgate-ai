@@ -24,10 +24,10 @@ jobs:
       matrix:
         include:
           - platform: macos-latest
-            args: --target aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles app,dmg
             rust_target: aarch64-apple-darwin
           - platform: macos-latest
-            args: --target x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles app,dmg
             rust_target: x86_64-apple-darwin
           - platform: ubuntu-22.04
             args: ''
@@ -118,10 +118,27 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
+          uploadUpdaterJson: false
           args: ${{ matrix.args }}
 
-  cli:
+  updater-json:
     needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Publish merged updater JSON
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/publish-updater-json.mjs
+
+  cli:
+    needs: updater-json
     strategy:
       fail-fast: false
       matrix:
