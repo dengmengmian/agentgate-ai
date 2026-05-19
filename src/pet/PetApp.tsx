@@ -93,7 +93,13 @@ export function PetApp() {
     const poll = () => {
       getPetGatewayState().then((info) => {
         setGatewayState((prev) => {
-          if (prev !== info.state) resetSleepTimer();
+          if (prev !== info.state) {
+            // Wake up on any state change — especially "active"
+            setIsSleeping(false);
+            lastActivityRef.current = Date.now();
+            if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+            sleepTimerRef.current = setTimeout(() => setIsSleeping(true), SLEEP_TIMEOUT);
+          }
           return info.state;
         });
         if (info.last_error && info.last_error.timestamp !== lastErrorTsRef.current) {
@@ -128,7 +134,8 @@ export function PetApp() {
   }, [resetSleepTimer]);
 
   // Pet state
-  const petState: PetState = isError ? "error" : isSleeping ? "sleep" : gatewayState === "active" ? "active" : "idle";
+  // active requests and errors always override sleep
+  const petState: PetState = isError ? "error" : gatewayState === "active" ? "active" : isSleeping ? "sleep" : "idle";
 
   // Drag
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
