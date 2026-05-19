@@ -19,17 +19,17 @@
 
 /* ── Latte Theme ── */
 [data-theme="latte"] {
-  --color-bg: #FAF6F1;
+  --color-bg: #F4EDE5;
   --color-card: #FFFFFF;
-  --color-card-secondary: #F5EDE4;
-  --color-border: #E8DDD0;
-  --color-text-primary: #3D3028;
-  --color-text-secondary: #7A6B5D;
-  --color-text-muted: #A89888;
-  --color-accent: #C08B5C;
-  --color-success: #5A9A3E;
-  --color-warning: #B8860B;
-  --color-error: #C0392B;
+  --color-card-secondary: #F5EEE6;
+  --color-border: #D8CCBE;
+  --color-text-primary: #2C2418;
+  --color-text-secondary: #6B5D4F;
+  --color-text-muted: #9A8B7A;
+  --color-accent: #B07D4F;
+  --color-success: #2D8A3E;
+  --color-warning: #A67508;
+  --color-error: #B83220;
 }
 
 body {
@@ -120,48 +120,75 @@ body {
 
 /* ── Latte theme overrides ── */
 
+/* Buttons */
 [data-theme="latte"] .btn-secondary {
   border: 1px solid var(--color-border);
 }
 
-/* Cards need shadow for depth on light bg */
-[data-theme="latte"] .border-border.bg-card,
+/* Cards — shadow for depth */
+[data-theme="latte"] .rounded-lg.border.bg-card {
+  box-shadow: 0 1px 4px rgba(60,40,20,0.08), 0 0 1px rgba(60,40,20,0.06);
+}
+
 [data-theme="latte"] section.rounded-lg {
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  box-shadow: 0 1px 4px rgba(60,40,20,0.08), 0 0 1px rgba(60,40,20,0.06);
 }
 
-/* Sidebar slightly tinted */
+/* Sidebar */
 [data-theme="latte"] aside {
-  background: #F5EEE6 !important;
+  background: #EDE5DA !important;
+  border-color: #D0C4B4 !important;
 }
 
-/* Topbar subtle bottom shadow */
+/* Topbar */
 [data-theme="latte"] header.border-b {
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  background: #FFFFFF !important;
+  box-shadow: 0 1px 3px rgba(60,40,20,0.06);
 }
 
-/* Form inputs / selects — clearer border */
+/* Form inputs / selects */
 [data-theme="latte"] .form-input,
 [data-theme="latte"] select {
   background-color: #FFFFFF;
-  border-color: #D8CCBE;
+  border-color: #C8BBAB;
 }
 
-/* Scrollbars */
+/* Inner cards (tool status, stat cards) — stronger border */
+[data-theme="latte"] .border-border\/50 {
+  border-color: var(--color-border) !important;
+}
+
+/* Table */
+[data-theme="latte"] thead tr {
+  background-color: #EDE5DA !important;
+}
+
+[data-theme="latte"] .border-b.border-border\/50 {
+  border-color: #E0D5C8 !important;
+}
+
+/* Scrollbar */
 [data-theme="latte"] ::-webkit-scrollbar-thumb {
-  background: #D4C8BA;
+  background: #C8BBAB;
 }
 
 [data-theme="latte"] ::-webkit-scrollbar-thumb:hover {
-  background: #B8A898;
+  background: #A89888;
 }
 
-/* Table header */
-[data-theme="latte"] thead tr {
-  background-color: #F5EDE4 !important;
+/* Fix /10 opacity colors — too faint on light. Use /20 equivalent via overrides */
+[data-theme="latte"] .bg-accent\/10 {
+  background-color: rgba(176, 125, 79, 0.15) !important;
 }
 
-/* Active nav link */
-[data-theme="latte"] a.bg-accent\/10 {
-  background-color: rgba(192, 139, 92, 0.12);
+[data-theme="latte"] .bg-error\/10 {
+  background-color: rgba(184, 50, 32, 0.12) !important;
+}
+
+[data-theme="latte"] .bg-warning\/10 {
+  background-color: rgba(166, 117, 8, 0.12) !important;
+}
+
+[data-theme="latte"] .bg-success\/10 {
+  background-color: rgba(45, 138, 62, 0.12) !important;
 }
