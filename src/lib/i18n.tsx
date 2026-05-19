@@ -396,6 +396,25 @@ const translations: Record<string, Record<Locale, string>> = {
   "settings.pet.ox": { en: "KuiKui", zh: "奎奎" },
   "settings.pet.ox_desc": { en: "A hardworking ox that never stops", zh: "一头永不停歇的牛马打工人" },
 
+  // ── Onboarding ──
+  "onboarding.welcome": { en: "Welcome to AgentGate", zh: "欢迎使用 AgentGate" },
+  "onboarding.welcome_desc": { en: "Paste your API key to get started", zh: "粘贴 API Key 开始配置" },
+  "onboarding.detected": { en: "Detected:", zh: "已识别:" },
+  "onboarding.skip": { en: "Skip for now", zh: "暂时跳过" },
+  "onboarding.next": { en: "Next", zh: "下一步" },
+  "onboarding.back": { en: "Back", zh: "返回" },
+  "onboarding.select_tools": { en: "Select Tools", zh: "选择工具" },
+  "onboarding.select_tools_desc": { en: "Choose which coding tools to configure", zh: "选择要配置的编程工具" },
+  "onboarding.start_setup": { en: "Start Setup", zh: "开始配置" },
+  "onboarding.setting_up": { en: "Setting up...", zh: "配置中..." },
+  "onboarding.creating_provider": { en: "Creating provider", zh: "创建服务商" },
+  "onboarding.starting_gateway": { en: "Starting gateway", zh: "启动网关" },
+  "onboarding.configuring": { en: "Configuring", zh: "配置" },
+  "onboarding.testing": { en: "Testing connection", zh: "测试连接" },
+  "onboarding.complete": { en: "All set!", zh: "配置完成！" },
+  "onboarding.partial": { en: "Setup completed with issues", zh: "配置完成（部分失败）" },
+  "onboarding.done": { en: "Get Started", zh: "开始使用" },
+
   // ── Settings about ──
   "settings.license": { en: "License", zh: "开源协议" },
 };
