@@ -73,7 +73,17 @@ export function Dashboard() {
   const handleStop = async () => { try { setStatus(await api.stopGateway()); toast("success", t("gateway.stopped")); } catch (err) { toast("error", (err as api.AppError).message); } };
   const handleRestart = async () => { try { setStatus(await api.restartGateway()); toast("success", t("gateway.restarted")); } catch (err) { toast("error", (err as api.AppError).message); } };
 
-  if (!status) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
+  if (!status) return (
+    <div className="grid grid-cols-3 gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="rounded-xl border border-border bg-card p-5">
+          <div className="skeleton h-3 w-20 mb-3" />
+          <div className="skeleton h-6 w-28 mb-2" />
+          <div className="skeleton h-2 w-16" />
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-6">

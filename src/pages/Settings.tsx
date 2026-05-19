@@ -122,7 +122,16 @@ export function Settings() {
     }
   };
 
-  if (!settings) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
+  if (!settings) return (
+    <div className="flex gap-6">
+      <div className="w-44 shrink-0 space-y-2">
+        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton h-9 rounded-lg" />)}
+      </div>
+      <div className="flex-1 space-y-4">
+        <div className="skeleton h-48 rounded-xl" />
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex gap-6 min-h-0">
