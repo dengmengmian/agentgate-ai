@@ -53,6 +53,7 @@ export function PetApp() {
   const chatInputRef = useRef("");
   const lastStatsRef = useRef(0);
   const gatewayStateRef = useRef<"running" | "stopped" | "active">("stopped");
+  const [lookAngle, setLookAngle] = useState({ x: 0, y: 0 });
 
   const locale = navigator.language.startsWith("zh") ? "zh" as const : "en" as const;
 
@@ -257,6 +258,20 @@ export function PetApp() {
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
+  // ── Eye follow (subtle lean toward cursor) ──
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
+      const dx = (e.clientX - cx) / cx; // -1 to 1
+      const dy = (e.clientY - cy) / cy;
+      setLookAngle({ x: dx * 3, y: dy * 2 }); // max 3deg X, 2deg Y
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
+
   // ── Render ──
 
   const PetComponent = PET_COMPONENTS[petType];
@@ -267,7 +282,14 @@ export function PetApp() {
       onMouseDown={handleMouseDown}
       onDoubleClick={handleDoubleClick}
     >
-      <div className={chatMode ? "" : `pet-${petState}`} style={{ position: "relative" }}>
+      <div
+        className={chatMode ? "" : `pet-${petState}`}
+        style={{
+          position: "relative",
+          transform: petState === "idle" ? `rotateY(${lookAngle.x}deg) rotateX(${-lookAngle.y}deg)` : undefined,
+          transition: "transform 0.3s ease-out",
+        }}
+      >
         {bubble && (
           <Bubble key={bubble.key} text={bubble.text} type={bubble.type} onDone={dismissBubble} />
         )}
