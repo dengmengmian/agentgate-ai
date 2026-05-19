@@ -12,7 +12,7 @@ export function RequestLogTable({ requests, onSelect }: RequestLogTableProps) {
   const { t } = useI18n();
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+    <div className="overflow-x-auto rounded-xl border border-border bg-card">
       <table className="w-full text-left text-xs">
         <thead>
           <tr className="border-b border-border text-text-muted">
@@ -34,7 +34,7 @@ export function RequestLogTable({ requests, onSelect }: RequestLogTableProps) {
               <tr
                 key={req.id}
                 onClick={() => onSelect(req)}
-                className="cursor-pointer border-b border-border/50 transition-colors hover:bg-card-secondary"
+                className="cursor-pointer border-b border-border/50 transition-colors hover:bg-hover"
               >
                 <td className="px-5 py-2.5 font-mono text-text-muted">
                   {formatTimestamp(req.timestamp)}

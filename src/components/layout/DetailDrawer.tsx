@@ -19,7 +19,7 @@ export function DetailDrawer({
       {/* Backdrop */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/40"
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
           onClick={onClose}
         />
       )}
@@ -30,6 +30,7 @@ export function DetailDrawer({
           "fixed right-0 top-0 z-50 flex h-full w-[480px] flex-col border-l border-border bg-card transition-transform duration-200",
           open ? "translate-x-0" : "translate-x-full"
         )}
+        style={{ boxShadow: open ? "var(--shadow-lg)" : "none" }}
       >
         {/* Header */}
         <div className="flex h-14 items-center justify-between border-b border-border px-5">
@@ -38,7 +39,7 @@ export function DetailDrawer({
           </h2>
           <button
             onClick={onClose}
-            className="rounded-md p-1.5 text-text-muted transition-colors hover:bg-card-secondary hover:text-text-primary"
+            className="rounded-lg p-1.5 text-text-muted transition-colors hover:bg-hover hover:text-text-primary"
           >
             <X className="h-4 w-4" />
           </button>

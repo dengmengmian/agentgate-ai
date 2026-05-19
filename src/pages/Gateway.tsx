@@ -112,10 +112,10 @@ export function Gateway() {
   return (
     <div className="space-y-6">
       {/* Status Card */}
-      <div className="rounded-lg border border-border bg-card p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-soft">
               <Radio className="h-6 w-6 text-accent" />
             </div>
             <div>
@@ -153,14 +153,14 @@ export function Gateway() {
             <>
               <button
                 onClick={handleStop}
-                className="flex items-center gap-2 rounded-md bg-error/10 px-4 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20"
+                className="flex items-center gap-2 rounded-md bg-error-soft px-4 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20"
               >
                 <Square className="h-3.5 w-3.5" />
                 {t("gateway.stop")}
               </button>
               <button
                 onClick={handleRestart}
-                className="flex items-center gap-2 rounded-md bg-warning/10 px-4 py-2 text-xs font-medium text-warning transition-colors hover:bg-warning/20"
+                className="flex items-center gap-2 rounded-md bg-warning-soft px-4 py-2 text-xs font-medium text-warning transition-colors hover:bg-warning/20"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 {t("gateway.restart")}
@@ -210,7 +210,7 @@ export function Gateway() {
       </div>
 
       {/* Route Modes */}
-      <div className="rounded-lg border border-border bg-card p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <h3 className="mb-4 text-sm font-semibold text-text-primary">
           {t("gateway.route_modes")}
         </h3>
@@ -239,10 +239,10 @@ export function Gateway() {
                 )}
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                   r.mode === "pass-through"
-                    ? "bg-accent/10 text-accent"
+                    ? "bg-accent-soft text-accent"
                     : r.mode === "transform"
-                      ? "bg-warning/10 text-warning"
-                      : "bg-text-muted/10 text-text-muted"
+                      ? "bg-warning-soft text-warning"
+                      : "bg-hover text-text-muted"
                 }`}>
                   {r.mode}
                 </span>
@@ -253,7 +253,7 @@ export function Gateway() {
       </div>
 
       {/* Settings */}
-      <div className="rounded-lg border border-border bg-card p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
             <Settings className="h-4 w-4 text-text-muted" />

@@ -13,7 +13,7 @@ export function RecentRequests({ requests }: RecentRequestsProps) {
   if (requests.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-border bg-card">
+    <div className="rounded-xl border border-border bg-card">
       <div className="border-b border-border px-5 py-3">
         <h3 className="text-sm font-semibold text-text-primary">
           {t("dashboard.recent_requests")}
@@ -39,7 +39,7 @@ export function RecentRequests({ requests }: RecentRequestsProps) {
               return (
                 <tr
                   key={req.id}
-                  className="border-b border-border/50 transition-colors hover:bg-card-secondary"
+                  className="border-b border-border/50 transition-colors hover:bg-hover"
                 >
                   <td className="px-5 py-2.5 font-mono text-text-muted">
                     {formatTimestamp(req.timestamp)}

@@ -1,36 +1,78 @@
 @import "tailwindcss";
 
-@theme {
-  --color-bg: #0B0D10;
-  --color-card: #111418;
-  --color-card-secondary: #161A20;
-  --color-border: #262B33;
-  --color-text-primary: #F4F6F8;
-  --color-text-secondary: #9BA3AF;
-  --color-text-muted: #6B7280;
-  --color-accent: #7C8CFF;
-  --color-success: #3FB950;
-  --color-warning: #D29922;
-  --color-error: #F85149;
+/* ═══════════════════════════════════════════════════════════════
+   Design Token System
+   All theme-dependent values as CSS variables.
+   Switch themes by changing [data-theme] — zero overrides needed.
+   ═══════════════════════════════════════════════════════════════ */
 
+@theme {
+  /* ── Surface Colors (Warm Dark) ── */
+  --color-bg: #121110;
+  --color-sidebar: #0E0D0C;
+  --color-card: #1C1A18;
+  --color-card-secondary: #232120;
+  --color-hover: #2A2826;
+  --color-border: #38342F;
+
+  /* ── Text ── */
+  --color-text-primary: #EDE8E2;
+  --color-text-secondary: #A39E96;
+  --color-text-muted: #6B6560;
+
+  /* ── Brand / Accent (Amber Gold) ── */
+  --color-accent: #E89850;
+  --color-accent-soft: rgba(232, 152, 80, 0.12);
+
+  /* ── Semantic ── */
+  --color-success: #5CB85C;
+  --color-success-soft: rgba(92, 184, 92, 0.12);
+  --color-warning: #E8B84E;
+  --color-warning-soft: rgba(232, 184, 78, 0.12);
+  --color-error: #E8584E;
+  --color-error-soft: rgba(232, 88, 78, 0.12);
+
+  /* ── Elevation ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.30);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.40);
+
+  /* ── Typography ── */
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* ── Latte Theme ── */
-[data-theme="latte"] {
-  --color-bg: #F8F1E8;
-  --color-card: #FEFCF8;
-  --color-card-secondary: #F4ECE2;
-  --color-border: #E2D6C8;
-  --color-text-primary: #2C2015;
-  --color-text-secondary: #5C4D3C;
-  --color-text-muted: #8A7B6A;
-  --color-accent: #A06830;
-  --color-success: #2D7A38;
-  --color-warning: #9A6B08;
-  --color-error: #B03020;
+/* ── Light Theme ── */
+[data-theme="light"] {
+  --color-bg: #F4F5F7;
+  --color-sidebar: #EBEDF0;
+  --color-card: #FFFFFF;
+  --color-card-secondary: #F4F5F7;
+  --color-hover: #EBEDF0;
+  --color-border: #D5D8DC;
+
+  --color-text-primary: #1A1C20;
+  --color-text-secondary: #5A5E66;
+  --color-text-muted: #8C9098;
+
+  --color-accent: #C07830;
+  --color-accent-soft: rgba(192, 120, 48, 0.10);
+
+  --color-success: #2D8840;
+  --color-success-soft: rgba(45, 136, 64, 0.10);
+  --color-warning: #B88A18;
+  --color-warning-soft: rgba(184, 138, 24, 0.10);
+  --color-error: #C83830;
+  --color-error-soft: rgba(200, 56, 48, 0.10);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Base Styles
+   ═══════════════════════════════════════════════════════════════ */
 
 body {
   background-color: var(--color-bg);
@@ -42,154 +84,171 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-muted); }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* ═══════════════════════════════════════════════════════════════
+   Component Classes
+   ═══════════════════════════════════════════════════════════════ */
 
-::-webkit-scrollbar-thumb {
-  background: var(--color-border);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
-}
-
-/* Form inputs */
-.form-input {
-  width: 100%;
-  border-radius: 0.375rem;
-  border: 1px solid var(--color-border);
-  background-color: var(--color-card-secondary);
-  padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
-  color: var(--color-text-primary);
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.form-input:focus {
-  border-color: var(--color-accent);
-}
-
-.form-input::placeholder {
-  color: var(--color-text-muted);
-}
-
-/* Buttons */
+/* ── Buttons ── */
 .btn-primary {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  border-radius: 0.375rem;
+  border-radius: 0.5rem;
   background-color: var(--color-accent);
-  padding: 0.375rem 0.75rem;
+  padding: 0.4rem 0.875rem;
   font-size: 0.6875rem;
   font-weight: 500;
   color: white;
-  transition: background-color 0.15s;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .btn-primary:hover {
-  opacity: 0.9;
+  filter: brightness(1.1);
+  transform: translateY(-0.5px);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
 }
 
 .btn-secondary {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  border-radius: 0.375rem;
+  border-radius: 0.5rem;
   background-color: var(--color-card-secondary);
-  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--color-border);
+  padding: 0.4rem 0.875rem;
   font-size: 0.6875rem;
   font-weight: 500;
   color: var(--color-text-secondary);
-  transition: all 0.15s;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .btn-secondary:hover {
-  background-color: var(--color-border);
+  background-color: var(--color-hover);
   color: var(--color-text-primary);
+  border-color: var(--color-text-muted);
 }
 
-/* ── Latte theme overrides ── */
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 0.5rem;
+  background-color: var(--color-error-soft);
+  border: 1px solid transparent;
+  padding: 0.4rem 0.875rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--color-error);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
 
-/* Buttons */
-[data-theme="latte"] .btn-secondary {
+.btn-danger:hover {
+  background-color: var(--color-error);
+  color: white;
+}
+
+/* ── Form Inputs ── */
+.form-input {
+  width: 100%;
+  border-radius: 0.5rem;
   border: 1px solid var(--color-border);
+  background-color: var(--color-card);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--color-text-primary);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* Cards — shadow for depth */
-[data-theme="latte"] .rounded-lg.border.bg-card {
-  box-shadow: 0 1px 4px rgba(60,40,20,0.08), 0 0 1px rgba(60,40,20,0.06);
+.form-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px var(--color-accent-soft);
 }
 
-[data-theme="latte"] section.rounded-lg {
-  box-shadow: 0 1px 4px rgba(60,40,20,0.08), 0 0 1px rgba(60,40,20,0.06);
+.form-input::placeholder {
+  color: var(--color-text-muted);
 }
 
-/* Sidebar — slightly deeper than bg */
-[data-theme="latte"] aside {
-  background: #F0E7DC !important;
-  border-color: #DDD0C2 !important;
+/* ── Cards ── */
+.card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-card);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-/* Topbar — match cards */
-[data-theme="latte"] header.border-b {
-  background: #FEFCF8 !important;
-  border-color: #E2D6C8 !important;
-  box-shadow: 0 1px 3px rgba(50,30,10,0.06);
+.card-hover:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
 }
 
-/* Form inputs / selects */
-[data-theme="latte"] .form-input,
-[data-theme="latte"] select {
-  background-color: #FEFCF8;
-  border-color: #DDD0C2;
+/* ═══════════════════════════════════════════════════════════════
+   Utility Overrides
+   Map Tailwind opacity classes to proper design tokens
+   ═══════════════════════════════════════════════════════════════ */
+
+.bg-accent-soft { background-color: var(--color-accent-soft); }
+.bg-success-soft { background-color: var(--color-success-soft); }
+.bg-warning-soft { background-color: var(--color-warning-soft); }
+.bg-error-soft { background-color: var(--color-error-soft); }
+
+/* ═══════════════════════════════════════════════════════════════
+   Animations
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* Inner cards (tool status, stat cards) — stronger border */
-[data-theme="latte"] .border-border\/50 {
-  border-color: var(--color-border) !important;
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
-/* Table */
-[data-theme="latte"] thead tr {
-  background-color: #F4ECE2 !important;
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
-[data-theme="latte"] .border-b.border-border\/50 {
-  border-color: #E0D4C5 !important;
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-/* Scrollbar */
-[data-theme="latte"] ::-webkit-scrollbar-thumb {
-  background: #D5C8B8;
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
-[data-theme="latte"] ::-webkit-scrollbar-thumb:hover {
-  background: #B8A898;
-}
+.animate-fade-in { animation: fade-in 0.2s ease-out; }
+.animate-slide-in-right { animation: slide-in-right 0.2s ease-out; }
+.animate-scale-in { animation: scale-in 0.15s ease-out; }
+.animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
 
-/* Fix /10 opacity colors — too faint on light. Use /20 equivalent via overrides */
-[data-theme="latte"] .bg-accent\/10 {
-  background-color: rgba(176, 125, 79, 0.15) !important;
-}
-
-[data-theme="latte"] .bg-error\/10 {
-  background-color: rgba(184, 50, 32, 0.12) !important;
-}
-
-[data-theme="latte"] .bg-warning\/10 {
-  background-color: rgba(166, 117, 8, 0.12) !important;
-}
-
-[data-theme="latte"] .bg-success\/10 {
-  background-color: rgba(45, 138, 62, 0.12) !important;
+/* ── Skeleton loader ── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-card-secondary) 25%,
+    var(--color-hover) 50%,
+    var(--color-card-secondary) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 0.375rem;
 }

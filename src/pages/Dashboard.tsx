@@ -73,15 +73,25 @@ export function Dashboard() {
   const handleStop = async () => { try { setStatus(await api.stopGateway()); toast("success", t("gateway.stopped")); } catch (err) { toast("error", (err as api.AppError).message); } };
   const handleRestart = async () => { try { setStatus(await api.restartGateway()); toast("success", t("gateway.restarted")); } catch (err) { toast("error", (err as api.AppError).message); } };
 
-  if (!status) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
+  if (!status) return (
+    <div className="grid grid-cols-3 gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="rounded-xl border border-border bg-card p-5">
+          <div className="skeleton h-3 w-20 mb-3" />
+          <div className="skeleton h-6 w-28 mb-2" />
+          <div className="skeleton h-2 w-16" />
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-6">
       {/* Gateway Status */}
-      <div className="rounded-lg border border-border bg-card p-5">
+      <div className="rounded-xl border border-border bg-card p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft">
               <Radio className="h-4.5 w-4.5 text-accent" />
             </div>
             <div>
@@ -101,8 +111,8 @@ export function Dashboard() {
         <div className="flex gap-2">
           {status.running ? (
             <>
-              <button onClick={handleStop} className="flex items-center gap-1.5 rounded-md bg-error/10 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/20"><Square className="h-3 w-3" />{t("dashboard.stop")}</button>
-              <button onClick={handleRestart} className="flex items-center gap-1.5 rounded-md bg-warning/10 px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/20"><RotateCcw className="h-3 w-3" />{t("dashboard.restart")}</button>
+              <button onClick={handleStop} className="flex items-center gap-1.5 rounded-md bg-error-soft px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/20"><Square className="h-3 w-3" />{t("dashboard.stop")}</button>
+              <button onClick={handleRestart} className="flex items-center gap-1.5 rounded-md bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/20"><RotateCcw className="h-3 w-3" />{t("dashboard.restart")}</button>
             </>
           ) : (
             <button onClick={handleStart} className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90"><Play className="h-3 w-3" />{t("dashboard.start")}</button>
@@ -141,7 +151,7 @@ export function Dashboard() {
       {stats && (
         <div className="grid grid-cols-3 gap-4">
           {/* Daily Bar Chart */}
-          <div className="col-span-2 rounded-lg border border-border bg-card p-5">
+          <div className="col-span-2 rounded-xl border border-border bg-card p-5">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <BarChart3 className="h-4 w-4 text-text-muted" />{t("stats.daily_chart")}
             </h3>
@@ -214,7 +224,7 @@ export function Dashboard() {
           </div>
 
           {/* Top Providers */}
-          <div className="rounded-lg border border-border bg-card p-5">
+          <div className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-3 text-sm font-semibold text-text-primary">{t("stats.top_providers")}</h3>
             <div className="space-y-2">
               {stats.providers.map((p) => (
@@ -230,7 +240,7 @@ export function Dashboard() {
       )}
 
       {/* Tools Overview */}
-      <div className="rounded-lg border border-border bg-card p-5">
+      <div className="rounded-xl border border-border bg-card p-5">
         <h3 className="mb-3 text-sm font-semibold text-text-primary">{t("dashboard.tool_status")}</h3>
         <div className="grid grid-cols-3 gap-4">
           {tools.map((tool) => (

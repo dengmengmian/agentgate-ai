@@ -12,7 +12,7 @@ export function JsonCodeBlock({
   language = "json",
 }: JsonCodeBlockProps) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-bg">
+    <div className="overflow-hidden rounded-xl border border-border bg-bg">
       {title && (
         <div className="flex items-center justify-between border-b border-border px-4 py-2">
           <span className="text-xs font-medium text-text-secondary">

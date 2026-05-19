@@ -122,7 +122,16 @@ export function Settings() {
     }
   };
 
-  if (!settings) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
+  if (!settings) return (
+    <div className="flex gap-6">
+      <div className="w-44 shrink-0 space-y-2">
+        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton h-9 rounded-lg" />)}
+      </div>
+      <div className="flex-1 space-y-4">
+        <div className="skeleton h-48 rounded-xl" />
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex gap-6 min-h-0">
@@ -135,8 +144,8 @@ export function Settings() {
               onClick={() => setTab(id)}
               className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 tab === id
-                  ? "bg-accent/10 text-accent font-medium"
-                  : "text-text-secondary hover:bg-card-secondary hover:text-text-primary"
+                  ? "bg-accent-soft text-accent font-medium"
+                  : "text-text-secondary hover:bg-hover hover:text-text-primary"
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -149,7 +158,7 @@ export function Settings() {
       {/* Right Content */}
       <div className="flex-1 min-w-0 space-y-6">
         {tab === "general" && (
-          <section className="rounded-lg border border-border bg-card p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.general")}</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -184,7 +193,7 @@ export function Settings() {
                   className="rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
                 >
                   <option value="dark">{t("settings.theme.dark")}</option>
-                  <option value="latte">{t("settings.theme.latte")}</option>
+                  <option value="light">{t("settings.theme.light")}</option>
                 </select>
               </div>
             </div>
@@ -192,7 +201,7 @@ export function Settings() {
         )}
 
         {tab === "security" && auth && (
-          <section className="rounded-lg border border-border bg-card p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <Shield className="h-4 w-4 text-accent" />{t("settings.gateway_security")}
             </h3>
@@ -212,7 +221,7 @@ export function Settings() {
         )}
 
         {tab === "gateway" && (
-          <section className="rounded-lg border border-border bg-card p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.gateway")}</h3>
             <div className="space-y-4">
               <SettingsRow label={t("gateway.listen_address")} value={settings.host} />
@@ -225,7 +234,7 @@ export function Settings() {
 
         {tab === "data" && (
           <>
-            <section className="rounded-lg border border-border bg-card p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.data")}</h3>
               <div className="flex items-center justify-between">
                 <div>
@@ -241,7 +250,7 @@ export function Settings() {
               </div>
             </section>
 
-            <section className="rounded-lg border border-border bg-card p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <DollarSign className="h-4 w-4 text-accent" />{t("settings.model_pricing")}
               </h3>
@@ -289,7 +298,7 @@ export function Settings() {
         )}
 
         {tab === "pet" && petSettings && (
-          <section className="rounded-lg border border-border bg-card p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <PawPrint className="h-4 w-4 text-accent" />{t("settings.pet.title")}
             </h3>
@@ -325,7 +334,7 @@ export function Settings() {
         )}
 
         {tab === "about" && (
-          <section className="rounded-lg border border-border bg-card p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.about")}</h3>
             <div className="space-y-2 text-xs">
               <div className="flex justify-between"><span className="text-text-muted">{t("settings.version")}</span><span className="text-text-primary">{appVersion}</span></div>
@@ -373,7 +382,7 @@ function PetTypeCard({ type, selected, name, desc, onClick }: {
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center gap-2 rounded-lg border p-4 transition-all ${
+      className={`flex flex-col items-center gap-2 rounded-lg border p-4 transition-all duration-150 hover:scale-[1.02] ${
         selected
           ? "border-accent bg-accent/5"
           : "border-border bg-card-secondary hover:border-text-muted"
@@ -508,7 +517,7 @@ function PricingRow({ item, onUpdate, onDelete }: { item: ModelPricing; onUpdate
         )}
       </td>
       <td className="px-3 py-1.5 text-center">
-        <span className={`rounded px-1.5 py-0.5 text-[10px] ${item.is_custom ? "bg-accent/10 text-accent" : "bg-card-secondary text-text-muted"}`}>
+        <span className={`rounded px-1.5 py-0.5 text-[10px] ${item.is_custom ? "bg-accent-soft text-accent" : "bg-card-secondary text-text-muted"}`}>
           {item.is_custom ? t("settings.custom") : t("settings.builtin")}
         </span>
       </td>
