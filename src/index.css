@@ -19,10 +19,10 @@
 
 /* ── Latte Theme ── */
 [data-theme="latte"] {
-  --color-bg: #F5EDE3;
-  --color-card: #FBF7F2;
-  --color-card-secondary: #F2E9DE;
-  --color-border: #DDD0C2;
+  --color-bg: #F8F1E8;
+  --color-card: #FEFCF8;
+  --color-card-secondary: #F4ECE2;
+  --color-border: #E2D6C8;
   --color-text-primary: #2C2015;
   --color-text-secondary: #5C4D3C;
   --color-text-muted: #8A7B6A;
@@ -136,22 +136,22 @@ body {
 
 /* Sidebar — slightly deeper than bg */
 [data-theme="latte"] aside {
-  background: #EDE2D6 !important;
-  border-color: #D8CBBB !important;
+  background: #F0E7DC !important;
+  border-color: #DDD0C2 !important;
 }
 
 /* Topbar — match cards */
 [data-theme="latte"] header.border-b {
-  background: #FBF7F2 !important;
-  border-color: #DDD0C2 !important;
+  background: #FEFCF8 !important;
+  border-color: #E2D6C8 !important;
   box-shadow: 0 1px 3px rgba(50,30,10,0.06);
 }
 
 /* Form inputs / selects */
 [data-theme="latte"] .form-input,
 [data-theme="latte"] select {
-  background-color: #FBF7F2;
-  border-color: #D8CBBB;
+  background-color: #FEFCF8;
+  border-color: #DDD0C2;
 }
 
 /* Inner cards (tool status, stat cards) — stronger border */
@@ -161,16 +161,16 @@ body {
 
 /* Table */
 [data-theme="latte"] thead tr {
-  background-color: #F0E6DA !important;
+  background-color: #F4ECE2 !important;
 }
 
 [data-theme="latte"] .border-b.border-border\/50 {
-  border-color: #DDD0C2 !important;
+  border-color: #E0D4C5 !important;
 }
 
 /* Scrollbar */
 [data-theme="latte"] ::-webkit-scrollbar-thumb {
-  background: #D0C2B0;
+  background: #D5C8B8;
 }
 
 [data-theme="latte"] ::-webkit-scrollbar-thumb:hover {
