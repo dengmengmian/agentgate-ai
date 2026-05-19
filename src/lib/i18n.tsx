@@ -299,7 +299,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "settings.theme": { en: "Theme", zh: "主题" },
   "settings.theme_desc": { en: "App color scheme", zh: "应用配色方案" },
   "settings.theme.dark": { en: "Dark", zh: "深色" },
-  "settings.theme.latte": { en: "Latte", zh: "奶茶" },
+  "settings.theme.light": { en: "Light", zh: "浅色" },
 
   // ── Stats ──
   "stats.total_requests": { en: "Total Requests", zh: "总请求" },

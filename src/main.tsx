@@ -5,8 +5,9 @@ import { App } from "./app/App";
 import { PetApp } from "./pet/PetApp";
 import "./index.css";
 
-// Apply saved theme
-const savedTheme = localStorage.getItem("agentgate_theme");
+// Apply saved theme (migrate "latte" → "light")
+let savedTheme = localStorage.getItem("agentgate_theme");
+if (savedTheme === "latte") { savedTheme = "light"; localStorage.setItem("agentgate_theme", "light"); }
 if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
 
 const label = getCurrentWindow().label;

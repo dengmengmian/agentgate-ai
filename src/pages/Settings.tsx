@@ -193,7 +193,7 @@ export function Settings() {
                   className="rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
                 >
                   <option value="dark">{t("settings.theme.dark")}</option>
-                  <option value="latte">{t("settings.theme.latte")}</option>
+                  <option value="light">{t("settings.theme.light")}</option>
                 </select>
               </div>
             </div>
