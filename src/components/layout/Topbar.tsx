@@ -34,7 +34,7 @@ export function Topbar() {
   }, [refresh]);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6" style={{ boxShadow: "var(--shadow-sm)" }}>
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-sidebar px-6" style={{ boxShadow: "var(--shadow-sm)" }}>
       <h1 className="text-sm font-semibold text-text-primary">{t(titleKey)}</h1>
 
       <div className="flex items-center gap-4">
