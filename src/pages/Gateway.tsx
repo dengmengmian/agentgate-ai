@@ -112,7 +112,7 @@ export function Gateway() {
   return (
     <div className="space-y-6">
       {/* Status Card */}
-      <div className="rounded-lg border border-border bg-card p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-soft">
@@ -210,7 +210,7 @@ export function Gateway() {
       </div>
 
       {/* Route Modes */}
-      <div className="rounded-lg border border-border bg-card p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <h3 className="mb-4 text-sm font-semibold text-text-primary">
           {t("gateway.route_modes")}
         </h3>
@@ -253,7 +253,7 @@ export function Gateway() {
       </div>
 
       {/* Settings */}
-      <div className="rounded-lg border border-border bg-card p-6">
+      <div className="rounded-xl border border-border bg-card p-6">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
             <Settings className="h-4 w-4 text-text-muted" />

@@ -169,7 +169,7 @@ export function Tools() {
   return (
     <div className="space-y-6">
       {/* Codex Card */}
-      <div className="rounded-lg border border-border bg-card p-5">
+      <div className="rounded-xl border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
@@ -226,7 +226,7 @@ export function Tools() {
       </div>
 
       {/* Claude Code Card */}
-      <div className="rounded-lg border border-border bg-card p-5">
+      <div className="rounded-xl border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
@@ -284,7 +284,7 @@ export function Tools() {
       </div>
 
       {/* OpenCode Card */}
-      <div className="rounded-lg border border-border bg-card p-5">
+      <div className="rounded-xl border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
@@ -318,7 +318,7 @@ export function Tools() {
       </div>
 
       {/* Gemini CLI Card */}
-      <div className="rounded-lg border border-border bg-card p-5">
+      <div className="rounded-xl border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
@@ -356,7 +356,7 @@ export function Tools() {
       </div>
 
       {/* AtomCode Card */}
-      <div className="rounded-lg border border-border bg-card p-5">
+      <div className="rounded-xl border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">

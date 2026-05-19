@@ -78,7 +78,7 @@ export function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Gateway Status */}
-      <div className="rounded-lg border border-border bg-card p-5">
+      <div className="rounded-xl border border-border bg-card p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft">
@@ -141,7 +141,7 @@ export function Dashboard() {
       {stats && (
         <div className="grid grid-cols-3 gap-4">
           {/* Daily Bar Chart */}
-          <div className="col-span-2 rounded-lg border border-border bg-card p-5">
+          <div className="col-span-2 rounded-xl border border-border bg-card p-5">
             <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <BarChart3 className="h-4 w-4 text-text-muted" />{t("stats.daily_chart")}
             </h3>
@@ -214,7 +214,7 @@ export function Dashboard() {
           </div>
 
           {/* Top Providers */}
-          <div className="rounded-lg border border-border bg-card p-5">
+          <div className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-3 text-sm font-semibold text-text-primary">{t("stats.top_providers")}</h3>
             <div className="space-y-2">
               {stats.providers.map((p) => (
@@ -230,7 +230,7 @@ export function Dashboard() {
       )}
 
       {/* Tools Overview */}
-      <div className="rounded-lg border border-border bg-card p-5">
+      <div className="rounded-xl border border-border bg-card p-5">
         <h3 className="mb-3 text-sm font-semibold text-text-primary">{t("dashboard.tool_status")}</h3>
         <div className="grid grid-cols-3 gap-4">
           {tools.map((tool) => (

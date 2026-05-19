@@ -84,7 +84,7 @@ export function Diagnostics() {
 
       {/* Overall status */}
       {report && (
-        <div className="rounded-lg border border-border bg-card p-5">
+        <div className="rounded-xl border border-border bg-card p-5">
           <div className="mb-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
               {statusIcon(report.overall_status)}
@@ -121,7 +121,7 @@ function ReportCard({ report }: { report: CheckReport }) {
   const [expanded, setExpanded] = useState(report.status !== "ok");
 
   return (
-    <div className="rounded-lg border border-border bg-card">
+    <div className="rounded-xl border border-border bg-card">
       <button
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center justify-between px-5 py-3 text-left"

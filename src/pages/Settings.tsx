@@ -136,7 +136,7 @@ export function Settings() {
               className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 tab === id
                   ? "bg-accent-soft text-accent font-medium"
-                  : "text-text-secondary hover:bg-card-secondary hover:text-text-primary"
+                  : "text-text-secondary hover:bg-hover hover:text-text-primary"
               }`}
             >
               <Icon className="h-4 w-4 shrink-0" />
@@ -149,7 +149,7 @@ export function Settings() {
       {/* Right Content */}
       <div className="flex-1 min-w-0 space-y-6">
         {tab === "general" && (
-          <section className="rounded-lg border border-border bg-card p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.general")}</h3>
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -192,7 +192,7 @@ export function Settings() {
         )}
 
         {tab === "security" && auth && (
-          <section className="rounded-lg border border-border bg-card p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <Shield className="h-4 w-4 text-accent" />{t("settings.gateway_security")}
             </h3>
@@ -212,7 +212,7 @@ export function Settings() {
         )}
 
         {tab === "gateway" && (
-          <section className="rounded-lg border border-border bg-card p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.gateway")}</h3>
             <div className="space-y-4">
               <SettingsRow label={t("gateway.listen_address")} value={settings.host} />
@@ -225,7 +225,7 @@ export function Settings() {
 
         {tab === "data" && (
           <>
-            <section className="rounded-lg border border-border bg-card p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.data")}</h3>
               <div className="flex items-center justify-between">
                 <div>
@@ -241,7 +241,7 @@ export function Settings() {
               </div>
             </section>
 
-            <section className="rounded-lg border border-border bg-card p-5">
+            <section className="rounded-xl border border-border bg-card p-5">
               <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <DollarSign className="h-4 w-4 text-accent" />{t("settings.model_pricing")}
               </h3>
@@ -289,7 +289,7 @@ export function Settings() {
         )}
 
         {tab === "pet" && petSettings && (
-          <section className="rounded-lg border border-border bg-card p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <PawPrint className="h-4 w-4 text-accent" />{t("settings.pet.title")}
             </h3>
@@ -325,7 +325,7 @@ export function Settings() {
         )}
 
         {tab === "about" && (
-          <section className="rounded-lg border border-border bg-card p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.about")}</h3>
             <div className="space-y-2 text-xs">
               <div className="flex justify-between"><span className="text-text-muted">{t("settings.version")}</span><span className="text-text-primary">{appVersion}</span></div>
@@ -373,7 +373,7 @@ function PetTypeCard({ type, selected, name, desc, onClick }: {
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-center gap-2 rounded-lg border p-4 transition-all ${
+      className={`flex flex-col items-center gap-2 rounded-lg border p-4 transition-all duration-150 hover:scale-[1.02] ${
         selected
           ? "border-accent bg-accent/5"
           : "border-border bg-card-secondary hover:border-text-muted"

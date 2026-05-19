@@ -10,7 +10,7 @@ export function ErrorExplanationCard({
   message,
 }: ErrorExplanationCardProps) {
   return (
-    <div className="rounded-lg border border-error/20 bg-error/5 p-4">
+    <div className="rounded-xl border border-error/20 bg-error/5 p-4">
       <div className="mb-2 flex items-center gap-2">
         <AlertTriangle className="h-4 w-4 text-error" />
         <span className="text-xs font-semibold text-error">

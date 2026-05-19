@@ -177,7 +177,7 @@ export function Routes() {
 
       {/* Create form */}
       {showCreate && (
-        <div className="rounded-lg border border-accent/30 bg-card p-4">
+        <div className="rounded-xl border border-accent/30 bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
             <h4 className="text-xs font-semibold text-text-primary">{t("routes.create_profile")}</h4>
             <button onClick={() => setShowCreate(false)} className="text-text-muted hover:text-text-primary"><X className="h-3.5 w-3.5" /></button>
@@ -226,7 +226,7 @@ export function Routes() {
                 className={`w-full rounded-lg border p-3 text-left transition-colors ${
                   detail?.profile.id === p.id
                     ? "border-accent/40 bg-card"
-                    : "border-border bg-card hover:bg-card-secondary"
+                    : "border-border bg-card hover:bg-hover"
                 }`}
               >
                 <div className="flex items-center justify-between">
@@ -246,7 +246,7 @@ export function Routes() {
           {detail && (
             <div className="flex-1 space-y-4">
               {/* Header */}
-              <div className="rounded-lg border border-border bg-card p-5">
+              <div className="rounded-xl border border-border bg-card p-5">
                 <div className="mb-3 flex items-center justify-between">
                   <div>
                     {editingName ? (
@@ -315,7 +315,7 @@ export function Routes() {
               </div>
 
               {/* Provider chain */}
-              <div className="rounded-lg border border-border bg-card p-5">
+              <div className="rounded-xl border border-border bg-card p-5">
                 <h4 className="mb-3 text-xs font-semibold text-text-primary">{t("routes.provider_chain")}</h4>
                 <div className="space-y-2">
                   {detail.providers.map((rp, idx) => {
