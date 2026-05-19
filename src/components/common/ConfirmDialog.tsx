@@ -31,7 +31,7 @@ export function ConfirmDialog({
       <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl">
         <div className="mb-4 flex items-center gap-3">
           {variant === "danger" && (
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-error/10">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-error-soft">
               <AlertTriangle className="h-4 w-4 text-error" />
             </div>
           )}

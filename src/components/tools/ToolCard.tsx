@@ -20,7 +20,7 @@ export function ToolCard({ tool }: ToolCardProps) {
       {/* Header */}
       <div className="mb-4 flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
             <Icon className="h-5 w-5 text-accent" />
           </div>
           <div>

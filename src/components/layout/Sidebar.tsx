@@ -55,7 +55,7 @@ export function Sidebar() {
               cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium transition-colors",
                 isActive
-                  ? "bg-accent/10 text-accent"
+                  ? "bg-accent-soft text-accent"
                   : "text-text-secondary hover:bg-card-secondary hover:text-text-primary"
               )
             }

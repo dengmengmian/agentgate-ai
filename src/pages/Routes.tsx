@@ -259,7 +259,7 @@ export function Routes() {
                           className="form-input text-sm font-semibold"
                           autoFocus
                         />
-                        <button onClick={handleRename} className="rounded p-1 text-accent hover:bg-accent/10"><Check className="h-3.5 w-3.5" /></button>
+                        <button onClick={handleRename} className="rounded p-1 text-accent hover:bg-accent-soft"><Check className="h-3.5 w-3.5" /></button>
                         <button onClick={() => setEditingName(false)} className="rounded p-1 text-text-muted hover:bg-border"><X className="h-3.5 w-3.5" /></button>
                       </div>
                     ) : (
@@ -560,7 +560,7 @@ function ConditionsDialog({ target, onSave, onClose }: {
           {!showCustom && (
             <div className="grid grid-cols-2 gap-2">
               {CONDITION_PRESETS.map(p => (
-                <label key={p.key} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors ${checked.has(p.key) ? "border-accent bg-accent/10 text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
+                <label key={p.key} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors ${checked.has(p.key) ? "border-accent bg-accent-soft text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
                   <input type="checkbox" checked={checked.has(p.key)} onChange={() => toggle(p.key)} className="accent-accent" />
                   {p.icon} {t(`routes.scene_${p.key}`)}
                 </label>

@@ -172,7 +172,7 @@ export function Tools() {
       <div className="rounded-lg border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
               <Code className="h-5 w-5 text-accent" />
             </div>
             <div>
@@ -229,7 +229,7 @@ export function Tools() {
       <div className="rounded-lg border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
               <Terminal className="h-5 w-5 text-accent" />
             </div>
             <div>
@@ -287,7 +287,7 @@ export function Tools() {
       <div className="rounded-lg border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
               <Braces className="h-5 w-5 text-accent" />
             </div>
             <div>
@@ -321,7 +321,7 @@ export function Tools() {
       <div className="rounded-lg border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
               <Sparkles className="h-5 w-5 text-accent" />
             </div>
             <div>
@@ -359,7 +359,7 @@ export function Tools() {
       <div className="rounded-lg border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent/10">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
               <Atom className="h-5 w-5 text-accent" />
             </div>
             <div>

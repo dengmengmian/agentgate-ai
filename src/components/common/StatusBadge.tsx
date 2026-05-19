@@ -3,11 +3,11 @@ import { cn } from "@/lib/utils";
 type Variant = "success" | "error" | "warning" | "muted" | "accent";
 
 const styles: Record<Variant, string> = {
-  success: "bg-success/10 text-success",
-  error: "bg-error/10 text-error",
-  warning: "bg-warning/10 text-warning",
-  muted: "bg-text-muted/10 text-text-muted",
-  accent: "bg-accent/10 text-accent",
+  success: "bg-success-soft text-success",
+  error: "bg-error-soft text-error",
+  warning: "bg-warning-soft text-warning",
+  muted: "bg-hover text-text-muted",
+  accent: "bg-accent-soft text-accent",
 };
 
 interface StatusBadgeProps {

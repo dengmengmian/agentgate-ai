@@ -81,7 +81,7 @@ export function Dashboard() {
       <div className="rounded-lg border border-border bg-card p-5">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft">
               <Radio className="h-4.5 w-4.5 text-accent" />
             </div>
             <div>
@@ -101,8 +101,8 @@ export function Dashboard() {
         <div className="flex gap-2">
           {status.running ? (
             <>
-              <button onClick={handleStop} className="flex items-center gap-1.5 rounded-md bg-error/10 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/20"><Square className="h-3 w-3" />{t("dashboard.stop")}</button>
-              <button onClick={handleRestart} className="flex items-center gap-1.5 rounded-md bg-warning/10 px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/20"><RotateCcw className="h-3 w-3" />{t("dashboard.restart")}</button>
+              <button onClick={handleStop} className="flex items-center gap-1.5 rounded-md bg-error-soft px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/20"><Square className="h-3 w-3" />{t("dashboard.stop")}</button>
+              <button onClick={handleRestart} className="flex items-center gap-1.5 rounded-md bg-warning-soft px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/20"><RotateCcw className="h-3 w-3" />{t("dashboard.restart")}</button>
             </>
           ) : (
             <button onClick={handleStart} className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90"><Play className="h-3 w-3" />{t("dashboard.start")}</button>

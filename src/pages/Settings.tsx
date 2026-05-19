@@ -135,7 +135,7 @@ export function Settings() {
               onClick={() => setTab(id)}
               className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 tab === id
-                  ? "bg-accent/10 text-accent font-medium"
+                  ? "bg-accent-soft text-accent font-medium"
                   : "text-text-secondary hover:bg-card-secondary hover:text-text-primary"
               }`}
             >
@@ -508,7 +508,7 @@ function PricingRow({ item, onUpdate, onDelete }: { item: ModelPricing; onUpdate
         )}
       </td>
       <td className="px-3 py-1.5 text-center">
-        <span className={`rounded px-1.5 py-0.5 text-[10px] ${item.is_custom ? "bg-accent/10 text-accent" : "bg-card-secondary text-text-muted"}`}>
+        <span className={`rounded px-1.5 py-0.5 text-[10px] ${item.is_custom ? "bg-accent-soft text-accent" : "bg-card-secondary text-text-muted"}`}>
           {item.is_custom ? t("settings.custom") : t("settings.builtin")}
         </span>
       </td>

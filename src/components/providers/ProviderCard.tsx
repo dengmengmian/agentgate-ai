@@ -34,7 +34,7 @@ export function ProviderCard({
     <div className={`rounded-lg border bg-card p-5 ${provider.is_active ? "border-accent/40" : "border-border"}`}>
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent/10">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft">
             <Cloud className="h-4 w-4 text-accent" />
           </div>
           <div>

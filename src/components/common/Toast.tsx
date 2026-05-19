@@ -24,9 +24,9 @@ const icons = {
 };
 
 const styles = {
-  success: "border-success/30 bg-success/10",
-  error: "border-error/30 bg-error/10",
-  warning: "border-warning/30 bg-warning/10",
+  success: "border-success/20 bg-success-soft",
+  error: "border-error/20 bg-error-soft",
+  warning: "border-warning/20 bg-warning-soft",
 };
 
 const iconColors = {
