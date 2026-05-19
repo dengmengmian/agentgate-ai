@@ -45,6 +45,9 @@ export function ProviderFormDialog({
   const [fetchingModels, setFetchingModels] = useState(false);
   const [newMappingClient, setNewMappingClient] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [quickMode, setQuickMode] = useState(true);
+  const [quickKey, setQuickKey] = useState("");
+  const [detectedType, setDetectedType] = useState<string | null>(null);
 
   // Presets per provider type
   const PROVIDER_PRESETS: Record<string, { baseUrl: string; protocols: string[]; defaultModel: string; reasoningModel?: string; anthropicBaseUrl?: string; responsesBaseUrl?: string; extraHeaders?: string }> = {
@@ -93,6 +96,55 @@ export function ProviderFormDialog({
     if (!name && typeLabel) setName(typeLabel);
   };
 
+  // API Key auto-detection
+  const detectProviderFromKey = (key: string): string | null => {
+    const k = key.trim();
+    if (!k) return null;
+    if (k.startsWith("sk-ant-")) return "anthropic";
+    if (k.startsWith("deepseek-")) return "deepseek";
+    if (k.startsWith("sk-or-")) return "openrouter";
+    if (k.startsWith("gsk_")) return "groq";
+    if (k.startsWith("xai-")) return "xai";
+    if (k.startsWith("pplx-")) return "perplexity";
+    // Generic sk- could be OpenAI, SiliconFlow, Kimi, etc.
+    // Default to OpenAI for sk- prefix
+    if (k.startsWith("sk-")) return "openai";
+    return null;
+  };
+
+  const handleQuickKeyChange = (key: string) => {
+    setQuickKey(key);
+    setDetectedType(detectProviderFromKey(key));
+  };
+
+  const handleQuickCreate = () => {
+    const type = detectedType;
+    if (!type || !quickKey.trim()) return;
+    // Apply preset and fill API key
+    setProviderType(type);
+    applyPreset(type);
+    setApiKeys([quickKey.trim()]);
+    // Submit directly
+    const preset = PROVIDER_PRESETS[type];
+    if (!preset) return;
+    const typeLabel = PROVIDER_TYPES.find(t => t.value === type)?.label ?? type;
+    onSubmit({
+      name: typeLabel,
+      provider_type: type,
+      base_url: preset.baseUrl,
+      api_key: quickKey.trim(),
+      default_model: preset.defaultModel,
+      reasoning_model: preset.reasoningModel ?? null,
+      protocol: JSON.stringify(preset.protocols),
+      timeout_seconds: 120,
+      enabled: true,
+      anthropic_base_url: preset.anthropicBaseUrl ?? null,
+      responses_base_url: preset.responsesBaseUrl ?? null,
+      extra_headers: preset.extraHeaders ?? null,
+      auto_cache_control: true,
+    } as CreateProviderInput);
+  };
+
   useEffect(() => {
     if (provider) {
       setName(provider.name);
@@ -128,6 +180,9 @@ export function ProviderFormDialog({
       setEnabled(true);
     }
     setErrors({});
+    setQuickMode(!provider);
+    setQuickKey("");
+    setDetectedType(null);
   }, [provider, open]);
 
   const validate = (): boolean => {
@@ -193,7 +248,48 @@ export function ProviderFormDialog({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 p-6">
+        {/* Quick mode — paste API key to auto-create */}
+        {quickMode && !isEdit && (
+          <div className="p-6 space-y-4">
+            <div>
+              <p className="text-xs text-text-muted mb-3">{t("providers.quick_add_hint")}</p>
+              <input
+                value={quickKey}
+                onChange={(e) => handleQuickKeyChange(e.target.value)}
+                placeholder="sk-xxx / deepseek-xxx / sk-ant-xxx ..."
+                className="form-input text-sm"
+                autoFocus
+              />
+            </div>
+            {detectedType && (
+              <div className="flex items-center justify-between rounded-xl border border-accent/30 bg-accent-soft p-4">
+                <div>
+                  <p className="text-sm font-medium text-text-primary">
+                    {PROVIDER_TYPES.find(t => t.value === detectedType)?.label}
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    {PROVIDER_PRESETS[detectedType]?.defaultModel}
+                  </p>
+                </div>
+                <button type="button" onClick={handleQuickCreate} className="btn-primary">
+                  {t("providers.create")}
+                </button>
+              </div>
+            )}
+            {quickKey && !detectedType && (
+              <p className="text-xs text-text-muted">{t("providers.quick_add_unknown")}</p>
+            )}
+            <button
+              type="button"
+              onClick={() => setQuickMode(false)}
+              className="text-xs text-accent hover:underline"
+            >
+              {t("providers.manual_setup")}
+            </button>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className={`space-y-4 p-6 ${quickMode && !isEdit ? "hidden" : ""}`}>
           {/* Provider type — auto-fills everything below */}
           <Field label={t("providers.type")}>
             <select value={providerType} onChange={(e) => { setProviderType(e.target.value); applyPreset(e.target.value); }} className="form-input">
