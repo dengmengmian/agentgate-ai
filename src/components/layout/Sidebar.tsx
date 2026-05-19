@@ -34,7 +34,7 @@ export function Sidebar() {
     <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-sidebar">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2.5 border-b border-border px-5">
-        <svg className="h-6 w-6" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <svg className="h-7 w-7" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
           <circle cx="256" cy="256" r="180" stroke="currentColor" strokeWidth="16" opacity="0.2" className="text-accent" />
           <ellipse cx="256" cy="256" rx="180" ry="100" stroke="currentColor" strokeWidth="16" opacity="0.35" className="text-accent" transform="rotate(-25 256 256)" />
           <ellipse cx="256" cy="256" rx="180" ry="100" stroke="currentColor" strokeWidth="16" opacity="0.35" className="text-accent" transform="rotate(25 256 256)" />
