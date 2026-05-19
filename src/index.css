@@ -19,9 +19,9 @@
 
 /* ── Latte Theme ── */
 [data-theme="latte"] {
-  --color-bg: #F4EDE5;
-  --color-card: #FFFFFF;
-  --color-card-secondary: #F5EEE6;
+  --color-bg: #F0E8DF;
+  --color-card: #F8F3ED;
+  --color-card-secondary: #F0E8DF;
   --color-border: #D8CCBE;
   --color-text-primary: #2C2418;
   --color-text-secondary: #6B5D4F;
@@ -142,14 +142,14 @@ body {
 
 /* Topbar */
 [data-theme="latte"] header.border-b {
-  background: #FFFFFF !important;
+  background: #F8F3ED !important;
   box-shadow: 0 1px 3px rgba(60,40,20,0.06);
 }
 
 /* Form inputs / selects */
 [data-theme="latte"] .form-input,
 [data-theme="latte"] select {
-  background-color: #FFFFFF;
+  background-color: #FBF7F2;
   border-color: #C8BBAB;
 }
 
