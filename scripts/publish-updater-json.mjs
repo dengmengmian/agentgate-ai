@@ -47,6 +47,10 @@ function findAsset(assets, patterns) {
   return assets.find((asset) => patterns.every((pattern) => pattern.test(asset.name)));
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 async function platformEntry(assets, asset) {
   if (!asset) return null;
   return {
@@ -57,7 +61,8 @@ async function platformEntry(assets, asset) {
 
 function releaseNotes(version) {
   const changelog = fs.readFileSync("CHANGELOG.md", "utf8");
-  const match = changelog.match(new RegExp(`^## \\\\[${version}\\\\][^\\n]*\\n([\\s\\S]*?)(?=^## \\\\[|$)`, "m"));
+  const escapedVersion = escapeRegExp(version);
+  const match = changelog.match(new RegExp(`^## \\[${escapedVersion}\\][^\\n]*\\n([\\s\\S]*?)(?=^## \\[|$)`, "m"));
   return match ? match[1].trim() : `Release ${tag}`;
 }
 

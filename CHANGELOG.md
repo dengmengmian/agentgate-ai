@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.4] - 2026-05-20
+
+### Fixes / 修复
+
+- 修复桌面宠物恢复到屏幕外坐标时看起来没有显示的问题
+- 修复通过设置页或托盘重新显示宠物时不会自动拉回可见区域的问题
+- 修复 release 合并版 `latest.json` 发布脚本在解析 changelog 版本标题时报正则错误的问题
+
+---
+
 ## [0.8.3] - 2026-05-19
 
 ### Fixes / 修复

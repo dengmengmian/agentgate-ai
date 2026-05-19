@@ -20,6 +20,59 @@ use app::commands;
 use app::state::AppState;
 use models::gateway::GatewayRuntimeState;
 
+const PET_DEFAULT_X: f64 = 100.0;
+const PET_DEFAULT_Y: f64 = 100.0;
+const PET_WIDTH: f64 = 220.0;
+const PET_HEIGHT: f64 = 240.0;
+
+fn pet_position_on_screen(monitors: &[tauri::Monitor], x: f64, y: f64) -> bool {
+    if !x.is_finite() || !y.is_finite() {
+        return false;
+    }
+
+    monitors.iter().any(|monitor| {
+        let pos = monitor.position();
+        let size = monitor.size();
+        let scale = monitor.scale_factor().max(1.0);
+        let left = pos.x as f64 / scale;
+        let top = pos.y as f64 / scale;
+        let right = left + size.width as f64 / scale;
+        let bottom = top + size.height as f64 / scale;
+
+        x + PET_WIDTH > left && x < right && y + PET_HEIGHT > top && y < bottom
+    })
+}
+
+fn normalized_pet_position(monitors: &[tauri::Monitor], x: f64, y: f64) -> (f64, f64) {
+    if monitors.is_empty() || pet_position_on_screen(monitors, x, y) {
+        return (x, y);
+    }
+
+    if let Some(monitor) = monitors.first() {
+        let pos = monitor.position();
+        let scale = monitor.scale_factor().max(1.0);
+        (
+            pos.x as f64 / scale + PET_DEFAULT_X,
+            pos.y as f64 / scale + PET_DEFAULT_Y,
+        )
+    } else {
+        (PET_DEFAULT_X, PET_DEFAULT_Y)
+    }
+}
+
+fn move_pet_to_visible_area(app: &tauri::AppHandle, pet_win: &tauri::WebviewWindow) {
+    let Ok(position) = pet_win.outer_position() else {
+        return;
+    };
+    let Ok(monitors) = app.available_monitors() else {
+        return;
+    };
+    let (x, y) = normalized_pet_position(&monitors, position.x as f64, position.y as f64);
+    if (x - position.x as f64).abs() > f64::EPSILON || (y - position.y as f64).abs() > f64::EPSILON {
+        let _ = pet_win.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -98,8 +151,10 @@ pub fn run() {
                     .and_then(|conn| storage::pet_settings::get(&conn).ok());
 
                 let pet_visible = pet_settings.as_ref().map(|s| s.visible).unwrap_or(true);
-                let pos_x = pet_settings.as_ref().map(|s| s.pos_x).unwrap_or(100.0);
-                let pos_y = pet_settings.as_ref().map(|s| s.pos_y).unwrap_or(100.0);
+                let saved_x = pet_settings.as_ref().map(|s| s.pos_x).unwrap_or(PET_DEFAULT_X);
+                let saved_y = pet_settings.as_ref().map(|s| s.pos_y).unwrap_or(PET_DEFAULT_Y);
+                let monitors = app.available_monitors().unwrap_or_default();
+                let (pos_x, pos_y) = normalized_pet_position(&monitors, saved_x, saved_y);
 
                 let mut builder = WebviewWindowBuilder::new(
                     app,
@@ -107,7 +162,7 @@ pub fn run() {
                     tauri::WebviewUrl::App("index.html".into()),
                 )
                 .title("AgentGate Pet")
-                .inner_size(220.0, 240.0)
+                .inner_size(PET_WIDTH, PET_HEIGHT)
                 .decorations(false)
                 .transparent(true)
                 .always_on_top(true)
@@ -116,9 +171,7 @@ pub fn run() {
                 .visible(pet_visible);
 
                 // Restore saved position
-                if pos_x > 0.0 || pos_y > 0.0 {
-                    builder = builder.position(pos_x, pos_y);
-                }
+                builder = builder.position(pos_x, pos_y);
 
                 if let Err(e) = builder.build() {
                     tracing::warn!("Failed to create pet window: {e}");
@@ -360,7 +413,9 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         if is_visible {
                             let _ = pet_win.hide();
                         } else {
+                            move_pet_to_visible_area(&app, &pet_win);
                             let _ = pet_win.show();
+                            let _ = pet_win.set_focus();
                         }
                         // Persist visibility
                         let new_visible = !is_visible;

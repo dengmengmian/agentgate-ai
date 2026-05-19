@@ -1342,7 +1342,9 @@ pub fn update_pet_settings(
 pub fn set_pet_visible(visible: bool, app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<crate::models::pet::PetSettings, AppError> {
     if let Some(pet_win) = app_handle.get_webview_window("pet") {
         if visible {
+            crate::move_pet_to_visible_area(&app_handle, &pet_win);
             let _ = pet_win.show();
+            let _ = pet_win.set_focus();
         } else {
             let _ = pet_win.hide();
         }
