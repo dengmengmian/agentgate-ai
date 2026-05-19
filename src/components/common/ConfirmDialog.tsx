@@ -27,9 +27,12 @@ export function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/50" onClick={onCancel} />
-      <div className="relative z-10 w-full max-w-md rounded-lg border border-border bg-card p-6 shadow-xl">
-        <div className="mb-4 flex items-center gap-3">
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+      <div
+        className="animate-scale-in relative z-10 w-full max-w-md rounded-xl border border-border bg-card p-6"
+        style={{ boxShadow: "var(--shadow-lg)" }}
+      >
+        <div className="mb-5 flex items-start gap-3">
           {variant === "danger" && (
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-error-soft">
               <AlertTriangle className="h-4 w-4 text-error" />
@@ -37,23 +40,16 @@ export function ConfirmDialog({
           )}
           <div>
             <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
-            <p className="mt-1 text-xs text-text-secondary">{message}</p>
+            <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">{message}</p>
           </div>
         </div>
         <div className="flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="rounded-md bg-card-secondary px-4 py-2 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-          >
+          <button onClick={onCancel} className="btn-secondary">
             {cancelLabel || t("common.cancel")}
           </button>
           <button
             onClick={onConfirm}
-            className={`rounded-md px-4 py-2 text-xs font-medium text-white transition-colors ${
-              variant === "danger"
-                ? "bg-error hover:bg-error/90"
-                : "bg-accent hover:bg-accent/90"
-            }`}
+            className={variant === "danger" ? "btn-danger" : "btn-primary"}
           >
             {confirmLabel || t("common.confirm")}
           </button>

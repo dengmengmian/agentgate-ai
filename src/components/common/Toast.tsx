@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { CheckCircle, XCircle, AlertTriangle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +35,8 @@ const iconColors = {
   warning: "text-warning",
 };
 
+const TOAST_DURATION = 4000;
+
 export function ToastContainer() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
@@ -43,14 +45,12 @@ export function ToastContainer() {
     setToasts((prev) => [...prev, { id, type, message }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
+    }, TOAST_DURATION);
   }, []);
 
   useEffect(() => {
     addToastFn = addToast;
-    return () => {
-      addToastFn = null;
-    };
+    return () => { addToastFn = null; };
   }, [addToast]);
 
   const dismiss = (id: number) => {
@@ -59,27 +59,53 @@ export function ToastContainer() {
 
   return (
     <div className="fixed bottom-4 right-4 z-[100] flex flex-col gap-2">
-      {toasts.map((t) => {
-        const Icon = icons[t.type];
-        return (
-          <div
-            key={t.id}
-            className={cn(
-              "flex items-center gap-3 rounded-lg border px-4 py-3 shadow-lg",
-              styles[t.type]
-            )}
-          >
-            <Icon className={cn("h-4 w-4 shrink-0", iconColors[t.type])} />
-            <span className="text-xs text-text-primary">{t.message}</span>
-            <button
-              onClick={() => dismiss(t.id)}
-              className="ml-2 shrink-0 text-text-muted hover:text-text-primary"
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        );
-      })}
+      {toasts.map((t) => (
+        <ToastItem key={t.id} toast={t} onDismiss={dismiss} />
+      ))}
+    </div>
+  );
+}
+
+function ToastItem({ toast: t, onDismiss }: { toast: ToastMessage; onDismiss: (id: number) => void }) {
+  const Icon = icons[t.type];
+  const progressRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (progressRef.current) {
+      progressRef.current.style.transition = `width ${TOAST_DURATION}ms linear`;
+      requestAnimationFrame(() => {
+        if (progressRef.current) progressRef.current.style.width = "0%";
+      });
+    }
+  }, []);
+
+  return (
+    <div
+      className={cn(
+        "animate-slide-in-right relative overflow-hidden rounded-lg border px-4 py-3",
+        styles[t.type]
+      )}
+      style={{ boxShadow: "var(--shadow-md)" }}
+    >
+      <div className="flex items-center gap-3">
+        <Icon className={cn("h-4 w-4 shrink-0", iconColors[t.type])} />
+        <span className="text-xs text-text-primary">{t.message}</span>
+        <button
+          onClick={() => onDismiss(t.id)}
+          className="ml-2 shrink-0 text-text-muted hover:text-text-primary"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      {/* Progress bar */}
+      <div
+        ref={progressRef}
+        className={cn("absolute bottom-0 left-0 h-[2px] w-full", {
+          "bg-success/40": t.type === "success",
+          "bg-error/40": t.type === "error",
+          "bg-warning/40": t.type === "warning",
+        })}
+      />
     </div>
   );
 }
