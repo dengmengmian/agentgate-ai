@@ -196,6 +196,20 @@ export function Settings() {
                   <option value="light">{t("settings.theme.light")}</option>
                 </select>
               </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-text-primary">{t("settings.show_quick_setup")}</p>
+                  <p className="text-xs text-text-muted">{t("settings.show_quick_setup_desc")}</p>
+                </div>
+                <ToggleSwitch
+                  checked={localStorage.getItem("agentgate_hide_quick_setup") !== "1"}
+                  onChange={(val) => {
+                    if (val) { localStorage.removeItem("agentgate_hide_quick_setup"); }
+                    else { localStorage.setItem("agentgate_hide_quick_setup", "1"); }
+                    window.location.reload();
+                  }}
+                />
+              </div>
             </div>
           </section>
         )}

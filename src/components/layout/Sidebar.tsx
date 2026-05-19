@@ -17,7 +17,6 @@ import { useI18n } from "@/lib/i18n";
 
 const navItems = [
   { to: "/", labelKey: "nav.overview", icon: LayoutDashboard },
-  { to: "/quick-setup", labelKey: "nav.quick_setup", icon: Rocket },
   { to: "/providers", labelKey: "nav.providers", icon: Cloud },
   { to: "/routes", labelKey: "nav.routes", icon: GitBranch },
   { to: "/gateway", labelKey: "nav.gateway", icon: Radio },
@@ -30,6 +29,7 @@ const navItems = [
 export function Sidebar() {
   const { t } = useI18n();
   const [version, setVersion] = useState("");
+  const [showQuickSetup, setShowQuickSetup] = useState(() => localStorage.getItem("agentgate_hide_quick_setup") !== "1");
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
 
   return (
@@ -50,6 +50,42 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex flex-1 flex-col gap-0.5 px-3 pt-3">
+        {showQuickSetup && (
+          <div className="relative mb-1">
+            <NavLink
+              to="/quick-setup"
+              className={({ isActive }) =>
+                cn(
+                  "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150",
+                  isActive
+                    ? "bg-accent-soft text-accent"
+                    : "text-accent hover:bg-accent-soft"
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />
+                  )}
+                  <Rocket className="h-4 w-4 shrink-0" />
+                  {t("nav.quick_setup")}
+                </>
+              )}
+            </NavLink>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                localStorage.setItem("agentgate_hide_quick_setup", "1");
+                setShowQuickSetup(false);
+              }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-text-muted hover:text-text-primary hover:bg-hover"
+              title={t("common.close")}
+            >
+              <span className="text-xs">✕</span>
+            </button>
+          </div>
+        )}
         {navItems.map((item) => (
           <NavLink
             key={item.to}

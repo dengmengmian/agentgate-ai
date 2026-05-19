@@ -304,6 +304,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "settings.updated": { en: "Setting updated", zh: "设置已更新" },
   "settings.language": { en: "Language", zh: "语言" },
   "settings.lang_desc": { en: "Interface language", zh: "界面语言" },
+  "settings.show_quick_setup": { en: "Show Quick Setup", zh: "显示快速配置" },
+  "settings.show_quick_setup_desc": { en: "Show Quick Setup entry in sidebar", zh: "在侧边栏显示快速配置入口" },
   "settings.theme": { en: "Theme", zh: "主题" },
   "settings.theme_desc": { en: "App color scheme", zh: "应用配色方案" },
   "settings.theme.dark": { en: "Dark", zh: "深色" },
