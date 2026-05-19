@@ -119,14 +119,49 @@ body {
 }
 
 /* ── Latte theme overrides ── */
+
 [data-theme="latte"] .btn-secondary {
   border: 1px solid var(--color-border);
 }
 
+/* Cards need shadow for depth on light bg */
+[data-theme="latte"] .border-border.bg-card,
+[data-theme="latte"] section.rounded-lg {
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+}
+
+/* Sidebar slightly tinted */
+[data-theme="latte"] aside {
+  background: #F5EEE6 !important;
+}
+
+/* Topbar subtle bottom shadow */
+[data-theme="latte"] header.border-b {
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+/* Form inputs / selects — clearer border */
+[data-theme="latte"] .form-input,
+[data-theme="latte"] select {
+  background-color: #FFFFFF;
+  border-color: #D8CCBE;
+}
+
+/* Scrollbars */
 [data-theme="latte"] ::-webkit-scrollbar-thumb {
   background: #D4C8BA;
 }
 
 [data-theme="latte"] ::-webkit-scrollbar-thumb:hover {
   background: #B8A898;
+}
+
+/* Table header */
+[data-theme="latte"] thead tr {
+  background-color: #F5EDE4 !important;
+}
+
+/* Active nav link */
+[data-theme="latte"] a.bg-accent\/10 {
+  background-color: rgba(192, 139, 92, 0.12);
 }
