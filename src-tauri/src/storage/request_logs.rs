@@ -185,13 +185,13 @@ pub fn get_stats(conn: &Connection) -> Result<RequestStats, AppError> {
         conn.query_row(
             "SELECT
                 COUNT(*),
-                SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END),
-                SUM(CASE WHEN status_code >= 400 OR status_code < 200 THEN 1 ELSE 0 END),
+                COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN status_code >= 400 OR status_code < 200 THEN 1 ELSE 0 END), 0),
                 COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0),
                 COALESCE(SUM(input_tokens), 0),
                 COALESCE(SUM(output_tokens), 0),
-                SUM(CASE WHEN timestamp LIKE ?1 THEN 1 ELSE 0 END),
-                SUM(CASE WHEN timestamp LIKE ?1 AND (status_code >= 400 OR status_code < 200) THEN 1 ELSE 0 END),
+                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 AND (status_code >= 400 OR status_code < 200) THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN input_tokens ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN output_tokens ELSE 0 END), 0),
                 COALESCE(SUM(cost), 0.0),
@@ -296,7 +296,7 @@ pub fn get_provider_health(conn: &Connection, provider_name: &str) -> Result<Pro
     let (h1_total, h1_success, h1_avg_latency, h1_p95_latency): (i64, i64, f64, f64) = conn.query_row(
         "SELECT
             COUNT(*),
-            SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END),
+            COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END), 0),
             COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0),
             COALESCE((SELECT latency_ms FROM request_logs
                 WHERE provider = ?1 AND timestamp >= ?2 AND status_code >= 200 AND status_code < 300
@@ -313,7 +313,7 @@ pub fn get_provider_health(conn: &Connection, provider_name: &str) -> Result<Pro
     let (h24_total, h24_success, h24_avg_latency): (i64, i64, f64) = conn.query_row(
         "SELECT
             COUNT(*),
-            SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END),
+            COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END), 0),
             COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0)
          FROM request_logs WHERE provider = ?1 AND timestamp >= ?2",
         rusqlite::params![provider_name, &one_day_ago],
@@ -377,4 +377,73 @@ pub fn cleanup_older_than(conn: &Connection, retention_days: i64) -> Result<usiz
         [&cutoff],
     )?;
     Ok(deleted)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_logs_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE request_logs (
+                id TEXT PRIMARY KEY,
+                request_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                client TEXT,
+                provider TEXT,
+                model TEXT,
+                route TEXT,
+                status_code INTEGER,
+                latency_ms INTEGER,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                raw_request TEXT,
+                converted_request TEXT,
+                raw_response TEXT,
+                converted_response TEXT,
+                sse_events TEXT,
+                tool_calls TEXT,
+                error_message TEXT,
+                cost REAL,
+                trace_json TEXT
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    #[test]
+    fn stats_on_empty_logs_are_zero() {
+        let conn = empty_logs_db();
+        let stats = get_stats(&conn).unwrap();
+
+        assert_eq!(stats.total, 0);
+        assert_eq!(stats.success, 0);
+        assert_eq!(stats.errors, 0);
+        assert_eq!(stats.today_total, 0);
+        assert_eq!(stats.today_errors, 0);
+        assert_eq!(stats.total_input_tokens, 0);
+        assert_eq!(stats.total_output_tokens, 0);
+        assert_eq!(stats.total_cost, 0.0);
+        assert_eq!(stats.daily.len(), 7);
+        assert!(stats.providers.is_empty());
+    }
+
+    #[test]
+    fn provider_health_on_empty_logs_is_zero() {
+        let conn = empty_logs_db();
+        let health = get_provider_health(&conn, "DeepSeek").unwrap();
+
+        assert_eq!(health.h1_total, 0);
+        assert_eq!(health.h1_success, 0);
+        assert_eq!(health.h1_success_rate, 0.0);
+        assert_eq!(health.h1_avg_latency_ms, 0);
+        assert_eq!(health.h1_p95_latency_ms, 0);
+        assert_eq!(health.h24_total, 0);
+        assert_eq!(health.h24_success, 0);
+        assert_eq!(health.h24_success_rate, 0.0);
+        assert_eq!(health.h24_avg_latency_ms, 0);
+        assert!(health.recent_errors.is_empty());
+    }
 }

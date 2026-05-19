@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.1] - 2026-05-19
+
+### Fixes / 修复
+
+- 修复首次安装后概览页在空请求日志表上计算统计时报数据库错误的问题
+- 修复 Provider 健康统计在没有请求日志时可能报数据库错误的问题
+
+---
+
 ## [0.5.10] - 2026-05-19
 
 ### CI / 发布
