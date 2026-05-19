@@ -19,17 +19,17 @@
 
 /* ── Latte Theme ── */
 [data-theme="latte"] {
-  --color-bg: #F0E8DF;
-  --color-card: #F8F3ED;
-  --color-card-secondary: #F0E8DF;
-  --color-border: #D8CCBE;
-  --color-text-primary: #2C2418;
-  --color-text-secondary: #6B5D4F;
-  --color-text-muted: #9A8B7A;
-  --color-accent: #B07D4F;
-  --color-success: #2D8A3E;
-  --color-warning: #A67508;
-  --color-error: #B83220;
+  --color-bg: #E6D9CA;
+  --color-card: #F3ECE2;
+  --color-card-secondary: #EAE0D3;
+  --color-border: #C8B9A6;
+  --color-text-primary: #2C2015;
+  --color-text-secondary: #5C4D3C;
+  --color-text-muted: #8A7B6A;
+  --color-accent: #A06830;
+  --color-success: #2D7A38;
+  --color-warning: #9A6B08;
+  --color-error: #B03020;
 }
 
 body {
@@ -134,23 +134,24 @@ body {
   box-shadow: 0 1px 4px rgba(60,40,20,0.08), 0 0 1px rgba(60,40,20,0.06);
 }
 
-/* Sidebar */
+/* Sidebar — darker, like the tea itself */
 [data-theme="latte"] aside {
-  background: #EDE5DA !important;
-  border-color: #D0C4B4 !important;
+  background: #D9CBBA !important;
+  border-color: #C0B09C !important;
 }
 
-/* Topbar */
+/* Topbar — match cards */
 [data-theme="latte"] header.border-b {
-  background: #F8F3ED !important;
-  box-shadow: 0 1px 3px rgba(60,40,20,0.06);
+  background: #F3ECE2 !important;
+  border-color: #C8B9A6 !important;
+  box-shadow: 0 1px 3px rgba(50,30,10,0.08);
 }
 
 /* Form inputs / selects */
 [data-theme="latte"] .form-input,
 [data-theme="latte"] select {
-  background-color: #FBF7F2;
-  border-color: #C8BBAB;
+  background-color: #F3ECE2;
+  border-color: #C0B09C;
 }
 
 /* Inner cards (tool status, stat cards) — stronger border */
@@ -160,20 +161,20 @@ body {
 
 /* Table */
 [data-theme="latte"] thead tr {
-  background-color: #EDE5DA !important;
+  background-color: #E6D9CA !important;
 }
 
 [data-theme="latte"] .border-b.border-border\/50 {
-  border-color: #E0D5C8 !important;
+  border-color: #D4C5B4 !important;
 }
 
 /* Scrollbar */
 [data-theme="latte"] ::-webkit-scrollbar-thumb {
-  background: #C8BBAB;
+  background: #C0B09C;
 }
 
 [data-theme="latte"] ::-webkit-scrollbar-thumb:hover {
-  background: #A89888;
+  background: #A8967E;
 }
 
 /* Fix /10 opacity colors — too faint on light. Use /20 equivalent via overrides */
