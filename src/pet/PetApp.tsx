@@ -142,9 +142,9 @@ export function PetApp() {
     if (e.button === 0 && !chatMode) getCurrentWindow().startDragging();
   }, [chatMode]);
 
-  // Click: toggle chat mode or show greeting
-  const handleClick = useCallback(() => {
-    if (chatMode) return; // don't interfere when chat is open
+  // Double-click: toggle chat mode
+  const handleDoubleClick = useCallback(() => {
+    if (chatMode) return;
     resetSleepTimer();
     setChatMode(true);
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -230,7 +230,7 @@ export function PetApp() {
     <div
       className="pet-container"
       onMouseDown={handleMouseDown}
-      onClick={handleClick}
+      onDoubleClick={handleDoubleClick}
     >
       <div className={chatMode ? "" : `pet-${petState}`} style={{ position: "relative" }}>
         {/* Bubble */}
