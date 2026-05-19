@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "react-router-dom";
-import { Circle } from "lucide-react";
 import * as api from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { GatewayStatus } from "@/types/gateway";
@@ -27,35 +26,32 @@ export function Topbar() {
     api.getGatewayStatus().then(setStatus).catch(() => {});
   }, []);
 
-  // Refresh on route change
   useEffect(() => { refresh(); }, [location.pathname, refresh]);
 
-  // Poll every 3 seconds to catch gateway state changes
   useEffect(() => {
     const timer = setInterval(refresh, 3000);
     return () => clearInterval(timer);
   }, [refresh]);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6">
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card px-6" style={{ boxShadow: "var(--shadow-sm)" }}>
       <h1 className="text-sm font-semibold text-text-primary">{t(titleKey)}</h1>
 
       <div className="flex items-center gap-4">
         {status && (
-          <div className="flex items-center gap-2 text-xs">
-            <Circle
-              className={`h-2 w-2 fill-current ${
-                status.running ? "text-success" : "text-text-muted"
-              }`}
-            />
-            <span className="text-text-secondary">
-              {t("topbar.gateway")}{" "}
-              <span className="capitalize text-text-primary">
-                {status.running ? t("topbar.running") : t("topbar.stopped")}
-              </span>
+          <div className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
+            status.running
+              ? "border-success/20 bg-success-soft text-success"
+              : "border-border bg-card-secondary text-text-muted"
+          }`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${
+              status.running ? "bg-success animate-pulse-dot" : "bg-text-muted"
+            }`} />
+            <span className="font-medium">
+              {status.running ? t("topbar.running") : t("topbar.stopped")}
             </span>
             {status.running && (
-              <span className="font-mono text-text-muted">
+              <span className="font-mono text-text-secondary">
                 {status.host}:{status.port}
               </span>
             )}
