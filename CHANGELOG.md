@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.10] - 2026-05-19
+
+### CI / 发布
+
+- 隔离各平台 CLI 构建输出目录，避免 macOS 交叉编译时复用错误架构的 build script 缓存
+
+---
+
 ## [0.5.9] - 2026-05-19
 
 ### Fixes / 修复

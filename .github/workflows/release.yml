@@ -135,6 +135,8 @@ jobs:
             bin: agentgate-serve.exe
 
     runs-on: ${{ matrix.platform }}
+    env:
+      CARGO_TARGET_DIR: src-tauri/target/cli-${{ matrix.target }}
     steps:
       - uses: actions/checkout@v5
 
@@ -173,14 +175,14 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          tar -C "src-tauri/target/${{ matrix.target }}/release" -czf "dist/${{ matrix.archive }}" "${{ matrix.bin }}"
+          tar -C "$CARGO_TARGET_DIR/${{ matrix.target }}/release" -czf "dist/${{ matrix.archive }}" "${{ matrix.bin }}"
 
       - name: Package CLI (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive -Path "src-tauri/target/${{ matrix.target }}/release/${{ matrix.bin }}" -DestinationPath "dist/${{ matrix.archive }}"
+          Compress-Archive -Path "$env:CARGO_TARGET_DIR/${{ matrix.target }}/release/${{ matrix.bin }}" -DestinationPath "dist/${{ matrix.archive }}"
 
       - name: Upload CLI to release
         env:
