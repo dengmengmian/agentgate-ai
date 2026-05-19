@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.8.2] - 2026-05-19
+
+### Fixes / 修复
+
+- 修复 `agentgate-serve` 未适配网关启动返回值导致 CLI 多平台构建失败的问题
+- 修复 Docker/默认 CLI 启动未读取 `AGENTGATE_HOST` 和 `AGENTGATE_PORT` 的问题
+
+### CI / 发布
+
+- 新增 Docker release preflight，发版前构建并启动 `agentgate-serve`，检查 `/health`
+- 修复 Dockerfile 的 Rust 版本、Linux/Tauri 依赖和构建上下文体积问题
+
+---
+
 ## [0.8.1] - 2026-05-19
 
 ### Fixes / 修复

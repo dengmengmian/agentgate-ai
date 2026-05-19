@@ -9,7 +9,16 @@ permissions:
   contents: write
 
 jobs:
+  preflight:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Docker preflight
+        run: bash scripts/release-preflight.sh
+
   build:
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:

@@ -131,7 +131,12 @@ async fn main() {
         Some(Commands::Status) => cmd_status(&cli),
         None => {
             // Default: serve
-            cmd_serve(&cli, "127.0.0.1", 9090).await;
+            let host = std::env::var("AGENTGATE_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
+            let port = std::env::var("AGENTGATE_PORT")
+                .ok()
+                .and_then(|value| value.parse::<u16>().ok())
+                .unwrap_or(9090);
+            cmd_serve(&cli, &host, port).await;
         }
     }
 }
@@ -156,13 +161,14 @@ async fn cmd_serve(cli: &Cli, host: &str, port: u16) {
     eprintln!();
 
     match agentgate_lib::gateway::server::start(host, port, db).await {
-        Ok((_shutdown_tx, handle)) => {
+        Ok((shutdown_tx, handle, _active_requests)) => {
             eprintln!("Gateway running on http://{host}:{port}");
             eprintln!("Press Ctrl+C to stop.");
             eprintln!();
             tokio::signal::ctrl_c().await.ok();
             eprintln!("\nShutting down...");
-            drop(handle);
+            let _ = shutdown_tx.send(());
+            let _ = handle.await;
         }
         Err(e) => {
             eprintln!("Failed to start: {}", e.message);
