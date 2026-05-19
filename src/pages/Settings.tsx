@@ -202,10 +202,15 @@ export function Settings() {
                   <p className="text-xs text-text-muted">{t("settings.show_quick_setup_desc")}</p>
                 </div>
                 <ToggleSwitch
-                  checked={localStorage.getItem("agentgate_hide_quick_setup") !== "1"}
+                  checked={localStorage.getItem("agentgate_show_quick_setup") === "1"}
                   onChange={(val) => {
-                    if (val) { localStorage.removeItem("agentgate_hide_quick_setup"); }
-                    else { localStorage.setItem("agentgate_hide_quick_setup", "1"); }
+                    if (val) {
+                      localStorage.setItem("agentgate_show_quick_setup", "1");
+                      localStorage.removeItem("agentgate_hide_quick_setup");
+                    } else {
+                      localStorage.removeItem("agentgate_show_quick_setup");
+                      localStorage.setItem("agentgate_hide_quick_setup", "1");
+                    }
                     window.location.reload();
                   }}
                 />

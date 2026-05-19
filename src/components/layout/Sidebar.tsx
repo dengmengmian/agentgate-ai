@@ -29,8 +29,19 @@ const navItems = [
 export function Sidebar() {
   const { t } = useI18n();
   const [version, setVersion] = useState("");
-  const [showQuickSetup, setShowQuickSetup] = useState(() => localStorage.getItem("agentgate_hide_quick_setup") !== "1");
+  const [showQuickSetup, setShowQuickSetup] = useState(false);
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
+
+  // Show quick setup only if: no providers AND not manually hidden
+  useEffect(() => {
+    if (localStorage.getItem("agentgate_hide_quick_setup") === "1") return;
+    if (localStorage.getItem("agentgate_show_quick_setup") === "1") { setShowQuickSetup(true); return; }
+    import("@/lib/api").then(api => {
+      api.listProviders().then(providers => {
+        setShowQuickSetup(providers.length === 0);
+      }).catch(() => {});
+    });
+  }, []);
 
   return (
     <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-sidebar">
@@ -77,6 +88,7 @@ export function Sidebar() {
               onClick={(e) => {
                 e.stopPropagation();
                 localStorage.setItem("agentgate_hide_quick_setup", "1");
+                localStorage.removeItem("agentgate_show_quick_setup");
                 setShowQuickSetup(false);
               }}
               className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-text-muted hover:text-text-primary hover:bg-hover"
