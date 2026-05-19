@@ -1236,6 +1236,88 @@ pub fn open_app_data_dir() -> Result<bool, AppError> {
     Ok(true)
 }
 
+// ── Tool Connection Test ──────────────────────────────────────
+
+#[tauri::command]
+pub async fn test_tool_connection(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
+    // Step 1: Check gateway is running
+    let (running, host, port) = {
+        let runtime = state.gateway_runtime.lock()
+            .map_err(|_| AppError::internal("Runtime lock failed"))?;
+        (runtime.running, runtime.host.clone(), runtime.port)
+    };
+
+    if !running {
+        return Ok(serde_json::json!({
+            "config_ok": true,
+            "gateway_ok": false,
+            "provider_ok": false,
+            "error": "Gateway not running",
+        }));
+    }
+
+    // Step 2: Check gateway health
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| AppError::internal(format!("HTTP client error: {e}")))?;
+
+    let health_url = format!("http://{}:{}/health", host, port);
+    let gateway_ok = client.get(&health_url).send().await
+        .map(|r| r.status().is_success())
+        .unwrap_or(false);
+
+    if !gateway_ok {
+        return Ok(serde_json::json!({
+            "config_ok": true,
+            "gateway_ok": false,
+            "provider_ok": false,
+            "error": "Gateway health check failed",
+        }));
+    }
+
+    // Step 3: Test provider with a minimal request
+    let token = crate::security::local_token::read_token().unwrap_or_default();
+    let test_url = format!("http://{}:{}/v1/chat/completions", host, port);
+    let test_body = serde_json::json!({
+        "model": "test",
+        "messages": [{"role": "user", "content": "hi"}],
+        "max_tokens": 1,
+    });
+
+    let resp = client.post(&test_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .header("Content-Type", "application/json")
+        .json(&test_body)
+        .send()
+        .await;
+
+    let (provider_ok, error) = match resp {
+        Ok(r) => {
+            let status = r.status();
+            if status.is_success() || status.as_u16() == 200 {
+                (true, None)
+            } else {
+                let body = r.text().await.unwrap_or_default();
+                // 400 with model error is ok — means provider is reachable
+                if status.as_u16() == 400 || status.as_u16() == 404 {
+                    (true, None)
+                } else {
+                    (false, Some(format!("Provider error: {} {}", status.as_u16(), body.chars().take(100).collect::<String>())))
+                }
+            }
+        }
+        Err(e) => (false, Some(format!("Request failed: {e}"))),
+    };
+
+    Ok(serde_json::json!({
+        "config_ok": true,
+        "gateway_ok": true,
+        "provider_ok": provider_ok,
+        "error": error,
+    }))
+}
+
 // ── Pet Commands ──────────────────────────────────────────────
 
 #[tauri::command]

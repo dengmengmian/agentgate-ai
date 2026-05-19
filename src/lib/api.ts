@@ -422,6 +422,19 @@ export async function openAppDataDir(): Promise<boolean> {
   return cmd("open_app_data_dir");
 }
 
+// ── Tool Connection Test ──────────────────────────────────────
+
+export interface ConnectionTestResult {
+  config_ok: boolean;
+  gateway_ok: boolean;
+  provider_ok: boolean;
+  error?: string;
+}
+
+export async function testToolConnection(): Promise<ConnectionTestResult> {
+  return cmd("test_tool_connection");
+}
+
 // ── Pet ───────────────────────────────────────────────────────
 
 import type { PetSettings, UpdatePetSettingsInput, PetGatewayInfo } from "@/types/pet";

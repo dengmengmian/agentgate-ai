@@ -238,6 +238,8 @@ pub fn run() {
             commands::run_full_self_test,
             commands::export_diagnostic_bundle,
             commands::open_app_data_dir,
+            // Tool Connection Test
+            commands::test_tool_connection,
             // Pet
             commands::get_pet_settings,
             commands::update_pet_settings,

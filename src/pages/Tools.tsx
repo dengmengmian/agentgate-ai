@@ -11,6 +11,10 @@ import {
   Shield,
   ToggleLeft,
   ToggleRight,
+  Activity,
+  CheckCircle,
+  XCircle,
+  Loader2,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
@@ -28,6 +32,8 @@ export function Tools() {
   const [codexConfig, setCodexConfig] = useState("");
   const [claudeSnippet, setClaudeSnippet] = useState("");
   const [loading, setLoading] = useState(true);
+  const [testResult, setTestResult] = useState<api.ConnectionTestResult | null>(null);
+  const [testing, setTesting] = useState(false);
   const [openCodeStatus, setOpenCodeStatus] = useState<OpenCodeConfigStatus | null>(null);
   const [geminiStatus, setGeminiStatus] = useState<GeminiCliConfigStatus | null>(null);
   const [atomCodeStatus, setAtomCodeStatus] = useState<AtomCodeConfigStatus | null>(null);
@@ -164,10 +170,59 @@ export function Tools() {
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await api.testToolConnection();
+      setTestResult(result);
+    } catch {
+      setTestResult({ config_ok: false, gateway_ok: false, provider_ok: false, error: "Test failed" });
+    } finally {
+      setTesting(false);
+    }
+  };
+
   if (loading) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
 
   return (
     <div className="space-y-6">
+      {/* Connection Status Bar */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <ConnectionStep
+              label={t("tools.step_config")}
+              ok={testResult?.config_ok ?? null}
+              testing={testing}
+            />
+            <div className="h-px w-6 bg-border" />
+            <ConnectionStep
+              label={t("tools.step_gateway")}
+              ok={testResult?.gateway_ok ?? null}
+              testing={testing}
+            />
+            <div className="h-px w-6 bg-border" />
+            <ConnectionStep
+              label={t("tools.step_provider")}
+              ok={testResult?.provider_ok ?? null}
+              testing={testing}
+            />
+          </div>
+          <button
+            onClick={handleTestConnection}
+            disabled={testing}
+            className="btn-secondary"
+          >
+            {testing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
+            {t("tools.test_connection")}
+          </button>
+        </div>
+        {testResult?.error && (
+          <p className="mt-2 text-xs text-error">{testResult.error}</p>
+        )}
+      </div>
+
       {/* Codex Card */}
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="mb-4 flex items-start justify-between">
@@ -398,6 +453,25 @@ export function Tools() {
       <ConfirmDialog open={confirmApplyOpenCode} title={t("tools.apply_opencode_title")} message={t("tools.apply_opencode_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyOpenCode} onCancel={() => setConfirmApplyOpenCode(false)} />
       <ConfirmDialog open={confirmApplyGemini} title={t("tools.apply_gemini_title")} message={t("tools.apply_gemini_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyGemini} onCancel={() => setConfirmApplyGemini(false)} />
       <ConfirmDialog open={confirmApplyAtomCode} title={t("tools.apply_atomcode_title")} message={t("tools.apply_atomcode_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyAtomCode} onCancel={() => setConfirmApplyAtomCode(false)} />
+    </div>
+  );
+}
+
+function ConnectionStep({ label, ok, testing }: { label: string; ok: boolean | null; testing: boolean }) {
+  return (
+    <div className="flex items-center gap-2">
+      {testing ? (
+        <Loader2 className="h-4 w-4 animate-spin text-text-muted" />
+      ) : ok === null ? (
+        <div className="h-4 w-4 rounded-full border-2 border-border" />
+      ) : ok ? (
+        <CheckCircle className="h-4 w-4 text-success" />
+      ) : (
+        <XCircle className="h-4 w-4 text-error" />
+      )}
+      <span className={`text-xs ${ok === true ? "text-success" : ok === false ? "text-error" : "text-text-muted"}`}>
+        {label}
+      </span>
     </div>
   );
 }
