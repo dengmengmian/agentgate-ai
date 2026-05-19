@@ -5,6 +5,10 @@ import { App } from "./app/App";
 import { PetApp } from "./pet/PetApp";
 import "./index.css";
 
+// Apply saved theme
+const savedTheme = localStorage.getItem("agentgate_theme");
+if (savedTheme) document.documentElement.setAttribute("data-theme", savedTheme);
+
 const label = getCurrentWindow().label;
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

@@ -34,6 +34,7 @@ const TABS: { id: Tab; icon: React.ComponentType<{ className?: string }> }[] = [
 export function Settings() {
   const { t, locale, setLocale } = useI18n();
   const [tab, setTab] = useState<Tab>("general");
+  const [theme, setThemeState] = useState(() => localStorage.getItem("agentgate_theme") || "dark");
   const [settings, setSettings] = useState<GatewaySettingsType | null>(null);
   const [auth, setAuth] = useState<GatewayAuthSettings | null>(null);
   const [confirmRegen, setConfirmRegen] = useState(false);
@@ -110,6 +111,17 @@ export function Settings() {
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
+  const setTheme = (t: string) => {
+    setThemeState(t);
+    if (t === "dark") {
+      document.documentElement.removeAttribute("data-theme");
+      localStorage.removeItem("agentgate_theme");
+    } else {
+      document.documentElement.setAttribute("data-theme", t);
+      localStorage.setItem("agentgate_theme", t);
+    }
+  };
+
   if (!settings) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
 
   return (
@@ -159,6 +171,20 @@ export function Settings() {
                 >
                   <option value="en">English</option>
                   <option value="zh">中文</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-text-primary">{t("settings.theme")}</p>
+                  <p className="text-xs text-text-muted">{t("settings.theme_desc")}</p>
+                </div>
+                <select
+                  value={theme}
+                  onChange={(e) => setTheme(e.target.value)}
+                  className="rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                >
+                  <option value="dark">{t("settings.theme.dark")}</option>
+                  <option value="latte">{t("settings.theme.latte")}</option>
                 </select>
               </div>
             </div>
