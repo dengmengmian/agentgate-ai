@@ -11,6 +11,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "nav.gateway": { en: "Gateway", zh: "网关" },
   "nav.logs": { en: "Logs", zh: "日志" },
   "nav.diagnostics": { en: "Diagnostics", zh: "诊断" },
+  "nav.quick_setup": { en: "Quick Setup", zh: "快速配置" },
   "nav.settings": { en: "Settings", zh: "设置" },
   "topbar.gateway": { en: "Gateway", zh: "网关" },
   "topbar.running": { en: "Running", zh: "运行中" },

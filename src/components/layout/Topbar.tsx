@@ -10,6 +10,7 @@ export function Topbar() {
 
   const pageTitleKeys: Record<string, string> = {
     "/": "nav.overview",
+    "/quick-setup": "nav.quick_setup",
     "/tools": "nav.clients",
     "/providers": "nav.providers",
     "/routes": "nav.routes",

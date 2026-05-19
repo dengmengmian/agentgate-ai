@@ -24,7 +24,6 @@ import type { GatewayStatus } from "@/types/gateway";
 import type { ToolConfigView } from "@/types/tool";
 import type { RequestLogListItem } from "@/types/request-log";
 import type { RequestStats } from "@/types/stats";
-import { SetupWizard } from "@/components/onboarding/SetupWizard";
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -44,15 +43,6 @@ export function Dashboard() {
   const [tools, setTools] = useState<ToolConfigView[]>([]);
   const [recentLogs, setRecentLogs] = useState<RequestLogListItem[]>([]);
   const [stats, setStats] = useState<RequestStats | null>(null);
-  const [showWizard, setShowWizard] = useState(false);
-
-  // Check if first run (no providers)
-  useEffect(() => {
-    api.listProviders().then((providers) => {
-      if (providers.length === 0) setShowWizard(true);
-    }).catch(() => {});
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -96,7 +86,6 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {showWizard && <SetupWizard onComplete={() => setShowWizard(false)} />}
       {/* Gateway Status */}
       <div className="rounded-xl border border-border bg-card p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
         <div className="mb-4 flex items-center justify-between">

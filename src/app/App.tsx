@@ -11,6 +11,7 @@ import { Gateway } from "@/pages/Gateway";
 import { Logs } from "@/pages/Logs";
 import { Diagnostics } from "@/pages/Diagnostics";
 import { Settings } from "@/pages/Settings";
+import { QuickSetup } from "@/pages/QuickSetup";
 
 export function App() {
   return (
@@ -19,6 +20,7 @@ export function App() {
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />
+            <Route path="/quick-setup" element={<QuickSetup />} />
             <Route path="/tools" element={<Tools />} />
             <Route path="/providers" element={<Providers />} />
             <Route path="/routes" element={<RoutesPage />} />

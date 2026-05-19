@@ -9,6 +9,7 @@ import {
   ScrollText,
   Stethoscope,
   Settings,
+  Rocket,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,7 @@ import { useI18n } from "@/lib/i18n";
 
 const navItems = [
   { to: "/", labelKey: "nav.overview", icon: LayoutDashboard },
+  { to: "/quick-setup", labelKey: "nav.quick_setup", icon: Rocket },
   { to: "/providers", labelKey: "nav.providers", icon: Cloud },
   { to: "/routes", labelKey: "nav.routes", icon: GitBranch },
   { to: "/gateway", labelKey: "nav.gateway", icon: Radio },
