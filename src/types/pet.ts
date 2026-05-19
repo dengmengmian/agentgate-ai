@@ -23,6 +23,10 @@ export interface PetGatewayInfo {
     provider?: string;
     timestamp: string;
   } | null;
+  today?: {
+    requests: number;
+    cost: number;
+  };
 }
 
 export interface PetBubbleEvent {

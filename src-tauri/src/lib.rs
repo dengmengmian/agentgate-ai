@@ -93,13 +93,15 @@ pub fn run() {
             // ── Desktop Pet Window ──
             {
                 let state: &AppState = app.state::<AppState>().inner();
-                let pet_visible = state.db.lock()
+                let pet_settings = state.db.lock()
                     .ok()
-                    .and_then(|conn| storage::pet_settings::get(&conn).ok())
-                    .map(|s| s.visible)
-                    .unwrap_or(true);
+                    .and_then(|conn| storage::pet_settings::get(&conn).ok());
 
-                let pet_window = WebviewWindowBuilder::new(
+                let pet_visible = pet_settings.as_ref().map(|s| s.visible).unwrap_or(true);
+                let pos_x = pet_settings.as_ref().map(|s| s.pos_x).unwrap_or(100.0);
+                let pos_y = pet_settings.as_ref().map(|s| s.pos_y).unwrap_or(100.0);
+
+                let mut builder = WebviewWindowBuilder::new(
                     app,
                     "pet",
                     tauri::WebviewUrl::App("index.html".into()),
@@ -111,10 +113,14 @@ pub fn run() {
                 .always_on_top(true)
                 .skip_taskbar(true)
                 .resizable(false)
-                .visible(pet_visible)
-                .build();
+                .visible(pet_visible);
 
-                if let Err(e) = pet_window {
+                // Restore saved position
+                if pos_x > 0.0 || pos_y > 0.0 {
+                    builder = builder.position(pos_x, pos_y);
+                }
+
+                if let Err(e) = builder.build() {
                     tracing::warn!("Failed to create pet window: {e}");
                 }
             }

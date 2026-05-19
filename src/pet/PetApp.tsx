@@ -13,12 +13,14 @@ import { OxPet } from "./pets/OxPet";
 import { SuperSoldierPet } from "./pets/SuperSoldierPet";
 import { CoderPet } from "./pets/CoderPet";
 import { Bubble, type BubbleType } from "./Bubble";
+import { getGreeting } from "./greetings";
 import "./pet.css";
 
 const SLEEP_TIMEOUT = 5 * 60 * 1000;
 const POLL_INTERVAL = 3000;
 const ERROR_COOLDOWN = 10000;
 const MAX_HISTORY = 10;
+const STATS_INTERVAL = 30 * 60 * 1000; // show stats every 30 min
 
 const PET_COMPONENTS: Record<PetType, React.ComponentType<{ state: PetState }>> = {
   robot: RobotPet, "pixel-cat": PixelCat, slime: SlimePet,
@@ -49,30 +51,49 @@ export function PetApp() {
   const memoryRef = useRef<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef("");
+  const lastStatsRef = useRef(0);
+  const gatewayStateRef = useRef<"running" | "stopped" | "active">("stopped");
 
   const locale = navigator.language.startsWith("zh") ? "zh" as const : "en" as const;
 
-  const showBubble = useCallback((text: string, type: BubbleType, duration?: number) => {
+  // ── Helpers ──
+
+  const showBubble = useCallback((text: string, type: BubbleType) => {
     bubbleKeyRef.current += 1;
     setBubble({ text, type, key: bubbleKeyRef.current });
-    if (duration !== undefined) {
-      // Bubble component handles its own timeout, but we can pass it via key
-    }
   }, []);
+
   const dismissBubble = useCallback(() => setBubble(null), []);
 
-  // Load pet type
+  // ── Init: load settings + memory + startup greeting ──
+
   useEffect(() => {
     getPetSettings().then((s) => setPetType(s.pet_type as PetType)).catch(() => {});
-  }, []);
 
-  // Listen for settings changes
+    getPetMemory().then((raw) => {
+      try { memoryRef.current = JSON.parse(raw); } catch { memoryRef.current = {}; }
+      // Startup greeting (delayed so window renders first)
+      setTimeout(() => {
+        const name = memoryRef.current.name;
+        if (name) {
+          showBubble(
+            locale === "zh" ? `${name}，${getGreeting("stopped", "zh")}` : `Hey ${name}! ${getGreeting("stopped", "en")}`,
+            "chat"
+          );
+        } else {
+          showBubble(getGreeting("stopped", locale), "chat");
+        }
+      }, 1500);
+    }).catch(() => {});
+  }, [locale, showBubble]);
+
+  // ── Event listeners ──
+
   useEffect(() => {
     const unlisten = listen<PetSettings>("pet-settings-changed", (e) => setPetType(e.payload.pet_type as PetType));
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
-  // Listen for bubble events
   useEffect(() => {
     const unlisten = listen<PetBubbleEvent>("pet-bubble", (e) => {
       const text = locale === "zh" && e.payload.text_zh ? e.payload.text_zh : e.payload.text;
@@ -81,20 +102,13 @@ export function PetApp() {
     return () => { unlisten.then((fn) => fn()); };
   }, [locale, showBubble]);
 
-  // Load memory
-  useEffect(() => {
-    getPetMemory().then((raw) => {
-      try { memoryRef.current = JSON.parse(raw); } catch { memoryRef.current = {}; }
-    }).catch(() => {});
-  }, []);
+  // ── Poll gateway state + errors + periodic stats ──
 
-  // Poll gateway state + errors
   useEffect(() => {
     const poll = () => {
       getPetGatewayState().then((info) => {
         setGatewayState((prev) => {
           if (prev !== info.state) {
-            // Wake up on any state change — especially "active"
             setIsSleeping(false);
             lastActivityRef.current = Date.now();
             if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
@@ -102,6 +116,9 @@ export function PetApp() {
           }
           return info.state;
         });
+        gatewayStateRef.current = info.state;
+
+        // Error detection
         if (info.last_error && info.last_error.timestamp !== lastErrorTsRef.current) {
           const age = Date.now() - new Date(info.last_error.timestamp).getTime();
           if (age < ERROR_COOLDOWN) {
@@ -113,14 +130,29 @@ export function PetApp() {
             setTimeout(() => setIsError(false), 3000);
           }
         }
+
+        // Periodic stats bubble (every 30 min if gateway is running)
+        if (info.today && info.state !== "stopped" && Date.now() - lastStatsRef.current > STATS_INTERVAL) {
+          if (info.today.requests > 0) {
+            lastStatsRef.current = Date.now();
+            const cost = info.today.cost > 0 ? ` | $${info.today.cost.toFixed(2)}` : "";
+            showBubble(
+              locale === "zh"
+                ? `今日: ${info.today.requests} 请求${cost}`
+                : `Today: ${info.today.requests} req${cost}`,
+              "info"
+            );
+          }
+        }
       }).catch(() => {});
     };
     poll();
     const id = setInterval(poll, POLL_INTERVAL);
     return () => clearInterval(id);
-  }, [showBubble]);
+  }, [showBubble, locale]);
 
-  // Sleep timer
+  // ── Sleep timer ──
+
   const resetSleepTimer = useCallback(() => {
     setIsSleeping(false);
     lastActivityRef.current = Date.now();
@@ -133,16 +165,18 @@ export function PetApp() {
     return () => { if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current); };
   }, [resetSleepTimer]);
 
-  // Pet state
-  // active requests and errors always override sleep
+  // ── State ──
+
   const petState: PetState = isError ? "error" : gatewayState === "active" ? "active" : isSleeping ? "sleep" : "idle";
 
-  // Drag
+  // ── Drag ──
+
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button === 0 && !chatMode) getCurrentWindow().startDragging();
   }, [chatMode]);
 
-  // Double-click: toggle chat mode
+  // ── Double-click: open chat ──
+
   const handleDoubleClick = useCallback(() => {
     if (chatMode) return;
     resetSleepTimer();
@@ -150,7 +184,8 @@ export function PetApp() {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [chatMode, resetSleepTimer]);
 
-  // Send chat message
+  // ── Chat submit with AI fallback ──
+
   const handleChatSubmit = useCallback(async () => {
     const msg = chatInputRef.current.trim();
     if (!msg) return;
@@ -160,10 +195,22 @@ export function PetApp() {
     setChatLoading(true);
     setBubble(null);
 
-    // Build messages with system prompt + memory + history
-    const memStr = Object.entries(memoryRef.current)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join("; ");
+    // Memory extraction (do before sending so AI also gets it)
+    const namePatterns = [
+      /my name is\s+(\S+)/i, /i'?m\s+(\S+)/i, /call me\s+(\S+)/i,
+      /我叫(.{1,10})/, /我是(.{1,10})/, /叫我(.{1,10})/,
+    ];
+    for (const pat of namePatterns) {
+      const m = msg.match(pat);
+      if (m) {
+        memoryRef.current.name = m[1].trim();
+        savePetMemory(JSON.stringify(memoryRef.current)).catch(() => {});
+        break;
+      }
+    }
+
+    // Build messages
+    const memStr = Object.entries(memoryRef.current).map(([k, v]) => `${k}: ${v}`).join("; ");
     const sysContent = SYSTEM_PROMPT + (memStr ? `\n\nYou remember about the user: ${memStr}` : "");
 
     chatHistoryRef.current.push({ role: "user", content: msg });
@@ -181,31 +228,16 @@ export function PetApp() {
       chatHistoryRef.current.push({ role: "assistant", content: reply });
       setChatLoading(false);
       showBubble(reply, "chat");
-
-      // Simple memory extraction
-      const namePatterns = [
-        /my name is\s+(\S+)/i, /i'?m\s+(\S+)/i, /call me\s+(\S+)/i,
-        /我叫(.{1,10})/, /我是(.{1,10})/, /叫我(.{1,10})/,
-      ];
-      for (const pat of namePatterns) {
-        const m = msg.match(pat);
-        if (m) {
-          memoryRef.current.name = m[1].trim();
-          savePetMemory(JSON.stringify(memoryRef.current)).catch(() => {});
-          break;
-        }
-      }
-    } catch (err: unknown) {
+    } catch {
+      // Fallback to local greeting when AI is unavailable
       setChatLoading(false);
-      const errMsg = err && typeof err === "object" && "message" in err
-        ? String((err as { message: string }).message)
-        : "Connection failed";
-      const short = errMsg.length > 30 ? errMsg.slice(0, 30) + "..." : errMsg;
-      showBubble(short, "error");
+      const fallback = getGreeting(gatewayStateRef.current, locale);
+      showBubble(fallback, "chat");
     }
-  }, [showBubble]);
+  }, [showBubble, locale]);
 
-  // Close chat on Escape or click outside
+  // ── Close chat on Escape ──
+
   useEffect(() => {
     if (!chatMode) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -215,7 +247,8 @@ export function PetApp() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [chatMode]);
 
-  // Save position
+  // ── Save position ──
+
   useEffect(() => {
     const win = getCurrentWindow();
     const unlisten = win.onMoved(({ payload }) => {
@@ -223,6 +256,8 @@ export function PetApp() {
     });
     return () => { unlisten.then((fn) => fn()); };
   }, []);
+
+  // ── Render ──
 
   const PetComponent = PET_COMPONENTS[petType];
 
@@ -233,27 +268,24 @@ export function PetApp() {
       onDoubleClick={handleDoubleClick}
     >
       <div className={chatMode ? "" : `pet-${petState}`} style={{ position: "relative" }}>
-        {/* Bubble */}
         {bubble && (
           <Bubble key={bubble.key} text={bubble.text} type={bubble.type} onDone={dismissBubble} />
         )}
 
-        {/* Loading indicator */}
         {chatLoading && (
           <div className="bubble bubble-in">
-            <div className="bubble-content" style={{ borderColor: "#7C8CFF" }}>
+            <div className="bubble-content" style={{ borderColor: "var(--color-accent, #E89850)" }}>
               <div className="chat-loading">
                 <span /><span /><span />
               </div>
             </div>
-            <div className="bubble-arrow" style={{ borderTopColor: "#7C8CFF" }} />
+            <div className="bubble-arrow" style={{ borderTopColor: "var(--color-accent, #E89850)" }} />
           </div>
         )}
 
         <PetComponent state={petState} />
         {petState === "sleep" && !chatMode && <span className="zzz">z</span>}
 
-        {/* Chat input */}
         {chatMode && (
           <div className="chat-input-wrap" onClick={(e) => e.stopPropagation()}>
             <input

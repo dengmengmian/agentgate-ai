@@ -1309,9 +1309,25 @@ pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::V
         None
     };
 
+    // Today's stats for pet bubble
+    let today_stats = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM request_logs WHERE timestamp >= ?1",
+            [&today], |row| row.get(0),
+        ).unwrap_or(0);
+        let cost: f64 = conn.query_row(
+            "SELECT COALESCE(SUM(cost), 0) FROM request_logs WHERE timestamp >= ?1",
+            [&today], |row| row.get(0),
+        ).unwrap_or(0.0);
+        serde_json::json!({ "requests": count, "cost": cost })
+    };
+
     Ok(serde_json::json!({
         "state": gw_state,
         "last_error": last_error,
+        "today": today_stats,
     }))
 }
 
