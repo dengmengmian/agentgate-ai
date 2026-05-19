@@ -72,12 +72,32 @@ AgentGate is a **local model gateway** for AI coding agents. One entry point con
 - OpenCode: one-click config
 - Local gateway access token (`ag_local_*`) authentication
 
+**Desktop Pet**
+- 9 original SVG pet characters: Gateway Bot, Pixel Cat, Slime, CEO, Octopus, MaFan, KuiKui, FenZong, ZhenZhen
+- Pet reacts to gateway state: idle (gentle bob), active (bounce during requests), error (shake), sleep (after 5min idle)
+- Speech bubble notifications for gateway start/stop and request errors
+- AI chat: double-click to chat, replies via your configured Provider
+- Persistent memory: remembers your name across sessions
+- Auto stats bubble: "Today: 128 requests | $0.42" every 30 minutes
+- Subtle lean toward cursor in idle state
+- Position saved and restored on restart
+- Manage in Settings > Pet tab or toggle via system tray
+
+**Quick Setup & Diagnostics**
+- First-run onboarding: paste API key → auto-detect provider → select tools → one-click setup
+- Quick-add provider: paste API key, auto-detect type from prefix (sk-ant-, deepseek-, gsk_, etc.)
+- Connection test: 3-step status bar (Config → Gateway → Provider) on the Clients page
+- Quick Setup page in sidebar (auto-hidden after providers configured, re-enable in Settings)
+
 **Desktop Application**
+- Dark theme (warm amber tones) and Light theme (clean neutral gray)
+- Theme switcher in Settings > General
 - System tray with background operation on window close
-- Tray menu for gateway start/stop control
+- Tray menu for gateway start/stop and pet toggle
 - Auto-start on system boot
 - Request logging, self-diagnostics, and diagnostic bundle export
 - Bilingual UI (Chinese and English)
+- Auto-update with in-app download and install
 
 ## Screenshots
 
@@ -649,8 +669,9 @@ Client sends Chat Completions request
 AgentGate/
 ├── src/                          # Frontend (React)
 │   ├── app/App.tsx               # App entry point
-│   ├── pages/                    # Pages (Overview/Providers/Routes/Gateway/Clients/Logs/Diagnostics/Settings)
-│   ├── components/               # UI components
+│   ├── pages/                    # Pages (Overview/Quick Setup/Providers/Routes/Gateway/Clients/Logs/Diagnostics/Settings)
+│   ├── components/               # UI components (layout/common/dashboard/providers/logs/tools/onboarding)
+│   ├── pet/                      # Desktop pet system (PetApp/Bubble/greetings/9 pet SVG components)
 │   ├── lib/                      # API wrapper, i18n, utilities
 │   └── types/                    # TypeScript type definitions
 ├── src-tauri/                    # Backend (Rust)
