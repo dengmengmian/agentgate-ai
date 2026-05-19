@@ -1,0 +1,205 @@
+/* ── Pet Window Global Styles ── */
+
+html, body, #root {
+  background: transparent !important;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.pet-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 8px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pet-container:active {
+  cursor: grabbing;
+}
+
+/* ── State Animations ── */
+
+.pet-idle {
+  animation: bob 2s ease-in-out infinite;
+}
+
+.pet-active {
+  animation: bounce 0.5s ease-in-out infinite;
+}
+
+.pet-error {
+  animation: shake 0.3s ease-in-out infinite;
+}
+
+.pet-sleep {
+  animation: sleep-breathe 3s ease-in-out infinite;
+}
+
+.pet-poke {
+  animation: poke 0.4s ease-out forwards;
+}
+
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  25% { transform: translateY(-10px) scale(1.05, 0.95); }
+  50% { transform: translateY(0) scale(0.95, 1.05); }
+  75% { transform: translateY(-5px) scale(1.02, 0.98); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-5deg); }
+  75% { transform: rotate(5deg); }
+}
+
+@keyframes sleep-breathe {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(1.03); opacity: 1; }
+}
+
+@keyframes poke {
+  0% { transform: scale(1); }
+  30% { transform: scale(0.85, 1.15); }
+  60% { transform: scale(1.1, 0.9); }
+  100% { transform: scale(1); }
+}
+
+/* ── Zzz Animation ── */
+
+.zzz {
+  position: absolute;
+  top: 0;
+  right: 5px;
+  font-size: 14px;
+  color: #7C8CFF;
+  animation: zzz-float 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes zzz-float {
+  0% { opacity: 0; transform: translateY(0) scale(0.8); }
+  50% { opacity: 1; transform: translateY(-15px) scale(1); }
+  100% { opacity: 0; transform: translateY(-30px) scale(0.6); }
+}
+
+/* ── Bubble ── */
+
+.bubble {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  pointer-events: none;
+  z-index: 10;
+  width: max-content;
+  max-width: 180px;
+}
+
+.bubble-content {
+  background: #1a1d23;
+  border: 1.5px solid #6B7280;
+  border-radius: 10px;
+  padding: 6px 12px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+.bubble-text {
+  font-family: "Inter", sans-serif;
+  font-size: 11px;
+  color: #e0e0e0;
+  line-height: 1.4;
+}
+
+.bubble-arrow {
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #6B7280;
+  margin: 0 auto;
+}
+
+.bubble-in {
+  animation: bubble-enter 0.25s ease-out forwards;
+}
+
+.bubble-out {
+  animation: bubble-leave 0.4s ease-in forwards;
+}
+
+@keyframes bubble-enter {
+  0% { opacity: 0; transform: translateX(-50%) translateY(6px) scale(0.8); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+@keyframes bubble-leave {
+  0% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+}
+
+/* ── Chat Input ── */
+
+.chat-input-wrap {
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  animation: bubble-enter 0.2s ease-out forwards;
+}
+
+.chat-input {
+  width: 160px;
+  padding: 5px 10px;
+  border-radius: 14px;
+  border: 1.5px solid #7C8CFF;
+  background: #1a1d23;
+  color: #e0e0e0;
+  font-size: 11px;
+  font-family: "Inter", sans-serif;
+  outline: none;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+
+.chat-input::placeholder {
+  color: #6B7280;
+}
+
+.chat-loading {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 0;
+}
+
+.chat-loading span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #7C8CFF;
+  animation: chat-dot 0.8s ease-in-out infinite;
+}
+
+.chat-loading span:nth-child(2) { animation-delay: 0.15s; }
+.chat-loading span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes chat-dot {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+

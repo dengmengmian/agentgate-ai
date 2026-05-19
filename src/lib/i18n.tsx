@@ -351,6 +351,40 @@ const translations: Record<string, Record<Locale, string>> = {
   "update.install_failed": { en: "Failed to install update", zh: "安装更新失败" },
   "update.restart_hint": { en: "Update installed, restart to apply", zh: "更新已安装，重启生效" },
 
+  // ── Settings tabs ──
+  "settings.tab.general": { en: "General", zh: "通用" },
+  "settings.tab.security": { en: "Security", zh: "安全" },
+  "settings.tab.gateway": { en: "Gateway", zh: "网关" },
+  "settings.tab.data": { en: "Data", zh: "数据" },
+  "settings.tab.pet": { en: "Pet", zh: "宠物" },
+  "settings.tab.about": { en: "About", zh: "关于" },
+
+  // ── Pet settings ──
+  "settings.pet.title": { en: "Desktop Pet", zh: "桌面宠物" },
+  "settings.pet.desc": { en: "A floating pet on your desktop that reacts to gateway activity", zh: "浮动在桌面上的宠物，可随网关活动做出反应" },
+  "settings.pet.visible": { en: "Show Pet", zh: "显示宠物" },
+  "settings.pet.visible_desc": { en: "Show or hide the desktop pet", zh: "显示或隐藏桌面宠物" },
+  "settings.pet.type": { en: "Pet Type", zh: "宠物类型" },
+  "settings.pet.type_desc": { en: "Choose your desktop companion", zh: "选择你的桌面伙伴" },
+  "settings.pet.robot": { en: "Gateway Bot", zh: "网关机器人" },
+  "settings.pet.robot_desc": { en: "A little robot with gateway arrows on its chest", zh: "胸口带网关箭头的小机器人" },
+  "settings.pet.pixel-cat": { en: "Pixel Cat", zh: "像素猫" },
+  "settings.pet.pixel-cat_desc": { en: "A cute pixel-art cat with wagging tail", zh: "一只会摇尾巴的像素风猫咪" },
+  "settings.pet.slime": { en: "Slime", zh: "史莱姆" },
+  "settings.pet.slime_desc": { en: "A bouncy jelly blob with expressive eyes", zh: "一团有表情的弹性果冻" },
+  "settings.pet.fox": { en: "CEO", zh: "CEO" },
+  "settings.pet.fox_desc": { en: "The boss with a golden tie, always watching", zh: "戴金色领带的老板，时刻关注着一切" },
+  "settings.pet.octopus": { en: "Octopus", zh: "章鱼" },
+  "settings.pet.octopus_desc": { en: "A purple octopus with waving tentacles", zh: "一只触手摇摆的紫色章鱼" },
+  "settings.pet.ghost": { en: "MaFan", zh: "麻凡" },
+  "settings.pet.ghost_desc": { en: "A friendly ghost who floats around", zh: "一个飘来飘去的友好幽灵" },
+  "settings.pet.soldier": { en: "FenZong", zh: "分总" },
+  "settings.pet.soldier_desc": { en: "A super soldier in full armor, unstoppable", zh: "全副武装的超级兵，势不可挡" },
+  "settings.pet.coder": { en: "ZhenZhen", zh: "振振" },
+  "settings.pet.coder_desc": { en: "A reliable core developer, coffee & commits", zh: "老实靠谱的核心程序员，咖啡与commit" },
+  "settings.pet.ox": { en: "KuiKui", zh: "奎奎" },
+  "settings.pet.ox_desc": { en: "A hardworking ox that never stops", zh: "一头永不停歇的牛马打工人" },
+
   // ── Settings about ──
   "settings.license": { en: "License", zh: "开源协议" },
 };

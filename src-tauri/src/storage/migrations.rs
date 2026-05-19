@@ -250,6 +250,26 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     // Seed default route profile on first run
     seed_default_route_profile(conn)?;
 
+    // Pet settings table
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS pet_settings (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            pet_type TEXT NOT NULL DEFAULT 'robot',
+            visible INTEGER NOT NULL DEFAULT 1,
+            pos_x REAL NOT NULL DEFAULT 100.0,
+            pos_y REAL NOT NULL DEFAULT 100.0
+        );"
+    )?;
+    // Ensure pet_settings has exactly one row
+    let pet_count: i64 =
+        conn.query_row("SELECT COUNT(*) FROM pet_settings", [], |row| row.get(0))?;
+    if pet_count == 0 {
+        conn.execute(
+            "INSERT INTO pet_settings (id, pet_type, visible, pos_x, pos_y) VALUES (1, 'robot', 1, 100.0, 100.0)",
+            [],
+        )?;
+    }
+
     Ok(())
 }
 

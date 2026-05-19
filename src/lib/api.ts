@@ -421,3 +421,35 @@ export async function exportDiagnosticBundle(includeLogs?: boolean, maxLogs?: nu
 export async function openAppDataDir(): Promise<boolean> {
   return cmd("open_app_data_dir");
 }
+
+// ── Pet ───────────────────────────────────────────────────────
+
+import type { PetSettings, UpdatePetSettingsInput, PetGatewayInfo } from "@/types/pet";
+
+export async function getPetSettings(): Promise<PetSettings> {
+  return cmd("get_pet_settings");
+}
+
+export async function updatePetSettings(input: UpdatePetSettingsInput): Promise<PetSettings> {
+  return cmd("update_pet_settings", { input });
+}
+
+export async function setPetVisible(visible: boolean): Promise<PetSettings> {
+  return cmd("set_pet_visible", { visible });
+}
+
+export async function getPetGatewayState(): Promise<PetGatewayInfo> {
+  return cmd("get_pet_gateway_state");
+}
+
+export async function getPetMemory(): Promise<string> {
+  return cmd("get_pet_memory");
+}
+
+export async function savePetMemory(memory: string): Promise<boolean> {
+  return cmd("save_pet_memory", { memory });
+}
+
+export async function petChat(messages: Array<{ role: string; content: string }>): Promise<string> {
+  return cmd("pet_chat", { messages });
+}

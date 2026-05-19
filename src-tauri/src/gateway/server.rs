@@ -2,28 +2,33 @@ use axum::routing::{get, post};
 use axum::Router;
 use rusqlite::Connection;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::oneshot;
 
 use crate::errors::AppError;
 use crate::gateway::routes::{self, GatewayState};
 
-/// Start the gateway HTTP server. Returns the shutdown sender and the join handle.
+/// Start the gateway HTTP server. Returns the shutdown sender, join handle, and active request counter.
 pub async fn start(
     host: &str,
     port: u16,
     db: Arc<Mutex<Connection>>,
-) -> Result<(oneshot::Sender<()>, tokio::task::JoinHandle<()>), AppError> {
+) -> Result<(oneshot::Sender<()>, tokio::task::JoinHandle<()>, Arc<AtomicU64>), AppError> {
     let http_client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
         .build()
         .map_err(|e| AppError::internal(format!("Failed to create HTTP client: {e}")))?;
 
+    let active_requests = Arc::new(AtomicU64::new(0));
+
     let state = GatewayState {
         db,
         http_client,
+        active_requests: active_requests.clone(),
     };
 
+    let counter = active_requests.clone();
     let app = Router::new()
         .route("/health", get(routes::health))
         .route("/v1/models", get(routes::list_models))
@@ -33,8 +38,16 @@ pub async fn start(
         .route("/chat/completions", post(routes::handle_chat_completions))
         .route("/v1/messages", post(routes::handle_messages))
         .route("/messages", post(routes::handle_messages))
-        .route("/v1beta/models/{model}:generateContent", post(routes::handle_gemini_generate))
-        .route("/v1beta/models/{model}:streamGenerateContent", post(routes::handle_gemini_generate))
+        .route("/v1beta/models/{model_action}", post(routes::handle_gemini_generate))
+        .layer(axum::middleware::from_fn(move |req, next: axum::middleware::Next| {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::Relaxed);
+                let response = next.run(req).await;
+                counter.fetch_sub(1, Ordering::Relaxed);
+                response
+            }
+        }))
         .with_state(state);
 
     let addr: SocketAddr = format!("{host}:{port}").parse().map_err(|e| {
@@ -64,5 +77,5 @@ pub async fn start(
             .ok();
     });
 
-    Ok((shutdown_tx, handle))
+    Ok((shutdown_tx, handle, active_requests))
 }

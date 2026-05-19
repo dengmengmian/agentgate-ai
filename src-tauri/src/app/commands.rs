@@ -1,4 +1,4 @@
-use tauri::State;
+use tauri::{Emitter, Manager, State};
 use std::time::Instant;
 
 use crate::app::state::AppState;
@@ -595,7 +595,7 @@ pub fn update_gateway_settings(
 }
 
 #[tauri::command]
-pub async fn start_gateway(state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
+pub async fn start_gateway(app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
     // Check if already running
     {
         let runtime = state.gateway_runtime.lock()
@@ -613,7 +613,7 @@ pub async fn start_gateway(state: State<'_, AppState>) -> Result<GatewayStatus, 
     };
 
     // Start real HTTP server
-    let (shutdown_tx, server_handle) =
+    let (shutdown_tx, server_handle, active_requests) =
         gateway::server::start(&host, port, state.db.clone()).await?;
 
     // Update runtime state
@@ -626,13 +626,15 @@ pub async fn start_gateway(state: State<'_, AppState>) -> Result<GatewayStatus, 
         runtime.started_at = Some(chrono::Utc::now().to_rfc3339());
         runtime.shutdown_tx = Some(shutdown_tx);
         runtime.server_handle = Some(server_handle);
+        runtime.active_requests = Some(active_requests);
     }
 
+    let _ = app_handle.emit("pet-bubble", serde_json::json!({ "text": "Gateway started", "text_zh": "网关已启动", "type": "success" }));
     get_gateway_status(state)
 }
 
 #[tauri::command]
-pub async fn stop_gateway(state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
+pub async fn stop_gateway(app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
     let (shutdown_tx, server_handle) = {
         let mut runtime = state.gateway_runtime.lock()
             .map_err(|_| AppError::internal("Runtime lock failed"))?;
@@ -654,11 +656,12 @@ pub async fn stop_gateway(state: State<'_, AppState>) -> Result<GatewayStatus, A
         let _ = tokio::time::timeout(std::time::Duration::from_secs(5), handle).await;
     }
 
+    let _ = app_handle.emit("pet-bubble", serde_json::json!({ "text": "Gateway stopped", "text_zh": "网关已停止", "type": "info" }));
     get_gateway_status(state)
 }
 
 #[tauri::command]
-pub async fn restart_gateway(state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
+pub async fn restart_gateway(app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
     // Stop if running
     {
         let is_running = {
@@ -687,7 +690,7 @@ pub async fn restart_gateway(state: State<'_, AppState>) -> Result<GatewayStatus
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
     // Start again
-    start_gateway(state).await
+    start_gateway(app_handle, state).await
 }
 
 // ── Logs Commands ──────────────────────────────────────────────
@@ -1231,6 +1234,167 @@ pub fn open_app_data_dir() -> Result<bool, AppError> {
     let dir = crate::security::local_token::token_dir();
     open::that(&dir).map_err(|e| AppError::internal(format!("Cannot open: {e}")))?;
     Ok(true)
+}
+
+// ── Pet Commands ──────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_pet_settings(state: State<'_, AppState>) -> Result<crate::models::pet::PetSettings, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::pet_settings::get(&conn)
+}
+
+#[tauri::command]
+pub fn update_pet_settings(
+    input: crate::models::pet::UpdatePetSettingsInput,
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<crate::models::pet::PetSettings, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let result = storage::pet_settings::update(&conn, input)?;
+    let _ = app_handle.emit("pet-settings-changed", &result);
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn set_pet_visible(visible: bool, app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<crate::models::pet::PetSettings, AppError> {
+    if let Some(pet_win) = app_handle.get_webview_window("pet") {
+        if visible {
+            let _ = pet_win.show();
+        } else {
+            let _ = pet_win.hide();
+        }
+    }
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::pet_settings::update(&conn, crate::models::pet::UpdatePetSettingsInput {
+        pet_type: None,
+        visible: Some(visible),
+        pos_x: None,
+        pos_y: None,
+    })
+}
+
+#[tauri::command]
+pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
+    let runtime = state.gateway_runtime.lock()
+        .map_err(|_| AppError::internal("Runtime lock failed"))?;
+
+    let gw_state = if !runtime.running {
+        "stopped"
+    } else if runtime.active_requests.as_ref()
+        .map(|c| c.load(std::sync::atomic::Ordering::Relaxed) > 0)
+        .unwrap_or(false)
+    {
+        "active"
+    } else {
+        "running"
+    };
+
+    // Query recent errors (last 5 seconds)
+    let last_error = if runtime.running {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        conn.query_row(
+            "SELECT error_message, provider, timestamp FROM request_logs
+             WHERE error_message IS NOT NULL AND error_message != ''
+             ORDER BY timestamp DESC LIMIT 1",
+            [],
+            |row| {
+                let msg: String = row.get(0)?;
+                let provider: Option<String> = row.get(1)?;
+                let ts: String = row.get(2)?;
+                Ok(serde_json::json!({ "message": msg, "provider": provider, "timestamp": ts }))
+            },
+        ).ok()
+    } else {
+        None
+    };
+
+    Ok(serde_json::json!({
+        "state": gw_state,
+        "last_error": last_error,
+    }))
+}
+
+// ── Pet Chat Commands ─────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_pet_memory(state: State<'_, AppState>) -> Result<String, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    Ok(storage::app_settings::get(&conn, "pet_memory")?.unwrap_or_else(|| "{}".to_string()))
+}
+
+#[tauri::command]
+pub fn save_pet_memory(memory: String, state: State<'_, AppState>) -> Result<bool, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::app_settings::set(&conn, "pet_memory", &memory)?;
+    Ok(true)
+}
+
+#[tauri::command]
+pub async fn pet_chat(
+    messages: Vec<serde_json::Value>,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    // Find the active provider
+    let (base_url, api_key, model, timeout) = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let settings = storage::gateway_settings::get(&conn)?;
+        let provider_id = settings.active_provider_id
+            .ok_or_else(|| AppError::new("NO_ACTIVE_PROVIDER", "No active provider configured"))?;
+        let provider = storage::providers::get_by_id(&conn, &provider_id)?;
+        let api_key = provider.api_key
+            .ok_or_else(|| AppError::new("NO_API_KEY", "Active provider has no API key"))?;
+        // Parse multi-key, use first
+        let key = if api_key.trim().starts_with('[') {
+            serde_json::from_str::<Vec<String>>(api_key.trim())
+                .ok()
+                .and_then(|v| v.into_iter().find(|s| !s.is_empty()))
+                .unwrap_or(api_key)
+        } else {
+            api_key
+        };
+        (provider.base_url, key, provider.default_model, provider.timeout_seconds)
+    };
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout as u64))
+        .build()
+        .map_err(|e| AppError::internal(format!("HTTP client error: {e}")))?;
+
+    let base = base_url.trim_end_matches('/');
+    let url = format!("{base}/v1/chat/completions");
+
+    let body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "max_tokens": 200,
+        "temperature": 0.8,
+    });
+
+    let resp = client.post(&url)
+        .header("Authorization", format!("Bearer {api_key}"))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| AppError::internal(format!("Request failed: {e}")))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(AppError::new("CHAT_API_ERROR", format!("API error {status}"))
+            .with_detail(text));
+    }
+
+    let json: serde_json::Value = resp.json().await
+        .map_err(|e| AppError::internal(format!("Parse error: {e}")))?;
+
+    let content = json["choices"][0]["message"]["content"]
+        .as_str()
+        .unwrap_or("...")
+        .to_string();
+
+    Ok(content)
 }
 
 fn dirs_next() -> Option<String> {

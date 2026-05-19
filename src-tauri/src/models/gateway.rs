@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
@@ -47,6 +49,7 @@ pub struct GatewayRuntimeState {
     pub started_at: Option<String>,
     pub shutdown_tx: Option<oneshot::Sender<()>>,
     pub server_handle: Option<JoinHandle<()>>,
+    pub active_requests: Option<Arc<AtomicU64>>,
 }
 
 impl Default for GatewayRuntimeState {
@@ -58,6 +61,7 @@ impl Default for GatewayRuntimeState {
             started_at: None,
             shutdown_tx: None,
             server_handle: None,
+            active_requests: None,
         }
     }
 }

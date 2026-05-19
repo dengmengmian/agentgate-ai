@@ -4,6 +4,7 @@ use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use rusqlite::Connection;
 use serde_json::{json, Value};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::mpsc;
@@ -27,6 +28,7 @@ use crate::security::local_token;
 pub struct GatewayState {
     pub db: Arc<Mutex<Connection>>,
     pub http_client: reqwest::Client,
+    pub active_requests: Arc<AtomicU64>,
 }
 
 // ── GET /health ────────────────────────────────────────────────

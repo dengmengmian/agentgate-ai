@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex};
 use tauri::Manager;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
+use tauri::webview::WebviewWindowBuilder;
 
 use app::commands;
 use app::state::AppState;
@@ -84,9 +85,38 @@ pub fn run() {
                         .map(|s| s.auto_start)
                         .unwrap_or(false);
                     if should_start {
-                        let _ = commands::start_gateway(state).await;
+                        let _ = commands::start_gateway(app_handle.clone(), state).await;
                     }
                 });
+            }
+
+            // ── Desktop Pet Window ──
+            {
+                let state: &AppState = app.state::<AppState>().inner();
+                let pet_visible = state.db.lock()
+                    .ok()
+                    .and_then(|conn| storage::pet_settings::get(&conn).ok())
+                    .map(|s| s.visible)
+                    .unwrap_or(true);
+
+                let pet_window = WebviewWindowBuilder::new(
+                    app,
+                    "pet",
+                    tauri::WebviewUrl::App("index.html".into()),
+                )
+                .title("AgentGate Pet")
+                .inner_size(220.0, 240.0)
+                .decorations(false)
+                .transparent(true)
+                .always_on_top(true)
+                .skip_taskbar(true)
+                .resizable(false)
+                .visible(pet_visible)
+                .build();
+
+                if let Err(e) = pet_window {
+                    tracing::warn!("Failed to create pet window: {e}");
+                }
             }
 
             // ── Close-to-tray: hide window on close ──
@@ -102,7 +132,7 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Hide window instead of closing
+                // Hide window instead of closing (for both main and pet windows)
                 api.prevent_close();
                 let _ = window.hide();
             }
@@ -202,6 +232,14 @@ pub fn run() {
             commands::run_full_self_test,
             commands::export_diagnostic_bundle,
             commands::open_app_data_dir,
+            // Pet
+            commands::get_pet_settings,
+            commands::update_pet_settings,
+            commands::set_pet_visible,
+            commands::get_pet_gateway_state,
+            commands::get_pet_memory,
+            commands::save_pet_memory,
+            commands::pet_chat,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -260,6 +298,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let start_gw = MenuItemBuilder::with_id("start_gateway", if zh { "启动网关" } else { "Start Gateway" }).build(app)?;
     let stop_gw = MenuItemBuilder::with_id("stop_gateway", if zh { "停止网关" } else { "Stop Gateway" }).build(app)?;
     let restart_gw = MenuItemBuilder::with_id("restart_gateway", if zh { "重启网关" } else { "Restart Gateway" }).build(app)?;
+    let toggle_pet = MenuItemBuilder::with_id("toggle_pet", if zh { "显示/隐藏宠物" } else { "Toggle Pet" }).build(app)?;
     let quit = MenuItemBuilder::with_id("quit", if zh { "退出" } else { "Quit" }).build(app)?;
 
     let menu = MenuBuilder::new(app)
@@ -268,6 +307,8 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .item(&start_gw)
         .item(&stop_gw)
         .item(&restart_gw)
+        .separator()
+        .item(&toggle_pet)
         .separator()
         .item(&quit)
         .build()?;
@@ -288,29 +329,53 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     let app_handle = app.clone();
                     tauri::async_runtime::spawn(async move {
                         let state: tauri::State<'_, AppState> = app_handle.state();
-                        let _ = commands::start_gateway(state).await;
+                        let _ = commands::start_gateway(app_handle.clone(), state).await;
                     });
                 }
                 "stop_gateway" => {
                     let app_handle = app.clone();
                     tauri::async_runtime::spawn(async move {
                         let state: tauri::State<'_, AppState> = app_handle.state();
-                        let _ = commands::stop_gateway(state).await;
+                        let _ = commands::stop_gateway(app_handle.clone(), state).await;
                     });
                 }
                 "restart_gateway" => {
                     let app_handle = app.clone();
                     tauri::async_runtime::spawn(async move {
                         let state: tauri::State<'_, AppState> = app_handle.state();
-                        let _ = commands::restart_gateway(state).await;
+                        let _ = commands::restart_gateway(app_handle.clone(), state).await;
                     });
+                }
+                "toggle_pet" => {
+                    if let Some(pet_win) = app.get_webview_window("pet") {
+                        let is_visible = pet_win.is_visible().unwrap_or(false);
+                        if is_visible {
+                            let _ = pet_win.hide();
+                        } else {
+                            let _ = pet_win.show();
+                        }
+                        // Persist visibility
+                        let new_visible = !is_visible;
+                        let app_handle = app.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let state: tauri::State<'_, AppState> = app_handle.state();
+                            let db = state.db.clone();
+                            let conn = db.lock().unwrap();
+                            let _ = storage::pet_settings::update(&conn, crate::models::pet::UpdatePetSettingsInput {
+                                pet_type: None,
+                                visible: Some(new_visible),
+                                pos_x: None,
+                                pos_y: None,
+                            });
+                        });
+                    }
                 }
                 "quit" => {
                     // Stop gateway before quitting
                     let app_handle = app.clone();
                     tauri::async_runtime::spawn(async move {
                         let state: tauri::State<'_, AppState> = app_handle.state();
-                        let _ = commands::stop_gateway(state).await;
+                        let _ = commands::stop_gateway(app_handle.clone(), state).await;
                         app_handle.exit(0);
                     });
                 }
