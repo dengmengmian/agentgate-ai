@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.0] - 2026-05-20
+
+### Release / 发布
+
+- 发布 AgentGate 1.0.0 正式版
+
+---
+
 ## [0.8.4] - 2026-05-20
 
 ### Fixes / 修复
