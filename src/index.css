@@ -19,10 +19,10 @@
 
 /* ── Latte Theme ── */
 [data-theme="latte"] {
-  --color-bg: #E6D9CA;
-  --color-card: #F3ECE2;
-  --color-card-secondary: #EAE0D3;
-  --color-border: #C8B9A6;
+  --color-bg: #F0E6DA;
+  --color-card: #F9F4ED;
+  --color-card-secondary: #F0E6DA;
+  --color-border: #D5C8B8;
   --color-text-primary: #2C2015;
   --color-text-secondary: #5C4D3C;
   --color-text-muted: #8A7B6A;
@@ -134,24 +134,24 @@ body {
   box-shadow: 0 1px 4px rgba(60,40,20,0.08), 0 0 1px rgba(60,40,20,0.06);
 }
 
-/* Sidebar — darker, like the tea itself */
+/* Sidebar — slightly deeper than bg */
 [data-theme="latte"] aside {
-  background: #D9CBBA !important;
-  border-color: #C0B09C !important;
+  background: #E8DCCE !important;
+  border-color: #D0C2B0 !important;
 }
 
 /* Topbar — match cards */
 [data-theme="latte"] header.border-b {
-  background: #F3ECE2 !important;
-  border-color: #C8B9A6 !important;
-  box-shadow: 0 1px 3px rgba(50,30,10,0.08);
+  background: #F9F4ED !important;
+  border-color: #D5C8B8 !important;
+  box-shadow: 0 1px 3px rgba(50,30,10,0.06);
 }
 
 /* Form inputs / selects */
 [data-theme="latte"] .form-input,
 [data-theme="latte"] select {
-  background-color: #F3ECE2;
-  border-color: #C0B09C;
+  background-color: #F9F4ED;
+  border-color: #D0C2B0;
 }
 
 /* Inner cards (tool status, stat cards) — stronger border */
@@ -161,20 +161,20 @@ body {
 
 /* Table */
 [data-theme="latte"] thead tr {
-  background-color: #E6D9CA !important;
+  background-color: #EDE2D5 !important;
 }
 
 [data-theme="latte"] .border-b.border-border\/50 {
-  border-color: #D4C5B4 !important;
+  border-color: #DDD0C2 !important;
 }
 
 /* Scrollbar */
 [data-theme="latte"] ::-webkit-scrollbar-thumb {
-  background: #C0B09C;
+  background: #D0C2B0;
 }
 
 [data-theme="latte"] ::-webkit-scrollbar-thumb:hover {
-  background: #A8967E;
+  background: #B8A898;
 }
 
 /* Fix /10 opacity colors — too faint on light. Use /20 equivalent via overrides */
