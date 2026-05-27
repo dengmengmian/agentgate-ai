@@ -184,10 +184,19 @@ pub fn detect() -> CodexConfigStatus {
     let exists = path.exists();
     let auth_json_exists = auth_path.exists();
 
+    // The new "hijack OpenAI provider" config has `model_provider = "OpenAI"`
+    // but with the OpenAI provider's `base_url` pointing at localhost (us).
+    // Distinguish "AgentGate compat mode" from "real official OpenAI" by:
+    //   - presence of `experimental_bearer_token = "ag_local_..."` (our token),
+    //   - OR base_url containing `127.0.0.1` / `localhost` on a sane port.
+    // The legacy `model_provider = "agentgate"` shape is still recognised so
+    // users upgrading from older builds see correct status before re-apply.
     let (has_agentgate, current_provider, current_model) = if exists {
         let content = fs::read_to_string(&path).unwrap_or_default();
+        let legacy_marker = content.contains("[model_providers.agentgate]");
+        let openai_hijack = content.contains("experimental_bearer_token = \"ag_local_");
         (
-            content.contains("agentgate"),
+            legacy_marker || openai_hijack,
             extract_toml_value(&content, "model_provider"),
             extract_toml_value(&content, "model"),
         )
@@ -200,10 +209,15 @@ pub fn detect() -> CodexConfigStatus {
         if let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content) {
             let current_key = map.get("OPENAI_API_KEY").and_then(|v| v.as_str()).unwrap_or("");
             let is_ag = current_key.starts_with("ag_local_");
-            // Also check: is it a clean agentgate-only auth (no OAuth tokens)?
-            let is_clean_ag = is_ag && !map.contains_key("tokens");
             // Polluted = has ag_local_ but ALSO has OAuth tokens (old version mess)
+            // OR is the clean ag-only form (legacy stripped state).
+            let is_clean_ag = is_ag && !map.contains_key("tokens");
             let polluted = is_ag && !is_clean_ag && !has_saved_official();
+            // In the new "hijack OpenAI" world, auth.json should look like the
+            // standard ChatGPT-logged-in state — has tokens, OPENAI_API_KEY
+            // is null (or absent). `has_agentgate_auth` was the legacy
+            // "auth.json stripped to our token" signal; it stays true only
+            // for that old shape so the UI can flag it for repair.
             (is_clean_ag, polluted)
         } else {
             (false, false)
@@ -212,7 +226,13 @@ pub fn detect() -> CodexConfigStatus {
         (false, false)
     };
 
-    let is_agentgate_active = current_provider.as_deref() == Some("agentgate");
+    // "AgentGate active" now means: our hijack snippet has been written
+    // (we can tell from the ag_local_ bearer token). The model_provider
+    // string itself reads "OpenAI" so we can't distinguish from real OpenAI
+    // by that field alone — the bearer token presence is the true marker.
+    let content_for_active = if exists { fs::read_to_string(&path).unwrap_or_default() } else { String::new() };
+    let is_agentgate_active = content_for_active.contains("experimental_bearer_token = \"ag_local_")
+        || current_provider.as_deref() == Some("agentgate"); // legacy
 
     CodexConfigStatus {
         config_path: path_str, auth_json_path: auth_str,
@@ -225,38 +245,44 @@ pub fn detect() -> CodexConfigStatus {
 }
 
 pub fn generate_snippet(host: &str, port: i64, bearer_token: &str) -> String {
-    // Layout notes:
+    // The "hijack OpenAI provider + requires_openai_auth" pattern:
     //
-    // - `model = "auto"` — Codex's special "let the provider decide" value.
-    //   Earlier builds used `"gpt-5.5"` to coerce Codex into the Responses
-    //   API path, but the IDE / Codex.app sees `gpt-5.5` as an unknown
-    //   model and greys out the ChatGPT panel as a result. `auto` is
-    //   recognised by both the CLI and the GUI and resolves at request
-    //   time through AgentGate's own routing.
+    //   model_provider = "OpenAI"   ← official provider name, NOT a custom one
     //
-    // - `wire_api = "responses"` already pins the body shape, so model name
-    //   only matters for the CLI/IDE display picker — `auto` is fine.
+    //   [model_providers.OpenAI]
+    //   base_url = "http://localhost:9090/v1"  ← override points to us
+    //   requires_openai_auth = true             ← keep ChatGPT auth state live
     //
-    // - `experimental_bearer_token` carries the per-provider auth so we
-    //   never have to touch `auth.json` (keeping ChatGPT OAuth tokens
-    //   intact for the IDE plugin's "configured?" probe). `env_key` is the
-    //   Codex-stable alternative but it'd force users to `export
-    //   AGENTGATE_API_KEY=...` in their shell — a regression vs our
-    //   current zero-touch behaviour.
+    // This is the magic: Codex.app's IDE entries (Mobile, plugins, quota,
+    // bundled extensions) gate themselves on `model_provider == openai/
+    // chatgpt`. By naming the provider `OpenAI` we satisfy that check, and
+    // by overriding its `base_url` the actual traffic still flows through
+    // AgentGate. `requires_openai_auth = true` tells Codex "treat this
+    // provider as one that still needs ChatGPT login state to be valid",
+    // so the IDE keeps the official auth-aware UI alive.
     //
-    // - `supports_websockets = false` is informative but defaults to
-    //   false; included for clarity and to satisfy any IDE picker that
-    //   demands an explicit declaration.
+    // `experimental_bearer_token` carries the local AgentGate access token
+    // — Codex sends `Authorization: Bearer ag_local_…` to us. auth.json is
+    // never touched: ChatGPT OAuth (`tokens.access_token`, `auth_mode:
+    // chatgpt`) stays intact and continues to drive the IDE login state.
+    //
+    // `model` is intentionally NOT set at the top level. The IDE / CLI
+    // picker chooses the model display name; AgentGate routes by whatever
+    // name comes in via its own per-model capability matrix.
+    //
+    // Credit: the `requires_openai_auth` discovery comes from a CSDN post
+    // by "硅基新手村" (alex_yangchuansheng) — this is the only known way
+    // to route Codex through a custom base_url while preserving the
+    // official ChatGPT IDE features.
     format!(
-        r#"model = "auto"
-model_provider = "agentgate"
+        r#"model_provider = "OpenAI"
 
-[model_providers.agentgate]
-name = "AgentGate Local Proxy"
+[model_providers.OpenAI]
+name = "OpenAI"
 base_url = "http://{host}:{port}/v1"
 wire_api = "responses"
-supports_websockets = false
-experimental_bearer_token = "{bearer_token}""#,
+experimental_bearer_token = "{bearer_token}"
+requires_openai_auth = true"#,
     )
 }
 
@@ -317,17 +343,17 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
         warnings.push("已备份原始 config.toml，可随时切换回官方配置。".to_string());
     }
 
-    // The tradeoff that comes with custom `model_provider`: Codex.app's IDE
-    // panel — and its bundled official plugins like Browser / Computer-Use —
-    // gate themselves on `model_provider == openai/chatgpt`. Setting it to
-    // anything else (which we must, to route through AgentGate) is what
-    // greys those entries out. There's no config trick around it; the user
-    // gets a heads-up here so the disabled-icons don't read as a bug.
-    // Switching back to native mode (toggle_provider) restores everything.
+    // Heads-up about the hijack-OpenAI design choice. `model_provider =
+    // "OpenAI"` + `requires_openai_auth = true` keeps the IDE plugin entries
+    // (Browser, Computer-Use, Mobile, quota query) alive because Codex.app
+    // sees the official provider name and still demands a valid ChatGPT
+    // login. Conversation requests, however, hit AgentGate's localhost
+    // endpoint instead of api.openai.com. The user should know that they
+    // need to keep `codex login` valid for the IDE bits to keep working.
     warnings.push(
-        "Codex.app 内嵌插件入口（Browser / Computer-Use 等官方扩展）会显示置灰 \
-         —— 这是 IDE 检测到 model_provider 非官方时的设计行为。如需恢复官方扩展，\
-         请在工具卡上切换为「原生模式」。CLI 与多 provider 路由不受影响。"
+        "已切换到代理模式：对话请求走 AgentGate，但 Codex.app 内嵌插件（Browser / \
+         Computer-Use / Mobile / 配额查询）仍走 ChatGPT 官方登录态 —— 都可用。\
+         如果之前没登录过 Codex，请先执行 `codex login` 完成 ChatGPT 认证。"
             .to_string(),
     );
 
@@ -390,10 +416,10 @@ pub fn toggle_provider(host: &str, port: i64) -> Result<ToggleResult, AppError> 
 /// backup itself is kept on disk so the user can toggle back to compat
 /// mode at any time without re-running an explicit setup step.
 ///
-/// Use this when the user explicitly wants Codex.app's official IDE
-/// extensions (Browser, Computer-Use, plugin marketplace) back — those are
-/// gated on `model_provider == openai/chatgpt` and only light up while
-/// AgentGate isn't injecting its own provider.
+/// With the new "hijack OpenAI + requires_openai_auth" config the IDE
+/// plugins stay alive in compat mode too, so this is now mostly a "stop
+/// routing through AgentGate" switch — useful when the user wants Codex
+/// CLI to talk to api.openai.com directly again.
 pub fn disable() -> Result<ApplyConfigResult, AppError> {
     let path = config_path();
     let auth_path = auth_json_path();
@@ -428,8 +454,8 @@ pub fn disable() -> Result<ApplyConfigResult, AppError> {
     }
 
     warnings.push(
-        "已切回原生模式：Codex.app 官方扩展恢复可用。CLI 走 ChatGPT 官方通道，\
-         不再经过 AgentGate 路由。"
+        "已切回原生模式：Codex 直连 ChatGPT 官方，对话请求不再经过 AgentGate。\
+         如需重新使用第三方模型路由，点击「应用配置」即可切回代理模式。"
             .to_string(),
     );
 
@@ -477,24 +503,40 @@ mod tests {
     #[test]
     fn test_generate_snippet() {
         let snippet = generate_snippet("127.0.0.1", 9090, "ag_local_abc123");
+
+        // The whole reason for this format: hijack the OpenAI provider so
+        // the IDE plugins (which gate on `model_provider == openai/chatgpt`)
+        // stay alive.
         assert!(
-            snippet.contains("model = \"auto\""),
-            "model must be \"auto\" — \"gpt-5.5\" was a synthetic name that triggered \
-             the Codex.app IDE plugin to grey out (model picker validates against \
-             a known list and rejected the fake name)."
+            snippet.contains("model_provider = \"OpenAI\""),
+            "must use the official OpenAI provider name (not a custom one)"
         );
-        assert!(snippet.contains("model_provider = \"agentgate\""));
-        assert!(snippet.contains("name = \"AgentGate Local Proxy\""));
+        assert!(snippet.contains("[model_providers.OpenAI]"));
+        assert!(snippet.contains("name = \"OpenAI\""));
         assert!(snippet.contains("base_url = \"http://127.0.0.1:9090/v1\""));
         assert!(snippet.contains("wire_api = \"responses\""));
-        assert!(snippet.contains("supports_websockets = false"));
+        assert!(
+            snippet.contains("requires_openai_auth = true"),
+            "requires_openai_auth = true is what keeps the IDE plugin alive — \
+             the whole point of this config shape"
+        );
         assert!(
             snippet.contains("experimental_bearer_token = \"ag_local_abc123\""),
-            "snippet must carry the bearer token so auth.json can stay untouched"
+            "bearer travels via config so auth.json can stay untouched"
+        );
+
+        // Regression guards: don't reintroduce known-broken shapes.
+        assert!(
+            !snippet.contains("model_provider = \"agentgate\""),
+            "custom model_provider (legacy) triggered IDE plugin grey-out"
+        );
+        assert!(
+            !snippet.contains("[model_providers.agentgate]"),
+            "legacy block name must not be reintroduced"
         );
         assert!(
             !snippet.contains("gpt-5.5"),
-            "regression guard — never re-introduce the gpt-5.5 placeholder"
+            "synthetic gpt-5.5 model name triggered IDE picker rejection"
         );
     }
 
@@ -517,8 +559,9 @@ mod tests {
         // NOT be created by apply. Bearer travels in config.toml.
         assert!(!auth_json_path().exists(), "apply must not create auth.json");
         let cfg = std::fs::read_to_string(config_path()).unwrap();
-        assert!(cfg.contains("model_provider = \"agentgate\""));
-        assert!(cfg.contains("experimental_bearer_token"));
+        assert!(cfg.contains("model_provider = \"OpenAI\""), "new hijack-OpenAI format");
+        assert!(cfg.contains("requires_openai_auth = true"));
+        assert!(cfg.contains("experimental_bearer_token = \"ag_local_"));
         cleanup(&temp);
     }
 
@@ -651,16 +694,60 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_with_config() {
+    fn test_detect_with_new_hijack_config() {
+        // The new hijack-OpenAI format: model_provider = "OpenAI" but the
+        // OpenAI block points at localhost with our ag_local_ bearer token.
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
-        std::fs::write(config_path(), "model_provider = \"agentgate\"\nmodel = \"gpt-5\"\n").unwrap();
+        let snippet = generate_snippet("127.0.0.1", 9090, "ag_local_xyz");
+        std::fs::write(config_path(), snippet).unwrap();
+        let status = detect();
+        assert!(status.exists);
+        assert!(status.has_agentgate, "ag_local_ bearer token marks our hijack snippet");
+        assert!(status.is_agentgate_active);
+        assert_eq!(status.current_provider, Some("OpenAI".to_string()));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn test_detect_with_legacy_agentgate_config() {
+        // Backward compat: old AgentGate builds wrote `model_provider = "agentgate"`.
+        // detect() should still recognise those rows so the upgrade flow can
+        // surface "needs re-apply" guidance.
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
+        std::fs::write(
+            config_path(),
+            "model_provider = \"agentgate\"\nmodel = \"gpt-5\"\n[model_providers.agentgate]\nbase_url = \"http://x\"\n",
+        )
+        .unwrap();
         let status = detect();
         assert!(status.exists);
         assert!(status.has_agentgate);
         assert_eq!(status.current_provider, Some("agentgate".to_string()));
         assert!(status.is_agentgate_active);
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn test_detect_with_real_openai_config_is_not_agentgate() {
+        // A user with a genuine [model_providers.OpenAI] block pointing at
+        // api.openai.com (no ag_local_ bearer) must NOT be flagged as
+        // AgentGate-active.
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
+        std::fs::write(
+            config_path(),
+            "model_provider = \"OpenAI\"\n[model_providers.OpenAI]\nbase_url = \"https://api.openai.com/v1\"\n",
+        )
+        .unwrap();
+        let status = detect();
+        assert!(status.exists);
+        assert!(!status.has_agentgate);
+        assert!(!status.is_agentgate_active);
         cleanup(&temp);
     }
 }
