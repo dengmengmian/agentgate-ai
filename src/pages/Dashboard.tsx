@@ -198,13 +198,16 @@ export function Dashboard() {
         ))}
       </div>
 
-      {/* ── 3. Trend chart (left 2/3) + Top providers (right 1/3) ── */}
+      {/* ── 3. Trend chart — always full-width so 30-day bars don't overflow.
+              Top providers gets its own row below. ── */}
       {stats && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <div className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+        <>
+          <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-                <BarChart3 className="h-4 w-4 text-text-muted" />{t("stats.daily_chart")}
+                <BarChart3 className="h-4 w-4 text-text-muted" />
+                {t("stats.daily_chart")}
+                <span className="text-text-muted">· {rangeDays === 1 ? "今天" : `${rangeDays} 天`}</span>
               </h3>
               <div className="flex items-center gap-3 text-[10px] text-text-muted">
                 <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-sm bg-accent/70" /><span>{t("stats.success_rate_label") || "成功"}</span></div>
@@ -237,8 +240,9 @@ export function Dashboard() {
                     <div className="absolute top-1/2 h-px w-full bg-border/30" />
                     <div className="absolute bottom-0 h-px w-full bg-border/40" />
                   </div>
-                  {/* Bars */}
-                  <div className="relative flex items-end justify-between gap-3 px-1" style={{ height: BAR_H }}>
+                  {/* Density tuning: gap shrinks + bar caps shrink as bar
+                      count grows so 30-day view doesn't overflow. */}
+                  <div className={`relative flex items-end justify-between px-1 ${stats.daily.length > 20 ? "gap-1" : stats.daily.length > 10 ? "gap-2" : "gap-3"}`} style={{ height: BAR_H }}>
                     {stats.daily.map((d) => {
                       const successCount = Math.max(d.total - d.errors, 0);
                       const totalH = d.total > 0 ? Math.max((d.total / niceMax) * BAR_H, 2) : 0;
@@ -252,7 +256,10 @@ export function Dashboard() {
                           title={tooltip}
                         >
                           {/* Bar */}
-                          <div className="flex w-full max-w-[32px] flex-col items-center justify-end overflow-hidden rounded-md transition-opacity group-hover:opacity-80">
+                          <div
+                            className="flex w-full flex-col items-center justify-end overflow-hidden rounded-md transition-opacity group-hover:opacity-80"
+                            style={{ maxWidth: stats.daily.length > 20 ? 18 : stats.daily.length > 10 ? 24 : 32 }}
+                          >
                             {totalH > 0 ? (
                               <>
                                 {errH > 0 && <div className="w-full bg-error/65" style={{ height: errH }} />}
@@ -278,18 +285,24 @@ export function Dashboard() {
                   </div>
                   {/* X-axis labels: date + counts row, aligned with bars (already
                       indented by parent padding-left). */}
-                  <div className="mt-2 flex items-start justify-between gap-3 px-1">
-                    {stats.daily.map((d) => {
+                  <div className={`mt-2 flex items-start justify-between px-1 ${stats.daily.length > 20 ? "gap-1" : stats.daily.length > 10 ? "gap-2" : "gap-3"}`}>
+                    {stats.daily.map((d, i) => {
                       const tokTotal = d.input_tokens + d.output_tokens;
+                      const n = stats.daily.length;
+                      const stride = n > 20 ? 3 : n > 10 ? 2 : 1;
+                      const showDate = i % stride === 0 || i === n - 1;
+                      const showTokens = n <= 14;
                       return (
                         <div key={d.date} className="flex flex-1 flex-col items-center gap-0.5">
-                          <span className="text-[10px] text-text-muted">{d.date.slice(5)}</span>
+                          <span className="text-[10px] text-text-muted">{showDate ? d.date.slice(5) : ""}</span>
                           <span className="font-mono text-[11px] font-medium text-text-primary tabular-nums">
                             {d.total > 0 ? d.total.toLocaleString() : "—"}
                           </span>
-                          <span className="font-mono text-[9px] text-text-muted tabular-nums">
-                            {tokTotal > 0 ? formatTokens(tokTotal) : " "}
-                          </span>
+                          {showTokens && (
+                            <span className="font-mono text-[9px] text-text-muted tabular-nums">
+                              {tokTotal > 0 ? formatTokens(tokTotal) : " "}
+                            </span>
+                          )}
                         </div>
                       );
                     })}
@@ -299,7 +312,7 @@ export function Dashboard() {
             })()}
           </div>
 
-          {/* Top providers */}
+          {/* Top providers — horizontal layout below the chart */}
           <div className="rounded-xl border border-border bg-card p-5">
             <h3 className="mb-3 text-sm font-semibold text-text-primary">{t("stats.top_providers")}</h3>
             {(() => {
@@ -310,7 +323,7 @@ export function Dashboard() {
               if (visible.length === 0) return <p className="text-xs text-text-muted">—</p>;
               const max = Math.max(...visible.map((x) => x.count), 1);
               return (
-                <div className="space-y-1.5">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-6">
                   {visible.slice(0, 6).map((p) => {
                     const pct = (p.count / max) * 100;
                     return (
@@ -329,7 +342,7 @@ export function Dashboard() {
               );
             })()}
           </div>
-        </div>
+        </>
       )}
 
       {/* ── 4. Tool status — single row of colored dots ── */}
