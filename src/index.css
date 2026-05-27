@@ -42,7 +42,7 @@
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
-/* ── Light Theme ── */
+/* ── Light Theme — Daylight 晴日（中性偏冷的官方亮色）── */
 [data-theme="light"] {
   --color-bg: #F4F5F7;
   --color-sidebar: #EBEDF0;
@@ -68,6 +68,174 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+/* ── Slate Steel 钢蓝 — 冷色调专业暗色 ── */
+[data-theme="slate"] {
+  --color-bg: #0F141B;
+  --color-sidebar: #0A0F15;
+  --color-card: #1A2230;
+  --color-card-secondary: #232C3B;
+  --color-hover: #2D3848;
+  --color-border: #3A4454;
+
+  --color-text-primary: #E1E7EF;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+
+  --color-accent: #38BDF8;
+  --color-accent-soft: rgba(56, 189, 248, 0.12);
+
+  --color-success: #34D399;
+  --color-success-soft: rgba(52, 211, 153, 0.12);
+  --color-warning: #FBBF24;
+  --color-warning-soft: rgba(251, 191, 36, 0.12);
+  --color-error: #F87171;
+  --color-error-soft: rgba(248, 113, 113, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Forest Pine 松林 — 沉稳森林绿 ── */
+[data-theme="forest"] {
+  --color-bg: #0F1612;
+  --color-sidebar: #0A100D;
+  --color-card: #16201A;
+  --color-card-secondary: #1E2A22;
+  --color-hover: #28362C;
+  --color-border: #34453B;
+
+  --color-text-primary: #E2E8E0;
+  --color-text-secondary: #94A18F;
+  --color-text-muted: #5F6B5A;
+
+  --color-accent: #84B062;
+  --color-accent-soft: rgba(132, 176, 98, 0.14);
+
+  --color-success: #6FA85C;
+  --color-success-soft: rgba(111, 168, 92, 0.12);
+  --color-warning: #D4A356;
+  --color-warning-soft: rgba(212, 163, 86, 0.12);
+  --color-error: #D4685C;
+  --color-error-soft: rgba(212, 104, 92, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Midnight Violet 紫夜 — 暗调紫色 ── */
+[data-theme="violet"] {
+  --color-bg: #14101C;
+  --color-sidebar: #100C16;
+  --color-card: #1E1828;
+  --color-card-secondary: #281F35;
+  --color-hover: #322942;
+  --color-border: #443854;
+
+  --color-text-primary: #ECE6F2;
+  --color-text-secondary: #A89BB8;
+  --color-text-muted: #6E647E;
+
+  --color-accent: #A78BFA;
+  --color-accent-soft: rgba(167, 139, 250, 0.14);
+
+  --color-success: #6EE7B7;
+  --color-success-soft: rgba(110, 231, 183, 0.12);
+  --color-warning: #FCD34D;
+  --color-warning-soft: rgba(252, 211, 77, 0.12);
+  --color-error: #F472B6;
+  --color-error-soft: rgba(244, 114, 182, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+/* ── Linen Cream 米麻 — 暖色调亮色 ── */
+[data-theme="linen"] {
+  --color-bg: #FAF6EE;
+  --color-sidebar: #F1ECE0;
+  --color-card: #FFFFFF;
+  --color-card-secondary: #F8F2E6;
+  --color-hover: #EFE8D7;
+  --color-border: #D9CFB8;
+
+  --color-text-primary: #2C2620;
+  --color-text-secondary: #6E6356;
+  --color-text-muted: #A39888;
+
+  --color-accent: #B66821;
+  --color-accent-soft: rgba(182, 104, 33, 0.10);
+
+  --color-success: #4A7C3A;
+  --color-success-soft: rgba(74, 124, 58, 0.10);
+  --color-warning: #B07816;
+  --color-warning-soft: rgba(176, 120, 22, 0.10);
+  --color-error: #B83828;
+  --color-error-soft: rgba(184, 56, 40, 0.10);
+
+  --shadow-sm: 0 1px 2px rgba(58, 42, 16, 0.06);
+  --shadow-md: 0 2px 8px rgba(58, 42, 16, 0.09);
+  --shadow-lg: 0 8px 24px rgba(58, 42, 16, 0.14);
+}
+
+/* ── Mist Blue 雾蓝 — 清新冷调亮色 ── */
+[data-theme="mist"] {
+  --color-bg: #F4F7FB;
+  --color-sidebar: #EBF0F7;
+  --color-card: #FFFFFF;
+  --color-card-secondary: #F4F7FB;
+  --color-hover: #E8EEF6;
+  --color-border: #CFD8E3;
+
+  --color-text-primary: #1B2735;
+  --color-text-secondary: #4F5E74;
+  --color-text-muted: #8696A8;
+
+  --color-accent: #2563EB;
+  --color-accent-soft: rgba(37, 99, 235, 0.08);
+
+  --color-success: #16A34A;
+  --color-success-soft: rgba(22, 163, 74, 0.10);
+  --color-warning: #CA8A04;
+  --color-warning-soft: rgba(202, 138, 4, 0.10);
+  --color-error: #DC2626;
+  --color-error-soft: rgba(220, 38, 38, 0.10);
+
+  --shadow-sm: 0 1px 2px rgba(15, 30, 50, 0.05);
+  --shadow-md: 0 2px 8px rgba(15, 30, 50, 0.08);
+  --shadow-lg: 0 8px 24px rgba(15, 30, 50, 0.12);
+}
+
+/* ── Sakura 樱粉 — 柔和粉色亮色 ── */
+[data-theme="sakura"] {
+  --color-bg: #FBF4F4;
+  --color-sidebar: #F4E8E8;
+  --color-card: #FFFFFF;
+  --color-card-secondary: #FBF4F4;
+  --color-hover: #F2E2E2;
+  --color-border: #E0CCCC;
+
+  --color-text-primary: #2C1F22;
+  --color-text-secondary: #6A535A;
+  --color-text-muted: #A28891;
+
+  --color-accent: #C44569;
+  --color-accent-soft: rgba(196, 69, 105, 0.10);
+
+  --color-success: #5C9E5C;
+  --color-success-soft: rgba(92, 158, 92, 0.10);
+  --color-warning: #C58B36;
+  --color-warning-soft: rgba(197, 139, 54, 0.10);
+  --color-error: #B53A4A;
+  --color-error-soft: rgba(181, 58, 74, 0.10);
+
+  --shadow-sm: 0 1px 2px rgba(80, 30, 40, 0.06);
+  --shadow-md: 0 2px 8px rgba(80, 30, 40, 0.09);
+  --shadow-lg: 0 8px 24px rgba(80, 30, 40, 0.14);
 }
 
 /* ═══════════════════════════════════════════════════════════════

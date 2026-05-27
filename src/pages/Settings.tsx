@@ -182,19 +182,10 @@ export function Settings() {
                   <option value="zh">中文</option>
                 </select>
               </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-text-primary">{t("settings.theme")}</p>
-                  <p className="text-xs text-text-muted">{t("settings.theme_desc")}</p>
-                </div>
-                <select
-                  value={theme}
-                  onChange={(e) => setTheme(e.target.value)}
-                  className="rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
-                >
-                  <option value="dark">{t("settings.theme.dark")}</option>
-                  <option value="light">{t("settings.theme.light")}</option>
-                </select>
+              <div>
+                <p className="text-sm text-text-primary">{t("settings.theme")}</p>
+                <p className="mb-3 text-xs text-text-muted">{t("settings.theme_desc")}</p>
+                <ThemePicker value={theme} onChange={setTheme} />
               </div>
               <div className="flex items-center justify-between">
                 <div>
@@ -587,6 +578,75 @@ function PricingAddForm({ onAdd }: { onAdd: (provider: string, model: string, in
         <input type="number" step="0.01" value={outputPrice} onChange={(e) => setOutputPrice(e.target.value)} placeholder="0.00" className="form-input w-full" />
       </div>
       <button onClick={handleSubmit} className="btn-primary mb-0.5"><Plus className="h-3 w-3" />{t("routes.add")}</button>
+    </div>
+  );
+}
+
+// ── Theme picker — swatch grid ──────────────────────────────────────
+// Each card previews the theme's surface + accent + text triplet so the
+// user can pick by sight, not by name guessing. The check overlay marks
+// the active theme.
+
+interface ThemeSwatch {
+  id: string;              // localStorage value + data-theme attribute
+  labelEn: string;
+  labelZh: string;
+  bg: string;
+  card: string;
+  accent: string;
+  textPrimary: string;
+  border: string;
+}
+
+const THEME_SWATCHES: ThemeSwatch[] = [
+  { id: "dark",    labelEn: "Warm Amber",    labelZh: "暖琥珀", bg: "#121110", card: "#1C1A18", accent: "#E89850", textPrimary: "#EDE8E2", border: "#38342F" },
+  { id: "slate",   labelEn: "Slate Steel",   labelZh: "钢蓝",   bg: "#0F141B", card: "#1A2230", accent: "#38BDF8", textPrimary: "#E1E7EF", border: "#3A4454" },
+  { id: "forest",  labelEn: "Forest Pine",   labelZh: "松林",   bg: "#0F1612", card: "#16201A", accent: "#84B062", textPrimary: "#E2E8E0", border: "#34453B" },
+  { id: "violet",  labelEn: "Midnight Violet", labelZh: "紫夜", bg: "#14101C", card: "#1E1828", accent: "#A78BFA", textPrimary: "#ECE6F2", border: "#443854" },
+  { id: "light",   labelEn: "Daylight",      labelZh: "晴日",   bg: "#F4F5F7", card: "#FFFFFF", accent: "#C07830", textPrimary: "#1A1C20", border: "#D5D8DC" },
+  { id: "linen",   labelEn: "Linen Cream",   labelZh: "米麻",   bg: "#FAF6EE", card: "#FFFFFF", accent: "#B66821", textPrimary: "#2C2620", border: "#D9CFB8" },
+  { id: "mist",    labelEn: "Mist Blue",     labelZh: "雾蓝",   bg: "#F4F7FB", card: "#FFFFFF", accent: "#2563EB", textPrimary: "#1B2735", border: "#CFD8E3" },
+  { id: "sakura",  labelEn: "Sakura",        labelZh: "樱粉",   bg: "#FBF4F4", card: "#FFFFFF", accent: "#C44569", textPrimary: "#2C1F22", border: "#E0CCCC" },
+];
+
+function ThemePicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+  return (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {THEME_SWATCHES.map((s) => {
+        const selected = value === s.id;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onChange(s.id)}
+            className={`group flex flex-col gap-2 rounded-lg border p-2.5 text-left transition-all ${
+              selected ? "border-accent ring-2 ring-accent/40" : "border-border hover:border-text-muted"
+            }`}
+            style={{ backgroundColor: s.bg }}
+            aria-pressed={selected}
+          >
+            {/* Mini preview: a faux card with accent dot + text bars */}
+            <div
+              className="flex items-center gap-2 rounded-md border px-2 py-2"
+              style={{ backgroundColor: s.card, borderColor: s.border }}
+            >
+              <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: s.accent }} />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="h-1 w-3/4 rounded-full" style={{ backgroundColor: s.textPrimary, opacity: 0.85 }} />
+                <span className="h-1 w-1/2 rounded-full" style={{ backgroundColor: s.textPrimary, opacity: 0.45 }} />
+              </div>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-xs font-medium" style={{ color: s.textPrimary }}>
+                {s.labelZh}
+              </span>
+              <span className="text-[10px]" style={{ color: s.textPrimary, opacity: 0.6 }}>
+                {s.labelEn}
+              </span>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
