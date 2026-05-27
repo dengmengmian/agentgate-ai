@@ -329,6 +329,13 @@ const translations: Record<string, Record<Locale, string>> = {
   "stats.avg_cost": { en: "Avg Cost", zh: "平均费用" },
   "stats.per_request": { en: "per request", zh: "每次请求" },
   "stats.requests": { en: "Requests", zh: "请求" },
+  "stats.realtime": { en: "auto-refresh", zh: "实时刷新" },
+  "stats.tokens_today": { en: "Tokens", zh: "Tokens" },
+  "stats.cost_today": { en: "Cost", zh: "费用" },
+  "stats.total_label": { en: "Cumulative", zh: "累计" },
+  "stats.success_rate_label": { en: "success", zh: "成功" },
+  "stats.avg_per_request": { en: "avg", zh: "均" },
+  "stats.req_unit": { en: "req", zh: "次" },
 
   // ── Diagnostics ──
   "diag.run_self_test": { en: "Run Self Test", zh: "运行自检" },
