@@ -12,6 +12,10 @@ export interface RequestStats {
   today_output_tokens: number;
   total_cost: number;
   today_cost: number;
+  total_cache_write_tokens: number;
+  total_cache_read_tokens: number;
+  today_cache_write_tokens: number;
+  today_cache_read_tokens: number;
   daily: DailyStat[];
   providers: ProviderStat[];
 }
@@ -24,6 +28,17 @@ export interface DailyStat {
   input_tokens: number;
   output_tokens: number;
   cost: number;
+  cache_write_tokens: number;
+  cache_read_tokens: number;
+}
+
+export interface RuntimeKpis {
+  active_requests: number;
+  uptime_seconds: number;
+  gateway_running: boolean;
+  gateway_port: number;
+  success_rate_today: number;
+  total_today: number;
 }
 
 export interface ProviderStat {

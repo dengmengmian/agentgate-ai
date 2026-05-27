@@ -368,10 +368,20 @@ export async function resetAllProviderRuntimeStatus(): Promise<boolean> {
 
 // ── Stats ──────────────────────────────────────────────────────
 
-import type { RequestStats, ModelPricing, ProviderHealth } from "@/types/stats";
+import type { RequestStats, ModelPricing, ProviderHealth, RuntimeKpis } from "@/types/stats";
 
 export async function getRequestStats(): Promise<RequestStats> {
   return cmd("get_request_stats");
+}
+
+/** Stats over a sliding window — used by the Dashboard date-range tabs. */
+export async function getRequestStatsRange(days: number): Promise<RequestStats> {
+  return cmd("get_request_stats_range", { days });
+}
+
+/** Live gateway KPIs (active requests, uptime, today success rate). */
+export async function getRuntimeKpis(): Promise<RuntimeKpis> {
+  return cmd("get_runtime_kpis");
 }
 
 export async function getProviderHealth(provider: string): Promise<ProviderHealth> {

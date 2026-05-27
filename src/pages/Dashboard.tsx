@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { RecentRequests } from "@/components/dashboard/RecentRequests";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { RuntimeFooter } from "@/components/common/RuntimeFooter";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { formatLatency } from "@/lib/utils";
@@ -41,12 +42,21 @@ function StripMetric({ label, value, tone }: { label: string; value: string; ton
   );
 }
 
+type RangeDays = 1 | 7 | 14 | 30;
+const RANGE_OPTIONS: { days: RangeDays; labelZh: string; labelEn: string }[] = [
+  { days: 1, labelZh: "今天", labelEn: "Today" },
+  { days: 7, labelZh: "7天", labelEn: "7d" },
+  { days: 14, labelZh: "14天", labelEn: "14d" },
+  { days: 30, labelZh: "30天", labelEn: "30d" },
+];
+
 export function Dashboard() {
   const { t } = useI18n();
   const [status, setStatus] = useState<GatewayStatus | null>(null);
   const [tools, setTools] = useState<ToolConfigView[]>([]);
   const [recentLogs, setRecentLogs] = useState<RequestLogListItem[]>([]);
   const [stats, setStats] = useState<RequestStats | null>(null);
+  const [rangeDays, setRangeDays] = useState<RangeDays>(7);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +66,7 @@ export function Dashboard() {
           api.getGatewayStatus(),
           api.listTools(),
           api.listRequestLogs({ limit: 5 }),
-          api.getRequestStats(),
+          api.getRequestStatsRange(rangeDays),
         ]);
         if (!cancelled) {
           setStatus(s);
@@ -71,7 +81,7 @@ export function Dashboard() {
     load();
     const timer = setInterval(load, 5000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, []);
+  }, [rangeDays]);
 
   const handleStart = async () => { try { setStatus(await api.startGateway()); toast("success", t("gateway.started")); } catch (err) { toast("error", (err as api.AppError).message); } };
   const handleStop = async () => { try { setStatus(await api.stopGateway()); toast("success", t("gateway.stopped")); } catch (err) { toast("error", (err as api.AppError).message); } };
@@ -149,6 +159,46 @@ export function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* ── 2b. Today cache strip — only render when there's a signal ── */}
+      {stats && (stats.today_cache_read_tokens > 0 || stats.today_cache_write_tokens > 0) && (
+        <div className="rounded-xl border border-border bg-card px-6 py-3" style={{ boxShadow: "var(--shadow-sm)" }}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">缓存 Token</span>
+            <span className="text-[11px] text-text-muted">
+              命中率{" "}
+              {(() => {
+                const inp = stats.today_input_tokens;
+                const r = stats.today_cache_read_tokens;
+                return inp > 0 ? `${((r / inp) * 100).toFixed(1)}%` : "—";
+              })()}
+            </span>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-3">
+            <StripMetric label="写入 Write" value={formatTokens(stats.today_cache_write_tokens)} />
+            <StripMetric label="命中 Read" value={formatTokens(stats.today_cache_read_tokens)} />
+            <StripMetric label="输入合计" value={formatTokens(stats.today_input_tokens)} tone="default" />
+          </div>
+        </div>
+      )}
+
+      {/* ── 3. Trend chart range selector ── */}
+      <div className="flex items-center justify-end gap-1">
+        {RANGE_OPTIONS.map((opt) => (
+          <button
+            key={opt.days}
+            onClick={() => setRangeDays(opt.days)}
+            className={`rounded-md px-3 py-1 text-[11px] font-medium transition-colors ${
+              rangeDays === opt.days
+                ? "bg-accent text-white"
+                : "bg-card text-text-secondary hover:bg-accent-soft hover:text-accent"
+            }`}
+            style={rangeDays === opt.days ? {} : { boxShadow: "var(--shadow-sm)" }}
+          >
+            {opt.labelZh}
+          </button>
+        ))}
+      </div>
 
       {/* ── 3. Trend chart (left 2/3) + Top providers (right 1/3) ── */}
       {stats && (
@@ -317,6 +367,9 @@ export function Dashboard() {
 
       {/* ── 6. Recent requests (unchanged) ── */}
       <RecentRequests requests={recentLogs} />
+
+      {/* ── 7. Runtime KPI footer ── */}
+      <RuntimeFooter />
     </div>
   );
 }
