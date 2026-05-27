@@ -1,0 +1,321 @@
+//! Capability seed for the model_capabilities matrix.
+//!
+//! Encodes what we know about specific model IDs so the UI can offer
+//! "auto-detect" instead of forcing users to tick every box by hand.
+//! Provider-specific rules first (MiMo / DeepSeek), then a generic
+//! fallback that infers caps from the model name (anything with "vision"
+//! / "tts" / etc. in the id).
+//!
+//! Canonical capability strings (keep stable — DB content depends on these):
+//!   - text       text input/output (almost every chat model)
+//!   - vision     image input
+//!   - audio_in   audio input (omni)
+//!   - tts        audio output / synthesis
+//!   - video_in   video input
+//!   - reasoning  thinking mode
+//!   - tools      function/tool calling
+//!   - web_search native web search builtin
+//!   - cache      Anthropic-style prompt caching
+
+pub const CAP_TEXT: &str = "text";
+pub const CAP_VISION: &str = "vision";
+pub const CAP_AUDIO_IN: &str = "audio_in";
+pub const CAP_TTS: &str = "tts";
+pub const CAP_VIDEO_IN: &str = "video_in";
+pub const CAP_REASONING: &str = "reasoning";
+pub const CAP_TOOLS: &str = "tools";
+pub const CAP_WEB_SEARCH: &str = "web_search";
+
+/// All canonical capability strings, for UI rendering. Order matters — this is
+/// also the column order shown in the matrix editor.
+pub const ALL_CAPABILITIES: &[&str] = &[
+    CAP_TEXT, CAP_VISION, CAP_AUDIO_IN, CAP_TTS, CAP_VIDEO_IN,
+    CAP_REASONING, CAP_TOOLS, CAP_WEB_SEARCH,
+];
+
+/// Auto-derive a model's capabilities given its provider type and id.
+/// Returns a sorted, de-duplicated vec of capability strings.
+pub fn seed_for_model(provider_type: &str, model_id: &str) -> Vec<String> {
+    let pt = provider_type.to_ascii_lowercase();
+    let mid = model_id.trim().to_ascii_lowercase();
+
+    // Try provider-specific rules first
+    let caps = match pt.as_str() {
+        p if p == "mimo" || p == "xiaomi" || p.contains("mimo") => seed_mimo(&mid),
+        "deepseek" => seed_deepseek(&mid),
+        p if p == "kimi" || p == "moonshot" || p.contains("moonshot") => seed_kimi(&mid),
+        _ => Vec::new(),
+    };
+    if !caps.is_empty() {
+        return dedup_sort(caps);
+    }
+
+    // Generic fallback: pattern-match the model name
+    dedup_sort(seed_generic(&mid))
+}
+
+fn seed_mimo(mid: &str) -> Vec<String> {
+    // MiMo per https://platform.xiaomimimo.com/docs/zh-CN/quick-start/model
+    // Strip any [...] qualifier (e.g. mimo-v2.5-pro[1m]) before matching.
+    let base = strip_qualifier(mid);
+    match base {
+        "mimo-v2.5-pro" | "mimo-v2-pro" => vec![
+            CAP_TEXT.into(), CAP_REASONING.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+        ],
+        "mimo-v2.5" => vec![
+            CAP_TEXT.into(), CAP_VISION.into(), CAP_AUDIO_IN.into(), CAP_VIDEO_IN.into(),
+            CAP_REASONING.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+        ],
+        "mimo-v2-omni" => vec![
+            CAP_TEXT.into(), CAP_VISION.into(), CAP_AUDIO_IN.into(), CAP_VIDEO_IN.into(),
+            CAP_TOOLS.into(),
+        ],
+        "mimo-v2-flash" => vec![
+            CAP_TEXT.into(), CAP_REASONING.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+        ],
+        m if m.contains("-tts") => vec![CAP_TTS.into()],
+        _ => Vec::new(),
+    }
+}
+
+fn seed_kimi(mid: &str) -> Vec<String> {
+    let base = strip_qualifier(mid);
+    // Kimi web_search is provided server-side via the `$web_search` builtin
+    // (AgentGate already translates Codex's web_search_preview → builtin_function
+    // in tool_calls.rs), so we mark web_search universally for Kimi models.
+    match base {
+        // kimi-for-coding accepts image input (confirmed by users). Coding-tuned
+        // model, supports function calling + web_search builtin.
+        "kimi-for-coding" => vec![
+            CAP_TEXT.into(), CAP_VISION.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+        ],
+        // Moonshot's explicit vision models.
+        m if m.contains("vision") => vec![
+            CAP_TEXT.into(), CAP_VISION.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+        ],
+        // Kimi K-series + standard Moonshot chat models. Recent K2 supports
+        // vision; conservative default keeps web_search + tools, leaves vision
+        // off for the user to opt into per model.
+        "kimi-k2" => vec![
+            CAP_TEXT.into(), CAP_VISION.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+        ],
+        _ => vec![CAP_TEXT.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into()],
+    }
+}
+
+fn seed_deepseek(mid: &str) -> Vec<String> {
+    let base = strip_qualifier(mid);
+    match base {
+        "deepseek-v4-pro" => vec![
+            CAP_TEXT.into(), CAP_REASONING.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+        ],
+        "deepseek-v4-flash" => vec![CAP_TEXT.into(), CAP_TOOLS.into()],
+        "deepseek-chat" => vec![CAP_TEXT.into(), CAP_TOOLS.into()],
+        "deepseek-reasoner" => vec![CAP_TEXT.into(), CAP_REASONING.into()],
+        _ => Vec::new(),
+    }
+}
+
+fn seed_generic(mid: &str) -> Vec<String> {
+    let mut caps: Vec<String> = vec![CAP_TEXT.into(), CAP_TOOLS.into()];
+    if mid.contains("vision") || mid.contains("-vl") || mid.contains("omni") {
+        caps.push(CAP_VISION.into());
+    }
+    if mid.contains("omni") {
+        caps.extend([CAP_AUDIO_IN.into(), CAP_VIDEO_IN.into()]);
+    }
+    if mid.contains("tts") || mid.contains("speech") {
+        return vec![CAP_TTS.into()];
+    }
+    if mid.contains("reason") || mid.contains("think") || mid.contains("-r1") || mid.contains("o1") || mid.contains("o3") {
+        caps.push(CAP_REASONING.into());
+    }
+    caps
+}
+
+/// Strip a trailing `[...]` qualifier like `mimo-v2.5-pro[1m]` → `mimo-v2.5-pro`.
+fn strip_qualifier(model: &str) -> &str {
+    if let Some(stripped) = model.strip_suffix(']') {
+        if let Some(open) = stripped.rfind('[') {
+            return &stripped[..open];
+        }
+    }
+    model
+}
+
+fn dedup_sort(mut v: Vec<String>) -> Vec<String> {
+    v.sort();
+    v.dedup();
+    v
+}
+
+/// Auto-derive capabilities for a whole list of models. Returns a map suitable
+/// for serializing into the `model_capabilities` JSON column.
+pub fn seed_for_models(provider_type: &str, model_ids: &[String]) -> std::collections::HashMap<String, Vec<String>> {
+    model_ids
+        .iter()
+        .map(|m| (m.clone(), seed_for_model(provider_type, m)))
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn caps_for(provider: &str, model: &str) -> Vec<String> {
+        seed_for_model(provider, model)
+    }
+
+    fn contains(caps: &[String], expected: &str) -> bool {
+        caps.iter().any(|c| c == expected)
+    }
+
+    // ── MiMo ──
+
+    #[test]
+    fn mimo_v25_pro_has_reasoning_no_vision() {
+        let c = caps_for("mimo", "mimo-v2.5-pro");
+        assert!(contains(&c, CAP_REASONING));
+        assert!(contains(&c, CAP_WEB_SEARCH));
+        assert!(!contains(&c, CAP_VISION));
+        assert!(!contains(&c, CAP_TTS));
+    }
+
+    #[test]
+    fn mimo_v25_has_vision() {
+        let c = caps_for("mimo", "mimo-v2.5");
+        assert!(contains(&c, CAP_TEXT));
+        assert!(contains(&c, CAP_VISION));
+        assert!(contains(&c, CAP_REASONING));
+    }
+
+    #[test]
+    fn mimo_v2_omni_has_vision_audio_video_but_no_reasoning() {
+        let c = caps_for("mimo", "mimo-v2-omni");
+        assert!(contains(&c, CAP_VISION));
+        assert!(contains(&c, CAP_AUDIO_IN));
+        assert!(contains(&c, CAP_VIDEO_IN));
+        assert!(!contains(&c, CAP_REASONING), "omni doesn't have thinking mode per docs");
+    }
+
+    #[test]
+    fn mimo_v2_flash_has_reasoning_no_vision() {
+        let c = caps_for("mimo", "mimo-v2-flash");
+        assert!(contains(&c, CAP_REASONING));
+        assert!(!contains(&c, CAP_VISION));
+    }
+
+    #[test]
+    fn mimo_tts_models_are_tts_only() {
+        for tts in ["mimo-v2.5-tts", "mimo-v2.5-tts-voiceclone", "mimo-v2.5-tts-voicedesign", "mimo-v2-tts"] {
+            let c = caps_for("mimo", tts);
+            assert_eq!(c, vec![CAP_TTS], "{tts} should be tts-only, got {c:?}");
+        }
+    }
+
+    #[test]
+    fn mimo_with_1m_qualifier_resolves_same_as_base() {
+        assert_eq!(caps_for("mimo", "mimo-v2.5-pro[1m]"), caps_for("mimo", "mimo-v2.5-pro"));
+    }
+
+    #[test]
+    fn xiaomi_alias_works() {
+        assert!(contains(&caps_for("xiaomi", "mimo-v2.5"), CAP_VISION));
+    }
+
+    // ── DeepSeek ──
+
+    #[test]
+    fn deepseek_v4_pro_has_reasoning_no_vision() {
+        let c = caps_for("deepseek", "deepseek-v4-pro");
+        assert!(contains(&c, CAP_REASONING));
+        assert!(!contains(&c, CAP_VISION));
+    }
+
+    #[test]
+    fn deepseek_v4_flash_no_reasoning() {
+        let c = caps_for("deepseek", "deepseek-v4-flash");
+        assert!(contains(&c, CAP_TEXT));
+        assert!(contains(&c, CAP_TOOLS));
+        assert!(!contains(&c, CAP_REASONING), "Flash is the cheap Haiku-tier, no reasoning by default");
+    }
+
+    #[test]
+    fn deepseek_with_1m_qualifier() {
+        assert_eq!(caps_for("deepseek", "deepseek-v4-pro[1m]"), caps_for("deepseek", "deepseek-v4-pro"));
+    }
+
+    #[test]
+    fn deepseek_reasoner_has_reasoning() {
+        assert!(contains(&caps_for("deepseek", "deepseek-reasoner"), CAP_REASONING));
+    }
+
+    // ── Kimi / Moonshot ──
+
+    #[test]
+    fn kimi_for_coding_has_vision_and_web_search() {
+        let c = caps_for("kimi", "kimi-for-coding");
+        assert!(contains(&c, CAP_VISION), "kimi-for-coding accepts image input per upstream confirmation");
+        assert!(contains(&c, CAP_WEB_SEARCH), "Kimi $web_search builtin is universally translated");
+        assert!(contains(&c, CAP_TOOLS));
+    }
+
+    #[test]
+    fn kimi_k2_has_vision() {
+        let c = caps_for("kimi", "kimi-k2");
+        assert!(contains(&c, CAP_VISION));
+    }
+
+    #[test]
+    fn moonshot_vision_models_have_vision() {
+        let c = caps_for("moonshot", "moonshot-v1-8k-vision-preview");
+        assert!(contains(&c, CAP_VISION));
+    }
+
+    #[test]
+    fn kimi_generic_chat_has_web_search_no_vision() {
+        let c = caps_for("kimi", "moonshot-v1-32k");
+        assert!(contains(&c, CAP_WEB_SEARCH));
+        assert!(!contains(&c, CAP_VISION), "conservative default — user opts in per model");
+    }
+
+    // ── Generic ──
+
+    #[test]
+    fn generic_vision_keyword_triggers_vision() {
+        let c = caps_for("openai", "gpt-4-vision");
+        assert!(contains(&c, CAP_VISION));
+    }
+
+    #[test]
+    fn generic_omni_triggers_vision_audio_video() {
+        let c = caps_for("openai", "gpt-4o-omni");
+        assert!(contains(&c, CAP_VISION));
+        assert!(contains(&c, CAP_AUDIO_IN));
+        assert!(contains(&c, CAP_VIDEO_IN));
+    }
+
+    #[test]
+    fn generic_tts_is_tts_only() {
+        let c = caps_for("openai", "tts-1");
+        assert_eq!(c, vec![CAP_TTS]);
+    }
+
+    #[test]
+    fn generic_o1_has_reasoning() {
+        let c = caps_for("openai", "o1-preview");
+        assert!(contains(&c, CAP_REASONING));
+    }
+
+    // ── Batch helper ──
+
+    #[test]
+    fn seed_for_models_returns_full_matrix() {
+        let models = vec!["mimo-v2.5-pro".to_string(), "mimo-v2.5".to_string(), "mimo-v2.5-tts".to_string()];
+        let matrix = seed_for_models("mimo", &models);
+        assert_eq!(matrix.len(), 3);
+        assert!(matrix.get("mimo-v2.5-pro").unwrap().contains(&CAP_REASONING.to_string()));
+        assert!(matrix.get("mimo-v2.5").unwrap().contains(&CAP_VISION.to_string()));
+        assert_eq!(matrix.get("mimo-v2.5-tts").unwrap(), &vec![CAP_TTS.to_string()]);
+    }
+}

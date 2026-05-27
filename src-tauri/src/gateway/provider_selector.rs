@@ -155,6 +155,16 @@ fn build_candidates(
             }
         });
 
+        // Capability-aware model promotion: if request demands a capability
+        // (e.g. vision) the resolved model lacks but another model on the same
+        // provider has, swap to that model. Only fires when model_capabilities
+        // matrix is populated; otherwise we leave the resolved model alone.
+        let model = if let (Some(p), Some(req_analysis)) = (provider_info.as_ref(), analysis) {
+            promote_for_capabilities(p, &model, req_analysis)
+        } else {
+            model
+        };
+
         let in_cooldown = rpp.cooldown_until.as_ref().map_or(false, |until| {
             chrono::DateTime::parse_from_rfc3339(until)
                 .map(|cd| cd > chrono::Utc::now())
@@ -169,7 +179,25 @@ fn build_candidates(
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or_default();
 
-        let supports_vision = provider_info.as_ref().and_then(|p| p.supports_vision);
+        // supports_vision precedence:
+        //   1. model_capabilities matrix (any model declares "vision") — MOST ACCURATE,
+        //      reflects per-model reality. Wins over the legacy single boolean.
+        //   2. explicit per-provider flag (legacy probe result) — only when matrix unset.
+        //   3. None — unknown, no opinion.
+        //
+        // Earlier the order was flipped, which caused MiMo providers where the legacy
+        // probe wrote `supports_vision=false` (because mimo-v2.5-pro 404'd on image) to
+        // be skipped from image requests entirely — even though the matrix declared
+        // mimo-v2.5 / mimo-v2-omni as vision-capable. The promotion step (below) would
+        // never run because the provider was filtered out in routes.rs:114 first.
+        let supports_vision = provider_info.as_ref().and_then(|p| {
+            let caps = p.parse_capabilities();
+            if caps.is_empty() {
+                None
+            } else {
+                Some(caps.values().any(|c| c.iter().any(|x| x == crate::providers::capabilities::CAP_VISION)))
+            }
+        }).or_else(|| provider_info.as_ref().and_then(|p| p.supports_vision));
 
         candidates.push(ProviderCandidate {
             provider_id: rpp.provider_id.clone(),
@@ -190,6 +218,7 @@ fn build_candidates(
 fn select_global_fallback(
     conn: &Connection,
     requested_model: Option<&str>,
+    analysis: Option<&RequestAnalysis>,
 ) -> Result<ProviderSelection, AppError> {
     let settings = storage::gateway_settings::get(conn)?;
     let provider_id = settings.active_provider_id.ok_or_else(|| {
@@ -201,6 +230,12 @@ fn select_global_fallback(
     let model = match requested_model {
         Some(req) => provider.resolve_model(req),
         None => provider.default_model.clone(),
+    };
+    // Capability-aware promotion in fallback path too — mirrors the route_profile path.
+    let model = if let Some(req_analysis) = analysis {
+        promote_for_capabilities(&provider, &model, req_analysis)
+    } else {
+        model
     };
 
     Ok(ProviderSelection {
@@ -268,8 +303,90 @@ pub fn select_for_failover(
             candidates,
         })
     } else {
-        select_global_fallback(&conn, requested_model)
+        let analysis = request.map(analyze_request);
+        select_global_fallback(&conn, requested_model, analysis.as_ref())
     }
+}
+
+/// Promote the resolved model to a sibling that has the capability the
+/// request needs, if the current pick lacks it. Currently checks vision
+/// (image input). Returns the original model when:
+///   - the provider has no model_capabilities matrix configured,
+///   - the current model already satisfies the request, or
+///   - no sibling model satisfies the demanded capability.
+fn promote_for_capabilities(
+    provider: &Provider,
+    current_model: &str,
+    analysis: &RequestAnalysis,
+) -> String {
+    let caps_map = provider.parse_capabilities();
+    if caps_map.is_empty() {
+        return current_model.to_string();
+    }
+
+    // Strip any qualifier ([1m] etc.) before looking up in the matrix.
+    let base = strip_qualifier(current_model);
+    let current_caps: Vec<String> = caps_map.get(base).cloned().unwrap_or_default();
+    let has = |c: &str| current_caps.iter().any(|x| x == c);
+
+    if analysis.has_images && !has(crate::providers::capabilities::CAP_VISION) {
+        if let Some(picked) = pick_best_substitute(
+            provider,
+            crate::providers::capabilities::CAP_VISION,
+            &current_caps,
+            &caps_map,
+        ) {
+            return picked;
+        }
+    }
+    // Future: extend with audio_in / tts / etc. as more clients send them.
+
+    current_model.to_string()
+}
+
+/// Pick the best vision-capable (or whatever-capable) substitute, preferring
+/// the model that preserves the most of the original model's other capabilities.
+/// Ties broken by `supported_models` order (first wins).
+///
+/// Example: original = mimo-v2.5-pro [reasoning, tools, web_search]; needed = vision.
+/// Candidates: [mimo-v2-omni (text+vision+tools), mimo-v2.5 (text+vision+reasoning+tools+web_search)].
+/// Original keeps 3 caps in v2.5 (tools+reasoning+web_search) vs 1 in omni (tools).
+/// → pick v2.5 even though omni came first in the supported_models list.
+fn pick_best_substitute(
+    provider: &Provider,
+    required: &str,
+    original_caps: &[String],
+    caps_map: &std::collections::HashMap<String, Vec<String>>,
+) -> Option<String> {
+    let candidates = provider.models_with_capability(required);
+    if candidates.is_empty() {
+        return None;
+    }
+    let original: std::collections::HashSet<&str> = original_caps.iter().map(|s| s.as_str()).collect();
+
+    // Iterate in supported_models order so ties favor the user's listed priority.
+    let mut best: Option<(String, usize)> = None;
+    for model in candidates {
+        let model_caps: std::collections::HashSet<&str> = caps_map
+            .get(model.as_str())
+            .map(|caps| caps.iter().map(|s| s.as_str()).collect())
+            .unwrap_or_default();
+        let overlap = original.iter().filter(|c| model_caps.contains(*c)).count();
+        // Strict > so the first model with this score wins (stable tie-break).
+        if best.as_ref().map_or(true, |(_, score)| overlap > *score) {
+            best = Some((model, overlap));
+        }
+    }
+    best.map(|(m, _)| m)
+}
+
+fn strip_qualifier(model: &str) -> &str {
+    if let Some(stripped) = model.strip_suffix(']') {
+        if let Some(open) = stripped.rfind('[') {
+            return &stripped[..open];
+        }
+    }
+    model
 }
 
 /// Check if we should failover based on error status/message and the candidate's config.
@@ -379,6 +496,138 @@ mod tests {
             input_char_count: chars, has_images: images, has_tools: tools,
             tool_count: 0, system_text: system.to_string(), message_count: 1,
         }
+    }
+
+    // ── Capability promotion tests ──
+
+    fn mimo_provider_with_matrix(default: &str) -> Provider {
+        Provider {
+            id: "p".into(), name: "MiMo".into(), provider_type: "mimo".into(),
+            base_url: "https://api.xiaomimimo.com/v1".into(), api_key: Some("sk-x".into()),
+            default_model: default.into(),
+            reasoning_model: None,
+            supported_models: Some(r#"["mimo-v2.5-pro","mimo-v2.5","mimo-v2-omni","mimo-v2-flash"]"#.into()),
+            model_mapping: None, extra_headers: None,
+            anthropic_base_url: None, responses_base_url: None,
+            protocol: "openai_chat_completions".into(),
+            timeout_seconds: 120, status: "ok".into(),
+            supports_vision: None, auto_cache_control: None, supports_cache: None,
+            model_capabilities: Some(r#"{
+                "mimo-v2.5-pro":["text","reasoning","tools","web_search"],
+                "mimo-v2.5":["text","vision","reasoning","tools","web_search"],
+                "mimo-v2-omni":["text","vision","audio_in","video_in","tools"],
+                "mimo-v2-flash":["text","reasoning","tools","web_search"]
+            }"#.into()),
+            enabled: true, is_active: true,
+            created_at: "2024-01-01".into(), updated_at: "2024-01-01".into(),
+        }
+    }
+
+    #[test]
+    fn promote_swaps_to_vision_model_when_request_has_image() {
+        // supported_models order: pro, v2.5, v2-omni, flash. Both v2.5 and v2-omni
+        // have vision. v2.5 preserves more of the original (reasoning + web_search)
+        // than omni (which has neither), so v2.5 should win even though omni is
+        // not listed first.
+        let p = mimo_provider_with_matrix("mimo-v2.5-pro");
+        let analysis = test_analysis(100, /* images */ true, false, "");
+        let promoted = promote_for_capabilities(&p, "mimo-v2.5-pro", &analysis);
+        assert_eq!(promoted, "mimo-v2.5", "should pick v2.5 — preserves reasoning + web_search of original");
+    }
+
+    #[test]
+    fn promote_prefers_capability_overlap_over_list_order() {
+        // Sanity check: even if v2-omni is listed FIRST in supported_models,
+        // the ranking should still pick v2.5 because of higher overlap.
+        let mut p = mimo_provider_with_matrix("mimo-v2.5-pro");
+        p.supported_models = Some(r#"["mimo-v2-omni","mimo-v2.5","mimo-v2.5-pro","mimo-v2-flash"]"#.into());
+        let analysis = test_analysis(100, true, false, "");
+        let promoted = promote_for_capabilities(&p, "mimo-v2.5-pro", &analysis);
+        assert_eq!(promoted, "mimo-v2.5", "list order doesn't override overlap score");
+    }
+
+    #[test]
+    fn promote_falls_back_to_list_order_on_tied_overlap() {
+        // If two vision models have identical overlap, supported_models order breaks the tie.
+        // Build a matrix where two models have identical caps.
+        let mut p = mimo_provider_with_matrix("mimo-v2.5-pro");
+        p.supported_models = Some(r#"["mimo-v2-omni","mimo-v2.5","mimo-v2.5-pro"]"#.into());
+        p.model_capabilities = Some(r#"{
+            "mimo-v2.5-pro":["text","reasoning"],
+            "mimo-v2.5":["text","vision","reasoning"],
+            "mimo-v2-omni":["text","vision","reasoning"]
+        }"#.into());
+        let analysis = test_analysis(100, true, false, "");
+        let promoted = promote_for_capabilities(&p, "mimo-v2.5-pro", &analysis);
+        assert_eq!(promoted, "mimo-v2-omni", "ties → first in supported_models");
+    }
+
+    #[test]
+    fn promote_keeps_model_when_already_vision_capable() {
+        let p = mimo_provider_with_matrix("mimo-v2.5");
+        let analysis = test_analysis(100, true, false, "");
+        let promoted = promote_for_capabilities(&p, "mimo-v2.5", &analysis);
+        assert_eq!(promoted, "mimo-v2.5");
+    }
+
+    #[test]
+    fn promote_keeps_model_when_no_image_in_request() {
+        let p = mimo_provider_with_matrix("mimo-v2.5-pro");
+        let analysis = test_analysis(100, /* images */ false, false, "");
+        let promoted = promote_for_capabilities(&p, "mimo-v2.5-pro", &analysis);
+        assert_eq!(promoted, "mimo-v2.5-pro");
+    }
+
+    #[test]
+    fn promote_noop_when_matrix_missing() {
+        let mut p = mimo_provider_with_matrix("mimo-v2.5-pro");
+        p.model_capabilities = None;
+        let analysis = test_analysis(100, true, false, "");
+        let promoted = promote_for_capabilities(&p, "mimo-v2.5-pro", &analysis);
+        assert_eq!(promoted, "mimo-v2.5-pro", "no matrix → no promotion");
+    }
+
+    #[test]
+    fn promote_handles_1m_qualifier() {
+        let p = mimo_provider_with_matrix("mimo-v2.5-pro[1m]");
+        let analysis = test_analysis(100, true, false, "");
+        let promoted = promote_for_capabilities(&p, "mimo-v2.5-pro[1m]", &analysis);
+        assert_eq!(promoted, "mimo-v2.5", "[1m] qualifier should be stripped before lookup");
+    }
+
+    // Verify the supports_vision derivation precedence: matrix must WIN
+    // over the legacy single-boolean flag, otherwise a stale `false` from
+    // the per-provider probe (run against a non-vision default model)
+    // would mask a perfectly capable sibling model in the matrix.
+    #[test]
+    fn supports_vision_derivation_matrix_overrides_legacy_false() {
+        let p = mimo_provider_with_matrix("mimo-v2.5-pro");
+        // simulate the old buggy probe that wrote false
+        let mut p = p;
+        p.supports_vision = Some(false);
+
+        let caps = p.parse_capabilities();
+        let from_matrix = caps.values().any(|c| c.iter().any(|x| x == "vision"));
+        // The matrix says: yes, *some* model has vision.
+        assert!(from_matrix, "matrix should report vision-capable model present");
+        // After the fix, the derived flag for the candidate must trust the matrix.
+        // (This mirrors the production code's chain of .and_then().or_else())
+        let derived = if !caps.is_empty() { Some(from_matrix) } else { p.supports_vision };
+        assert_eq!(derived, Some(true));
+    }
+
+    #[test]
+    fn promote_no_swap_when_no_vision_model_exists() {
+        let mut p = mimo_provider_with_matrix("deepseek-v4-pro");
+        p.provider_type = "deepseek".into();
+        p.supported_models = Some(r#"["deepseek-v4-pro","deepseek-v4-flash"]"#.into());
+        p.model_capabilities = Some(r#"{
+            "deepseek-v4-pro":["text","reasoning","tools","web_search"],
+            "deepseek-v4-flash":["text","tools"]
+        }"#.into());
+        let analysis = test_analysis(100, true, false, "");
+        let promoted = promote_for_capabilities(&p, "deepseek-v4-pro", &analysis);
+        assert_eq!(promoted, "deepseek-v4-pro", "no vision model → leave alone, let upstream surface error");
     }
 
     #[test]

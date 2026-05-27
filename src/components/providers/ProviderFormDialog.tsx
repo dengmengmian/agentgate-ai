@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { X, RefreshCcw, Loader2 } from "lucide-react";
-import { PROVIDER_TYPES, PROTOCOLS } from "@/types/provider";
+import { X, RefreshCcw, Loader2, Sparkles } from "lucide-react";
+import { PROVIDER_TYPES, PROTOCOLS, ALL_CAPABILITIES, CAPABILITY_LABELS } from "@/types/provider";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/common/Toast";
 import * as api from "@/lib/api";
@@ -33,6 +33,8 @@ export function ProviderFormDialog({
   const [defaultModel, setDefaultModel] = useState("");
   const [reasoningModel, setReasoningModel] = useState("");
   const [supportedModels, setSupportedModels] = useState("");
+  const [modelCapabilities, setModelCapabilities] = useState<Record<string, string[]>>({});
+  const [seedingCaps, setSeedingCaps] = useState(false);
   const [modelMapping, setModelMapping] = useState<Record<string, string>>({});
   const [extraHeaders, setExtraHeaders] = useState("");
   const [anthropicBaseUrl, setAnthropicBaseUrl] = useState("");
@@ -66,6 +68,7 @@ export function ProviderFormDialog({
     perplexity: { baseUrl: "https://api.perplexity.ai", protocols: ["openai_chat_completions"], defaultModel: "sonar-pro" },
     cohere: { baseUrl: "https://api.cohere.com/compatibility", protocols: ["openai_chat_completions"], defaultModel: "command-r-plus" },
     // China providers
+    mimo: { baseUrl: "https://api.xiaomimimo.com/v1", protocols: ["openai_chat_completions"], defaultModel: "mimo-v2.5-pro", reasoningModel: "mimo-v2.5-pro", anthropicBaseUrl: "https://api.xiaomimimo.com/anthropic" },
     kimi: { baseUrl: "https://api.moonshot.cn", protocols: ["openai_chat_completions"], defaultModel: "kimi-k2", extraHeaders: '{"User-Agent":"KimiCLI/1.40.0"}' },
     minimax: { baseUrl: "https://api.minimax.chat", protocols: ["openai_chat_completions"], defaultModel: "MiniMax-M1" },
     glm: { baseUrl: "https://open.bigmodel.cn/api/paas/v4/chat/completions", protocols: ["openai_chat_completions"], defaultModel: "glm-4-plus", anthropicBaseUrl: "https://open.bigmodel.cn/api/anthropic" },
@@ -80,6 +83,19 @@ export function ProviderFormDialog({
     // Custom
     custom_openai_compatible: { baseUrl: "", protocols: ["openai_chat_completions"], defaultModel: "" },
   };
+
+  // MiMo runs two host pairs depending on the key tier:
+  //   sk-* (按量付费) → api.xiaomimimo.com
+  //   tp-* (Token Plan) → token-plan-cn.xiaomimimo.com
+  // Cross-host requests 401, so we swap baseUrl + anthropicBaseUrl together
+  // based on the key prefix.
+  const MIMO_PAYG = { baseUrl: "https://api.xiaomimimo.com/v1", anthropicBaseUrl: "https://api.xiaomimimo.com/anthropic" };
+  const MIMO_TOKEN_PLAN = { baseUrl: "https://token-plan-cn.xiaomimimo.com/v1", anthropicBaseUrl: "https://token-plan-cn.xiaomimimo.com/anthropic" };
+  const mimoUrlsFromKey = (key: string) =>
+    key.startsWith("tp-") ? MIMO_TOKEN_PLAN : MIMO_PAYG;
+  const isKnownMimoUrl = (url: string) =>
+    url === MIMO_PAYG.baseUrl || url === MIMO_TOKEN_PLAN.baseUrl
+      || url === MIMO_PAYG.anthropicBaseUrl || url === MIMO_TOKEN_PLAN.anthropicBaseUrl;
 
   const applyPreset = (type: string) => {
     const preset = PROVIDER_PRESETS[type];
@@ -96,11 +112,27 @@ export function ProviderFormDialog({
     if (!name && typeLabel) setName(typeLabel);
   };
 
+  // MiMo-specific: when user enters a tp-* key after picking MiMo from the
+  // dropdown, swap to the token-plan host. Only swap if the current URL is
+  // one of the two known MiMo URLs (don't clobber custom edits).
+  useEffect(() => {
+    if (isEdit || providerType !== "mimo") return;
+    const key = (apiKeys[0] || "").trim();
+    if (!key || (!key.startsWith("tp-") && !key.startsWith("sk-"))) return;
+    const target = mimoUrlsFromKey(key);
+    if (isKnownMimoUrl(baseUrl) && baseUrl !== target.baseUrl) setBaseUrl(target.baseUrl);
+    if (isKnownMimoUrl(anthropicBaseUrl) && anthropicBaseUrl !== target.anthropicBaseUrl) {
+      setAnthropicBaseUrl(target.anthropicBaseUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providerType, apiKeys, isEdit]);
+
   // API Key auto-detection
   const detectProviderFromKey = (key: string): string | null => {
     const k = key.trim();
     if (!k) return null;
     if (k.startsWith("sk-ant-")) return "anthropic";
+    if (k.startsWith("tp-")) return "mimo";  // MiMo token-plan keys
     if (k.startsWith("deepseek-")) return "deepseek";
     if (k.startsWith("sk-or-")) return "openrouter";
     if (k.startsWith("gsk_")) return "groq";
@@ -128,17 +160,19 @@ export function ProviderFormDialog({
     const preset = PROVIDER_PRESETS[type];
     if (!preset) return;
     const typeLabel = PROVIDER_TYPES.find(t => t.value === type)?.label ?? type;
+    // MiMo: tp-* keys must hit the token-plan host (cross-host → 401).
+    const mimoOverride = type === "mimo" ? mimoUrlsFromKey(quickKey.trim()) : null;
     onSubmit({
       name: typeLabel,
       provider_type: type,
-      base_url: preset.baseUrl,
+      base_url: mimoOverride?.baseUrl ?? preset.baseUrl,
       api_key: quickKey.trim(),
       default_model: preset.defaultModel,
       reasoning_model: preset.reasoningModel ?? null,
       protocol: JSON.stringify(preset.protocols),
       timeout_seconds: 120,
       enabled: true,
-      anthropic_base_url: preset.anthropicBaseUrl ?? null,
+      anthropic_base_url: mimoOverride?.anthropicBaseUrl ?? preset.anthropicBaseUrl ?? null,
       responses_base_url: preset.responsesBaseUrl ?? null,
       extra_headers: preset.extraHeaders ?? null,
       auto_cache_control: true,
@@ -154,6 +188,7 @@ export function ProviderFormDialog({
       setDefaultModel(provider.default_model);
       setReasoningModel(provider.reasoning_model ?? "");
       setSupportedModels(provider.supported_models ?? "");
+      try { setModelCapabilities(provider.model_capabilities ? JSON.parse(provider.model_capabilities) : {}); } catch { setModelCapabilities({}); }
       try { setModelMapping(provider.model_mapping ? JSON.parse(provider.model_mapping) : {}); } catch { setModelMapping({}); }
       setExtraHeaders(provider.extra_headers ?? "");
       setAnthropicBaseUrl(provider.anthropic_base_url ?? "");
@@ -170,6 +205,7 @@ export function ProviderFormDialog({
       setDefaultModel("");
       setReasoningModel("");
       setSupportedModels("");
+      setModelCapabilities({});
       setModelMapping({});
       setExtraHeaders("");
       setAnthropicBaseUrl("");
@@ -205,6 +241,7 @@ export function ProviderFormDialog({
     const ehStr = extraHeaders || undefined;
     const abuStr = anthropicBaseUrl || undefined;
     const rbuStr = responsesBaseUrl || undefined;
+    const mcStr = Object.keys(modelCapabilities).length > 0 ? JSON.stringify(modelCapabilities) : undefined;
 
     if (isEdit) {
       const input: UpdateProviderInput = {
@@ -212,6 +249,7 @@ export function ProviderFormDialog({
         default_model: defaultModel, reasoning_model: reasoningModel || undefined,
         supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: abuStr, responses_base_url: rbuStr,
         auto_cache_control: autoCacheControl,
+        model_capabilities: mcStr,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
       const validKeys = apiKeys.filter(k => k.trim());
@@ -224,6 +262,7 @@ export function ProviderFormDialog({
         default_model: defaultModel, reasoning_model: reasoningModel || undefined,
         supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: abuStr, responses_base_url: rbuStr,
         auto_cache_control: autoCacheControl,
+        model_capabilities: mcStr,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
       const validKeys = apiKeys.filter(k => k.trim());
@@ -380,6 +419,93 @@ export function ProviderFormDialog({
               );
             })()}
           </div>
+
+          {/* Model Capability Matrix — per-model capability flags for routing AND for card icons */}
+          {(() => {
+            let models: string[] = [];
+            try { models = supportedModels ? JSON.parse(supportedModels) : []; } catch { /* */ }
+            // Merge in default_model / reasoning_model so single-model providers
+            // still get a row to configure (e.g. Kimi Code with only kimi-for-coding).
+            // Without the matrix, capability icons fall back to the legacy probe
+            // which is unreliable for non-OpenAI-style providers.
+            const merged = new Set(models);
+            if (defaultModel) merged.add(defaultModel);
+            if (reasoningModel) merged.add(reasoningModel);
+            models = Array.from(merged);
+            if (models.length < 1) return null;
+            return (
+              <div>
+                <div className="mb-1 flex items-center justify-between">
+                  <label className="text-xs font-medium text-text-secondary">能力矩阵</label>
+                  <button
+                    type="button"
+                    disabled={seedingCaps}
+                    onClick={async () => {
+                      setSeedingCaps(true);
+                      try {
+                        const seeded = await api.seedModelCapabilities(providerType, models);
+                        setModelCapabilities(seeded);
+                        toast("success", "已根据模型名自动识别能力");
+                      } catch (err) {
+                        toast("error", (err as api.AppError).message);
+                      } finally {
+                        setSeedingCaps(false);
+                      }
+                    }}
+                    className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 disabled:opacity-50"
+                  >
+                    {seedingCaps ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    自动识别
+                  </button>
+                </div>
+                <p className="mb-2 text-[11px] text-text-muted">
+                  勾选每个模型支持的能力。请求带图片时网关会自动路由到支持 vision 的模型。
+                </p>
+                <div className="overflow-x-auto rounded-md border border-border bg-card-secondary">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="border-b border-border bg-bg/50">
+                        <th className="sticky left-0 z-10 bg-bg/50 px-2 py-1.5 text-left font-mono text-text-secondary">model</th>
+                        {ALL_CAPABILITIES.map((cap) => (
+                          <th key={cap} className="px-2 py-1.5 text-center font-medium text-text-secondary" title={cap}>
+                            {CAPABILITY_LABELS[cap]}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {models.map((m) => {
+                        const caps = modelCapabilities[m] ?? [];
+                        return (
+                          <tr key={m} className="border-b border-border last:border-0">
+                            <td className="sticky left-0 z-10 bg-card-secondary px-2 py-1.5 font-mono text-text-primary">{m}</td>
+                            {ALL_CAPABILITIES.map((cap) => (
+                              <td key={cap} className="px-2 py-1.5 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={caps.includes(cap)}
+                                  onChange={(e) => {
+                                    setModelCapabilities((prev) => {
+                                      const next = { ...prev };
+                                      const cur = new Set(next[m] ?? []);
+                                      if (e.target.checked) cur.add(cap); else cur.delete(cap);
+                                      next[m] = Array.from(cur).sort();
+                                      return next;
+                                    });
+                                  }}
+                                  className="h-3.5 w-3.5 cursor-pointer accent-accent"
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Default / Reasoning Model — dropdown if models available */}
           <div className="grid grid-cols-2 gap-4">

@@ -43,6 +43,7 @@ pub struct RouteProfileProviderView {
     pub provider_protocol: String,
     pub has_anthropic_url: bool,
     pub supports_vision: Option<bool>,
+    pub model_capabilities: Option<String>,
     pub priority: i64,
     pub enabled: bool,
     pub model_override: Option<String>,

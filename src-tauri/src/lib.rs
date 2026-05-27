@@ -207,6 +207,8 @@ pub fn run() {
             commands::fetch_provider_models,
             commands::test_provider,
             commands::detect_provider_vision,
+            commands::seed_model_capabilities,
+            commands::autofill_provider_capabilities,
             // Gateway
             commands::get_gateway_status,
             commands::get_gateway_settings,

@@ -15,6 +15,7 @@ import {
   Filter,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { CapabilityIcons } from "@/components/common/CapabilityIcons";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
@@ -353,7 +354,10 @@ export function Routes() {
                                   </StatusBadge>
                                 );
                               })()}
-                              {rp.supports_vision === true && <StatusBadge variant="accent">{t("providers.vision_supported")}</StatusBadge>}
+                              <CapabilityIcons
+                                modelCapabilities={rp.model_capabilities}
+                                legacyVision={rp.supports_vision}
+                              />
                               {rp.routing_conditions && (
                                 <StatusBadge variant="success"><Filter className="inline h-2.5 w-2.5 mr-0.5" />{t("routes.has_conditions")}</StatusBadge>
                               )}

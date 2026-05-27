@@ -14,6 +14,68 @@ use crate::gateway;
 
 // ── Provider Commands ──────────────────────────────────────────
 
+/// Auto-derive capabilities for a list of model IDs given a provider type.
+/// Used by the "Auto-detect" button in the capability matrix editor to fill
+/// in sensible defaults without forcing the user to tick every box.
+#[tauri::command]
+pub fn seed_model_capabilities(
+    provider_type: String,
+    model_ids: Vec<String>,
+) -> Result<std::collections::HashMap<String, Vec<String>>, AppError> {
+    Ok(crate::providers::capabilities::seed_for_models(&provider_type, &model_ids))
+}
+
+/// Seed-fill the model_capabilities matrix for a provider and persist it.
+/// Only fills models that are missing from the existing matrix — never
+/// overwrites manual edits. Used by the "测试" button after connectivity
+/// succeeds, so newly added models pick up sensible defaults without the
+/// user needing to open the form dialog.
+#[tauri::command]
+pub fn autofill_provider_capabilities(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<usize, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let provider = storage::providers::get_by_id(&conn, &id)?;
+
+    // Existing matrix — preserve user edits.
+    let mut matrix: std::collections::HashMap<String, Vec<String>> = provider
+        .model_capabilities.as_deref()
+        .and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default();
+
+    // Target models: supported_models ∪ default_model ∪ reasoning_model.
+    let mut targets: std::collections::BTreeSet<String> = Default::default();
+    if let Some(ref sm) = provider.supported_models {
+        if let Ok(list) = serde_json::from_str::<Vec<String>>(sm) {
+            for m in list { targets.insert(m); }
+        }
+    }
+    if !provider.default_model.is_empty() { targets.insert(provider.default_model.clone()); }
+    if let Some(ref rm) = provider.reasoning_model {
+        if !rm.is_empty() { targets.insert(rm.clone()); }
+    }
+
+    let mut filled = 0usize;
+    for model in targets {
+        if !matrix.contains_key(&model) {
+            let caps = crate::providers::capabilities::seed_for_model(&provider.provider_type, &model);
+            if !caps.is_empty() {
+                matrix.insert(model, caps);
+                filled += 1;
+            }
+        }
+    }
+
+    if filled > 0 {
+        let json = serde_json::to_string(&matrix)
+            .map_err(|e| AppError::internal(format!("serialize matrix: {e}")))?;
+        storage::providers::update_model_capabilities(&conn, &id, &json)?;
+    }
+
+    Ok(filled)
+}
+
 #[tauri::command]
 pub fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderView>, AppError> {
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
@@ -340,49 +402,53 @@ pub async fn detect_provider_vision(
 
     let latency = start.elapsed().as_millis() as u64;
 
-    let supports_vision = match result {
+    // Vision detection by status code:
+    //   2xx                → supported (model accepted image input)
+    //   401 / 403          → inconclusive (auth issue, can't tell capability)
+    //   5xx, network error → inconclusive (server-side issue)
+    //   any other 4xx      → NOT supported (model rejected image input)
+    //
+    // The "any 4xx" rule is critical: providers reject image input with
+    // different status codes — OpenAI/DeepSeek use 400 ("invalid image"),
+    // MiMo's pro/flash variants use 404 ("No endpoints found that support
+    // image input"), some return 422. Treating only 400 as "not supported"
+    // (the previous logic) false-positived MiMo's 404 as supports_vision.
+    let supports_vision: Option<bool> = match result {
         Ok(resp) => {
-            let status = resp.status();
-            if status.is_success() || status.as_u16() == 200 {
-                true
+            let code = resp.status().as_u16();
+            if resp.status().is_success() {
+                Some(true)
+            } else if code == 401 || code == 403 || code >= 500 {
+                None
             } else {
-                // 400 typically means the model doesn't support images
-                // Other errors (401, 403, 5xx) are inconclusive
-                status.as_u16() != 400
+                Some(false)
             }
         }
-        Err(_) => {
-            // Network error — inconclusive, don't update
-            return Ok(ProviderTestResult {
-                success: false,
-                status: "failed".to_string(),
-                message: "Vision detection failed: network error".to_string(),
-                latency_ms: Some(latency),
-                supports_vision: None,
-            });
-        }
+        Err(_) => None,
     };
 
-    // Save result
-    {
+    // Persist only when conclusive — keep stale state out of the DB on
+    // auth/server errors so the user retries with a fresh signal.
+    if let Some(v) = supports_vision {
         let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-        storage::providers::update_supports_vision(&conn, &id, supports_vision)?;
+        storage::providers::update_supports_vision(&conn, &id, v)?;
     }
 
-    let message = if supports_vision {
-        "Vision supported".to_string()
-    } else {
-        "Vision not supported".to_string()
+    let (status_str, message) = match supports_vision {
+        Some(true) => ("detected", "Vision supported".to_string()),
+        Some(false) => ("detected", "Vision not supported".to_string()),
+        None => ("inconclusive", "Vision detection inconclusive (auth / server error / network)".to_string()),
     };
 
     Ok(ProviderTestResult {
-        success: true,
-        status: "detected".to_string(),
+        success: supports_vision.is_some(),
+        status: status_str.to_string(),
         message,
         latency_ms: Some(latency),
-        supports_vision: Some(supports_vision),
+        supports_vision,
     })
 }
+
 
 #[tauri::command]
 pub async fn detect_provider_cache(

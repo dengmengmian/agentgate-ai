@@ -13,7 +13,39 @@ pub fn convert_tools(tools: &[Value], clean_for_deepseek: bool) -> Vec<Value> {
 
 /// Convert tools with provider-type awareness (e.g. Kimi web_search).
 pub fn convert_tools_for_provider(tools: &[Value], clean_for_deepseek: bool, provider_type: &str) -> Vec<Value> {
+    convert_tools_with_matrix(tools, clean_for_deepseek, provider_type, "", &Default::default())
+}
+
+/// Same as convert_tools_for_provider but consults the per-model capability
+/// matrix to decide whether to emit MiMo's `web_search` builtin. If the matrix
+/// has an entry for the target model AND that entry doesn't include
+/// "web_search", we skip emission — lets users disable forwarding per model
+/// (e.g. when the MiMo account has no Web Search Plugin activated).
+///
+/// Matrix-empty behavior is unchanged for back-compat.
+pub fn convert_tools_with_matrix(
+    tools: &[Value],
+    clean_for_deepseek: bool,
+    provider_type: &str,
+    model: &str,
+    matrix: &std::collections::HashMap<String, Vec<String>>,
+) -> Vec<Value> {
     let is_kimi = provider_type == "kimi" || provider_type.contains("moonshot");
+    let is_mimo = provider_type == "mimo" || provider_type == "xiaomi" || provider_type.contains("mimo");
+
+    // Strip [1m]/[...] qualifier before looking up in matrix (matrix keys use base id).
+    let model_base = {
+        let m = model;
+        if let Some(stripped) = m.strip_suffix(']') {
+            if let Some(open) = stripped.rfind('[') { &stripped[..open] } else { m }
+        } else { m }
+    };
+    // Whether to emit web_search for MiMo: only suppress when matrix has an
+    // explicit entry that excludes web_search. Empty matrix → emit (back-compat).
+    let mimo_emit_web_search = matrix.get(model_base)
+        .map(|caps| caps.iter().any(|c| c == "web_search"))
+        .unwrap_or(true);
+
     let mut result = Vec::new();
     for tool in tools {
         let tool_type = tool.get("type").and_then(|t| t.as_str()).unwrap_or("");
@@ -96,6 +128,19 @@ pub fn convert_tools_for_provider(tools: &[Value], clean_for_deepseek: bool, pro
                         "type": "builtin_function",
                         "function": { "name": "$web_search" }
                     }));
+                } else if is_mimo && mimo_emit_web_search {
+                    // MiMo's native web_search builtin. Preserve Codex's optional
+                    // config fields; MiMo's account-level "Web Search Plugin" must
+                    // be activated, otherwise upstream 400s with
+                    // "webSearchEnabled is false". Users opt out per-model by
+                    // unchecking `web_search` in the capability matrix.
+                    let mut ws = json!({ "type": "web_search" });
+                    for k in &["user_location", "max_keyword", "force_search", "limit"] {
+                        if let Some(v) = tool.get(*k) {
+                            ws[*k] = v.clone();
+                        }
+                    }
+                    result.push(ws);
                 }
                 // Other providers: skip (not supported by Chat Completions)
             }
@@ -323,6 +368,81 @@ mod tests {
         let tools = vec![json!({"type": "web_search"})];
         let result = convert_tools_for_provider(&tools, false, "openai");
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_convert_tools_web_search_mimo_minimal() {
+        let tools = vec![json!({"type": "web_search_preview"})];
+        let result = convert_tools_for_provider(&tools, false, "mimo");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["type"], "web_search");
+    }
+
+    #[test]
+    fn test_convert_tools_mimo_matrix_suppresses_web_search() {
+        // Matrix entry exists for the target model but doesn't include web_search
+        // → user has opted out, translator must skip emitting web_search.
+        let tools = vec![json!({"type": "web_search"})];
+        let mut matrix: std::collections::HashMap<String, Vec<String>> = Default::default();
+        matrix.insert("mimo-v2.5".to_string(), vec!["text".into(), "vision".into()]);
+        let result = convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5", &matrix);
+        assert!(result.is_empty(), "web_search should be suppressed when matrix says model doesn't have it");
+    }
+
+    #[test]
+    fn test_convert_tools_mimo_matrix_qualifier_stripped() {
+        // model = "mimo-v2.5-pro[1m]" — should look up "mimo-v2.5-pro" in matrix.
+        let tools = vec![json!({"type": "web_search"})];
+        let mut matrix: std::collections::HashMap<String, Vec<String>> = Default::default();
+        matrix.insert("mimo-v2.5-pro".to_string(), vec!["text".into()]);
+        let result = convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5-pro[1m]", &matrix);
+        assert!(result.is_empty(), "[1m] qualifier should be stripped before matrix lookup");
+    }
+
+    #[test]
+    fn test_convert_tools_mimo_matrix_allows_web_search_when_listed() {
+        let tools = vec![json!({"type": "web_search"})];
+        let mut matrix: std::collections::HashMap<String, Vec<String>> = Default::default();
+        matrix.insert("mimo-v2.5-pro".to_string(), vec!["text".into(), "web_search".into()]);
+        let result = convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5-pro", &matrix);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["type"], "web_search");
+    }
+
+    #[test]
+    fn test_convert_tools_mimo_empty_matrix_keeps_back_compat() {
+        // No matrix configured → keep emitting (existing behavior).
+        let tools = vec![json!({"type": "web_search"})];
+        let result = convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5-pro", &Default::default());
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_convert_tools_mimo_matrix_unknown_model_keeps_emit() {
+        // model not in matrix at all → emit (matrix only restricts when entry exists).
+        let tools = vec![json!({"type": "web_search"})];
+        let mut matrix: std::collections::HashMap<String, Vec<String>> = Default::default();
+        matrix.insert("other-model".to_string(), vec!["text".into()]);
+        let result = convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5-pro", &matrix);
+        assert_eq!(result.len(), 1, "unknown model → assume web_search supported");
+    }
+
+    #[test]
+    fn test_convert_tools_web_search_mimo_preserves_optional_fields() {
+        let tools = vec![json!({
+            "type": "web_search",
+            "max_keyword": 3,
+            "force_search": true,
+            "limit": 10,
+            "user_location": {"country": "CN"}
+        })];
+        let result = convert_tools_for_provider(&tools, false, "mimo");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["type"], "web_search");
+        assert_eq!(result[0]["max_keyword"], 3);
+        assert_eq!(result[0]["force_search"], true);
+        assert_eq!(result[0]["limit"], 10);
+        assert_eq!(result[0]["user_location"]["country"], "CN");
     }
 
     #[test]

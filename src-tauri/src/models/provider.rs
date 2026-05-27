@@ -20,6 +20,7 @@ pub struct Provider {
     pub supports_vision: Option<bool>,
     pub auto_cache_control: Option<bool>,
     pub supports_cache: Option<bool>,
+    pub model_capabilities: Option<String>, // JSON: {"model_id": ["text","vision",...]}
     pub enabled: bool,
     pub is_active: bool,
     pub created_at: String,
@@ -46,6 +47,7 @@ pub struct ProviderView {
     pub supports_vision: Option<bool>,
     pub auto_cache_control: Option<bool>,
     pub supports_cache: Option<bool>,
+    pub model_capabilities: Option<String>,
     pub enabled: bool,
     pub is_active: bool,
     pub created_at: String,
@@ -68,6 +70,7 @@ pub struct CreateProviderInput {
     pub protocol: String,
     pub timeout_seconds: Option<i64>,
     pub auto_cache_control: Option<bool>,
+    pub model_capabilities: Option<String>,
     pub enabled: Option<bool>,
 }
 
@@ -85,6 +88,7 @@ pub struct UpdateProviderInput {
     pub anthropic_base_url: Option<String>,
     pub responses_base_url: Option<String>,
     pub auto_cache_control: Option<bool>,
+    pub model_capabilities: Option<String>,
     pub protocol: Option<String>,
     pub timeout_seconds: Option<i64>,
     pub enabled: Option<bool>,
@@ -120,6 +124,7 @@ impl Provider {
             supports_vision: self.supports_vision,
             auto_cache_control: self.auto_cache_control,
             supports_cache: self.supports_cache,
+            model_capabilities: self.model_capabilities.clone(),
             enabled: self.enabled,
             is_active: self.is_active,
             created_at: self.created_at.clone(),
@@ -153,6 +158,51 @@ impl Provider {
             }
         }
         false
+    }
+
+    /// Parse `model_capabilities` JSON into a {model_id → capability set} map.
+    /// Returns empty map on missing/invalid JSON.
+    pub fn parse_capabilities(&self) -> std::collections::HashMap<String, Vec<String>> {
+        self.model_capabilities
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<std::collections::HashMap<String, Vec<String>>>(s).ok())
+            .unwrap_or_default()
+    }
+
+    /// List models declared to support the given capability, preserving the
+    /// `supported_models` order so the caller can pick the highest-priority
+    /// candidate. Falls back to default_model / reasoning_model when those
+    /// happen to be listed in the matrix.
+    pub fn models_with_capability(&self, capability: &str) -> Vec<String> {
+        let caps = self.parse_capabilities();
+        if caps.is_empty() {
+            return Vec::new();
+        }
+        // Use supported_models order if available, else any order from the map
+        let order: Vec<String> = if let Some(ref sm) = self.supported_models {
+            serde_json::from_str::<Vec<String>>(sm).unwrap_or_default()
+        } else {
+            caps.keys().cloned().collect()
+        };
+        order
+            .into_iter()
+            .filter(|m| caps.get(m).map(|c| c.iter().any(|x| x == capability)).unwrap_or(false))
+            .collect()
+    }
+
+    /// Pick the first model from supported_models that has the given capability.
+    /// Returns None if nothing matches; callers should fall back to default_model
+    /// and accept that the request may fail upstream.
+    pub fn pick_model_for_capability(&self, capability: &str) -> Option<String> {
+        self.models_with_capability(capability).into_iter().next()
+    }
+
+    /// Does ANY model on this provider support the given capability? Used by
+    /// the card UI to show capability icons without having to inspect each model.
+    pub fn any_model_supports(&self, capability: &str) -> bool {
+        self.parse_capabilities()
+            .values()
+            .any(|caps| caps.iter().any(|c| c == capability))
     }
 
     /// Resolve a client model name to the provider's actual model name.
@@ -241,6 +291,7 @@ mod tests {
             supports_vision: None,
             auto_cache_control: None,
             supports_cache: None,
+            model_capabilities: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -275,6 +326,7 @@ mod tests {
             supports_vision: None,
             auto_cache_control: None,
             supports_cache: None,
+            model_capabilities: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -306,6 +358,7 @@ mod tests {
             supports_vision: None,
             auto_cache_control: None,
             supports_cache: None,
+            model_capabilities: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -337,6 +390,7 @@ mod tests {
             supports_vision: None,
             auto_cache_control: None,
             supports_cache: None,
+            model_capabilities: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -355,7 +409,7 @@ mod tests {
             default_model: "gpt-4".to_string(), reasoning_model: None, supported_models: None,
             model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
             protocol: r#"["openai_chat_completions","openai_responses"]"#.to_string(),
-            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None,
+            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None, model_capabilities: None,
             enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
         };
         assert_eq!(provider.protocols(), vec!["openai_chat_completions", "openai_responses"]);
@@ -372,7 +426,7 @@ mod tests {
             default_model: "deepseek-v4-flash".to_string(), reasoning_model: None, supported_models: None,
             model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
             protocol: "openai_chat_completions".to_string(),
-            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None,
+            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None, model_capabilities: None,
             enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
         };
         assert_eq!(provider.protocols(), vec!["openai_chat_completions"]);
@@ -388,7 +442,7 @@ mod tests {
             default_model: "gpt-4o".to_string(), reasoning_model: None, supported_models: None,
             model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
             protocol: r#"["openai_chat_completions","openai_responses","anthropic_messages"]"#.to_string(),
-            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None,
+            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None, model_capabilities: None,
             enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
         };
         assert!(provider.supports_protocol("openai_chat_completions"));

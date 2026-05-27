@@ -97,21 +97,28 @@ export function Providers() {
   const handleTest = async (provider: ProviderView) => {
     setTestingId(provider.id);
     try {
+      // 1. Connectivity check — verifies API key + base_url.
       const result = await api.testProvider(provider.id);
-      if (result.success) {
-        toast("success", result.message);
-        // Auto-detect vision + cache support after successful connection test
-        try {
-          const visionResult = await api.detectProviderVision(provider.id);
-          toast("success", visionResult.message);
-        } catch { /* best-effort */ }
-        try {
-          const cacheResult = await api.detectProviderCache(provider.id);
-          if (cacheResult.success) toast("success", cacheResult.message);
-        } catch { /* best-effort */ }
-      } else {
+      if (!result.success) {
         toast("error", result.message);
+        loadProviders();
+        return;
       }
+      toast("success", result.message);
+
+      // 2. Auto-fill missing rows in the capability matrix from seed defaults.
+      //    Preserves manual edits. No upstream calls — purely name-pattern based.
+      try {
+        const filled = await api.autofillProviderCapabilities(provider.id);
+        if (filled > 0) toast("success", `已自动识别 ${filled} 个模型的能力`);
+      } catch { /* best-effort */ }
+
+      // 3. Cache probe (anthropic-style providers only).
+      try {
+        const cacheResult = await api.detectProviderCache(provider.id);
+        if (cacheResult.success) toast("success", cacheResult.message);
+      } catch { /* best-effort */ }
+
       loadProviders();
     } catch (err) {
       toast("error", (err as api.AppError).message);

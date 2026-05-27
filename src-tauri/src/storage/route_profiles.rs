@@ -140,7 +140,7 @@ pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RoutePr
     let mut stmt = conn.prepare(
         "SELECT rpp.id, rpp.provider_id, p.name, p.provider_type, p.protocol,
                 CASE WHEN p.anthropic_base_url IS NOT NULL AND p.anthropic_base_url != '' THEN 1 ELSE 0 END,
-                p.supports_vision,
+                p.supports_vision, p.model_capabilities,
                 rpp.priority, rpp.enabled,
                 rpp.model_override, rpp.cooldown_seconds,
                 rpp.failover_on_status_codes, rpp.failover_on_error_keywords, rpp.routing_conditions,
@@ -158,11 +158,12 @@ pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RoutePr
             provider_type: row.get(3)?, provider_protocol: row.get(4)?,
             has_anthropic_url: row.get(5)?,
             supports_vision: row.get(6)?,
-            priority: row.get(7)?, enabled: row.get(8)?,
-            model_override: row.get(9)?, cooldown_seconds: row.get(10)?,
-            failover_on_status_codes: row.get(11)?, failover_on_error_keywords: row.get(12)?,
-            routing_conditions: row.get(13)?,
-            runtime_available: row.get(14)?, cooldown_until: row.get(15)?, consecutive_failures: row.get(16)?,
+            model_capabilities: row.get(7)?,
+            priority: row.get(8)?, enabled: row.get(9)?,
+            model_override: row.get(10)?, cooldown_seconds: row.get(11)?,
+            failover_on_status_codes: row.get(12)?, failover_on_error_keywords: row.get(13)?,
+            routing_conditions: row.get(14)?,
+            runtime_available: row.get(15)?, cooldown_until: row.get(16)?, consecutive_failures: row.get(17)?,
         })
     })?;
 

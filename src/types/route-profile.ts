@@ -25,6 +25,7 @@ export interface RouteProfileProviderView {
   provider_protocol: string;
   has_anthropic_url: boolean;
   supports_vision: boolean | null;
+  model_capabilities: string | null;
   priority: number;
   enabled: boolean;
   model_override: string | null;

@@ -89,6 +89,20 @@ export async function detectProviderCache(id: string): Promise<ProviderTestResul
   return cmd("detect_provider_cache", { id });
 }
 
+export async function seedModelCapabilities(
+  providerType: string,
+  modelIds: string[],
+): Promise<Record<string, string[]>> {
+  return cmd("seed_model_capabilities", { providerType, modelIds });
+}
+
+/// Fill missing rows in the provider's model_capabilities matrix from the seed
+/// function (provider_type + model id pattern). Preserves manually-edited rows.
+/// Returns the number of rows added.
+export async function autofillProviderCapabilities(id: string): Promise<number> {
+  return cmd("autofill_provider_capabilities", { id });
+}
+
 // ── Gateway ────────────────────────────────────────────────────
 
 export async function getGatewayStatus(): Promise<GatewayStatus> {

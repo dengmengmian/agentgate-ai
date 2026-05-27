@@ -169,6 +169,25 @@ fn parse_retry_after(resp: &reqwest::Response) -> Option<u64> {
         .and_then(|s| s.parse::<u64>().ok())
 }
 
+/// Build an upstream error with provider-specific enhancement attached.
+/// Looks up the provider's transform impl and asks it whether the response
+/// body matches a known error pattern that warrants a friendlier suggestion
+/// (e.g. MiMo's "webSearchEnabled is false" → activation hint).
+fn build_upstream_error(
+    config: &ProviderConfig,
+    code: &str,
+    message: String,
+    status_code: u16,
+    body_snippet: &str,
+) -> AppError {
+    let mut err = AppError::new(code, message).with_detail(truncate(body_snippet, 2000));
+    let transform = crate::transform::providers::for_config(config);
+    if let Some(suggestion) = transform.enhance_error(status_code, body_snippet) {
+        err = err.with_suggestion(suggestion);
+    }
+    err
+}
+
 /// Send a non-streaming chat completions request with automatic retry.
 pub async fn send_non_stream(
     client: &Client,
@@ -219,15 +238,17 @@ pub async fn send_non_stream(
             let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
             eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-            last_err = Some(AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Provider returned HTTP {status}"))
-                .with_detail(truncate(&sanitized, 2000)));
+            last_err = Some(build_upstream_error(
+                config, "UPSTREAM_NON_STREAM_ERROR",
+                format!("Provider returned HTTP {status}"), status_code, &sanitized,
+            ));
             continue;
         }
 
-        return Err(
-            AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Provider returned HTTP {status}"))
-                .with_detail(truncate(&sanitized, 2000)),
-        );
+        return Err(build_upstream_error(
+            config, "UPSTREAM_NON_STREAM_ERROR",
+            format!("Provider returned HTTP {status}"), status_code, &sanitized,
+        ));
     }
 
     Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
@@ -278,15 +299,17 @@ pub async fn send_stream(
             let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
             eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-            last_err = Some(AppError::new("UPSTREAM_STREAM_ERROR", format!("Provider returned HTTP {status}"))
-                .with_detail(truncate(&sanitized, 2000)));
+            last_err = Some(build_upstream_error(
+                config, "UPSTREAM_STREAM_ERROR",
+                format!("Provider returned HTTP {status}"), status_code, &sanitized,
+            ));
             continue;
         }
 
-        return Err(
-            AppError::new("UPSTREAM_STREAM_ERROR", format!("Provider returned HTTP {status}"))
-                .with_detail(truncate(&sanitized, 2000)),
-        );
+        return Err(build_upstream_error(
+            config, "UPSTREAM_STREAM_ERROR",
+            format!("Provider returned HTTP {status}"), status_code, &sanitized,
+        ));
     }
 
     Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))
@@ -580,6 +603,7 @@ mod tests {
             supports_vision: None,
             auto_cache_control: None,
             supports_cache: None,
+            model_capabilities: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),

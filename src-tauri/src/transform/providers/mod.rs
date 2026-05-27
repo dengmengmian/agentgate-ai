@@ -9,6 +9,7 @@ mod minimax;
 mod default;
 mod anthropic;
 mod gemini;
+mod mimo;
 
 pub use deepseek::DeepSeekProvider;
 pub use kimi::KimiProvider;
@@ -16,6 +17,7 @@ pub use minimax::MiniMaxProvider;
 pub use default::DefaultProvider;
 pub use anthropic::AnthropicProvider;
 pub use gemini::GeminiProvider;
+pub use mimo::MimoProvider;
 
 /// Per-provider hooks for transforming Responses API → Chat Completions API.
 ///
@@ -43,6 +45,16 @@ pub trait ProviderTransform: Send + Sync {
     fn provider_type(&self) -> &str {
         ""
     }
+
+    /// Map an upstream HTTP error (non-2xx) to an actionable suggestion that
+    /// the gateway will attach to the AppError. Called from the request
+    /// dispatcher with the sanitized response body snippet so providers can
+    /// pattern-match against known error markers (e.g. MiMo's
+    /// "webSearchEnabled is false" 400 → "activate the Web Search Plugin").
+    /// Return None to use the generic upstream error formatting.
+    fn enhance_error(&self, _status: u16, _body_snippet: &str) -> Option<String> {
+        None
+    }
 }
 
 /// Dispatch to the correct provider transform based on the provider config.
@@ -58,6 +70,8 @@ pub fn for_config(config: &ProviderConfig) -> Box<dyn ProviderTransform + Send +
         Box::new(AnthropicProvider)
     } else if pt == "google_gemini" {
         Box::new(GeminiProvider)
+    } else if pt == "mimo" || pt == "xiaomi" || pt.contains("mimo") {
+        Box::new(MimoProvider)
     } else {
         Box::new(DefaultProvider)
     }

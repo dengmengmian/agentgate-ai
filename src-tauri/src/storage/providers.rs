@@ -6,7 +6,7 @@ use crate::models::provider::{CreateProviderInput, Provider, UpdateProviderInput
 pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url,
-                protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, enabled, is_active, created_at, updated_at
+                protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, model_capabilities, enabled, is_active, created_at, updated_at
          FROM providers ORDER BY is_active DESC, created_at ASC",
     )?;
 
@@ -30,10 +30,11 @@ pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
             supports_vision: row.get(15)?,
             auto_cache_control: row.get(16)?,
             supports_cache: row.get(17)?,
-            enabled: row.get(18)?,
-            is_active: row.get(19)?,
-            created_at: row.get(20)?,
-            updated_at: row.get(21)?,
+            model_capabilities: row.get(18)?,
+            enabled: row.get(19)?,
+            is_active: row.get(20)?,
+            created_at: row.get(21)?,
+            updated_at: row.get(22)?,
         })
     })?;
 
@@ -47,7 +48,7 @@ pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<Provider, AppError> {
     conn.query_row(
         "SELECT id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url,
-                protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, enabled, is_active, created_at, updated_at
+                protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, model_capabilities, enabled, is_active, created_at, updated_at
          FROM providers WHERE id = ?1",
         [id],
         |row| {
@@ -70,10 +71,11 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Provider, AppError> {
                 supports_vision: row.get(15)?,
                 auto_cache_control: row.get(16)?,
                 supports_cache: row.get(17)?,
-                enabled: row.get(18)?,
-                is_active: row.get(19)?,
-                created_at: row.get(20)?,
-                updated_at: row.get(21)?,
+                model_capabilities: row.get(18)?,
+                enabled: row.get(19)?,
+                is_active: row.get(20)?,
+                created_at: row.get(21)?,
+                updated_at: row.get(22)?,
             })
         },
     )
@@ -91,8 +93,8 @@ pub fn create(conn: &Connection, input: CreateProviderInput) -> Result<Provider,
 
     conn.execute(
         "INSERT INTO providers (id, name, provider_type, base_url, api_key, default_model, reasoning_model,
-                                supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url, protocol, timeout_seconds, status, auto_cache_control, enabled, is_active, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tested', ?15, ?16, 0, ?17, ?17)",
+                                supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url, protocol, timeout_seconds, status, auto_cache_control, model_capabilities, enabled, is_active, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tested', ?15, ?16, ?17, 0, ?18, ?18)",
         params![
             &id,
             &input.name,
@@ -109,6 +111,7 @@ pub fn create(conn: &Connection, input: CreateProviderInput) -> Result<Provider,
             &input.protocol,
             timeout,
             &input.auto_cache_control,
+            &input.model_capabilities,
             enabled,
             &now,
         ],
@@ -138,12 +141,13 @@ pub fn update(conn: &Connection, id: &str, input: UpdateProviderInput) -> Result
     let protocol = input.protocol.unwrap_or(existing.protocol);
     let timeout_seconds = input.timeout_seconds.unwrap_or(existing.timeout_seconds);
     let auto_cache_control = input.auto_cache_control.or(existing.auto_cache_control);
+    let model_capabilities = input.model_capabilities.or(existing.model_capabilities);
     let enabled = input.enabled.unwrap_or(existing.enabled);
 
     conn.execute(
         "UPDATE providers SET name=?1, provider_type=?2, base_url=?3, api_key=?4, default_model=?5,
-                reasoning_model=?6, supported_models=?7, model_mapping=?8, extra_headers=?9, anthropic_base_url=?10, responses_base_url=?11, protocol=?12, timeout_seconds=?13, auto_cache_control=?14, enabled=?15, updated_at=?16
-         WHERE id=?17",
+                reasoning_model=?6, supported_models=?7, model_mapping=?8, extra_headers=?9, anthropic_base_url=?10, responses_base_url=?11, protocol=?12, timeout_seconds=?13, auto_cache_control=?14, model_capabilities=?15, enabled=?16, updated_at=?17
+         WHERE id=?18",
         params![
             &name,
             &provider_type,
@@ -159,6 +163,7 @@ pub fn update(conn: &Connection, id: &str, input: UpdateProviderInput) -> Result
             &protocol,
             timeout_seconds,
             auto_cache_control,
+            &model_capabilities,
             enabled,
             &now,
             id,
@@ -259,6 +264,15 @@ pub fn update_supports_cache(conn: &Connection, id: &str, supports_cache: bool) 
     conn.execute(
         "UPDATE providers SET supports_cache = ?1, updated_at = ?2 WHERE id = ?3",
         params![supports_cache, &now, id],
+    )?;
+    Ok(())
+}
+
+pub fn update_model_capabilities(conn: &Connection, id: &str, matrix_json: &str) -> Result<(), AppError> {
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "UPDATE providers SET model_capabilities = ?1, updated_at = ?2 WHERE id = ?3",
+        params![matrix_json, &now, id],
     )?;
     Ok(())
 }

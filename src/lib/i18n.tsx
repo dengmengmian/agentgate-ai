@@ -60,6 +60,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.health_recent_errors": { en: "Recent Errors", zh: "最近错误" },
   "providers.cache_enabled": { en: "Cache", zh: "缓存" },
   "providers.cache_supported": { en: "Cache ✓", zh: "支持缓存" },
+  "providers.details": { en: "Details", zh: "详情" },
   "providers.cache_not_supported": { en: "No Cache", zh: "不支持缓存" },
   "providers.recommended": { en: "Recommended", zh: "推荐" },
   "providers.experimental": { en: "Experimental", zh: "实验性" },

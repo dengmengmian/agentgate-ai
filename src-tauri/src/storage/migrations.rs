@@ -174,6 +174,16 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN supports_cache INTEGER;")?;
     }
 
+    // Migration: add model_capabilities column to providers
+    // Stores per-model capability matrix as JSON: {"model_id": ["text","vision","reasoning",...]}
+    // Routing layer uses this to pick the right model when request features (image/audio/...)
+    // demand a capability the default_model lacks. Supersedes the per-provider supports_vision
+    // flag for vision-aware routing while keeping it as a coarse summary.
+    let has_mc: bool = conn.prepare("SELECT model_capabilities FROM providers LIMIT 0").is_ok();
+    if !has_mc {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN model_capabilities TEXT;")?;
+    }
+
     // Migration: add routing_conditions to route_profile_providers
     let has_rc: bool = conn.prepare("SELECT routing_conditions FROM route_profile_providers LIMIT 0").is_ok();
     if !has_rc {

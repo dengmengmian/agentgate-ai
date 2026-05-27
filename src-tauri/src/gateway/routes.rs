@@ -208,7 +208,18 @@ pub async fn handle_responses(
         } else {
             // Chat Completions path (default: transform Responses → Chat Completions)
             let provider_transform = crate::transform::providers::for_config(&config);
-            let chat_req = match responses_to_chat::convert_with_provider(&req, &model, provider_transform.as_ref()) {
+            // Pull the per-model capability matrix from the underlying provider
+            // (re-fetch since ProviderConfig doesn't carry it). Empty map → fall back
+            // to legacy "always emit web_search for MiMo" behavior.
+            let matrix = {
+                let conn = state.db.lock().map_err(|_| GatewayError(AppError::internal("DB lock")))?;
+                crate::storage::providers::get_by_id(&conn, &candidate.provider_id)
+                    .ok()
+                    .and_then(|p| p.model_capabilities)
+                    .and_then(|s| serde_json::from_str::<std::collections::HashMap<String, Vec<String>>>(&s).ok())
+                    .unwrap_or_default()
+            };
+            let chat_req = match responses_to_chat::convert_with_provider_matrix(&req, &model, provider_transform.as_ref(), &matrix) {
                 Ok(r) => r,
                 Err(e) => {
                     attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));
@@ -1616,7 +1627,14 @@ fn log_request_error_full(
     status_code: i64,
     latency_ms: i64,
 ) {
-    let error_msg = format!("{}: {}", err.message, err.detail.as_deref().unwrap_or(""));
+    // Surface suggestion alongside the raw detail so users see actionable hints
+    // (e.g. MiMo's "go activate the Web Search Plugin") right in the log card,
+    // not buried in the JSON trace.
+    let mut error_msg = format!("{}: {}", err.message, err.detail.as_deref().unwrap_or(""));
+    if let Some(ref sug) = err.suggestion {
+        error_msg.push_str("\n\n💡 ");
+        error_msg.push_str(sug);
+    }
     let trace = json!({
         "error_code": err.code,
         "suggestion": err.suggestion,

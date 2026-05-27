@@ -17,6 +17,7 @@ export interface ProviderView {
   supports_vision: boolean | null;
   auto_cache_control: boolean | null;
   supports_cache: boolean | null;
+  model_capabilities: string | null;  // JSON: {"model_id": ["text","vision",...]}
   enabled: boolean;
   is_active: boolean;
   created_at: string;
@@ -36,6 +37,7 @@ export interface CreateProviderInput {
   anthropic_base_url?: string;
   responses_base_url?: string;
   auto_cache_control?: boolean;
+  model_capabilities?: string;
   protocol: string;
   timeout_seconds?: number;
   enabled?: boolean;
@@ -54,10 +56,25 @@ export interface UpdateProviderInput {
   anthropic_base_url?: string;
   responses_base_url?: string;
   auto_cache_control?: boolean;
+  model_capabilities?: string;
   protocol?: string;
   timeout_seconds?: number;
   enabled?: boolean;
 }
+
+export const CAPABILITY_LABELS: Record<string, string> = {
+  text: "文本",
+  vision: "视觉",
+  audio_in: "音频输入",
+  tts: "语音合成",
+  video_in: "视频",
+  reasoning: "推理",
+  tools: "工具",
+  web_search: "联网搜索",
+};
+
+export const ALL_CAPABILITIES = ["text", "vision", "audio_in", "tts", "video_in", "reasoning", "tools", "web_search"] as const;
+export type Capability = (typeof ALL_CAPABILITIES)[number];
 
 export interface ProviderTestResult {
   success: boolean;
@@ -83,6 +100,7 @@ export const PROVIDER_TYPES = [
   { value: "perplexity", label: "Perplexity" },
   { value: "cohere", label: "Cohere" },
   // China providers
+  { value: "mimo", label: "MiMo (小米)" },
   { value: "kimi", label: "Kimi (月之暗面)" },
   { value: "minimax", label: "MiniMax" },
   { value: "glm", label: "GLM (智谱)" },

@@ -12,6 +12,19 @@ pub fn convert_with_provider(
     model: &str,
     provider: &dyn ProviderTransform,
 ) -> Result<ChatCompletionsRequest, AppError> {
+    convert_with_provider_matrix(req, model, provider, &Default::default())
+}
+
+/// Same as convert_with_provider but consults a per-model capability matrix
+/// when emitting provider-builtin tools (e.g. MiMo's web_search). Production
+/// gateway uses this so users can opt out of capabilities per model by
+/// editing the matrix; tests can use the simpler 3-arg form.
+pub fn convert_with_provider_matrix(
+    req: &ResponsesRequest,
+    model: &str,
+    provider: &dyn ProviderTransform,
+    matrix: &std::collections::HashMap<String, Vec<String>>,
+) -> Result<ChatCompletionsRequest, AppError> {
     let mut messages = Vec::new();
 
     // 0. Replay history from previous_response_id (session store)
@@ -42,9 +55,10 @@ pub fn convert_with_provider(
     let input_messages = convert_input(&req.input)?;
     messages.extend(input_messages);
 
-    // 3. Convert tools (provider-aware for Kimi web_search)
+    // 3. Convert tools (provider + matrix aware: Kimi $web_search builtin,
+    //    MiMo web_search builtin gated by per-model capability matrix)
     let converted_tools = req.tools.as_ref().map(|t| {
-        tool_calls::convert_tools_for_provider(t, provider.clean_schemas(), provider.provider_type())
+        tool_calls::convert_tools_with_matrix(t, provider.clean_schemas(), provider.provider_type(), model, matrix)
     }).filter(|t| !t.is_empty());
 
     // 4. Convert tool_choice
