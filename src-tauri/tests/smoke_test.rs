@@ -113,7 +113,7 @@ async fn release_preflight_smoke() {
     let port = smoke_port();
     println!("   Starting test gateway on {}:{} ...", host, port);
 
-    let (shutdown_tx, server_handle, _active_requests) = server::start(&host, port, db.clone())
+    let (shutdown_tx, server_handle, _active_requests, _port) = server::start(&host, port, db.clone())
         .await
         .expect("start gateway");
 
@@ -217,7 +217,54 @@ async fn release_preflight_smoke() {
         }
     }
 
-    // ── 6. Per-provider connectivity (direct upstream ping) ──────────
+    // ── 6a. Responses API — strict output shape ──────────────────────
+    // Hits /v1/responses with a tiny prompt and walks the Responses-shape
+    // contract. Verifies that whatever path was taken (translation or
+    // native pass-through) produced a wire-correct response object.
+    {
+        let url = format!("{}/v1/responses", base);
+        let res = test_responses_strict(&client, &token, &url).await;
+        let ok = res.is_ok();
+        match &res {
+            Ok(model) => println!("   ✅ Responses strict — model={model}"),
+            Err(e) => println!("   ❌ Responses strict — {e}"),
+        }
+        results.push(("responses_strict".to_string(), ok, res.err()));
+    }
+
+    // ── 6b. Anthropic Messages API ───────────────────────────────────
+    // Tests /v1/messages directly. Exercises the responses_to_anthropic
+    // path for providers without an Anthropic-native base_url, OR the
+    // pass-through if the active provider has anthropic_base_url set.
+    {
+        let url = format!("{}/v1/messages", base);
+        let res = test_anthropic_messages(&client, &token, &url).await;
+        match &res {
+            Ok(_) => println!("   ✅ Anthropic Messages — 200"),
+            Err(e) => println!("   ⚠️  Anthropic Messages — {e} (non-fatal)"),
+        }
+        // Non-fatal: not every setup routes /v1/messages.
+        results.push(("anthropic_messages".to_string(), true, res.err()));
+    }
+
+    // ── 6c. Session affinity multi-turn (cache_tokens recording) ─────
+    // Two-turn conversation with the same opening message. If the upstream
+    // surfaces cached_tokens > 0 on the second turn, session_affinity
+    // should record the binding — verified indirectly via successful round-
+    // trip; the affinity store itself is in-memory and not directly probe-
+    // able from here.
+    {
+        let url = format!("{}/v1/responses", base);
+        let res = test_responses_multi_turn(&client, &token, &url).await;
+        let ok = res.is_ok();
+        match &res {
+            Ok(()) => println!("   ✅ Multi-turn responses — 200×2"),
+            Err(e) => println!("   ❌ Multi-turn responses — {e}"),
+        }
+        results.push(("multi_turn".to_string(), ok, res.err()));
+    }
+
+    // ── 7. Per-provider connectivity (direct upstream ping) ──────────
     let providers = {
         let c = db.lock().unwrap();
         storage::providers::list_all(&c).unwrap_or_default()
@@ -336,6 +383,159 @@ async fn test_responses_api(
 
     if json.get("id").is_none() {
         return Err("missing response id".into());
+    }
+    Ok(())
+}
+
+async fn test_responses_strict(
+    client: &reqwest::Client,
+    token: &str,
+    url: &str,
+) -> Result<String, String> {
+    // Use array-form input — the realistic shape Codex sends. The string
+    // shape is tested by the existing `test_responses_api`; this exercises
+    // the array path + walks the output structure end-to-end.
+    //
+    // Shape contract (what the gateway controls) — strict:
+    //   - status 2xx
+    //   - response.id, object="response", status="completed", model present
+    //   - output is an array
+    // Content (what the model decides) — tolerant:
+    //   - empty output / empty text is allowed; thinking-mode models can
+    //     burn the entire token budget on reasoning and produce no text.
+    //   - if output has a message item, its content must include an
+    //     output_text block (validates our translation reshaping).
+    let body = serde_json::json!({
+        "model": null,
+        "input": [{
+            "type": "message",
+            "role": "user",
+            "content": [{"type": "input_text", "text": "Reply with the single word 'ok'."}]
+        }],
+        "stream": false,
+        "max_output_tokens": 64,
+        "temperature": 0.0,
+    });
+
+    let resp = client.post(url).bearer_auth(token).json(&body).send().await
+        .map_err(|e| format!("request failed: {e}"))?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| format!("read body: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {}", text.chars().take(200).collect::<String>()));
+    }
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("parse json: {e}"))?;
+
+    if json.get("id").is_none() {
+        return Err("missing response id".into());
+    }
+    let object = json.get("object").and_then(|v| v.as_str()).unwrap_or("");
+    if object != "response" {
+        return Err(format!("expected object=response, got {object}"));
+    }
+    let status_field = json.get("status").and_then(|v| v.as_str()).unwrap_or("");
+    if status_field != "completed" {
+        return Err(format!("expected status=completed, got {status_field}"));
+    }
+    // Output array existence is required; emptiness is allowed.
+    let output = json.get("output").and_then(|v| v.as_array())
+        .ok_or_else(|| "missing output array".to_string())?;
+    if let Some(msg) = output.iter().find(|o| o.get("type").and_then(|t| t.as_str()) == Some("message")) {
+        let content = msg.get("content").and_then(|c| c.as_array())
+            .ok_or_else(|| "message has no content array".to_string())?;
+        // If a message item is present, our translator should have emitted
+        // at least an empty output_text block (sometimes empty when the
+        // upstream returned no choices).
+        let _text_block = content.iter().find(|c| c.get("type").and_then(|t| t.as_str()) == Some("output_text"))
+            .ok_or_else(|| "message present but no output_text content".to_string())?;
+    }
+    let model = json.get("model").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+    Ok(model)
+}
+
+async fn test_anthropic_messages(
+    client: &reqwest::Client,
+    token: &str,
+    url: &str,
+) -> Result<(), String> {
+    let body = serde_json::json!({
+        "model": "claude-3-5-sonnet-latest",
+        "max_tokens": 8,
+        "messages": [
+            {"role": "user", "content": "Reply with the single word 'ok'."}
+        ]
+    });
+    let resp = client.post(url).bearer_auth(token).json(&body).send().await
+        .map_err(|e| format!("request failed: {e}"))?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| format!("read body: {e}"))?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {}", text.chars().take(200).collect::<String>()));
+    }
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("parse json: {e}"))?;
+    // Anthropic shape: {type: "message", content: [{type: "text", text: "..."}], ...}
+    if json.get("type").and_then(|v| v.as_str()) != Some("message") {
+        return Err(format!("expected type=message, got {:?}", json.get("type")));
+    }
+    let content = json.get("content").and_then(|v| v.as_array())
+        .ok_or_else(|| "missing content array".to_string())?;
+    if content.is_empty() {
+        return Err("content array empty".into());
+    }
+    Ok(())
+}
+
+async fn test_responses_multi_turn(
+    client: &reqwest::Client,
+    token: &str,
+    url: &str,
+) -> Result<(), String> {
+    // Long-enough opening prompt to clear the 64-char threshold in
+    // session_affinity::derive_from_responses.
+    let opening = "You are a helpful assistant in a smoke test harness. Reply concisely with the word 'one'.";
+
+    // Turn 1
+    let body1 = serde_json::json!({
+        "model": null,
+        "input": [{
+            "type": "message", "role": "user",
+            "content": [{"type": "input_text", "text": opening}],
+        }],
+        "stream": false,
+        "max_output_tokens": 8,
+        "temperature": 0.0,
+    });
+    let r1 = client.post(url).bearer_auth(token).json(&body1).send().await
+        .map_err(|e| format!("turn1 send: {e}"))?;
+    if !r1.status().is_success() {
+        let t = r1.text().await.unwrap_or_default();
+        return Err(format!("turn1 HTTP error: {}", t.chars().take(200).collect::<String>()));
+    }
+
+    // Turn 2 — replays the same opening to maximize prompt-cache hit
+    // probability. Routing should prefer the same provider via affinity if
+    // turn 1 surfaced cached_tokens > 0.
+    let body2 = serde_json::json!({
+        "model": null,
+        "input": [
+            {"type": "message", "role": "user",
+             "content": [{"type": "input_text", "text": opening}]},
+            {"type": "message", "role": "assistant",
+             "content": [{"type": "output_text", "text": "one"}]},
+            {"type": "message", "role": "user",
+             "content": [{"type": "input_text", "text": "Now reply 'two'."}]},
+        ],
+        "stream": false,
+        "max_output_tokens": 8,
+        "temperature": 0.0,
+    });
+    let r2 = client.post(url).bearer_auth(token).json(&body2).send().await
+        .map_err(|e| format!("turn2 send: {e}"))?;
+    if !r2.status().is_success() {
+        let t = r2.text().await.unwrap_or_default();
+        return Err(format!("turn2 HTTP error: {}", t.chars().take(200).collect::<String>()));
     }
     Ok(())
 }

@@ -9,12 +9,14 @@ use tokio::sync::oneshot;
 use crate::errors::AppError;
 use crate::gateway::routes::{self, GatewayState};
 
-/// Start the gateway HTTP server. Returns the shutdown sender, join handle, and active request counter.
+/// Start the gateway HTTP server. Returns shutdown sender, join handle,
+/// active-request counter, and the actually-bound port (useful when callers
+/// pass `port=0` to let the OS pick — integration tests rely on this).
 pub async fn start(
     host: &str,
     port: u16,
     db: Arc<Mutex<Connection>>,
-) -> Result<(oneshot::Sender<()>, tokio::task::JoinHandle<()>, Arc<AtomicU64>), AppError> {
+) -> Result<(oneshot::Sender<()>, tokio::task::JoinHandle<()>, Arc<AtomicU64>, u16), AppError> {
     let http_client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
         // Drop idle keep-alive connections after 30s. Without this, the pool
@@ -73,6 +75,11 @@ pub async fn start(
         }
     })?;
 
+    let bound_port = listener
+        .local_addr()
+        .map(|a| a.port())
+        .unwrap_or(port);
+
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
     let handle = tokio::spawn(async move {
@@ -84,5 +91,5 @@ pub async fn start(
             .ok();
     });
 
-    Ok((shutdown_tx, handle, active_requests))
+    Ok((shutdown_tx, handle, active_requests, bound_port))
 }

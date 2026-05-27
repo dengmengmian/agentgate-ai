@@ -683,7 +683,7 @@ pub async fn start_gateway(app_handle: tauri::AppHandle, state: State<'_, AppSta
     };
 
     // Start real HTTP server
-    let (shutdown_tx, server_handle, active_requests) =
+    let (shutdown_tx, server_handle, active_requests, _bound_port) =
         gateway::server::start(&host, port, state.db.clone()).await?;
 
     // Update runtime state
