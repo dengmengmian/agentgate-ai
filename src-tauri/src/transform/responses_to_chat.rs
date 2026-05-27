@@ -323,13 +323,27 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                 });
             }
             "reasoning" => {
-                // Capture reasoning content to attach to next assistant message
-                if let Some(rc) = item.get("content").and_then(|v| v.as_str()) {
+                // Reasoning round-trip priority:
+                //   1. `encrypted_content` — full uncondensed trace pinned by the
+                //      gateway on the previous response. Codex echoes it back
+                //      verbatim, so this survives even when summary[] is truncated.
+                //      Critical for MiMo / DeepSeek thinking-mode multi-turn tool
+                //      calls (upstream 400s if the assistant turn that carried
+                //      tool_calls is missing its reasoning_content).
+                //   2. `content` — legacy field used by some clients.
+                //   3. `summary[].text` — Codex's short summary, lossy fallback.
+                if let Some(rc) = item.get("encrypted_content").and_then(|v| v.as_str()) {
                     if !rc.is_empty() {
                         pending_reasoning = Some(rc.to_string());
                     }
                 }
-                // Also check summary field
+                if pending_reasoning.is_none() {
+                    if let Some(rc) = item.get("content").and_then(|v| v.as_str()) {
+                        if !rc.is_empty() {
+                            pending_reasoning = Some(rc.to_string());
+                        }
+                    }
+                }
                 if pending_reasoning.is_none() {
                     if let Some(rc) = item.get("summary").and_then(|v| {
                         if v.is_string() { v.as_str().map(String::from) }
@@ -1245,5 +1259,59 @@ mod tests {
     fn test_extract_content_none() {
         let result = extract_content(None);
         assert_eq!(result, Value::String(String::new()));
+    }
+
+    #[test]
+    fn reasoning_encrypted_content_round_trips_to_assistant_message() {
+        // Codex echoes a `reasoning` item with `encrypted_content` after a
+        // prior turn; convert_input must pull that text and attach it to the
+        // next assistant message as reasoning_content.
+        let items = vec![
+            json!({"type": "message", "role": "user", "content": "what's 2+2"}),
+            json!({"type": "reasoning", "encrypted_content": "Let me think... 4."}),
+            json!({"type": "message", "role": "assistant", "content": "4"}),
+        ];
+        let msgs = convert_input_array(&items).unwrap();
+        // user, assistant(reasoning=...)
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[1].role, "assistant");
+        assert_eq!(msgs[1].reasoning_content.as_deref(), Some("Let me think... 4."));
+    }
+
+    #[test]
+    fn reasoning_encrypted_content_attaches_to_tool_call_turn() {
+        // The critical case: tool_calls turn missing reasoning_content would
+        // 400 on MiMo / DeepSeek thinking mode. encrypted_content from input
+        // must land on the function_call turn.
+        let items = vec![
+            json!({"type": "message", "role": "user", "content": "search for X"}),
+            json!({"type": "reasoning", "encrypted_content": "I should search."}),
+            json!({
+                "type": "function_call",
+                "call_id": "c1",
+                "name": "search",
+                "arguments": "{\"q\":\"X\"}",
+            }),
+            json!({"type": "function_call_output", "call_id": "c1", "output": "found"}),
+        ];
+        let msgs = convert_input_array(&items).unwrap();
+        // user + assistant(tool_calls, reasoning) + tool
+        let assistant = msgs.iter().find(|m| m.role == "assistant").expect("assistant present");
+        assert_eq!(assistant.reasoning_content.as_deref(), Some("I should search."));
+        assert!(assistant.tool_calls.is_some());
+    }
+
+    #[test]
+    fn reasoning_encrypted_content_takes_priority_over_summary() {
+        let items = vec![
+            json!({
+                "type": "reasoning",
+                "encrypted_content": "full trace",
+                "summary": [{"type": "summary_text", "text": "short summary"}],
+            }),
+            json!({"type": "message", "role": "assistant", "content": "ok"}),
+        ];
+        let msgs = convert_input_array(&items).unwrap();
+        assert_eq!(msgs[0].reasoning_content.as_deref(), Some("full trace"));
     }
 }

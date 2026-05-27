@@ -118,7 +118,8 @@ impl super::ProviderTransform for MimoProvider {
                     .to_string(),
             );
         }
-        None
+        // Fall back to shared context-overflow detection.
+        crate::transform::providers::detect_context_overflow(status, body)
     }
 }
 

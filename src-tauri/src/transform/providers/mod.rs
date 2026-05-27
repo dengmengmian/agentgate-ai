@@ -26,8 +26,13 @@ pub use mimo::MimoProvider;
 pub trait ProviderTransform: Send + Sync {
     /// Process messages after initial conversion from Responses format.
     /// Called before merge_consecutive_messages and tool argument sanitization.
+    ///
+    /// Default impl runs a structural safety pass that synthesizes placeholder
+    /// tool messages for any orphaned tool_call_id (cancelled turns, dropped
+    /// outputs, etc.) without reordering. Providers that need stricter handling
+    /// (DeepSeek, MiMo) override and use `fix_tool_message_order` instead.
     fn process_messages(&self, messages: Vec<ChatMessage>) -> Result<Vec<ChatMessage>, AppError> {
-        Ok(messages)
+        Ok(crate::transform::tool_calls::synthesize_orphan_tool_outputs(messages))
     }
 
     /// Finalize the ChatCompletionsRequest before sending to the provider.
@@ -52,7 +57,50 @@ pub trait ProviderTransform: Send + Sync {
     /// pattern-match against known error markers (e.g. MiMo's
     /// "webSearchEnabled is false" 400 → "activate the Web Search Plugin").
     /// Return None to use the generic upstream error formatting.
-    fn enhance_error(&self, _status: u16, _body_snippet: &str) -> Option<String> {
+    ///
+    /// Default implementation detects common context-window-exceeded markers
+    /// across vendors and surfaces a `/compact` hint. Providers that override
+    /// to handle other errors should call `detect_context_overflow(...)` as
+    /// a fallback when their own match fails.
+    fn enhance_error(&self, status: u16, body_snippet: &str) -> Option<String> {
+        detect_context_overflow(status, body_snippet)
+    }
+}
+
+/// Shared detection for "context window exceeded" 400s across providers.
+/// Pattern set covers OpenAI / Anthropic / DeepSeek / MiMo / Kimi / MiniMax /
+/// generic Chinese wording. Case-insensitive substring match against the
+/// upstream's error body snippet.
+pub fn detect_context_overflow(status: u16, body_snippet: &str) -> Option<String> {
+    if status != 400 {
+        return None;
+    }
+    let lower = body_snippet.to_ascii_lowercase();
+    const MARKERS: &[&str] = &[
+        "context length",
+        "context_length",
+        "context window",
+        "context_window_exceeded",
+        "maximum context",
+        "exceeds the maximum",
+        "too long for context",
+        "prompt is too long",
+        "input is too long",
+        "tokens exceeded",
+        "上下文长度",
+        "上下文窗口",
+        "超出最大",
+        "超出上下文",
+    ];
+    if MARKERS.iter().any(|m| lower.contains(m)) {
+        Some(
+            "请求超出模型上下文窗口。\n\
+             • 如果你在 Codex / Claude Code 中，输入 /compact 压缩历史后重试。\n\
+             • 或开启新会话，避免过长的对话历史。\n\
+             • 也可改用支持 1M 上下文的模型（如 mimo-v2.5-pro[1m] / deepseek-v4-pro[1m]，仅 Claude Code 路径有效）。"
+                .to_string(),
+        )
+    } else {
         None
     }
 }

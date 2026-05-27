@@ -39,6 +39,10 @@ pub struct SseAccumulator {
     pub tool_calls: BTreeMap<usize, AccumulatedToolCall>,
     pub reasoning_content: String,
     pub usage: Option<serde_json::Value>,
+    /// Web-search citations / annotations collected from delta.annotations
+    /// as they stream in. Embedded into the final output_item.done message
+    /// so the client sees the references.
+    pub annotations: Vec<serde_json::Value>,
     pub events_log: String,
     events_size: usize,
     next_output_index: usize,
@@ -56,6 +60,7 @@ impl SseAccumulator {
             tool_calls: BTreeMap::new(),
             reasoning_content: String::new(),
             usage: None,
+            annotations: Vec::new(),
             events_log: String::new(),
             events_size: 0,
             next_output_index: 1, // 0 is reserved for the message item
@@ -190,6 +195,22 @@ pub async fn process_upstream_stream(
                     }
                 }
 
+                // ── Web-search annotations / citations ──
+                // MiMo emits these on the first streaming chunk; OpenAI's
+                // search-preview models emit per chunk. Forward each as an
+                // `output_text.annotation.added` event so the client can
+                // surface citations in real time, and accumulate them for the
+                // final output_item.done message.
+                if let Some(ref anns) = delta.annotations {
+                    for ann in anns {
+                        let annotation_index = acc.annotations.len();
+                        send(&tx, &ev::output_text_annotation_added(
+                            &acc.msg_item_id, 0, 0, annotation_index, ann,
+                        )).await;
+                        acc.annotations.push(ann.clone());
+                    }
+                }
+
                 // ── Legacy delta.function_call → synthetic tool_call ──
                 if let Some(ref fc) = delta.function_call {
                     has_tool_calls = true;
@@ -305,17 +326,35 @@ async fn finalize(
 ) -> Result<(), String> {
     let rc = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.as_str()) };
 
-    // Store reasoning for future requests
+    // Store reasoning for future requests (in-memory LRU, process-local —
+    // survives within the same process for the same conversation thread).
     if !acc.reasoning_content.is_empty() {
         let tc_ids: Vec<String> = acc.tool_calls.values().map(|tc| tc.id.clone()).collect();
         reasoning_store::store(&acc.full_text, &acc.reasoning_content, &tc_ids);
+    }
+
+    // Pin reasoning into a dedicated `reasoning` output_item with
+    // `encrypted_content`. Codex round-trips this verbatim, so the trace
+    // survives process restarts and multi-turn tool calls preserve their
+    // reasoning_content (required by MiMo / DeepSeek thinking-mode upstream).
+    // Emitted BEFORE message / function_call items so it precedes them in
+    // the conversation history Codex builds.
+    if !acc.reasoning_content.is_empty() {
+        let reasoning_item_id = format!("rs_{}", &acc.response_id.replace("resp_", ""));
+        let oi = acc.next_output_index;
+        // Note: we don't mutate next_output_index here because acc is &; we
+        // only need a unique output_index. Using a dedicated slot keeps it
+        // distinct from message (0) and tool_calls (1+).
+        send(&tx, &ev::output_item_done_reasoning(&reasoning_item_id, oi, &acc.reasoning_content)).await;
     }
 
     // Close text content if any
     if has_text {
         send(&tx, &ev::output_text_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
         send(&tx, &ev::content_part_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
-        send(&tx, &ev::output_item_done_message(&acc.msg_item_id, 0, &acc.full_text, rc)).await;
+        send(&tx, &ev::output_item_done_message_with_annotations(
+            &acc.msg_item_id, 0, &acc.full_text, rc, &acc.annotations,
+        )).await;
     }
     // Tool-call-only: no message item was emitted, no need to close it
 

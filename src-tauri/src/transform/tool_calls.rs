@@ -215,6 +215,53 @@ pub fn convert_tool_choice(tc: &Value) -> Value {
 ///    (Codex sometimes injects approval notifications as system messages.)
 /// 3. Multiple tool_calls in one assistant message: tool outputs follow in matching order.
 /// 4. The LAST assistant with tool_calls may have missing tool outputs (model pending request).
+/// Lightweight orphan-tool-message cleanup that does NOT reorder messages.
+/// Walks the conversation; whenever an assistant message has tool_calls that
+/// aren't matched by subsequent tool messages (anywhere in the remaining
+/// stream, not just immediately after), synthesize a placeholder tool message
+/// right after the assistant. Safe to call on any provider — does not
+/// reposition system/developer messages, just patches structural holes.
+///
+/// Use this when you want the safety net of valid tool_calls topology without
+/// the stricter reordering that `fix_tool_message_order` performs.
+pub fn synthesize_orphan_tool_outputs(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+    let mut out: Vec<ChatMessage> = Vec::with_capacity(messages.len());
+    let len = messages.len();
+    let mut i = 0;
+    while i < len {
+        let msg = &messages[i];
+        out.push(msg.clone());
+
+        if msg.role == "assistant" {
+            if let Some(ref tcs) = msg.tool_calls {
+                // Collect all tool_call_ids present anywhere after this assistant.
+                let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+                for later in &messages[i + 1..] {
+                    if later.role == "tool" {
+                        if let Some(ref tcid) = later.tool_call_id {
+                            seen.insert(tcid.clone());
+                        }
+                    }
+                }
+                for tc in tcs {
+                    if !seen.contains(&tc.id) {
+                        out.push(ChatMessage {
+                            role: "tool".to_string(),
+                            content: Some(serde_json::Value::String(String::new())),
+                            reasoning_content: None,
+                            tool_calls: None,
+                            tool_call_id: Some(tc.id.clone()),
+                            name: None,
+                        });
+                    }
+                }
+            }
+        }
+        i += 1;
+    }
+    out
+}
+
 pub fn fix_tool_message_order(messages: Vec<ChatMessage>) -> Result<Vec<ChatMessage>, AppError> {
     let mut reordered: Vec<ChatMessage> = Vec::new();
     let len = messages.len();
@@ -254,14 +301,27 @@ pub fn fix_tool_message_order(messages: Vec<ChatMessage>) -> Result<Vec<ChatMess
                 break;
             }
 
-            // Error if not last and some expected tool outputs are missing
+            // Missing tool outputs in the middle of the conversation: synthesize
+            // empty placeholders so the upstream still sees a structurally valid
+            // assistant→tool sequence. Without this, providers that strictly
+            // enforce the Chat Completions invariant (DeepSeek, MiMo) return 400.
+            // Matches mimo2codex's lenient cleanup (reqToChat.ts:630-706).
+            //
+            // The last assistant in the conversation is exempt: that's the pending
+            // tool call awaiting our response, and synthesizing an empty placeholder
+            // there would falsely tell the model the tool already returned nothing.
             let is_last = j >= len;
-            if !is_last && !expected_ids.is_empty() {
-                let tc = tcs.iter().find(|tc| expected_ids.contains(&tc.id)).unwrap();
-                return Err(AppError::new(
-                    "TOOL_OUTPUT_NOT_FOUND",
-                    format!("Missing tool output for tool call '{}' (function: {})", tc.id, tc.function.name),
-                ).with_suggestion("Check that all function_call items have matching function_call_output items in the input"));
+            if !is_last {
+                for missing_id in &expected_ids {
+                    tool_msgs.push(ChatMessage {
+                        role: "tool".to_string(),
+                        content: Some(serde_json::Value::String(String::new())),
+                        reasoning_content: None,
+                        tool_calls: None,
+                        tool_call_id: Some(missing_id.clone()),
+                        name: None,
+                    });
+                }
             }
 
             // Put system/developer messages before assistant, then assistant, then tool messages
@@ -505,7 +565,71 @@ mod tests {
     }
 
     #[test]
-    fn test_fix_tool_message_order_missing_non_last() {
+    fn synthesize_orphan_fills_missing_tool_outputs_without_reordering() {
+        // assistant with 2 tool_calls; only one has output; placeholder is
+        // appended directly after the assistant so the topology is valid.
+        let messages = vec![
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: None,
+                reasoning_content: None,
+                tool_calls: Some(vec![
+                    ToolCall { id: "a".into(), call_type: "function".into(),
+                        function: ToolCallFunction { name: "f".into(), arguments: "{}".into() } },
+                    ToolCall { id: "b".into(), call_type: "function".into(),
+                        function: ToolCallFunction { name: "g".into(), arguments: "{}".into() } },
+                ]),
+                tool_call_id: None,
+                name: None,
+            },
+            ChatMessage {
+                role: "tool".to_string(),
+                content: Some(json!("result-a")),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: Some("a".into()),
+                name: None,
+            },
+        ];
+        let out = synthesize_orphan_tool_outputs(messages);
+        assert_eq!(out.len(), 3);
+        assert_eq!(out[1].tool_call_id.as_deref(), Some("b"));
+        assert!(matches!(out[1].content, Some(serde_json::Value::String(ref s)) if s.is_empty()));
+        assert_eq!(out[2].tool_call_id.as_deref(), Some("a"));
+    }
+
+    #[test]
+    fn synthesize_orphan_noop_when_all_tool_outputs_present() {
+        let messages = vec![
+            ChatMessage {
+                role: "assistant".to_string(),
+                content: None,
+                reasoning_content: None,
+                tool_calls: Some(vec![ToolCall {
+                    id: "x".into(), call_type: "function".into(),
+                    function: ToolCallFunction { name: "f".into(), arguments: "{}".into() },
+                }]),
+                tool_call_id: None,
+                name: None,
+            },
+            ChatMessage {
+                role: "tool".to_string(),
+                content: Some(json!("ok")),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: Some("x".into()),
+                name: None,
+            },
+        ];
+        let out = synthesize_orphan_tool_outputs(messages.clone());
+        assert_eq!(out.len(), messages.len());
+    }
+
+    #[test]
+    fn test_fix_tool_message_order_missing_non_last_synthesizes_placeholder() {
+        // Non-last assistant with missing tool output: cleanup must synthesize
+        // an empty placeholder tool message so the topology stays valid for
+        // strict upstreams (DeepSeek / MiMo).
         let messages = vec![
             ChatMessage {
                 role: "assistant".to_string(),
@@ -528,8 +652,13 @@ mod tests {
                 name: None,
             },
         ];
-        let result = fix_tool_message_order(messages);
-        assert!(result.is_err());
+        let result = fix_tool_message_order(messages).expect("orphan now synthesized, not errored");
+        // assistant + synthesized tool placeholder + user
+        assert_eq!(result.len(), 3);
+        assert_eq!(result[0].role, "assistant");
+        assert_eq!(result[1].role, "tool");
+        assert_eq!(result[1].tool_call_id.as_deref(), Some("call_1"));
+        assert_eq!(result[2].role, "user");
     }
 
     #[test]

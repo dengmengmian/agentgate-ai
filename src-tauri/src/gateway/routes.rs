@@ -340,12 +340,28 @@ async fn handle_non_stream_response(
                         // Text content
                         if !text_content.is_empty() {
                             let msg_id = format!("msg_{}", &resp_id.replace("resp_", ""));
+                            // Pull web-search annotations from the raw upstream message
+                            // (ChatCompletionResponse struct doesn't model them; the
+                            // shape is provider-defined and we pass through verbatim).
+                            let annotations = upstream_json
+                                .get("choices")
+                                .and_then(|c| c.as_array())
+                                .and_then(|arr| arr.first())
+                                .and_then(|c| c.get("message"))
+                                .and_then(|m| m.get("annotations"))
+                                .and_then(|a| a.as_array())
+                                .cloned()
+                                .unwrap_or_default();
                             let mut item = json!({
                                 "id": msg_id,
                                 "type": "message",
                                 "status": "completed",
                                 "role": "assistant",
-                                "content": [{"type": "output_text", "text": &text_content}]
+                                "content": [{
+                                    "type": "output_text",
+                                    "text": &text_content,
+                                    "annotations": annotations,
+                                }]
                             });
                             if let Some(ref rc) = msg.reasoning_content {
                                 if !rc.is_empty() {

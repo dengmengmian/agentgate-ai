@@ -90,6 +90,10 @@ pub struct ChunkDelta {
     /// Legacy single-tool format (pre-tool_calls API)
     pub function_call: Option<serde_json::Value>,
     pub tool_calls: Option<Vec<ChunkToolCall>>,
+    /// Web-search citations / annotations. MiMo emits these on the first
+    /// streaming chunk; OpenAI's gpt-4o-search-preview emits per chunk.
+    /// Shape is provider-defined; passed through verbatim to the client.
+    pub annotations: Option<Vec<serde_json::Value>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
