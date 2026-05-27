@@ -207,6 +207,12 @@ export async function toggleCodexProvider(): Promise<ToggleResult> {
   return cmd("toggle_codex_provider");
 }
 
+/** Switch Codex back to native mode (official ChatGPT path). Used to bring
+ * IDE plugin entries back from their compat-mode grey state. */
+export async function disableCodexAgentgate(): Promise<ApplyConfigResult> {
+  return cmd("disable_codex_agentgate");
+}
+
 export async function openCodexConfig(): Promise<boolean> {
   return cmd("open_codex_config");
 }
