@@ -233,6 +233,7 @@ pub fn run() {
             // Codex Config
             commands::detect_codex_config,
             commands::apply_codex_config,
+            commands::disable_codex_agentgate,
             commands::toggle_codex_provider,
             commands::open_codex_config,
             // Claude Code

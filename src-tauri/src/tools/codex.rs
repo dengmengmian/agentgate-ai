@@ -317,6 +317,20 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
         warnings.push("已备份原始 config.toml，可随时切换回官方配置。".to_string());
     }
 
+    // The tradeoff that comes with custom `model_provider`: Codex.app's IDE
+    // panel — and its bundled official plugins like Browser / Computer-Use —
+    // gate themselves on `model_provider == openai/chatgpt`. Setting it to
+    // anything else (which we must, to route through AgentGate) is what
+    // greys those entries out. There's no config trick around it; the user
+    // gets a heads-up here so the disabled-icons don't read as a bug.
+    // Switching back to native mode (toggle_provider) restores everything.
+    warnings.push(
+        "Codex.app 内嵌插件入口（Browser / Computer-Use 等官方扩展）会显示置灰 \
+         —— 这是 IDE 检测到 model_provider 非官方时的设计行为。如需恢复官方扩展，\
+         请在工具卡上切换为「原生模式」。CLI 与多 provider 路由不受影响。"
+            .to_string(),
+    );
+
     Ok(ApplyConfigResult {
         success: true, config_path: path_str, auth_json_path: auth_str,
         backup_path: None, auth_backup_path: None,
@@ -368,6 +382,67 @@ pub fn toggle_provider(host: &str, port: i64) -> Result<ToggleResult, AppError> 
             config_path: config_path().to_string_lossy().to_string(),
         })
     }
+}
+
+/// Switch Codex back to its pre-AgentGate "native" mode by restoring the
+/// saved config.toml. Keeps `auth.json` untouched (new code never modified
+/// it; old polluted state was already cleaned up by `apply`). The saved
+/// backup itself is kept on disk so the user can toggle back to compat
+/// mode at any time without re-running an explicit setup step.
+///
+/// Use this when the user explicitly wants Codex.app's official IDE
+/// extensions (Browser, Computer-Use, plugin marketplace) back — those are
+/// gated on `model_provider == openai/chatgpt` and only light up while
+/// AgentGate isn't injecting its own provider.
+pub fn disable() -> Result<ApplyConfigResult, AppError> {
+    let path = config_path();
+    let auth_path = auth_json_path();
+    let path_str = path.to_string_lossy().to_string();
+    let auth_str = auth_path.to_string_lossy().to_string();
+    let tp = local_token::token_path().to_string_lossy().to_string();
+    let mut warnings = Vec::new();
+    let mut changed_keys = Vec::new();
+
+    let saved_cfg = saved_config_path();
+    if !saved_cfg.exists() {
+        return Err(AppError::new(
+            "CODEX_NO_SAVED_FILES",
+            "未找到 AgentGate 备份的官方 config.toml — 请先在 Codex 上至少跑过一次官方登录。",
+        ));
+    }
+
+    fs::copy(&saved_cfg, &path).map_err(|e| {
+        AppError::new("CODEX_RESTORE_FAILED", format!("Cannot restore config.toml: {e}"))
+    })?;
+    changed_keys.push("config.toml (restored)".to_string());
+
+    // Defense-in-depth: even though new `apply` no longer touches auth.json,
+    // restore the OAuth backup if the live file got mangled by an older build
+    // and a healthy backup is available.
+    if repair_polluted_auth_json() {
+        warnings.push(
+            "auth.json 被旧版 AgentGate 清空过的部分已恢复，Codex IDE 插件应可用。"
+                .to_string(),
+        );
+        changed_keys.push("auth.json (restored)".to_string());
+    }
+
+    warnings.push(
+        "已切回原生模式：Codex.app 官方扩展恢复可用。CLI 走 ChatGPT 官方通道，\
+         不再经过 AgentGate 路由。"
+            .to_string(),
+    );
+
+    Ok(ApplyConfigResult {
+        success: true,
+        config_path: path_str,
+        auth_json_path: auth_str,
+        backup_path: None,
+        auth_backup_path: None,
+        token_path: tp,
+        changed_keys,
+        warnings,
+    })
 }
 
 pub fn open_config() -> Result<(), AppError> {
@@ -521,6 +596,47 @@ mod tests {
         // config.toml has agentgate's bearer token, not auth.json.
         let cfg = std::fs::read_to_string(config_path()).unwrap();
         assert!(cfg.contains("experimental_bearer_token = \"ag_local_"));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn test_disable_restores_official_config() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
+        // Start with an official-style config (what a fresh Codex login produces).
+        let original_cfg = "model_provider = \"openai\"\n[plugins.\"browser@openai-bundled\"]\nenabled = true\n";
+        std::fs::write(config_path(), original_cfg).unwrap();
+        let oauth_auth = r#"{"OPENAI_API_KEY":null,"auth_mode":"chatgpt","tokens":{"access_token":"jwt"}}"#;
+        std::fs::write(auth_json_path(), oauth_auth).unwrap();
+
+        // Apply AgentGate config (compat mode).
+        apply("127.0.0.1", 9090).unwrap();
+        assert!(detect().is_agentgate_active);
+
+        // Disable: should restore the official block.
+        let result = disable().unwrap();
+        assert!(result.success);
+        let cfg = std::fs::read_to_string(config_path()).unwrap();
+        assert!(cfg.contains("model_provider = \"openai\""), "official model_provider restored");
+        assert!(cfg.contains("browser@openai-bundled"), "official plugin block restored");
+        assert!(!cfg.contains("agentgate"), "agentgate block should be gone");
+
+        // auth.json must still be the OAuth one — disable never touches it
+        // unless the polluted-repair branch fires (which doesn't apply here).
+        let auth = std::fs::read_to_string(auth_json_path()).unwrap();
+        assert!(auth.contains("access_token"));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn test_disable_errors_without_saved_backup() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        // No saved backup, no prior apply — disable should refuse rather
+        // than blank out the user's config.
+        let err = disable().unwrap_err();
+        assert_eq!(err.code, "CODEX_NO_SAVED_FILES");
         cleanup(&temp);
     }
 

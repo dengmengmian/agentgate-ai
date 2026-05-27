@@ -1055,6 +1055,14 @@ pub fn toggle_codex_provider(state: State<'_, AppState>) -> Result<crate::tools:
     crate::tools::codex::toggle_provider(&settings.host, settings.port)
 }
 
+/// Restore Codex to its pre-AgentGate state — the saved config.toml is
+/// copied back so the user gets the official `[plugins.*]` / `[mcp_servers.*]`
+/// blocks alive again. Used by the UI's "Switch to native mode" button.
+#[tauri::command]
+pub fn disable_codex_agentgate() -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
+    crate::tools::codex::disable()
+}
+
 #[tauri::command]
 pub fn open_codex_config() -> Result<bool, AppError> {
     crate::tools::codex::open_config()?;
