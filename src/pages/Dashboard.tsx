@@ -137,7 +137,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* ── 2. Today metric strip — single horizontal row with 5 key numbers ── */}
+      {/* ── 2. Today card — 5 primary metrics + cache inline footer when present ── */}
       {stats && (
         <div className="rounded-xl border border-border bg-card px-6 py-4" style={{ boxShadow: "var(--shadow-sm)" }}>
           <div className="mb-3 flex items-center justify-between">
@@ -155,63 +155,66 @@ export function Dashboard() {
             <StripMetric label={t("stats.cost_today") || "今日费用"} value={formatCost(stats.today_cost)} />
             <StripMetric label={t("stats.avg_latency")} value={formatLatency(stats.avg_latency_ms)} />
           </div>
+          {(stats.today_cache_read_tokens > 0 || stats.today_cache_write_tokens > 0) && (
+            <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border pt-3 text-[11px] text-text-muted">
+              <span className="font-medium text-text-secondary">缓存</span>
+              <span>
+                写入 <span className="font-mono text-text-primary">{formatTokens(stats.today_cache_write_tokens)}</span>
+              </span>
+              <span className="text-text-muted/40">·</span>
+              <span>
+                命中 <span className="font-mono text-text-primary">{formatTokens(stats.today_cache_read_tokens)}</span>
+              </span>
+              <span className="text-text-muted/40">·</span>
+              <span>
+                输入合计 <span className="font-mono text-text-primary">{formatTokens(stats.today_input_tokens)}</span>
+              </span>
+              <span className="ml-auto">
+                命中率{" "}
+                <span className="font-mono text-text-primary">
+                  {(() => {
+                    const inp = stats.today_input_tokens;
+                    const r = stats.today_cache_read_tokens;
+                    return inp > 0 ? `${((r / inp) * 100).toFixed(1)}%` : "—";
+                  })()}
+                </span>
+              </span>
+            </div>
+          )}
         </div>
       )}
 
-      {/* ── 2b. Today cache strip — only render when there's a signal ── */}
-      {stats && (stats.today_cache_read_tokens > 0 || stats.today_cache_write_tokens > 0) && (
-        <div className="rounded-xl border border-border bg-card px-6 py-3" style={{ boxShadow: "var(--shadow-sm)" }}>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">缓存 Token</span>
-            <span className="text-[11px] text-text-muted">
-              命中率{" "}
-              {(() => {
-                const inp = stats.today_input_tokens;
-                const r = stats.today_cache_read_tokens;
-                return inp > 0 ? `${((r / inp) * 100).toFixed(1)}%` : "—";
-              })()}
-            </span>
-          </div>
-          <div className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <StripMetric label="写入 Write" value={formatTokens(stats.today_cache_write_tokens)} />
-            <StripMetric label="命中 Read" value={formatTokens(stats.today_cache_read_tokens)} />
-            <StripMetric label="输入合计" value={formatTokens(stats.today_input_tokens)} tone="default" />
-          </div>
-        </div>
-      )}
-
-      {/* ── 3. Trend chart range selector ── */}
-      <div className="flex items-center justify-end gap-1">
-        {RANGE_OPTIONS.map((opt) => (
-          <button
-            key={opt.days}
-            onClick={() => setRangeDays(opt.days)}
-            className={`rounded-md px-3 py-1 text-[11px] font-medium transition-colors ${
-              rangeDays === opt.days
-                ? "bg-accent text-white"
-                : "bg-card text-text-secondary hover:bg-accent-soft hover:text-accent"
-            }`}
-            style={rangeDays === opt.days ? {} : { boxShadow: "var(--shadow-sm)" }}
-          >
-            {opt.labelZh}
-          </button>
-        ))}
-      </div>
-
-      {/* ── 3. Trend chart — always full-width so 30-day bars don't overflow.
-              Top providers gets its own row below. ── */}
+      {/* ── 3. Trend chart + Top providers in one card. Range tabs live in the
+              chart header (they only affect the chart, not today's strip). ── */}
       {stats && (
         <>
           <div className="rounded-xl border border-border bg-card p-5">
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between gap-2">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <BarChart3 className="h-4 w-4 text-text-muted" />
                 {t("stats.daily_chart")}
                 <span className="text-text-muted">· {rangeDays === 1 ? "今天" : `${rangeDays} 天`}</span>
               </h3>
-              <div className="flex items-center gap-3 text-[10px] text-text-muted">
-                <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-sm bg-accent/70" /><span>{t("stats.success_rate_label") || "成功"}</span></div>
-                <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-sm bg-error/60" /><span>{t("stats.errors_label")}</span></div>
+              <div className="flex items-center gap-3">
+                <div className="hidden items-center gap-3 text-[10px] text-text-muted sm:flex">
+                  <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-sm bg-accent/70" /><span>{t("stats.success_rate_label") || "成功"}</span></div>
+                  <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-sm bg-error/60" /><span>{t("stats.errors_label")}</span></div>
+                </div>
+                <div className="flex items-center gap-0.5 rounded-md bg-card-secondary p-0.5">
+                  {RANGE_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.days}
+                      onClick={() => setRangeDays(opt.days)}
+                      className={`rounded px-2.5 py-0.5 text-[11px] font-medium transition-colors ${
+                        rangeDays === opt.days
+                          ? "bg-accent text-white"
+                          : "text-text-secondary hover:text-accent"
+                      }`}
+                    >
+                      {opt.labelZh}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             {(() => {
@@ -310,34 +313,20 @@ export function Dashboard() {
                 </div>
               );
             })()}
-          </div>
-
-          {/* Top providers — horizontal layout below the chart */}
-          <div className="rounded-xl border border-border bg-card p-5">
-            <h3 className="mb-3 text-sm font-semibold text-text-primary">{t("stats.top_providers")}</h3>
+            {/* Top providers — inline strip under the chart in the same card. */}
             {(() => {
-              // Filter "unknown" — that's the fallback label backend writes when
-              // a request errors before any provider is selected (parse error,
-              // missing API key, etc.). Not a real "top provider".
               const visible = stats.providers.filter((p) => p.name !== "unknown");
-              if (visible.length === 0) return <p className="text-xs text-text-muted">—</p>;
-              const max = Math.max(...visible.map((x) => x.count), 1);
+              if (visible.length === 0) return null;
               return (
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3 lg:grid-cols-6">
-                  {visible.slice(0, 6).map((p) => {
-                    const pct = (p.count / max) * 100;
-                    return (
-                      <div key={p.name} className="text-xs">
-                        <div className="mb-0.5 flex items-center justify-between">
-                          <span className="truncate text-text-primary">{p.name}</span>
-                          <span className="font-mono text-text-muted">{p.count}</span>
-                        </div>
-                        <div className="h-1 w-full overflow-hidden rounded-full bg-card-secondary">
-                          <div className="h-full rounded-full bg-accent/60" style={{ width: `${pct}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-3 text-[11px]">
+                  <span className="font-medium text-text-secondary">{t("stats.top_providers")}</span>
+                  {visible.slice(0, 6).map((p, i) => (
+                    <div key={p.name} className="flex items-center gap-1">
+                      {i > 0 && <span className="text-text-muted/40">·</span>}
+                      <span className="text-text-primary">{p.name}</span>
+                      <span className="font-mono text-text-muted">{p.count.toLocaleString()}</span>
+                    </div>
+                  ))}
                 </div>
               );
             })()}
@@ -345,21 +334,8 @@ export function Dashboard() {
         </>
       )}
 
-      {/* ── 4. Tool status — single row of colored dots ── */}
-      <div className="rounded-xl border border-border bg-card px-5 py-3">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <span className="text-xs font-semibold text-text-secondary">{t("dashboard.tool_status")}</span>
-          {tools.map((tool) => (
-            <span key={tool.id} className="flex items-center gap-1.5" title={tool.config_path}>
-              <span className={`inline-block h-2 w-2 rounded-full ${tool.config_exists ? "bg-success" : "bg-text-muted/30"}`} />
-              <span className={`text-xs ${tool.config_exists ? "text-text-primary" : "text-text-muted"}`}>{tool.name}</span>
-            </span>
-          ))}
-        </div>
-      </div>
-
-      {/* ── 6. Recent requests (unchanged) ── */}
-      <RecentRequests requests={recentLogs} />
+      {/* ── 4. Recent requests with inline tool status header chip. ── */}
+      <RecentRequests requests={recentLogs} tools={tools} />
 
       {/* ── 7. Runtime KPI footer ── */}
       <RuntimeFooter />
