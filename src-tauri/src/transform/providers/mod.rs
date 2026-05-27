@@ -76,3 +76,84 @@ pub fn for_config(config: &ProviderConfig) -> Box<dyn ProviderTransform + Send +
         Box::new(DefaultProvider)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::adapter::ProviderConfig;
+
+    fn config(provider_type: &str) -> ProviderConfig {
+        ProviderConfig {
+            name: "Test".into(),
+            provider_type: provider_type.into(),
+            base_url: "http://localhost".into(),
+            api_keys: vec!["sk-test".into()],
+            default_model: "model".into(),
+            reasoning_model: None,
+            timeout_seconds: 30,
+            extra_headers: std::collections::HashMap::new(),
+            anthropic_base_url: None,
+            responses_base_url: None,
+        }
+    }
+
+    #[test]
+    fn for_config_deepseek() {
+        let t = for_config(&config("deepseek"));
+        assert_eq!(t.provider_type(), "deepseek");
+    }
+
+    #[test]
+    fn for_config_kimi() {
+        let t = for_config(&config("kimi"));
+        assert_eq!(t.provider_type(), "kimi");
+    }
+
+    #[test]
+    fn for_config_moonshot() {
+        let t = for_config(&config("moonshot"));
+        assert_eq!(t.provider_type(), "kimi");
+    }
+
+    #[test]
+    fn for_config_minimax() {
+        let t = for_config(&config("minimax"));
+        assert_eq!(t.provider_type(), "minimax");
+    }
+
+    #[test]
+    fn for_config_anthropic() {
+        let t = for_config(&config("anthropic"));
+        assert_eq!(t.provider_type(), "");
+    }
+
+    #[test]
+    fn for_config_claude() {
+        let t = for_config(&config("claude"));
+        assert_eq!(t.provider_type(), "");
+    }
+
+    #[test]
+    fn for_config_google_gemini() {
+        let t = for_config(&config("google_gemini"));
+        assert_eq!(t.provider_type(), "");
+    }
+
+    #[test]
+    fn for_config_mimo() {
+        let t = for_config(&config("mimo"));
+        assert_eq!(t.provider_type(), "mimo");
+    }
+
+    #[test]
+    fn for_config_xiaomi() {
+        let t = for_config(&config("xiaomi"));
+        assert_eq!(t.provider_type(), "mimo");
+    }
+
+    #[test]
+    fn for_config_unknown_defaults() {
+        let t = for_config(&config("openai"));
+        assert_eq!(t.provider_type(), "");
+    }
+}
