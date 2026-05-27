@@ -55,8 +55,12 @@ impl GeminiSseAccumulator {
 }
 
 /// Process a Gemini SSE stream and emit Responses API SSE events.
+///
+/// Caller is expected to have already run `sse_bootstrap::bootstrap_detect`
+/// — `Bootstrap.prefix` is replayed first so frames pulled during the scan
+/// are processed before we read more from the live stream.
 pub async fn process_gemini_stream(
-    response: reqwest::Response,
+    boot: crate::gateway::sse_bootstrap::Bootstrap,
     tx: mpsc::Sender<String>,
     acc: &mut GeminiSseAccumulator,
 ) -> Result<(), String> {
@@ -68,22 +72,26 @@ pub async fn process_gemini_stream(
     send(&tx, &ev::response_created(&acc.response_id, &acc.model)).await;
     send(&tx, &ev::response_in_progress(&acc.response_id, &acc.model)).await;
 
-    let mut buffer = String::new();
-    let mut stream = response.bytes_stream();
+    let mut buffer = String::from_utf8_lossy(&boot.prefix).into_owned();
+    buffer = buffer.replace("\r\n", "\n");
+    let mut stream = boot.stream;
+    let mut bootstrap_replayed = false;
 
-    while let Some(chunk) = stream.next().await {
-        let chunk = match chunk {
-            Ok(b) => b,
-            Err(e) => {
-                let err_msg = format!("Stream error: {e}");
-                send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &err_msg)).await;
-                return Err(err_msg);
-            }
-        };
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-        // Normalize \r\n
-        buffer = buffer.replace("\r\n", "\n");
+    loop {
+        if bootstrap_replayed {
+            let chunk = match stream.next().await {
+                Some(Ok(b)) => b,
+                Some(Err(e)) => {
+                    let err_msg = format!("Stream error: {e}");
+                    send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &err_msg)).await;
+                    return Err(err_msg);
+                }
+                None => break,
+            };
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+            buffer = buffer.replace("\r\n", "\n");
+        }
+        bootstrap_replayed = true;
 
         // Process complete SSE frames
         while let Some(frame_end) = buffer.find("\n\n") {

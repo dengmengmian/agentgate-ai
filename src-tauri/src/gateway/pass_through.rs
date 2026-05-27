@@ -164,6 +164,12 @@ async fn handle_stream(
             .unwrap());
     }
 
+    // Bootstrap-validate the stream before committing to forwarding: catches
+    // HTTP-200-with-error-frame failures (quota / rate-limit emitted mid-
+    // stream by GLM / MiMo even on direct pass-through) and turns them into
+    // a clean Err so the outer route loop can fail over.
+    let boot = crate::gateway::sse_bootstrap::bootstrap_detect(resp).await?;
+
     // Stream: pipe upstream SSE to client, log asynchronously
     let (tx, rx) = mpsc::channel::<String>(512);
     let db_clone = db.clone();
@@ -176,10 +182,20 @@ async fn handle_stream(
     let client_type_owned = client_type.to_string();
 
     tokio::spawn(async move {
-        let mut stream = resp.bytes_stream();
+        let prefix_text = String::from_utf8_lossy(&boot.prefix).to_string();
         let mut sse_log = String::new();
         let mut sse_size: usize = 0;
 
+        // Replay the bootstrap prefix first so any bytes already pulled
+        // during the scan reach the client.
+        if !prefix_text.is_empty() {
+            let to_add = prefix_text.len().min(MAX_SSE_LOG);
+            sse_log.push_str(&prefix_text[..to_add]);
+            sse_size += to_add;
+            let _ = tx.send(prefix_text).await;
+        }
+
+        let mut stream = boot.stream;
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
                 Ok(bytes) => {

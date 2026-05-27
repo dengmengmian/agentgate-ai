@@ -60,8 +60,14 @@ impl AnthropicSseAccumulator {
 }
 
 /// Process a Claude SSE stream and emit Responses API SSE events.
+///
+/// The caller is expected to have already run `sse_bootstrap::bootstrap_detect`
+/// on the upstream response — the `Bootstrap.prefix` carries bytes already
+/// consumed during the scan and gets replayed before pulling from the live
+/// stream, so frames straddling the bootstrap boundary are handled exactly
+/// once.
 pub async fn process_anthropic_stream(
-    response: reqwest::Response,
+    boot: crate::gateway::sse_bootstrap::Bootstrap,
     tx: mpsc::Sender<String>,
     acc: &mut AnthropicSseAccumulator,
 ) -> Result<(), String> {
@@ -69,24 +75,29 @@ pub async fn process_anthropic_stream(
 
     crate::protocol::responses_events::reset_sequence();
 
-    let mut buffer = String::new();
+    // Seed buffer with the bootstrap prefix; first loop iteration parses any
+    // complete frames already present without pulling from the live stream.
+    let mut buffer = String::from_utf8_lossy(&boot.prefix).into_owned();
+    buffer = buffer.replace("\r\n", "\n");
     let mut current_event_type = String::new();
-    let mut stream = response.bytes_stream();
+    let mut stream = boot.stream;
+    let mut bootstrap_replayed = false;
 
-    while let Some(chunk) = stream.next().await {
-        let chunk = match chunk {
-            Ok(b) => b,
-            Err(e) => {
-                let err_msg = format!("Stream error: {e}");
-                send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &err_msg)).await;
-                return Err(err_msg);
-            }
-        };
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-        // Process complete SSE frames (handle both \n\n and \r\n\r\n)
-        // Normalize \r\n to \n for consistent parsing
-        buffer = buffer.replace("\r\n", "\n");
+    loop {
+        if bootstrap_replayed {
+            let chunk = match stream.next().await {
+                Some(Ok(b)) => b,
+                Some(Err(e)) => {
+                    let err_msg = format!("Stream error: {e}");
+                    send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &err_msg)).await;
+                    return Err(err_msg);
+                }
+                None => break,
+            };
+            buffer.push_str(&String::from_utf8_lossy(&chunk));
+            buffer = buffer.replace("\r\n", "\n");
+        }
+        bootstrap_replayed = true;
 
         while let Some(frame_end) = buffer.find("\n\n") {
             let frame = buffer[..frame_end].to_string();

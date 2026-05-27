@@ -759,6 +759,14 @@ async fn handle_anthropic_stream_response(
 
     match upstream_resp {
         Ok(response) => {
+            // Bootstrap-validate before committing to streaming so HTTP-200-
+            // with-error-frame failures (Anthropic overload / rate-limit
+            // events) become a clean Err that triggers failover.
+            let boot = match crate::gateway::sse_bootstrap::bootstrap_detect(response).await {
+                Ok(b) => b,
+                Err(e) => return Err(GatewayError(e)),
+            };
+
             let resp_id = format!("resp_{}", &request_id[4..]);
             let (tx, rx) = mpsc::channel::<String>(256);
 
@@ -773,7 +781,7 @@ async fn handle_anthropic_stream_response(
 
             tokio::spawn(async move {
                 let mut acc = AnthropicSseAccumulator::new(resp_id, model_clone.clone());
-                let result = crate::gateway::sse_anthropic::process_anthropic_stream(response, tx, &mut acc).await;
+                let result = crate::gateway::sse_anthropic::process_anthropic_stream(boot, tx, &mut acc).await;
 
                 let latency = start.elapsed().as_millis() as i64;
                 let tc_list = acc.tool_calls_list();
@@ -957,6 +965,16 @@ async fn handle_gemini_stream_response(
 
     match upstream_resp {
         Ok(response) => {
+            // Bootstrap-validate the stream before committing to forwarding.
+            // Gemini occasionally returns 200 then immediately emits an error
+            // JSON in the first SSE frame (e.g. quota / safety blocks); the
+            // scan catches those and routes them through the standard
+            // failover path instead of letting the client see a broken stream.
+            let boot = match crate::gateway::sse_bootstrap::bootstrap_detect(response).await {
+                Ok(b) => b,
+                Err(e) => return Err(GatewayError(e)),
+            };
+
             let resp_id = format!("resp_{}", &request_id[4..]);
             let (tx, rx) = mpsc::channel::<String>(256);
 
@@ -969,7 +987,7 @@ async fn handle_gemini_stream_response(
 
             tokio::spawn(async move {
                 let mut acc = GeminiSseAccumulator::new(resp_id, model_clone.clone());
-                let result = crate::gateway::sse_gemini::process_gemini_stream(response, tx, &mut acc).await;
+                let result = crate::gateway::sse_gemini::process_gemini_stream(boot, tx, &mut acc).await;
 
                 let latency = start.elapsed().as_millis() as i64;
                 match result {
@@ -1081,6 +1099,14 @@ pub async fn handle_gemini_generate(
             GatewayError(e)
         })?;
 
+        // Bootstrap-validate the upstream Chat Completions stream before
+        // committing to forwarding the converted Gemini SSE back to the client.
+        let boot = crate::gateway::sse_bootstrap::bootstrap_detect(upstream_resp).await.map_err(|e| {
+            let latency = start.elapsed().as_millis() as i64;
+            log_request_error_full(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json, &config.name, &resolved_model, &e, 502, latency);
+            GatewayError(e)
+        })?;
+
         let (tx, rx) = mpsc::channel::<String>(256);
         let db = state.db.clone();
         let provider_name = config.name.clone();
@@ -1091,17 +1117,23 @@ pub async fn handle_gemini_generate(
 
         tokio::spawn(async move {
             use futures::StreamExt;
-            let mut stream = upstream_resp.bytes_stream();
-            let mut buffer = String::new();
+            let mut stream = boot.stream;
+            let mut buffer = String::from_utf8_lossy(&boot.prefix).into_owned();
+            buffer = buffer.replace("\r\n", "\n");
             let mut full_text = String::new();
+            let mut bootstrap_replayed = false;
 
-            while let Some(chunk) = stream.next().await {
-                let chunk = match chunk {
-                    Ok(b) => b,
-                    Err(_) => break,
-                };
-                buffer.push_str(&String::from_utf8_lossy(&chunk));
-                buffer = buffer.replace("\r\n", "\n");
+            loop {
+                if bootstrap_replayed {
+                    let chunk = match stream.next().await {
+                        Some(Ok(b)) => b,
+                        Some(Err(_)) => break,
+                        None => break,
+                    };
+                    buffer.push_str(&String::from_utf8_lossy(&chunk));
+                    buffer = buffer.replace("\r\n", "\n");
+                }
+                bootstrap_replayed = true;
 
                 while let Some(line_end) = buffer.find('\n') {
                     let line = buffer[..line_end].trim_end_matches('\r').to_string();
