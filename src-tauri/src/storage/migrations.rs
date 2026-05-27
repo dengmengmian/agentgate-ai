@@ -283,6 +283,61 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_migrations_creates_tables() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        assert!(tables.contains(&"providers".to_string()));
+        assert!(tables.contains(&"gateway_settings".to_string()));
+        assert!(tables.contains(&"request_logs".to_string()));
+        assert!(tables.contains(&"app_settings".to_string()));
+        assert!(tables.contains(&"route_profiles".to_string()));
+        assert!(tables.contains(&"config_backups".to_string()));
+        assert!(tables.contains(&"pet_settings".to_string()));
+        assert!(tables.contains(&"provider_runtime_status".to_string()));
+    }
+
+    #[test]
+    fn run_migrations_idempotent() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        run_migrations(&conn).unwrap(); // should not panic or error
+    }
+
+    #[test]
+    fn run_migrations_seeds_gateway_settings() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM gateway_settings", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn run_migrations_seeds_pet_settings() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        let pet_type: String = conn
+            .query_row("SELECT pet_type FROM pet_settings WHERE id = 1", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(pet_type, "robot");
+    }
+}
+
 fn seed_default_providers(conn: &Connection) -> Result<(), AppError> {
     let count: i64 =
         conn.query_row("SELECT COUNT(*) FROM providers", [], |row| row.get(0))?;

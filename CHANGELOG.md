@@ -2,6 +2,70 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added / 新增
+
+- **Xiaomi MiMo as first-class provider / 小米 MiMo provider 一等公民支持**
+  - 完整 5 个聊天模型：`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`
+  - 多轮 `reasoning_content` 回填，避免思考模式下 tool_calls 跨轮丢失 reasoning 触发 400
+  - `mimo-v2.5-pro` / `mimo-v2.5` 思考态自动剥 `temperature`（上游强制 1.0）
+  - `mimo-v2-omni` 自动剥 `web_search` builtin（该模型不支持联网搜索）
+  - `tool_choice` 非 `auto` 值客户端剥除
+  - 友好错误提示：`webSearchEnabled is false` 400 → 提示用户去开通 Web Search Plugin
+  - Token-Plan host 自动切换：粘贴 `tp-*` key 时自动改用 `token-plan-cn.xiaomimimo.com`
+  - 内置 MiMo 海外定价（v2.5-pro / v2.5 / v2-pro / v2-omni / v2-flash + TTS）
+- **Per-model capability matrix / 模型能力矩阵**
+  - 新增 `model_capabilities` JSON 字段：`{"model": ["text", "vision", "reasoning", ...]}`
+  - 8 种能力：text / vision / audio_in / tts / video_in / reasoning / tools / web_search
+  - Capability-aware promotion：请求带图自动 swap 到支持 vision 的模型（带图请求路由到 `mimo-v2.5` 而非 `mimo-v2.5-pro`）
+  - Promotion 排序：选保留最多原模型能力的候选（v2.5 比 v2-omni 保留 reasoning+web_search 优先）
+  - Matrix 也驱动 web_search 是否发送：用户在矩阵取消勾选即停止给该 model 发送 web_search builtin
+  - Provider 表单加能力矩阵编辑器，"自动识别"按钮按 model 名规则种子填充（MiMo / DeepSeek / Kimi / Moonshot / 通用 fallback）
+  - 测试按钮升级：连通性 + 自动识别合并填充缺失行（保留用户手动编辑）
+  - Provider 卡片 / Routes 页改用图标行（👁🎤🔊🎞🧠🌐）替代单一 `supports_vision` 徽章
+- **`[1m]` suffix auto-injection / 长上下文后缀自动注入**
+  - Claude Code 透传路径上对 MiMo 和 DeepSeek 的 1M-context 模型自动追加 `[1m]`
+  - Codex（OpenAI）路径完全不动 —— 用户配置 `mimo-v2.5-pro`，CC 端拿到 1M 上下文，Codex 端正常 128K
+  - 已写 `[1m]` 的用户配置 / 不支持 1M 的模型（Flash / Omni）原样保留
+- **Codex `web_search_preview` → MiMo `web_search` 翻译**
+  - Codex 用户的联网搜索能力穿透到 MiMo 上游
+  - 受 `model_capabilities` 矩阵控制：模型行未勾 web_search 则不翻译，避免上游 400
+- **Accurate client labels in logs / 日志精确客户端识别**
+  - User-Agent 推断客户端：Codex / Claude Code / OpenCode / AtomCode / Kimi CLI / Cursor / Cherry Studio / Continue / Cline / Roo Code / Python SDK / Node SDK / curl 等
+  - 未匹配的 UA 显示其第一个 token，便于发现新客户端
+  - 之前所有 `/v1/chat/completions` 透传路由都被打成 "Codex"，现在按路由 + UA 准确归类
+- **Dashboard redesign / 概览页重布**
+  - 9 张卡（含冗余数学如 Total = In + Out）→ 顶部一行"今日 strip"5 个核心指标
+  - 7 天图表重做：单粗柱代替双窄柱、左侧 y 轴 0 / peak/2 / peak 三刻度对齐网格、错误堆栈在柱底红色、hover 显示明细 tooltip
+  - Top providers 加横向 bar ranking，过滤 `unknown` 伪 provider
+  - 累计 / 工具状态收为单行
+- **Error suggestion display / 错误建议展示**
+  - `enhance_error` 钩子接入 `ProviderTransform`，错误日志详情多一个绿色"建议"卡，actionable 提示与原始错误分离
+
+### Changed / 改动
+
+- **Connection stability / 连接稳定性**
+  - HTTP client 加 `pool_idle_timeout(30s)` + `tcp_keepalive(20s)`：避免静默后 keep-alive 池递死连接导致 `PASS_THROUGH_REQUEST_FAILED`
+  - 网络层 transient 错误（connect / timeout / request）自动重试 1 次，带 backoff，覆盖 pass_through 4 处和 adapter 6 处 send 调用
+- **Vision probe accuracy / Vision 探针修正**
+  - 旧逻辑只把 400 视为"不支持"，但 MiMo 返回 404，被误判为支持
+  - 新逻辑：任何 4xx 都视为不支持，401/403/5xx 标为不确定不写库
+- **Provider card layout / Provider 卡片重布**
+  - 字符级换行修复（StatusBadge 加 `whitespace-nowrap`）、底层布局加 `min-w-0` + `truncate`，长 URL 不再压扁右侧 badge
+  - 单行紧凑布局（icon · 名称 · 能力图标行）替代 8 字段网格，"详情"折叠展示协议 / 推理模型等次要字段
+- **Pricing improvements / 定价改进**
+  - 模型 ID 带 `[1m]` 等 qualifier 时自动 fallback 到 base-id 价格匹配
+- **Capability icons unified component / 统一能力图标组件**
+  - 新 `CapabilityIcons` 在 Providers 和 Routes 页共享，behavior 一致
+
+### Fixed / 修复
+
+- 日志硬编码"Codex"/"/v1/responses"导致 Claude Code 和 chat completions 透传错误归类
+- Vision 探针对 MiMo 等返回非-400 错误码的上游误报"支持视觉"
+
+---
+
 ## [1.0.0] - 2026-05-20
 
 ### Release / 发布

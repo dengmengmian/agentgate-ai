@@ -232,3 +232,24 @@ async fn finalize(acc: &mut GeminiSseAccumulator, tx: &mpsc::Sender<String>) {
 async fn send(tx: &mpsc::Sender<String>, event: &str) {
     let _ = tx.send(event.to_string()).await;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gemini_accumulator_new() {
+        let acc = GeminiSseAccumulator::new("resp_456".into(), "gemini-2.5-flash".into());
+        assert_eq!(acc.response_id, "resp_456");
+        assert_eq!(acc.model, "gemini-2.5-flash");
+        assert!(acc.full_text.is_empty());
+        assert!(acc.tool_calls.is_empty());
+        assert_eq!(acc.tool_call_counter, 0);
+    }
+
+    #[test]
+    fn gemini_accumulator_tool_calls_list_empty() {
+        let acc = GeminiSseAccumulator::new("resp_1".into(), "model".into());
+        assert!(acc.tool_calls_list().is_empty());
+    }
+}

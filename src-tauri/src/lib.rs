@@ -472,3 +472,39 @@ pub(crate) mod test_utils {
         let _ = std::fs::remove_dir_all(temp);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn locale_value_is_chinese_zh_cn() {
+        assert!(locale_value_is_chinese("zh_CN.UTF-8"));
+    }
+
+    #[test]
+    fn locale_value_is_chinese_zh_hans() {
+        assert!(locale_value_is_chinese("zh-Hans"));
+    }
+
+    #[test]
+    fn locale_value_is_chinese_zh_hant() {
+        assert!(locale_value_is_chinese("zh-Hant"));
+    }
+
+    #[test]
+    fn locale_value_is_not_chinese_en() {
+        assert!(!locale_value_is_chinese("en_US.UTF-8"));
+    }
+
+    #[test]
+    fn locale_value_is_not_chinese_ja() {
+        assert!(!locale_value_is_chinese("ja_JP.UTF-8"));
+    }
+
+    #[test]
+    fn locale_value_case_insensitive() {
+        assert!(locale_value_is_chinese("ZH_CN"));
+        assert!(locale_value_is_chinese("Zh-Hans"));
+    }
+}

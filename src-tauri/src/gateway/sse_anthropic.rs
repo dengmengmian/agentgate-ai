@@ -292,3 +292,41 @@ async fn finalize(acc: &mut AnthropicSseAccumulator, tx: &mpsc::Sender<String>) 
 async fn send(tx: &mpsc::Sender<String>, event: &str) {
     let _ = tx.send(event.to_string()).await;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clamp_call_id_short() {
+        assert_eq!(clamp_call_id("abc"), "abc");
+    }
+
+    #[test]
+    fn clamp_call_id_exact_length() {
+        let id = "a".repeat(64);
+        assert_eq!(clamp_call_id(&id).len(), 64);
+    }
+
+    #[test]
+    fn clamp_call_id_long() {
+        let id = "a".repeat(100);
+        let clamped = clamp_call_id(&id);
+        assert_eq!(clamped.len(), 64);
+    }
+
+    #[test]
+    fn accumulator_new() {
+        let acc = AnthropicSseAccumulator::new("resp_123".into(), "claude-sonnet".into());
+        assert_eq!(acc.response_id, "resp_123");
+        assert_eq!(acc.model, "claude-sonnet");
+        assert!(acc.full_text.is_empty());
+        assert!(acc.tool_calls.is_empty());
+    }
+
+    #[test]
+    fn accumulator_tool_calls_list_empty() {
+        let acc = AnthropicSseAccumulator::new("resp_1".into(), "model".into());
+        assert!(acc.tool_calls_list().is_empty());
+    }
+}

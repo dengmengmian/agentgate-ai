@@ -50,21 +50,29 @@ AgentGate is a **local model gateway** for AI coding agents. One entry point con
 - Prompt cache injection for Anthropic (auto `cache_control`, ~90% input cost savings)
 - Cache support auto-detection on provider test
 
-**Multimodal Support & Vision-Aware Routing**
-- Image content is fully preserved during protocol conversion, supporting `input_image`/`image_url` → Chat Completions `image_url` and Anthropic `image source` format conversion
-- Vision capability is auto-detected when a provider is saved or tested (sends a 1x1 pixel probe request)
-- In failover mode, requests containing images automatically skip providers that don't support vision
-- Providers that don't support images (e.g., DeepSeek) have images stripped at the provider-specific layer, avoiding 400 errors
+**Multimodal Support & Per-Model Capability Matrix**
+- Image content is fully preserved during protocol conversion (`input_image`/`image_url` → Chat Completions `image_url`, Anthropic `image source` format)
+- Per-model capability matrix tracks 8 dimensions per model: `text` / `vision` / `audio_in` / `tts` / `video_in` / `reasoning` / `tools` / `web_search`
+- Capability-aware promotion: when a request includes images, the gateway auto-swaps to a sibling model that supports vision (e.g. routes image requests to `mimo-v2.5` instead of `mimo-v2.5-pro` on the same provider)
+- Promotion ranking prefers the substitute that preserves the most of the original model's other capabilities, with `supported_models` order as tiebreak
+- The capability matrix also drives tool emission: unchecking `web_search` for a model stops the gateway from sending the builtin to that model
+- Matrix auto-seeded from model-name patterns: built-in rules for MiMo / DeepSeek / Kimi / Moonshot, with a generic fallback for others
+- Provider test button now combines connectivity check + non-destructive matrix autofill (preserves manual edits)
+- In failover mode, requests with images skip providers whose matrix declares no vision-capable model
+- Providers that don't support images at the chosen model strip the image content at the provider-specific layer, avoiding upstream 400/404
 
 **Multi-Provider Management**
-- Supports DeepSeek, OpenAI, Anthropic, OpenRouter, Kimi, MiniMax, and custom OpenAI-compatible endpoints
+- Supports **Xiaomi MiMo**, DeepSeek, OpenAI, Anthropic, OpenRouter, Kimi, MiniMax, and custom OpenAI-compatible endpoints
+- MiMo first-class support: 5 chat models (`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`), multi-turn `reasoning_content` round-trip, `tp-*` key auto-routes to Token Plan host, friendly `webSearchEnabled` error mapping
+- `[1m]` long-context suffix auto-injected on the Claude Code passthrough path for MiMo and DeepSeek 1M-capable models (transparent: users configure `mimo-v2.5-pro`, the Codex path gets the base model, Claude Code gets `mimo-v2.5-pro[1m]`)
 - Route Profiles with multi-provider priority chains, auto-matched by protocol
 - Manual switching or automatic failover
 - Provider cooldown and runtime status tracking
 - Per-request failover: Provider A fails → automatically tries Provider B
-- Vision-aware routing: requests with images auto-skip non-vision providers
+- Capability-aware routing: requests with images / audio / etc. auto-route to capable models within a provider, fall back to capable providers across the chain
 - New providers are automatically added to all route chains
 - Automatic model list fetching from providers
+- Connection stability: HTTP client tuned with `pool_idle_timeout` and `tcp_keepalive`, plus app-layer retry on transient connect/timeout errors (avoids stale keep-alive failures after a pause)
 
 **Client Configuration**
 - Codex: one-click config + toggle between official and AgentGate (preserves conversations)
@@ -509,13 +517,14 @@ On the **Diagnostics** page:
 
 ## Supported Providers
 
-| Provider | Type | Conversion | Provider-Specific Handling | Vision |
+| Provider | Type | Conversion | Provider-Specific Handling | Vision (per-model) |
 |---|---|---|---|---|
-| DeepSeek | `deepseek` | Chat Completions | Image stripping, reasoning injection, schema cleaning, message reordering | ✗ |
+| Xiaomi MiMo | `mimo` | Chat Completions / Anthropic passthrough | Multi-turn `reasoning_content` round-trip, `tp-*` host auto-routing, temperature strip in thinking mode (v2.5-pro/v2.5), tool_choice non-auto strip, omni web_search strip, `[1m]` suffix injection on CC path, web_search builtin translation gated by matrix, friendly Web Search Plugin error hint | `mimo-v2.5` / `mimo-v2-omni` ✓; others ✗ |
+| DeepSeek | `deepseek` | Chat Completions | Image stripping, reasoning injection, schema cleaning, message reordering, `[1m]` suffix on CC path for v4-pro | Model-dependent |
 | OpenAI | `openai` | Pass-through or Chat Completions | None | ✓ |
 | Anthropic | `anthropic` | Claude Messages native | `tool_use`/`tool_result`, `input_schema`, thinking budget | ✓ |
 | OpenRouter | `openrouter` | Chat Completions | None | Model-dependent |
-| KimiCoding | `kimi` | Chat Completions | web_search → builtin_function, thinking control | ✓ |
+| Kimi / Moonshot | `kimi` | Chat Completions | `web_search` → `builtin_function`/`$web_search`, thinking control | `kimi-for-coding` ✓; others model-dependent |
 | MiniMax | `minimax` | Chat Completions | Strip reasoning_effort/response_format, `<think>` extraction | ✓ |
 | Custom | `custom_openai_compatible` | Chat Completions | None | Auto-detected |
 
