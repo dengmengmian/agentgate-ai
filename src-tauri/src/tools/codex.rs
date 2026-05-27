@@ -33,6 +33,12 @@ fn saved_auth_path() -> PathBuf {
 }
 
 /// Save original config.toml + auth.json for restoring on toggle.
+///
+/// auth.json is only copied when it currently holds the user's real
+/// credentials — i.e. the `OPENAI_API_KEY` doesn't start with `ag_local_`.
+/// This protects an existing healthy backup from being overwritten by a
+/// previously-polluted live auth.json (older AgentGate builds had stripped
+/// the OAuth tokens to just `{"OPENAI_API_KEY":"ag_local_..."}`).
 fn save_official_files() -> Result<(), AppError> {
     let dir = saved_dir();
     fs::create_dir_all(&dir).map_err(|e| {
@@ -47,7 +53,7 @@ fn save_official_files() -> Result<(), AppError> {
     }
 
     let auth = auth_json_path();
-    if auth.exists() {
+    if auth.exists() && !auth_is_polluted(&auth) {
         fs::copy(&auth, saved_auth_path()).map_err(|e| {
             AppError::new("CODEX_SAVE_FAILED", format!("Cannot save auth.json: {e}"))
         })?;
@@ -56,9 +62,21 @@ fn save_official_files() -> Result<(), AppError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = fs::set_permissions(saved_auth_path(), fs::Permissions::from_mode(0o600));
+        let saved = saved_auth_path();
+        if saved.exists() {
+            let _ = fs::set_permissions(&saved, fs::Permissions::from_mode(0o600));
+        }
     }
     Ok(())
+}
+
+fn auth_is_polluted(path: &PathBuf) -> bool {
+    let Ok(content) = fs::read_to_string(path) else { return false; };
+    let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content) else {
+        return false;
+    };
+    let current_key = map.get("OPENAI_API_KEY").and_then(|v| v.as_str()).unwrap_or("");
+    current_key.starts_with("ag_local_") && !map.contains_key("tokens")
 }
 
 /// Check if saved official files exist.
@@ -67,6 +85,11 @@ fn has_saved_official() -> bool {
 }
 
 /// Restore both config.toml + auth.json from saved official files.
+///
+/// Kept for legacy/manual use — the modern `toggle_provider` restore path
+/// inlines a config-only copy instead, so auth.json stays untouched. Useful
+/// if a user needs a full hard reset to pre-AgentGate state.
+#[allow(dead_code)]
 fn restore_official_files() -> Result<(), AppError> {
     let dir = saved_dir();
     if !dir.exists() {
@@ -91,22 +114,32 @@ fn restore_official_files() -> Result<(), AppError> {
     Ok(())
 }
 
-/// Write a minimal auth.json with only the AgentGate token as OPENAI_API_KEY.
-fn write_agentgate_auth(token: &str) -> Result<(), AppError> {
+/// Repair `auth.json` if a previous AgentGate version replaced it with
+/// `{"OPENAI_API_KEY": "ag_local_..."}` and stripped the ChatGPT OAuth
+/// tokens. The Codex JetBrains / VS Code plugins detect "configured" by
+/// reading `auth_mode` + the `tokens` object out of this file — when those
+/// are missing the plugin greys out. We restore from `~/.agentgate/codex_official/auth.json`
+/// (saved by `save_official_files` the first time we touched the file) and
+/// return true so the caller can surface a notice.
+///
+/// No-op when the current auth.json already has tokens (clean state) or
+/// there's no saved backup to restore from.
+fn repair_polluted_auth_json() -> bool {
     let auth_path = auth_json_path();
-    if let Some(parent) = auth_path.parent() {
-        let _ = fs::create_dir_all(parent);
+    let Ok(content) = fs::read_to_string(&auth_path) else { return false; };
+    let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content) else {
+        return false;
+    };
+    let current_key = map.get("OPENAI_API_KEY").and_then(|v| v.as_str()).unwrap_or("");
+    let is_ag_stripped = current_key.starts_with("ag_local_") && !map.contains_key("tokens");
+    if !is_ag_stripped {
+        return false;
     }
-    let content = format!("{{\n  \"OPENAI_API_KEY\": \"{token}\"\n}}\n");
-    let tmp = auth_path.with_extension("json.tmp");
-    fs::write(&tmp, &content).map_err(|e| {
-        AppError::new("CODEX_CONFIG_WRITE_FAILED", format!("Failed to write auth.json: {e}"))
-    })?;
-    fs::rename(&tmp, &auth_path).map_err(|e| {
-        let _ = fs::remove_file(&tmp);
-        AppError::new("CODEX_CONFIG_WRITE_FAILED", format!("Failed to replace auth.json: {e}"))
-    })?;
-    Ok(())
+    let saved = saved_auth_path();
+    if !saved.exists() {
+        return false;
+    }
+    fs::copy(&saved, &auth_path).is_ok()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -191,7 +224,13 @@ pub fn detect() -> CodexConfigStatus {
     }
 }
 
-pub fn generate_snippet(host: &str, port: i64) -> String {
+pub fn generate_snippet(host: &str, port: i64, bearer_token: &str) -> String {
+    // `experimental_bearer_token` carries the per-provider auth — Codex CLI
+    // uses this as `Authorization: Bearer …` for any request routed through
+    // the `agentgate` model_provider. Crucially this means we never touch
+    // `auth.json`: the ChatGPT OAuth tokens stay intact and the IDE plugin
+    // continues to detect Codex as configured. Borrowed from cc-switch's
+    // surgical-config-only design.
     format!(
         r#"model = "gpt-5.5"
 model_provider = "agentgate"
@@ -199,7 +238,8 @@ model_provider = "agentgate"
 [model_providers.agentgate]
 name = "AgentGate"
 base_url = "http://{host}:{port}/v1"
-wire_api = "responses""#,
+wire_api = "responses"
+experimental_bearer_token = "{bearer_token}""#,
     )
 }
 
@@ -212,6 +252,7 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     let auth_str = auth_path.to_string_lossy().to_string();
     let tp = local_token::token_path().to_string_lossy().to_string();
     let mut warnings = Vec::new();
+    let mut changed_keys = vec!["config.toml".to_string()];
 
     // Ensure parent dir
     if let Some(parent) = path.parent() {
@@ -220,14 +261,32 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
         })?;
     }
 
-    // === Save original config.toml + auth.json for toggle restore ===
-    let already_agentgate = detect().is_agentgate_active && detect().has_agentgate_auth;
-    if !already_agentgate {
+    // Save original config.toml + auth.json the FIRST time we touch them, so
+    // a future "switch back to official" can restore the user's pre-AgentGate
+    // setup. Skipped when we're already pointing at AgentGate (the saved copy
+    // would otherwise overwrite the user's true original with our config).
+    let status_before = detect();
+    if !status_before.is_agentgate_active {
         save_official_files()?;
     }
 
-    // === Write config.toml ===
-    let new_content = generate_snippet(host, port);
+    // === Repair: if a previous AgentGate version stripped auth.json down to
+    // just our local token, restore the ChatGPT OAuth tokens from the saved
+    // backup. The Codex IDE plugin reads auth.json to detect "configured" —
+    // wiping the OAuth fields was what greyed it out. New apply() never
+    // writes auth.json so once repaired it stays good.
+    if repair_polluted_auth_json() {
+        warnings.push(
+            "已修复被旧版 AgentGate 清空的 auth.json，Codex IDE 插件应该恢复可用。".to_string(),
+        );
+        changed_keys.push("auth.json (restored)".to_string());
+    }
+
+    // === Write config.toml with experimental_bearer_token. auth.json is
+    // intentionally left alone — the bearer travels via config.toml's
+    // model_providers.agentgate block instead, matching cc-switch's
+    // approach. ===
+    let new_content = generate_snippet(host, port, &token);
     let tmp_path = path.with_extension("toml.tmp");
     fs::write(&tmp_path, &new_content).map_err(|e| {
         AppError::new("CODEX_CONFIG_WRITE_FAILED", format!("Failed to write temp file: {e}"))
@@ -237,17 +296,9 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
         AppError::new("CODEX_CONFIG_WRITE_FAILED", format!("Failed to replace config: {e}"))
     })?;
 
-    // === Write clean auth.json with only AgentGate token ===
-    write_agentgate_auth(&token)?;
-
     if has_saved_official() {
-        warnings.push("Original config saved. Use toggle to switch back.".to_string());
+        warnings.push("已备份原始 config.toml，可随时切换回官方配置。".to_string());
     }
-
-    let changed_keys = vec![
-        "config.toml".to_string(),
-        "auth.json".to_string(),
-    ];
 
     Ok(ApplyConfigResult {
         success: true, config_path: path_str, auth_json_path: auth_str,
@@ -264,13 +315,26 @@ pub struct ToggleResult {
 }
 
 /// Toggle between AgentGate and the original official config.
-/// Swaps both config.toml AND auth.json as a pair.
+/// Restores / writes ONLY config.toml — auth.json is intentionally untouched
+/// so the Codex IDE plugin (which probes auth.json for `auth_mode` + `tokens`)
+/// stays alive throughout the switch.
 pub fn toggle_provider(host: &str, port: i64) -> Result<ToggleResult, AppError> {
     let status = detect();
 
     if status.is_agentgate_active {
-        // Switching TO official: restore saved config.toml + auth.json
-        restore_official_files()?;
+        // Switching TO official: restore saved config.toml only.
+        // (auth.json was either never touched by new apply, or has already
+        // been repaired in a prior apply.)
+        let saved_cfg = saved_config_path();
+        if !saved_cfg.exists() {
+            return Err(AppError::new(
+                "CODEX_NO_SAVED_FILES",
+                "No saved official config found. Please log in to Codex again with `codex --login`.",
+            ));
+        }
+        fs::copy(&saved_cfg, config_path()).map_err(|e| {
+            AppError::new("CODEX_RESTORE_FAILED", format!("Cannot restore config.toml: {e}"))
+        })?;
         let new_provider = detect().current_provider.unwrap_or_else(|| "openai".to_string());
         Ok(ToggleResult {
             success: true,
@@ -278,29 +342,13 @@ pub fn toggle_provider(host: &str, port: i64) -> Result<ToggleResult, AppError> 
             config_path: config_path().to_string_lossy().to_string(),
         })
     } else {
-        // Switching TO agentgate: save current files, write agentgate config
-        let token = local_token::ensure_token()?;
-        save_official_files()?;
-
-        // Write agentgate config.toml
-        let path = config_path();
-        let content = generate_snippet(host, port);
-        let tmp = path.with_extension("toml.tmp");
-        fs::write(&tmp, &content).map_err(|e| {
-            AppError::new("CODEX_CONFIG_WRITE_FAILED", format!("Failed to write: {e}"))
-        })?;
-        fs::rename(&tmp, &path).map_err(|e| {
-            let _ = fs::remove_file(&tmp);
-            AppError::new("CODEX_CONFIG_WRITE_FAILED", format!("Failed to replace config: {e}"))
-        })?;
-
-        // Write minimal auth.json
-        write_agentgate_auth(&token)?;
-
+        // Switching TO agentgate: same path as `apply()`. Defer to it so the
+        // auth-repair safety net runs here too.
+        apply(host, port)?;
         Ok(ToggleResult {
             success: true,
             new_provider: "agentgate".to_string(),
-            config_path: path.to_string_lossy().to_string(),
+            config_path: config_path().to_string_lossy().to_string(),
         })
     }
 }
@@ -336,11 +384,15 @@ mod tests {
 
     #[test]
     fn test_generate_snippet() {
-        let snippet = generate_snippet("127.0.0.1", 9090);
+        let snippet = generate_snippet("127.0.0.1", 9090, "ag_local_abc123");
         assert!(snippet.contains("model = \"gpt-5.5\""));
         assert!(snippet.contains("model_provider = \"agentgate\""));
         assert!(snippet.contains("base_url = \"http://127.0.0.1:9090/v1\""));
         assert!(snippet.contains("wire_api = \"responses\""));
+        assert!(
+            snippet.contains("experimental_bearer_token = \"ag_local_abc123\""),
+            "snippet must carry the bearer token so auth.json can stay untouched"
+        );
     }
 
     #[test]
@@ -358,16 +410,21 @@ mod tests {
         let result = apply("127.0.0.1", 9090).unwrap();
         assert!(result.success);
         assert!(config_path().exists());
-        assert!(auth_json_path().exists());
+        // No pre-existing auth.json + nothing to repair → auth.json should
+        // NOT be created by apply. Bearer travels in config.toml.
+        assert!(!auth_json_path().exists(), "apply must not create auth.json");
         let cfg = std::fs::read_to_string(config_path()).unwrap();
         assert!(cfg.contains("model_provider = \"agentgate\""));
-        let auth = std::fs::read_to_string(auth_json_path()).unwrap();
-        assert!(auth.contains("ag_local_"));
+        assert!(cfg.contains("experimental_bearer_token"));
         cleanup(&temp);
     }
 
     #[test]
-    fn test_apply_saves_official_files() {
+    fn test_apply_preserves_chatgpt_oauth_tokens_in_auth_json() {
+        // The whole reason for this refactor: applying AgentGate must NOT
+        // strip the OAuth tokens from auth.json, because the Codex IDE
+        // plugin reads them to detect "configured". Failing this test means
+        // the IDE plugin will grey out for users running AgentGate.
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
@@ -377,16 +434,38 @@ mod tests {
         let result = apply("127.0.0.1", 9090).unwrap();
         assert!(result.success);
         let auth = std::fs::read_to_string(auth_json_path()).unwrap();
-        assert!(auth.contains("ag_local_"));
-        assert!(!auth.contains("chatgpt"));
-        assert!(has_saved_official());
-        let saved = std::fs::read_to_string(saved_auth_path()).unwrap();
-        assert!(saved.contains("chatgpt"));
+        assert!(auth.contains("chatgpt"), "auth_mode must survive apply");
+        assert!(auth.contains("access_token"), "tokens must survive apply");
+        assert!(auth.contains("sk-real"), "original OPENAI_API_KEY must survive apply");
+        assert!(has_saved_official(), "config.toml backup still saved for restore");
         cleanup(&temp);
     }
 
     #[test]
-    fn test_toggle_provider() {
+    fn test_apply_repairs_old_polluted_auth_json() {
+        // Migration path: a previous AgentGate version replaced auth.json
+        // with just `{"OPENAI_API_KEY":"ag_local_..."}`. On the next apply
+        // we should restore the original from the saved backup.
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        std::fs::create_dir_all(saved_dir()).unwrap();
+        std::fs::create_dir_all(auth_json_path().parent().unwrap()).unwrap();
+        let original_auth = r#"{"OPENAI_API_KEY":"sk-real","auth_mode":"chatgpt","tokens":{"access_token":"jwt"}}"#;
+        // Saved backup from the time AgentGate first ran.
+        std::fs::write(saved_auth_path(), original_auth).unwrap();
+        // Currently-polluted live auth.json (no tokens, no auth_mode).
+        std::fs::write(auth_json_path(), r#"{"OPENAI_API_KEY":"ag_local_xyz"}"#).unwrap();
+
+        let result = apply("127.0.0.1", 9090).unwrap();
+        assert!(result.success);
+        let auth = std::fs::read_to_string(auth_json_path()).unwrap();
+        assert!(auth.contains("access_token"), "repair must restore tokens");
+        assert!(auth.contains("chatgpt"), "repair must restore auth_mode");
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn test_toggle_provider_restores_config_only() {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
@@ -395,19 +474,25 @@ mod tests {
         std::fs::write(auth_json_path(), original_auth).unwrap();
         apply("127.0.0.1", 9090).unwrap();
         assert!(detect().is_agentgate_active);
-        // Toggle to official
+        // Toggle back to official
         let result = toggle_provider("127.0.0.1", 9090).unwrap();
         assert!(result.success);
         let auth = std::fs::read_to_string(auth_json_path()).unwrap();
-        assert!(auth.contains("chatgpt"));
+        assert!(auth.contains("chatgpt"), "auth.json still untouched on toggle");
+        assert!(auth.contains("access_token"));
         let cfg = std::fs::read_to_string(config_path()).unwrap();
         assert!(cfg.contains("model_provider = \"openai\""));
         // Toggle back to agentgate
         let result = toggle_provider("127.0.0.1", 9090).unwrap();
         assert!(result.success);
         assert_eq!(result.new_provider, "agentgate");
+        // auth.json is STILL the original OAuth — never touched by toggle.
         let auth = std::fs::read_to_string(auth_json_path()).unwrap();
-        assert!(auth.contains("ag_local_"));
+        assert!(auth.contains("access_token"), "auth.json survives round-trip");
+        assert!(auth.contains("chatgpt"));
+        // config.toml has agentgate's bearer token, not auth.json.
+        let cfg = std::fs::read_to_string(config_path()).unwrap();
+        assert!(cfg.contains("experimental_bearer_token = \"ag_local_"));
         cleanup(&temp);
     }
 

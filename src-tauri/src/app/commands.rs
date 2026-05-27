@@ -861,7 +861,8 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
 pub fn generate_codex_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
-    Ok(crate::tools::codex::generate_snippet(&settings.host, settings.port))
+    let token = crate::security::local_token::ensure_token()?;
+    Ok(crate::tools::codex::generate_snippet(&settings.host, settings.port, &token))
 }
 
 // ── Route Profile Commands ─────────────────────────────────────
