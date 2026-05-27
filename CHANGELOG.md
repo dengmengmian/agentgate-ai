@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.1] - 2026-05-27
+
+### 新增
+
+- **主题扩展到 8 套** —— 在原有 Warm Amber 暖琥珀 / Daylight 晴日基础上新增 6 套：
+  - 暗色：Slate Steel 钢蓝（accent #38BDF8）/ Forest Pine 松林（#84B062）/ Midnight Violet 紫夜（#A78BFA）
+  - 亮色：Linen Cream 米麻（#B66821 陶土）/ Mist Blue 雾蓝（#2563EB）/ Sakura 樱粉（#C44569）
+  - 每套都核对 WCAG AA 对比度；shadow 跟随色温调整避免硬黑投影
+- **主题选择器升级为色板预览** —— 设置页里 `<select>` 下拉换成 2×4 网格，每个 swatch 实时画出 surface + accent + 文字深浅的迷你卡片，可视化选择
+
+### 修复
+
+- **App 图标重画为暖琥珀色调** —— 旧图标是接近纯黑的深蓝底色，在 macOS 暗色 dock 里几乎看不出形状。新图标米黄圆角矩形底 + 三色原子轨道 + 中央眼瞳，48 个平台变体（icon.icns / .ico / Square*Logo / iOS / Android mipmap）全部刷新
+- **`agentgate-serve` 无头 binary 编译失败** —— 1.1.0 内部 API 漂移期间 `server::start()` 返回值变 4 元组、`CreateProviderInput` 新加 `model_capabilities` 字段，CLI binary 没跟上。导致 Docker preflight 挂掉，v1.1.0 tag 已重新指向修复 commit
+
+---
+
 ## [1.1.0] - 2026-05-27
 
 This release lands the full Xiaomi MiMo integration, brings the Codex.app
