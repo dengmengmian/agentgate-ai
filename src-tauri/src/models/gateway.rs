@@ -65,3 +65,63 @@ impl Default for GatewayRuntimeState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gateway_settings_roundtrip() {
+        let s = GatewaySettings {
+            id: 1,
+            host: "127.0.0.1".into(),
+            port: 9090,
+            active_provider_id: Some("p1".into()),
+            input_protocol: "responses".into(),
+            output_protocol: "chat".into(),
+            auto_start: true,
+            log_retention_days: 14,
+            updated_at: "2024-01-01T00:00:00Z".into(),
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains("127.0.0.1"));
+        assert!(json.contains("9090"));
+        let de: GatewaySettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.port, 9090);
+        assert_eq!(de.auto_start, true);
+    }
+
+    #[test]
+    fn update_gateway_settings_input_deserialization() {
+        let json = r#"{"host":"0.0.0.0","port":8080,"auto_start":false}"#;
+        let input: UpdateGatewaySettingsInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.host, Some("0.0.0.0".into()));
+        assert_eq!(input.port, Some(8080));
+        assert_eq!(input.auto_start, Some(false));
+        assert!(input.active_provider_id.is_none());
+    }
+
+    #[test]
+    fn gateway_status_serialization() {
+        let s = GatewayStatus {
+            running: true,
+            host: "127.0.0.1".into(),
+            port: 9090,
+            active_provider: Some("deepseek".into()),
+            input_protocol: "responses".into(),
+            output_protocol: "chat".into(),
+            started_at: Some("2024-01-01T00:00:00Z".into()),
+        };
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains("running"));
+        assert!(json.contains("deepseek"));
+    }
+
+    #[test]
+    fn gateway_runtime_state_default() {
+        let s = GatewayRuntimeState::default();
+        assert!(!s.running);
+        assert_eq!(s.port, 0);
+        assert!(s.started_at.is_none());
+    }
+}

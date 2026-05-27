@@ -21,3 +21,40 @@ pub fn init_database(app_data_dir: &PathBuf) -> Result<Connection, AppError> {
 
     Ok(conn)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_init_database_in_memory() {
+        let temp = std::env::temp_dir().join("agentgate_test_db");
+        let conn = init_database(&temp).unwrap();
+        // Verify WAL mode is enabled
+        let journal_mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(journal_mode.to_lowercase(), "wal");
+        // Verify foreign keys are enabled
+        let fk: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(fk, 1);
+        // Verify key tables exist
+        let tables: Vec<String> = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert!(tables.contains(&"providers".to_string()));
+        assert!(tables.contains(&"gateway_settings".to_string()));
+        assert!(tables.contains(&"route_profiles".to_string()));
+        assert!(tables.contains(&"request_logs".to_string()));
+        assert!(tables.contains(&"model_pricing".to_string()));
+        assert!(tables.contains(&"pet_settings".to_string()));
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+}

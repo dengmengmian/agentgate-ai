@@ -109,3 +109,83 @@ pub fn reset_all(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::storage::migrations::run_migrations(&conn).unwrap();
+        conn
+    }
+
+    #[test]
+    fn test_get_creates_default_when_missing() {
+        let conn = setup_db();
+        let status = get(&conn, "p1").unwrap();
+        assert_eq!(status.provider_id, "p1");
+        assert!(status.available);
+        assert_eq!(status.consecutive_failures, 0);
+        assert!(!status.quota_exhausted);
+    }
+
+    #[test]
+    fn test_mark_failure_and_success() {
+        let conn = setup_db();
+        mark_failure(&conn, "p1", "RATE_LIMIT", "rate limit exceeded", 60).unwrap();
+        let status = get(&conn, "p1").unwrap();
+        assert!(!status.available);
+        assert_eq!(status.consecutive_failures, 1);
+        assert_eq!(status.last_error_code, Some("RATE_LIMIT".to_string()));
+        assert!(status.cooldown_until.is_some());
+
+        mark_success(&conn, "p1").unwrap();
+        let status = get(&conn, "p1").unwrap();
+        assert!(status.available);
+        assert_eq!(status.consecutive_failures, 0);
+        assert!(status.cooldown_until.is_none());
+    }
+
+    #[test]
+    fn test_mark_failure_quota_detection() {
+        let conn = setup_db();
+        mark_failure(&conn, "p1", "INSUFFICIENT_QUOTA", "insufficient balance", 60).unwrap();
+        let status = get(&conn, "p1").unwrap();
+        assert!(status.quota_exhausted);
+    }
+
+    #[test]
+    fn test_reset() {
+        let conn = setup_db();
+        mark_failure(&conn, "p1", "ERROR", "fail", 60).unwrap();
+        let status = reset(&conn, "p1").unwrap();
+        assert!(status.available);
+        assert_eq!(status.consecutive_failures, 0);
+        assert!(status.cooldown_until.is_none());
+        assert!(!status.quota_exhausted);
+    }
+
+    #[test]
+    fn test_reset_all() {
+        let conn = setup_db();
+        mark_failure(&conn, "p1", "ERROR", "fail", 60).unwrap();
+        mark_failure(&conn, "p2", "ERROR", "fail", 60).unwrap();
+        reset_all(&conn).unwrap();
+        let s1 = get(&conn, "p1").unwrap();
+        let s2 = get(&conn, "p2").unwrap();
+        assert!(s1.available);
+        assert!(s2.available);
+    }
+
+    #[test]
+    fn test_list_all() {
+        let conn = setup_db();
+        get(&conn, "p1").unwrap();
+        get(&conn, "p2").unwrap();
+        let all = list_all(&conn).unwrap();
+        let ids: Vec<_> = all.iter().map(|s| s.provider_id.as_str()).collect();
+        assert!(ids.contains(&"p1"));
+        assert!(ids.contains(&"p2"));
+    }
+}
+

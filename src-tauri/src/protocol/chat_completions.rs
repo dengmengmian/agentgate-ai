@@ -133,3 +133,81 @@ pub struct CompletionMessage {
     pub reasoning_content: Option<String>,
     pub tool_calls: Option<Vec<ToolCall>>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn chat_message_serialization() {
+        let msg = ChatMessage {
+            role: "user".into(),
+            content: Some(json!("hello")),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("user"));
+        assert!(json.contains("hello"));
+    }
+
+    #[test]
+    fn tool_call_roundtrip() {
+        let tc = ToolCall {
+            id: "tc-1".into(),
+            call_type: "function".into(),
+            function: ToolCallFunction {
+                name: "get_weather".into(),
+                arguments: r#"{"city":"Beijing"}"#.into(),
+            },
+        };
+        let json = serde_json::to_string(&tc).unwrap();
+        let de: ToolCall = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.function.name, "get_weather");
+    }
+
+    #[test]
+    fn chat_completions_request_skips_none_fields() {
+        let req = ChatCompletionsRequest {
+            model: "gpt-4".into(),
+            messages: vec![],
+            tools: None,
+            tool_choice: None,
+            stream: false,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            thinking: None,
+            stream_options: None,
+            response_format: None,
+            reasoning_effort: None,
+            seed: None,
+            stop: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(!json.contains("temperature"));
+        assert!(!json.contains("max_tokens"));
+    }
+
+    #[test]
+    fn chunk_delta_deserialization() {
+        let json = r#"{"role":"assistant","content":"hi","reasoning_content":"think"}"#;
+        let delta: ChunkDelta = serde_json::from_str(json).unwrap();
+        assert_eq!(delta.role, Some("assistant".into()));
+        assert_eq!(delta.content, Some("hi".into()));
+        assert_eq!(delta.reasoning_content, Some("think".into()));
+    }
+
+    #[test]
+    fn completion_choice_deserialization() {
+        let json = r#"{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}"#;
+        let choice: CompletionChoice = serde_json::from_str(json).unwrap();
+        assert_eq!(choice.finish_reason, Some("stop".into()));
+        assert_eq!(choice.message.as_ref().unwrap().content, Some("ok".into()));
+    }
+}

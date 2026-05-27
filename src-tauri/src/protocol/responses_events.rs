@@ -142,3 +142,80 @@ pub fn response_failed(response_id: &str, model: &str, error_msg: &str) -> Strin
     envelope["error"] = json!({"message": error_msg, "code": "upstream_error"});
     sse("response.failed", json!({"type": "response.failed", "response": envelope}))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn response_created_format() {
+        reset_sequence();
+        let s = response_created("r1", "gpt-4");
+        assert!(s.starts_with("event: response.created"));
+        assert!(s.contains("\"id\":\"r1\""));
+        assert!(s.contains("\"status\":\"in_progress\""));
+        assert!(s.contains("\"sequence_number\":"));
+    }
+
+    #[test]
+    fn output_text_delta_format() {
+        reset_sequence();
+        let _ = response_created("r1", "gpt-4"); // consumes a seq
+        let s = output_text_delta("i1", 0, 0, "hello");
+        assert!(s.starts_with("event: response.output_text.delta"));
+        assert!(s.contains("\"delta\":\"hello\""));
+        assert!(s.contains("\"sequence_number\":"));
+    }
+
+    #[test]
+    fn response_completed_includes_usage() {
+        reset_sequence();
+        let usage = json!({"input_tokens": 10, "output_tokens": 20});
+        let s = response_completed("r1", "gpt-4", Some(&usage));
+        assert!(s.starts_with("event: response.completed"));
+        assert!(s.contains("\"status\":\"completed\""));
+        assert!(s.contains("10"));
+    }
+
+    #[test]
+    fn response_failed_format() {
+        reset_sequence();
+        let s = response_failed("r1", "gpt-4", "rate limit");
+        assert!(s.starts_with("event: response.failed"));
+        assert!(s.contains("\"status\":\"failed\""));
+        assert!(s.contains("rate limit"));
+    }
+
+    #[test]
+    fn function_call_events_format() {
+        reset_sequence();
+        let s1 = function_call_added("i1", 0, "c1", "get_weather");
+        assert!(s1.contains("\"type\":\"function_call\""));
+        let s2 = function_call_arguments_delta("i1", 0, r#"{"city":"B""#);
+        assert!(s2.contains("city"));
+        assert!(s2.contains("B"));
+        let s3 = function_call_arguments_done("i1", 0, r#"{"city":"Beijing"}"#);
+        assert!(s3.contains("Beijing"));
+        let s4 = function_call_done("i1", 0, "c1", "get_weather", r#"{"city":"Beijing"}"#, None);
+        assert!(s4.contains("\"status\":\"completed\""));
+    }
+
+    #[test]
+    fn output_item_done_with_reasoning() {
+        reset_sequence();
+        let s = output_item_done_message("i1", 0, "result", Some("<think>trace</think>"));
+        assert!(s.contains("result"));
+        assert!(s.contains("<think>trace</think>"));
+    }
+
+    #[test]
+    fn sequence_number_increments() {
+        reset_sequence();
+        let s1 = response_created("r1", "m1");
+        let s2 = response_in_progress("r1", "m1");
+        let s3 = output_item_added_message("i1", 0);
+        assert!(s1.contains("\"sequence_number\":"));
+        assert!(s2.contains("\"sequence_number\":"));
+        assert!(s3.contains("\"sequence_number\":"));
+    }
+}

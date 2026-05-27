@@ -81,3 +81,127 @@ impl super::ProviderTransform for DeepSeekProvider {
         "deepseek"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::chat_completions::{ChatCompletionsRequest, ChatMessage, ToolCall, ToolCallFunction};
+    use crate::transform::providers::ProviderTransform;
+    use serde_json::json;
+
+    fn req() -> ChatCompletionsRequest {
+        ChatCompletionsRequest {
+            model: "deepseek-chat".into(),
+            messages: vec![],
+            tools: None,
+            tool_choice: None,
+            stream: false,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            thinking: None,
+            stream_options: None,
+            response_format: None,
+            reasoning_effort: None,
+            seed: None,
+            stop: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+        }
+    }
+
+    #[test]
+    fn deepseek_strips_thinking() {
+        let mut r = req();
+        r.thinking = Some(json!({"type": "enabled"}));
+        DeepSeekProvider.finalize_request(&mut r, &None);
+        assert!(r.thinking.is_none());
+    }
+
+    #[test]
+    fn deepseek_strips_reasoning_effort() {
+        let mut r = req();
+        r.reasoning_effort = Some("high".into());
+        DeepSeekProvider.finalize_request(&mut r, &None);
+        assert!(r.reasoning_effort.is_none());
+    }
+
+    #[test]
+    fn deepseek_downgrades_json_schema() {
+        let mut r = req();
+        r.response_format = Some(json!({"type": "json_schema", "schema": {}}));
+        DeepSeekProvider.finalize_request(&mut r, &None);
+        assert_eq!(r.response_format, Some(json!({"type": "json_object"})));
+    }
+
+    #[test]
+    fn deepseek_keeps_json_object() {
+        let mut r = req();
+        r.response_format = Some(json!({"type": "json_object"}));
+        DeepSeekProvider.finalize_request(&mut r, &None);
+        assert_eq!(r.response_format, Some(json!({"type": "json_object"})));
+    }
+
+    #[test]
+    fn deepseek_process_messages_strips_image_url() {
+        let messages = vec![ChatMessage {
+            role: "user".into(),
+            content: Some(json!([
+                {"type": "text", "text": "look"},
+                {"type": "image_url", "image_url": {"url": "http://example.com/img.png"}}
+            ])),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }];
+        let out = DeepSeekProvider.process_messages(messages).unwrap();
+        let arr = out[0].content.as_ref().unwrap().as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["type"], "text");
+    }
+
+    #[test]
+    fn deepseek_process_messages_image_only_becomes_empty_string() {
+        let messages = vec![ChatMessage {
+            role: "user".into(),
+            content: Some(json!([
+                {"type": "image_url", "image_url": {"url": "http://example.com/img.png"}}
+            ])),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }];
+        let out = DeepSeekProvider.process_messages(messages).unwrap();
+        assert_eq!(out[0].content, Some(json!("")));
+    }
+
+    #[test]
+    fn deepseek_process_messages_backfills_reasoning_for_tool_calls() {
+        let messages = vec![ChatMessage {
+            role: "assistant".into(),
+            content: Some(json!("text")),
+            reasoning_content: None,
+            tool_calls: Some(vec![ToolCall {
+                id: "tc-1".into(),
+                call_type: "function".into(),
+                function: ToolCallFunction { name: "f".into(), arguments: "{}".into() },
+            }]),
+            tool_call_id: None,
+            name: None,
+        }];
+        let out = DeepSeekProvider.process_messages(messages).unwrap();
+        assert!(out[0].reasoning_content.is_some());
+    }
+
+    #[test]
+    fn deepseek_provider_type() {
+        assert_eq!(DeepSeekProvider.provider_type(), "deepseek");
+    }
+
+    #[test]
+    fn deepseek_clean_schemas() {
+        assert!(DeepSeekProvider.clean_schemas());
+    }
+}

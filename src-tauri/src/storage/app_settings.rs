@@ -35,3 +35,38 @@ impl<T> OptionalExt<T> for Result<T, rusqlite::Error> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::storage::migrations::run_migrations(&conn).unwrap();
+        conn
+    }
+
+    #[test]
+    fn test_get_missing_key() {
+        let conn = setup_db();
+        let val = get(&conn, "nonexistent").unwrap();
+        assert!(val.is_none());
+    }
+
+    #[test]
+    fn test_set_and_get() {
+        let conn = setup_db();
+        set(&conn, "theme", "dark").unwrap();
+        let val = get(&conn, "theme").unwrap();
+        assert_eq!(val, Some("dark".into()));
+    }
+
+    #[test]
+    fn test_set_overwrites() {
+        let conn = setup_db();
+        set(&conn, "lang", "en").unwrap();
+        set(&conn, "lang", "zh").unwrap();
+        let val = get(&conn, "lang").unwrap();
+        assert_eq!(val, Some("zh".into()));
+    }
+}

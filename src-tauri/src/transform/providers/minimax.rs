@@ -15,3 +15,52 @@ impl super::ProviderTransform for MiniMaxProvider {
         "minimax"
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::chat_completions::ChatCompletionsRequest;
+    use crate::transform::providers::ProviderTransform;
+
+    fn req() -> ChatCompletionsRequest {
+        ChatCompletionsRequest {
+            model: "minimax-pro".into(),
+            messages: vec![],
+            tools: None,
+            tool_choice: None,
+            stream: false,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            thinking: None,
+            stream_options: None,
+            response_format: None,
+            reasoning_effort: None,
+            seed: None,
+            stop: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+        }
+    }
+
+    #[test]
+    fn minimax_strips_reasoning_effort() {
+        let mut r = req();
+        r.reasoning_effort = Some("high".into());
+        MiniMaxProvider.finalize_request(&mut r, &None);
+        assert!(r.reasoning_effort.is_none());
+    }
+
+    #[test]
+    fn minimax_strips_response_format() {
+        let mut r = req();
+        r.response_format = Some(serde_json::json!({"type": "json_object"}));
+        MiniMaxProvider.finalize_request(&mut r, &None);
+        assert!(r.response_format.is_none());
+    }
+
+    #[test]
+    fn minimax_provider_type() {
+        assert_eq!(MiniMaxProvider.provider_type(), "minimax");
+    }
+}

@@ -68,3 +68,61 @@ pub fn update(
 
     get(conn)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::gateway::UpdateGatewaySettingsInput;
+
+    fn setup_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::storage::migrations::run_migrations(&conn).unwrap();
+        conn
+    }
+
+    #[test]
+    fn test_get_gateway_settings() {
+        let conn = setup_db();
+        let settings = get(&conn).unwrap();
+        assert_eq!(settings.id, 1);
+        assert_eq!(settings.host, "127.0.0.1");
+        assert_eq!(settings.port, 9090);
+    }
+
+    #[test]
+    fn test_update_gateway_settings() {
+        let conn = setup_db();
+        let updated = update(&conn, UpdateGatewaySettingsInput {
+            host: Some("0.0.0.0".to_string()),
+            port: Some(8080),
+            active_provider_id: None,
+            input_protocol: Some("openai_chat_completions".to_string()),
+            output_protocol: None,
+            auto_start: Some(true),
+            log_retention_days: Some(7),
+        }).unwrap();
+        assert_eq!(updated.host, "0.0.0.0");
+        assert_eq!(updated.port, 8080);
+        assert_eq!(updated.input_protocol, "openai_chat_completions");
+        assert_eq!(updated.auto_start, true);
+        assert_eq!(updated.log_retention_days, 7);
+    }
+
+    #[test]
+    fn test_partial_update_preserves_existing() {
+        let conn = setup_db();
+        let original = get(&conn).unwrap();
+        let updated = update(&conn, UpdateGatewaySettingsInput {
+            host: Some("0.0.0.0".to_string()),
+            port: None,
+            active_provider_id: None,
+            input_protocol: None,
+            output_protocol: None,
+            auto_start: None,
+            log_retention_days: None,
+        }).unwrap();
+        assert_eq!(updated.host, "0.0.0.0");
+        assert_eq!(updated.port, original.port);
+        assert_eq!(updated.input_protocol, original.input_protocol);
+    }
+}

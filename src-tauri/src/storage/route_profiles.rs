@@ -245,3 +245,209 @@ pub fn update_provider_conditions(
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::route_profile::{CreateRouteProfileInput, UpdateRouteProfileInput, AddProviderToRouteInput};
+    use crate::storage::providers;
+    use crate::models::provider::CreateProviderInput;
+
+    fn setup_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::storage::migrations::run_migrations(&conn).unwrap();
+        conn
+    }
+
+    fn create_test_provider(conn: &Connection) -> String {
+        let p = providers::create(conn, CreateProviderInput {
+            name: "TestProvider".to_string(),
+            provider_type: "openai".to_string(),
+            base_url: "https://api.openai.com".to_string(),
+            api_key: Some("sk-test".to_string()),
+            default_model: "gpt-4".to_string(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
+            protocol: r#"["openai_chat_completions"]"#.to_string(),
+            timeout_seconds: Some(120),
+            auto_cache_control: None,
+            model_capabilities: None,
+            enabled: Some(true),
+        }).unwrap();
+        p.id
+    }
+
+    #[test]
+    fn test_create_and_get_route_profile() {
+        let conn = setup_db();
+        let profile = create(&conn, CreateRouteProfileInput {
+            name: "TestProfile".to_string(),
+            input_protocol: "openai_responses".to_string(),
+            mode: Some("manual".to_string()),
+        }).unwrap();
+        assert_eq!(profile.name, "TestProfile");
+        assert_eq!(profile.input_protocol, "openai_responses");
+        assert_eq!(profile.mode, "manual");
+
+        let fetched = get_by_id(&conn, &profile.id).unwrap();
+        assert_eq!(fetched.id, profile.id);
+    }
+
+    #[test]
+    fn test_update_route_profile() {
+        let conn = setup_db();
+        let profile = create(&conn, CreateRouteProfileInput {
+            name: "Original".to_string(),
+            input_protocol: "openai_responses".to_string(),
+            mode: None,
+        }).unwrap();
+        let updated = update(&conn, &profile.id, UpdateRouteProfileInput {
+            name: Some("Updated".to_string()),
+            mode: None,
+            enabled: None,
+        }).unwrap();
+        assert_eq!(updated.name, "Updated");
+    }
+
+    #[test]
+    fn test_set_default_route_profile() {
+        let conn = setup_db();
+        let p1 = create(&conn, CreateRouteProfileInput {
+            name: "P1".to_string(),
+            input_protocol: "openai_responses".to_string(),
+            mode: None,
+        }).unwrap();
+        let default = set_default(&conn, &p1.id).unwrap();
+        assert!(default.is_default);
+    }
+
+    #[test]
+    fn test_delete_route_profile_prevents_default() {
+        let conn = setup_db();
+        let profile = create(&conn, CreateRouteProfileInput {
+            name: "ToDelete".to_string(),
+            input_protocol: "openai_responses".to_string(),
+            mode: None,
+        }).unwrap();
+        let _ = set_default(&conn, &profile.id);
+        let err = delete(&conn, &profile.id).unwrap_err();
+        assert_eq!(err.code, "ROUTE_PROFILE_DELETE_DEFAULT_FORBIDDEN");
+    }
+
+    #[test]
+    fn test_add_and_remove_provider_from_route() {
+        let conn = setup_db();
+        let provider_id = create_test_provider(&conn);
+        let profile = create(&conn, CreateRouteProfileInput {
+            name: "WithProvider".to_string(),
+            input_protocol: "openai_responses".to_string(),
+            mode: None,
+        }).unwrap();
+
+        add_provider(&conn, &profile.id, &provider_id, AddProviderToRouteInput {
+            priority: Some(1),
+            model_override: None,
+            cooldown_seconds: None,
+            failover_on_status_codes: None,
+            failover_on_error_keywords: None,
+            routing_conditions: None,
+        }).unwrap();
+
+        let providers = list_providers(&conn, &profile.id).unwrap();
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0].provider_id, provider_id);
+
+        remove_provider(&conn, &profile.id, &provider_id).unwrap();
+        let providers_after = list_providers(&conn, &profile.id).unwrap();
+        assert!(providers_after.is_empty());
+    }
+
+    #[test]
+    fn test_add_provider_duplicate_fails() {
+        let conn = setup_db();
+        let provider_id = create_test_provider(&conn);
+        let profile = create(&conn, CreateRouteProfileInput {
+            name: "DupTest".to_string(),
+            input_protocol: "openai_responses".to_string(),
+            mode: None,
+        }).unwrap();
+
+        add_provider(&conn, &profile.id, &provider_id, AddProviderToRouteInput {
+            priority: Some(1),
+            model_override: None,
+            cooldown_seconds: None,
+            failover_on_status_codes: None,
+            failover_on_error_keywords: None,
+            routing_conditions: None,
+        }).unwrap();
+
+        let err = add_provider(&conn, &profile.id, &provider_id, AddProviderToRouteInput {
+            priority: Some(2),
+            model_override: None,
+            cooldown_seconds: None,
+            failover_on_status_codes: None,
+            failover_on_error_keywords: None,
+            routing_conditions: None,
+        }).unwrap_err();
+        assert_eq!(err.code, "ROUTE_PROVIDER_DUPLICATED");
+    }
+
+    #[test]
+    fn test_reorder_providers() {
+        let conn = setup_db();
+        let pid1 = create_test_provider(&conn);
+        let pid2 = create_test_provider(&conn);
+        let profile = create(&conn, CreateRouteProfileInput {
+            name: "Reorder".to_string(),
+            input_protocol: "openai_responses".to_string(),
+            mode: None,
+        }).unwrap();
+
+        add_provider(&conn, &profile.id, &pid1, AddProviderToRouteInput {
+            priority: Some(1), model_override: None, cooldown_seconds: None,
+            failover_on_status_codes: None, failover_on_error_keywords: None, routing_conditions: None,
+        }).unwrap();
+        add_provider(&conn, &profile.id, &pid2, AddProviderToRouteInput {
+            priority: Some(2), model_override: None, cooldown_seconds: None,
+            failover_on_status_codes: None, failover_on_error_keywords: None, routing_conditions: None,
+        }).unwrap();
+
+        reorder_providers(&conn, &profile.id, &[pid2.clone(), pid1.clone()]).unwrap();
+        let providers = list_providers(&conn, &profile.id).unwrap();
+        assert_eq!(providers[0].provider_id, pid2);
+        assert_eq!(providers[1].provider_id, pid1);
+    }
+
+    #[test]
+    fn test_update_provider_conditions() {
+        let conn = setup_db();
+        let provider_id = create_test_provider(&conn);
+        let profile = create(&conn, CreateRouteProfileInput {
+            name: "Conditions".to_string(),
+            input_protocol: "openai_responses".to_string(),
+            mode: None,
+        }).unwrap();
+
+        add_provider(&conn, &profile.id, &provider_id, AddProviderToRouteInput {
+            priority: Some(1), model_override: None, cooldown_seconds: None,
+            failover_on_status_codes: None, failover_on_error_keywords: None, routing_conditions: None,
+        }).unwrap();
+
+        let cond = r#"{"has_images":true}"#;
+        update_provider_conditions(&conn, &profile.id, &provider_id, Some(cond)).unwrap();
+        let providers = list_providers(&conn, &profile.id).unwrap();
+        assert_eq!(providers[0].routing_conditions, Some(cond.to_string()));
+    }
+
+    #[test]
+    fn test_get_default_for_protocol() {
+        let conn = setup_db();
+        // Migrations seed default profiles; we should find one for openai_responses
+        let default = get_default_for_protocol(&conn, "openai_responses").unwrap();
+        assert!(default.is_some());
+    }
+}
+

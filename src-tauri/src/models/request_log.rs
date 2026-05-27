@@ -37,7 +37,7 @@ pub struct RequestLogDetail {
     pub trace_json: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestLogFilter {
     pub client: Option<String>,
     pub provider: Option<String>,
@@ -45,4 +45,75 @@ pub struct RequestLogFilter {
     pub keyword: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_request_log_list_item_serde() {
+        let item = RequestLogListItem {
+            id: "1".to_string(),
+            request_id: "req_1".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            client: Some("codex".to_string()),
+            provider: Some("openai".to_string()),
+            model: Some("gpt-4".to_string()),
+            route: Some("/v1/responses".to_string()),
+            status_code: Some(200),
+            latency_ms: Some(500),
+            error_message: None,
+        };
+        let json = serde_json::to_string(&item).unwrap();
+        assert!(json.contains("req_1"));
+        let de: RequestLogListItem = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.id, "1");
+        assert_eq!(de.status_code, Some(200));
+    }
+
+    #[test]
+    fn test_request_log_filter_serde() {
+        let filter = RequestLogFilter {
+            client: Some("codex".to_string()),
+            provider: None,
+            status: Some("success".to_string()),
+            keyword: Some("error".to_string()),
+            limit: Some(50),
+            offset: Some(0),
+        };
+        let json = serde_json::to_string(&filter).unwrap();
+        let de: RequestLogFilter = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.client, Some("codex".to_string()));
+        assert_eq!(de.limit, Some(50));
+    }
+
+    #[test]
+    fn test_request_log_detail_serde() {
+        let detail = RequestLogDetail {
+            id: "1".to_string(),
+            request_id: "req_1".to_string(),
+            timestamp: "2024-01-01T00:00:00Z".to_string(),
+            client: Some("codex".to_string()),
+            provider: Some("openai".to_string()),
+            model: Some("gpt-4".to_string()),
+            route: Some("/v1/responses".to_string()),
+            status_code: Some(200),
+            latency_ms: Some(500),
+            input_tokens: Some(100),
+            output_tokens: Some(50),
+            raw_request: Some(r#"{"input":"hello"}"#.to_string()),
+            converted_request: None,
+            raw_response: Some(r#"{"output":"hi"}"#.to_string()),
+            converted_response: None,
+            sse_events: None,
+            tool_calls: None,
+            error_message: None,
+            trace_json: None,
+        };
+        let json = serde_json::to_string(&detail).unwrap();
+        assert!(json.contains("hello"));
+        let de: RequestLogDetail = serde_json::from_str(&json).unwrap();
+        assert_eq!(de.input_tokens, Some(100));
+    }
 }

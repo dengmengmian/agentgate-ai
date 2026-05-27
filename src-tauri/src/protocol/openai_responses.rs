@@ -28,3 +28,42 @@ pub struct ResponsesRequest {
     pub extra: std::collections::HashMap<String, Value>,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn responses_request_deserialization() {
+        let body = json!({
+            "model": "gpt-4",
+            "input": "hello",
+            "stream": true,
+            "temperature": 0.5,
+            "extra_field": 123
+        });
+        let req: ResponsesRequest = serde_json::from_value(body).unwrap();
+        assert_eq!(req.model, Some("gpt-4".into()));
+        assert_eq!(req.stream, Some(true));
+        assert_eq!(req.temperature, Some(0.5));
+        assert!(req.extra.contains_key("extra_field"));
+    }
+
+    #[test]
+    fn responses_request_default() {
+        let req = ResponsesRequest::default();
+        assert!(req.model.is_none());
+        assert!(req.input.is_null());
+    }
+
+    #[test]
+    fn responses_request_unknown_fields_via_flatten() {
+        let body = json!({
+            "input": [],
+            "custom_key": "custom_value"
+        });
+        let req: ResponsesRequest = serde_json::from_value(body).unwrap();
+        assert_eq!(req.extra.get("custom_key").unwrap(), "custom_value");
+    }
+}
+

@@ -276,3 +276,150 @@ pub fn update_model_capabilities(conn: &Connection, id: &str, matrix_json: &str)
     )?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::provider::{CreateProviderInput, UpdateProviderInput};
+
+    fn setup_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::storage::migrations::run_migrations(&conn).unwrap();
+        conn
+    }
+
+    fn create_test_provider(conn: &Connection, name: &str) -> Provider {
+        create(conn, CreateProviderInput {
+            name: name.to_string(),
+            provider_type: "openai".to_string(),
+            base_url: "https://api.openai.com".to_string(),
+            api_key: Some("sk-test".to_string()),
+            default_model: "gpt-4".to_string(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
+            protocol: r#"["openai_chat_completions"]"#.to_string(),
+            timeout_seconds: Some(120),
+            auto_cache_control: None,
+            model_capabilities: None,
+            enabled: Some(true),
+        }).unwrap()
+    }
+
+    #[test]
+    fn test_list_all_empty() {
+        let conn = setup_db();
+        let providers = list_all(&conn).unwrap();
+        // After migrations seed_default_providers inserts 2 defaults
+        assert!(providers.len() >= 2);
+    }
+
+    #[test]
+    fn test_create_and_get_provider() {
+        let conn = setup_db();
+        let p = create_test_provider(&conn, "TestProvider");
+        assert_eq!(p.name, "TestProvider");
+        assert_eq!(p.provider_type, "openai");
+
+        let fetched = get_by_id(&conn, &p.id).unwrap();
+        assert_eq!(fetched.id, p.id);
+        assert_eq!(fetched.name, "TestProvider");
+    }
+
+    #[test]
+    fn test_get_by_id_not_found() {
+        let conn = setup_db();
+        let err = get_by_id(&conn, "nonexistent").unwrap_err();
+        assert_eq!(err.code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn test_update_provider() {
+        let conn = setup_db();
+        let p = create_test_provider(&conn, "Original");
+        let updated = update(&conn, &p.id, UpdateProviderInput {
+            name: Some("Updated".to_string()),
+            provider_type: None,
+            base_url: None,
+            api_key: None,
+            default_model: None,
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
+            auto_cache_control: None,
+            model_capabilities: None,
+            protocol: None,
+            timeout_seconds: None,
+            enabled: None,
+        }).unwrap();
+        assert_eq!(updated.name, "Updated");
+    }
+
+    #[test]
+    fn test_delete_provider() {
+        let conn = setup_db();
+        let p = create_test_provider(&conn, "ToDelete");
+        let result = delete(&conn, &p.id).unwrap();
+        assert!(result);
+        assert!(get_by_id(&conn, &p.id).is_err());
+    }
+
+    #[test]
+    fn test_set_active_provider() {
+        let conn = setup_db();
+        let p1 = create_test_provider(&conn, "P1");
+        let p2 = create_test_provider(&conn, "P2");
+        set_active(&conn, &p1.id).unwrap();
+        let active1 = get_by_id(&conn, &p1.id).unwrap();
+        assert!(active1.is_active);
+
+        set_active(&conn, &p2.id).unwrap();
+        let active2 = get_by_id(&conn, &p2.id).unwrap();
+        assert!(active2.is_active);
+        let inactive1 = get_by_id(&conn, &p1.id).unwrap();
+        assert!(!inactive1.is_active);
+    }
+
+    #[test]
+    fn test_update_status() {
+        let conn = setup_db();
+        let p = create_test_provider(&conn, "StatusTest");
+        update_status(&conn, &p.id, "ok").unwrap();
+        let updated = get_by_id(&conn, &p.id).unwrap();
+        assert_eq!(updated.status, "ok");
+    }
+
+    #[test]
+    fn test_update_supports_vision() {
+        let conn = setup_db();
+        let p = create_test_provider(&conn, "VisionTest");
+        update_supports_vision(&conn, &p.id, true).unwrap();
+        let updated = get_by_id(&conn, &p.id).unwrap();
+        assert_eq!(updated.supports_vision, Some(true));
+    }
+
+    #[test]
+    fn test_update_supports_cache() {
+        let conn = setup_db();
+        let p = create_test_provider(&conn, "CacheTest");
+        update_supports_cache(&conn, &p.id, true).unwrap();
+        let updated = get_by_id(&conn, &p.id).unwrap();
+        assert_eq!(updated.supports_cache, Some(true));
+    }
+
+    #[test]
+    fn test_update_model_capabilities() {
+        let conn = setup_db();
+        let p = create_test_provider(&conn, "CapTest");
+        let matrix = r#"{"gpt-4":["text","vision"]}"#;
+        update_model_capabilities(&conn, &p.id, matrix).unwrap();
+        let updated = get_by_id(&conn, &p.id).unwrap();
+        assert_eq!(updated.model_capabilities, Some(matrix.to_string()));
+    }
+}

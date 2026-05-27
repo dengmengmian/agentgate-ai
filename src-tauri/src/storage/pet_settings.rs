@@ -42,3 +42,52 @@ pub fn update(
 
     get(conn)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn setup_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        crate::storage::migrations::run_migrations(&conn).unwrap();
+        conn
+    }
+
+    #[test]
+    fn test_get_default() {
+        let conn = setup_db();
+        let settings = get(&conn).unwrap();
+        assert_eq!(settings.pet_type, "robot");
+        assert!(settings.visible);
+    }
+
+    #[test]
+    fn test_update_partial() {
+        let conn = setup_db();
+        let original = get(&conn).unwrap();
+        let updated = update(&conn, UpdatePetSettingsInput {
+            pet_type: Some("dog".into()),
+            visible: None,
+            pos_x: None,
+            pos_y: None,
+        }).unwrap();
+        assert_eq!(updated.pet_type, "dog");
+        assert_eq!(updated.visible, original.visible);
+        assert_eq!(updated.pos_x, original.pos_x);
+    }
+
+    #[test]
+    fn test_update_all_fields() {
+        let conn = setup_db();
+        let updated = update(&conn, UpdatePetSettingsInput {
+            pet_type: Some("cat".into()),
+            visible: Some(false),
+            pos_x: Some(123.0),
+            pos_y: Some(456.0),
+        }).unwrap();
+        assert_eq!(updated.pet_type, "cat");
+        assert_eq!(updated.visible, false);
+        assert_eq!(updated.pos_x, 123.0);
+        assert_eq!(updated.pos_y, 456.0);
+    }
+}

@@ -66,3 +66,80 @@ pub struct ExportResult {
     pub files: Vec<String>,
     pub warnings: Vec<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn check_item_ok() {
+        let item = CheckItem::ok("id1", "Name", "All good");
+        assert_eq!(item.id, "id1");
+        assert_eq!(item.name, "Name");
+        assert_eq!(item.status, "ok");
+        assert_eq!(item.message, "All good");
+        assert!(item.detail.is_none());
+        assert!(item.suggestion.is_none());
+    }
+
+    #[test]
+    fn check_item_warning() {
+        let item = CheckItem::warning("id2", "Name", "Careful");
+        assert_eq!(item.status, "warning");
+    }
+
+    #[test]
+    fn check_item_failed() {
+        let item = CheckItem::failed("id3", "Name", "Broken");
+        assert_eq!(item.status, "failed");
+    }
+
+    #[test]
+    fn check_item_with_suggestion() {
+        let item = CheckItem::ok("id", "Name", "msg").with_suggestion("Try this");
+        assert_eq!(item.suggestion, Some("Try this".to_string()));
+    }
+
+    #[test]
+    fn check_report_all_ok() {
+        let checks = vec![
+            CheckItem::ok("a", "A", "ok"),
+            CheckItem::ok("b", "B", "ok"),
+        ];
+        let report = CheckReport::new("Test", checks);
+        assert_eq!(report.status, "ok");
+        assert_eq!(report.summary, "2/2 passed");
+    }
+
+    #[test]
+    fn check_report_with_warning() {
+        let checks = vec![
+            CheckItem::ok("a", "A", "ok"),
+            CheckItem::warning("b", "B", "warn"),
+        ];
+        let report = CheckReport::new("Test", checks);
+        assert_eq!(report.status, "warning");
+        assert_eq!(report.summary, "1/2 passed");
+    }
+
+    #[test]
+    fn check_report_with_failed() {
+        let checks = vec![
+            CheckItem::ok("a", "A", "ok"),
+            CheckItem::failed("b", "B", "fail"),
+        ];
+        let report = CheckReport::new("Test", checks);
+        assert_eq!(report.status, "failed");
+        assert_eq!(report.summary, "1/2 passed");
+    }
+
+    #[test]
+    fn check_report_failed_over_warning() {
+        let checks = vec![
+            CheckItem::warning("a", "A", "warn"),
+            CheckItem::failed("b", "B", "fail"),
+        ];
+        let report = CheckReport::new("Test", checks);
+        assert_eq!(report.status, "failed");
+    }
+}
