@@ -161,7 +161,7 @@ async fn cmd_serve(cli: &Cli, host: &str, port: u16) {
     eprintln!();
 
     match agentgate_lib::gateway::server::start(host, port, db).await {
-        Ok((shutdown_tx, handle, _active_requests)) => {
+        Ok((shutdown_tx, handle, _active_requests, _port)) => {
             eprintln!("Gateway running on http://{host}:{port}");
             eprintln!("Press Ctrl+C to stop.");
             eprintln!();
@@ -216,6 +216,7 @@ fn cmd_provider_add(cli: &Cli, provider_type: &str, name: Option<&str>, api_key:
         anthropic_base_url: None,
         responses_base_url: None,
         auto_cache_control: None,
+        model_capabilities: None,
         protocol: "openai_chat_completions".to_string(),
         timeout_seconds: Some(120),
         enabled: Some(true),
