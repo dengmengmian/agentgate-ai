@@ -17,6 +17,13 @@ pub async fn start(
 ) -> Result<(oneshot::Sender<()>, tokio::task::JoinHandle<()>, Arc<AtomicU64>), AppError> {
     let http_client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(300))
+        // Drop idle keep-alive connections after 30s. Without this, the pool
+        // hands out connections the remote has already RST'd after a long
+        // pause (e.g. Claude Code stays open for minutes between user
+        // messages), causing the first request after the pause to fail with
+        // "error sending request" before reaching the upstream.
+        .pool_idle_timeout(std::time::Duration::from_secs(30))
+        .tcp_keepalive(std::time::Duration::from_secs(20))
         .build()
         .map_err(|e| AppError::internal(format!("Failed to create HTTP client: {e}")))?;
 

@@ -82,12 +82,13 @@ pub async fn handle_responses(
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!("req_{}", uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string());
+    let client_type = detect_client_from_ua(&headers, "Codex");
 
     // 1. Parse request
     let req: ResponsesRequest = serde_json::from_str(&body).map_err(|e| {
         let err = AppError::new("RESPONSES_PARSE_ERROR", format!("Failed to parse request: {e}"));
         // Log the error
-        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &err, start.elapsed().as_millis() as i64);
+        log_request_error(&state.db, &client_type, "/v1/responses", &request_id, &sanitize_body(&body), None, &err, start.elapsed().as_millis() as i64);
         err
     })?;
 
@@ -95,7 +96,7 @@ pub async fn handle_responses(
     let selection = crate::gateway::provider_selector::select_for_failover(
         &state.db, "openai_responses", req.model.as_deref(), Some(&req),
     ).map_err(|e| {
-        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(&state.db, &client_type, "/v1/responses", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
     })?;
 
@@ -167,7 +168,7 @@ pub async fn handle_responses(
             // Pass-through: provider has explicit Responses API endpoint
             let target_url = config.responses_url();
             crate::gateway::pass_through::handle(
-                &state.http_client, &state.db, &config, &target_url, &body, &request_id, start,
+                &state.http_client, &state.db, &config, &target_url, &body, &request_id, start, &client_type,
             ).await.map_err(|e| GatewayError(e))
         } else if config.is_anthropic() {
             // Claude Messages API conversion (only for Anthropic-type providers)
@@ -184,9 +185,9 @@ pub async fn handle_responses(
             let converted_json = serde_json::to_string_pretty(&anthropic_body).unwrap_or_default();
             let is_stream = req.stream.unwrap_or(false);
             if is_stream {
-                handle_anthropic_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
+                handle_anthropic_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
             } else {
-                handle_anthropic_non_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
+                handle_anthropic_non_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
             }
         } else if config.is_gemini() {
             // Gemini API conversion
@@ -201,9 +202,9 @@ pub async fn handle_responses(
             let converted_json = serde_json::to_string_pretty(&gemini_body).unwrap_or_default();
             let is_stream = req.stream.unwrap_or(false);
             if is_stream {
-                handle_gemini_stream_response(state.clone(), config.clone(), gemini_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
+                handle_gemini_stream_response(state.clone(), config.clone(), gemini_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
             } else {
-                handle_gemini_non_stream_response(state.clone(), config.clone(), gemini_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
+                handle_gemini_non_stream_response(state.clone(), config.clone(), gemini_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
             }
         } else {
             // Chat Completions path (default: transform Responses → Chat Completions)
@@ -230,9 +231,9 @@ pub async fn handle_responses(
             let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
             let is_stream = chat_req.stream;
             if is_stream {
-                handle_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
+                handle_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
             } else {
-                handle_non_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start).await
+                handle_non_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
             }
         };
 
@@ -297,6 +298,7 @@ async fn handle_non_stream_response(
     converted_request: String,
     model: String,
     start: Instant,
+    client_type: String,
 ) -> Result<Response, GatewayError> {
     let result = adapter::send_non_stream(&state.http_client, &config, &chat_req).await;
 
@@ -418,7 +420,7 @@ async fn handle_non_stream_response(
             // Log success
             let trace = json!({ "response_id": &resp_id, "stream": false }).to_string();
             log_request_success(
-                &state.db, &request_id, &raw_request, &converted_request,
+                &state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&responses_resp).unwrap_or_default(),
                 if tool_calls_json.is_empty() { None } else { Some(&tool_calls_json) },
@@ -434,7 +436,7 @@ async fn handle_non_stream_response(
                 else if err.code.starts_with("UPSTREAM") { 502 }
                 else { 500 };
 
-            log_request_error_full(&state.db, &request_id, &raw_request, &converted_request,
+            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &config.name, &model, &err, status, latency);
 
             Err(GatewayError(err))
@@ -451,6 +453,7 @@ async fn handle_stream_response(
     converted_request: String,
     model: String,
     start: Instant,
+    client_type: String,
 ) -> Result<Response, GatewayError> {
     let upstream_resp = adapter::send_stream(&state.http_client, &config, &chat_req).await;
 
@@ -523,7 +526,7 @@ async fn handle_stream_response(
                         }).unwrap_or((None, None));
 
                         log_request_success(
-                            &db, &req_id, &raw_req, &conv_req,
+                            &db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req,
                             "",
                             &truncate_str(&acc.full_text, 10000),
                             tool_calls_json.as_deref(),
@@ -533,7 +536,7 @@ async fn handle_stream_response(
                     }
                     Err(err_msg) => {
                         let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
-                        log_request_error_full(&db, &req_id, &raw_req, &conv_req,
+                        log_request_error_full(&db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req,
                             &provider_name, &model_clone, &err, 502, latency);
                     }
                 }
@@ -556,7 +559,7 @@ async fn handle_stream_response(
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
             let status = if err.code.starts_with("UPSTREAM") { 502 } else { 500 };
-            log_request_error_full(&state.db, &request_id, &raw_request, &converted_request,
+            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &config.name, &model, &err, status, latency);
             Err(GatewayError(err))
         }
@@ -574,6 +577,7 @@ async fn handle_anthropic_non_stream_response(
     converted_request: String,
     model: String,
     start: Instant,
+    client_type: String,
 ) -> Result<Response, GatewayError> {
     let result = adapter::send_anthropic_non_stream(&state.http_client, &config, &body).await;
 
@@ -641,7 +645,7 @@ async fn handle_anthropic_non_stream_response(
 
             let trace = json!({"response_id": &resp_id, "stream": false, "protocol": "anthropic_messages"}).to_string();
             log_request_success(
-                &state.db, &request_id, &raw_request, &converted_request,
+                &state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&responses_resp).unwrap_or_default(),
                 if tool_calls_json.is_empty() { None } else { Some(&tool_calls_json) },
@@ -652,7 +656,7 @@ async fn handle_anthropic_non_stream_response(
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &request_id, &raw_request, &converted_request,
+            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &config.name, &model, &err, 502, latency);
             Err(GatewayError(err))
         }
@@ -668,6 +672,7 @@ async fn handle_anthropic_stream_response(
     converted_request: String,
     model: String,
     start: Instant,
+    client_type: String,
 ) -> Result<Response, GatewayError> {
     let upstream_resp = adapter::send_anthropic_stream(&state.http_client, &config, &body).await;
 
@@ -703,7 +708,7 @@ async fn handle_anthropic_stream_response(
                         }).unwrap_or((None, None));
 
                         log_request_success(
-                            &db, &req_id, &raw_req, &conv_req, "",
+                            &db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req, "",
                             &truncate_str(&acc.full_text, 10000),
                             None, &provider_name, &model_clone, 200, latency,
                             Some(&trace), in_tok, out_tok,
@@ -711,7 +716,7 @@ async fn handle_anthropic_stream_response(
                     }
                     Err(err_msg) => {
                         let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
-                        log_request_error_full(&db, &req_id, &raw_req, &conv_req,
+                        log_request_error_full(&db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req,
                             &provider_name, &model_clone, &err, 502, latency);
                     }
                 }
@@ -732,7 +737,7 @@ async fn handle_anthropic_stream_response(
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &request_id, &raw_request, &converted_request,
+            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &config.name, &model, &err, 502, latency);
             Err(GatewayError(err))
         }
@@ -757,6 +762,7 @@ async fn handle_gemini_non_stream_response(
     converted_request: String,
     model: String,
     start: Instant,
+    client_type: String,
 ) -> Result<Response, GatewayError> {
     let result = adapter::send_gemini_non_stream(&state.http_client, &config, &body, &model).await;
 
@@ -818,7 +824,7 @@ async fn handle_gemini_non_stream_response(
             let latency = start.elapsed().as_millis() as i64;
             let (in_tok, out_tok) = extract_gemini_usage(&upstream_json);
             let trace = json!({"response_id": &resp_id, "stream": false, "protocol": "gemini"}).to_string();
-            log_request_success(&state.db, &request_id, &raw_request, &converted_request,
+            log_request_success(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&responses_resp).unwrap_or_default(),
                 None, &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok);
@@ -826,7 +832,7 @@ async fn handle_gemini_non_stream_response(
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &request_id, &raw_request, &converted_request,
+            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &config.name, &model, &err, 502, latency);
             Err(GatewayError(err))
         }
@@ -842,6 +848,7 @@ async fn handle_gemini_stream_response(
     converted_request: String,
     model: String,
     start: Instant,
+    client_type: String,
 ) -> Result<Response, GatewayError> {
     let upstream_resp = adapter::send_gemini_stream(&state.http_client, &config, &body, &model).await;
 
@@ -872,14 +879,14 @@ async fn handle_gemini_stream_response(
                             (u.get("input_tokens").and_then(|v| v.as_i64()),
                              u.get("output_tokens").and_then(|v| v.as_i64()))
                         }).unwrap_or((None, None));
-                        log_request_success(&db, &req_id, &raw_req, &conv_req, "",
+                        log_request_success(&db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req, "",
                             &truncate_str(&acc.full_text, 10000),
                             None, &provider_name, &model_clone, 200, latency,
                             Some(&trace), in_tok, out_tok);
                     }
                     Err(err_msg) => {
                         let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
-                        log_request_error_full(&db, &req_id, &raw_req, &conv_req,
+                        log_request_error_full(&db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req,
                             &provider_name, &model_clone, &err, 502, latency);
                     }
                 }
@@ -899,7 +906,7 @@ async fn handle_gemini_stream_response(
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &request_id, &raw_request, &converted_request,
+            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &config.name, &model, &err, 502, latency);
             Err(GatewayError(err))
         }
@@ -924,6 +931,7 @@ pub async fn handle_gemini_generate(
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!("req_{}", uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string());
+    let client_type = detect_client_from_ua(&headers, "Gemini CLI");
 
     // Extract model name from path (e.g. "gemini-2.5-flash" from "gemini-2.5-flash:generateContent")
     let model_name = model_path.split(':').next().unwrap_or(&model_path).to_string();
@@ -931,7 +939,7 @@ pub async fn handle_gemini_generate(
 
     let gemini_body: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
         let err = AppError::new("GEMINI_PARSE_ERROR", format!("Failed to parse Gemini request: {e}"));
-        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &err, start.elapsed().as_millis() as i64);
+        log_request_error(&state.db, &client_type, "/v1beta/generateContent", &request_id, &sanitize_body(&body), None, &err, start.elapsed().as_millis() as i64);
         err
     })?;
 
@@ -941,12 +949,12 @@ pub async fn handle_gemini_generate(
     ).or_else(|_| crate::gateway::provider_selector::select_for_failover(
         &state.db, "openai_chat_completions", None, None,
     )).map_err(|e| {
-        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(&state.db, &client_type, "/v1beta/generateContent", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
     })?;
 
     let config = ProviderConfig::from_provider(&selection.provider).map_err(|e| {
-        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(&state.db, &client_type, "/v1beta/generateContent", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
     })?;
 
@@ -955,7 +963,7 @@ pub async fn handle_gemini_generate(
 
     // Convert Gemini → Chat Completions
     let mut chat_req = gemini_to_chat::convert(&gemini_body, &resolved_model).map_err(|e| {
-        log_request_error(&state.db, &request_id, &raw_body, None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
     })?;
     chat_req.stream = is_stream;
@@ -966,7 +974,7 @@ pub async fn handle_gemini_generate(
         // Stream: Chat Completions SSE → convert each chunk to Gemini SSE format
         let upstream_resp = adapter::send_stream(&state.http_client, &config, &chat_req).await.map_err(|e| {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &request_id, &raw_body, &converted_json, &config.name, &resolved_model, &e, 502, latency);
+            log_request_error_full(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json, &config.name, &resolved_model, &e, 502, latency);
             GatewayError(e)
         })?;
 
@@ -1021,7 +1029,7 @@ pub async fn handle_gemini_generate(
 
             let latency = start.elapsed().as_millis() as i64;
             let trace = json!({"response_id": &req_id, "stream": true, "protocol": "gemini_input"}).to_string();
-            log_request_success(&db, &req_id, &raw_req, &conv_req, "", &full_text[..full_text.len().min(10000)],
+            log_request_success(&db, &client_type, "/v1beta/generateContent", &req_id, &raw_req, &conv_req, "", &full_text[..full_text.len().min(10000)],
                 None, &provider_name, &model_clone, 200, latency, Some(&trace), None, None);
         });
 
@@ -1047,7 +1055,7 @@ pub async fn handle_gemini_generate(
                 let latency = start.elapsed().as_millis() as i64;
                 let (in_tok, out_tok) = extract_usage(&upstream_json);
                 let trace = json!({"protocol": "gemini_input"}).to_string();
-                log_request_success(&state.db, &request_id, &raw_body, &converted_json,
+                log_request_success(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json,
                     &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                     &serde_json::to_string_pretty(&gemini_resp).unwrap_or_default(),
                     None, &config.name, &resolved_model, 200, latency, Some(&trace), in_tok, out_tok);
@@ -1055,7 +1063,7 @@ pub async fn handle_gemini_generate(
             }
             Err(err) => {
                 let latency = start.elapsed().as_millis() as i64;
-                log_request_error_full(&state.db, &request_id, &raw_body, &converted_json,
+                log_request_error_full(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json,
                     &config.name, &resolved_model, &err, 502, latency);
                 Err(GatewayError(err))
             }
@@ -1073,11 +1081,12 @@ pub async fn handle_chat_completions(
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!("req_{}", &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let client_type = detect_client_from_ua(&headers, "Generic");
 
     let selection = crate::gateway::provider_selector::select_for_failover(
         &state.db, "openai_chat_completions", None, None,
     ).map_err(|e| {
-        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(&state.db, &client_type, "/v1/chat/completions", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
     })?;
 
@@ -1121,7 +1130,7 @@ pub async fn handle_chat_completions(
         }
 
         let result = crate::gateway::pass_through::handle(
-            &state.http_client, &state.db, &config, &decision.target_url, &body, &request_id, start,
+            &state.http_client, &state.db, &config, &decision.target_url, &body, &request_id, start, &client_type,
         ).await;
 
         match result {
@@ -1161,6 +1170,7 @@ pub async fn handle_messages(
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!("req_{}", &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let client_type = detect_client_from_ua(&headers, "Claude Code");
 
     // Select provider — try anthropic_messages protocol first, then openai_responses as fallback
     let selection = crate::gateway::provider_selector::select_for_failover(
@@ -1168,12 +1178,12 @@ pub async fn handle_messages(
     ).or_else(|_| crate::gateway::provider_selector::select_for_failover(
         &state.db, "openai_responses", None, None,
     )).map_err(|e| {
-        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
     })?;
 
     let config = ProviderConfig::from_provider(&selection.provider).map_err(|e| {
-        log_request_error(&state.db, &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
     })?;
 
@@ -1184,9 +1194,9 @@ pub async fn handle_messages(
         {
             let target = config.anthropic_messages_url();
             return crate::gateway::pass_through::handle_anthropic(
-                &state.http_client, &state.db, &config, &target, &body, &request_id, start,
+                &state.http_client, &state.db, &config, &target, &body, &request_id, start, &client_type,
             ).await.map_err(|e| {
-                log_request_error(&state.db, &request_id, &raw, None, &e, start.elapsed().as_millis() as i64);
+                log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &raw, None, &e, start.elapsed().as_millis() as i64);
                 GatewayError(e)
             });
         }
@@ -1195,7 +1205,7 @@ pub async fn handle_messages(
     // No anthropic endpoint — fall back to Messages → Chat Completions transform
     let msg_req: crate::protocol::anthropic_messages::MessagesRequest = serde_json::from_str(&body).map_err(|e| {
         let err = AppError::new("MESSAGES_PARSE_ERROR", format!("Failed to parse: {e}"));
-        log_request_error(&state.db, &request_id, &raw, None, &err, start.elapsed().as_millis() as i64);
+        log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &raw, None, &err, start.elapsed().as_millis() as i64);
         err
     })?;
 
@@ -1223,7 +1233,7 @@ pub async fn handle_messages(
             let latency = start.elapsed().as_millis() as i64;
             let (in_tok, out_tok) = extract_usage(&upstream_json);
             let trace = json!({"mode": "transform", "protocol": "anthropic_messages"}).to_string();
-            log_request_success(&state.db, &request_id, &raw, &converted_json,
+            log_request_success(&state.db, &client_type, "/v1/messages", &request_id, &raw, &converted_json,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&response).unwrap_or_default(),
                 None, &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok);
@@ -1231,7 +1241,7 @@ pub async fn handle_messages(
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &request_id, &raw, &converted_json,
+            log_request_error_full(&state.db, &client_type, "/v1/messages", &request_id, &raw, &converted_json,
                 &config.name, &model, &err, 502, latency);
             Err(GatewayError(err))
         }
@@ -1239,6 +1249,70 @@ pub async fn handle_messages(
 }
 
 // ── Helpers ────────────────────────────────────────────────────
+
+/// Best-effort client identification from the request's User-Agent header.
+/// Falls back to a route-default label when UA is empty / unknown so that
+/// at least the protocol is conveyed (e.g. Codex is the only common client
+/// using /v1/responses today).
+///
+/// Common patterns:
+///   - Codex CLI / desktop:   "OpenAI/Python" or "codex"
+///   - Claude Code:           "claude-cli" / "claude-code"
+///   - OpenCode:              "opencode"
+///   - AtomCode:              "atomcode"
+///   - Kimi CLI:              "KimiCLI/1.40.0"
+///   - Cursor:                "Cursor/..."
+///   - Cherry Studio:         "Cherry-Studio"
+///   - Continue.dev:          "continue"
+///   - generic SDKs:          "Python/requests", "node-fetch", "axios", etc.
+pub(crate) fn detect_client_from_ua(headers: &HeaderMap, route_default: &str) -> String {
+    let ua = headers.get("user-agent")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .trim();
+    if ua.is_empty() {
+        return route_default.to_string();
+    }
+    let lower = ua.to_ascii_lowercase();
+    // Order matters: more specific matches first.
+    if lower.contains("claude-code") || lower.contains("claude-cli") || lower.contains("claude code") {
+        return "Claude Code".to_string();
+    }
+    if lower.contains("codex-cli") || lower.starts_with("codex/") {
+        return "Codex".to_string();
+    }
+    if lower.contains("opencode") { return "OpenCode".to_string(); }
+    if lower.contains("atomcode") { return "AtomCode".to_string(); }
+    if lower.contains("kimicli") || lower.contains("kimi-cli") || lower.contains("kimi cli") {
+        return "Kimi CLI".to_string();
+    }
+    if lower.contains("cursor") { return "Cursor".to_string(); }
+    if lower.contains("cherry") { return "Cherry Studio".to_string(); }
+    if lower.contains("continue") { return "Continue".to_string(); }
+    if lower.contains("cline") { return "Cline".to_string(); }
+    if lower.contains("roo") { return "Roo Code".to_string(); }
+    if lower.contains("hermes") { return "Hermes".to_string(); }
+    if lower.contains("opencode") { return "OpenCode".to_string(); }
+    if lower.starts_with("openai/") || lower.contains("openai-python") {
+        // Codex CLI desktop reports "OpenAI/Python ..." too; treat as Codex
+        // when the route is the Responses API.
+        if route_default == "Codex" { return "Codex".to_string(); }
+        return "OpenAI SDK".to_string();
+    }
+    if lower.contains("anthropic-sdk") || lower.starts_with("anthropic/") {
+        return "Anthropic SDK".to_string();
+    }
+    if lower.starts_with("python") || lower.contains("python-requests") || lower.contains("httpx") {
+        return "Python SDK".to_string();
+    }
+    if lower.starts_with("node") || lower.contains("node-fetch") || lower.contains("axios") || lower.contains("undici") {
+        return "Node SDK".to_string();
+    }
+    if lower.starts_with("curl") { return "curl".to_string(); }
+    // Unknown — surface the raw first token (helps users identify new clients)
+    let token: String = ua.split_whitespace().next().unwrap_or(ua).chars().take(40).collect();
+    if token.is_empty() { route_default.to_string() } else { token }
+}
 
 pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
     // 1. Try standard Authorization: Bearer <token>
@@ -1557,13 +1631,15 @@ fn extract_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i64>) {
 
 fn log_request_error(
     db: &Arc<Mutex<Connection>>,
+    client_type: &str,
+    route: &str,
     request_id: &str,
     raw_request: &str,
     converted_request: Option<&str>,
     err: &AppError,
     latency_ms: i64,
 ) {
-    log_request_error_full(db, request_id, raw_request,
+    log_request_error_full(db, client_type, route, request_id, raw_request,
         converted_request.unwrap_or(""), "", "", err,
         if err.code == "RESPONSES_PARSE_ERROR" { 400 }
         else if err.code == "PROVIDER_API_KEY_MISSING" { 401 }
@@ -1585,6 +1661,8 @@ fn lock_db(db: &Arc<Mutex<Connection>>) -> Option<std::sync::MutexGuard<'_, Conn
 
 fn log_request_success(
     db: &Arc<Mutex<Connection>>,
+    client_type: &str,
+    route: &str,
     request_id: &str,
     raw_request: &str,
     converted_request: &str,
@@ -1605,8 +1683,8 @@ fn log_request_success(
             &conn, provider, model, input_tokens, output_tokens,
         );
         let _ = crate::storage::request_logs::insert(
-            &conn, request_id, "Codex", provider, model,
-            "/v1/responses", status_code, latency_ms,
+            &conn, request_id, client_type, provider, model,
+            route, status_code, latency_ms,
             Some(raw_request), Some(converted_request),
             if raw_response.is_empty() { None } else { Some(raw_response) },
             if converted_response.is_empty() { None } else { Some(converted_response) },
@@ -1618,6 +1696,8 @@ fn log_request_success(
 
 fn log_request_error_full(
     db: &Arc<Mutex<Connection>>,
+    client_type: &str,
+    route: &str,
     request_id: &str,
     raw_request: &str,
     converted_request: &str,
@@ -1641,10 +1721,10 @@ fn log_request_error_full(
     }).to_string();
     if let Some(conn) = lock_db(db) {
         let _ = crate::storage::request_logs::insert(
-            &conn, request_id, "Codex",
+            &conn, request_id, client_type,
             if provider.is_empty() { "unknown" } else { provider },
             if model.is_empty() { "unknown" } else { model },
-            "/v1/responses", status_code, latency_ms,
+            route, status_code, latency_ms,
             Some(raw_request),
             if converted_request.is_empty() { None } else { Some(converted_request) },
             None, None, None, None,

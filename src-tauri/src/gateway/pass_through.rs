@@ -24,6 +24,7 @@ pub async fn handle(
     raw_body: &str,
     request_id: &str,
     start: Instant,
+    client_type: &str,
 ) -> Result<Response, AppError> {
     let mut body_json: serde_json::Value = serde_json::from_str(raw_body)
         .unwrap_or(serde_json::json!({}));
@@ -42,9 +43,9 @@ pub async fn handle(
     let rewritten_body = body_json.to_string();
 
     if is_stream {
-        handle_stream(http_client, db, config, target_url, &rewritten_body, request_id, &model, start).await
+        handle_stream(http_client, db, config, target_url, &rewritten_body, request_id, &model, start, client_type).await
     } else {
-        handle_non_stream(http_client, db, config, target_url, &rewritten_body, request_id, &model, start).await
+        handle_non_stream(http_client, db, config, target_url, &rewritten_body, request_id, &model, start, client_type).await
     }
 }
 
@@ -57,17 +58,17 @@ async fn handle_non_stream(
     request_id: &str,
     model: &str,
     start: Instant,
+    client_type: &str,
 ) -> Result<Response, AppError> {
-    let resp = http_client
-        .post(target_url)
-        .header("Authorization", format!("Bearer {}", config.select_api_key()))
-        .header("Content-Type", "application/json")
-        .body(raw_body.to_string())
-        .send()
-        .await
-        .map_err(|e| {
-            AppError::new("PASS_THROUGH_REQUEST_FAILED", format!("Failed to connect to provider: {e}"))
-        })?;
+    let resp = crate::providers::adapter::send_with_net_retry(|| {
+        http_client
+            .post(target_url)
+            .header("Authorization", format!("Bearer {}", config.select_api_key()))
+            .header("Content-Type", "application/json")
+            .body(raw_body.to_string())
+    }, 1).await
+        .map_err(|e| AppError::new("PASS_THROUGH_REQUEST_FAILED",
+            format!("Failed to connect to provider: {e}")))?;
 
     let upstream_status = resp.status();
     let body_text = resp.text().await.unwrap_or_default();
@@ -91,7 +92,7 @@ async fn handle_non_stream(
     };
 
     log_to_db(
-        db, request_id, &config.name, model,
+        db, client_type, "/v1/chat/completions", request_id, &config.name, model,
         &sanitize(raw_body, config.api_key()),
         &sanitized_response,
         error_msg.as_deref(),
@@ -118,18 +119,18 @@ async fn handle_stream(
     request_id: &str,
     model: &str,
     start: Instant,
+    client_type: &str,
 ) -> Result<Response, AppError> {
-    let resp = http_client
-        .post(target_url)
-        .header("Authorization", format!("Bearer {}", config.select_api_key()))
-        .header("Content-Type", "application/json")
-        .header("Accept", "text/event-stream")
-        .body(raw_body.to_string())
-        .send()
-        .await
-        .map_err(|e| {
-            AppError::new("PASS_THROUGH_STREAM_FAILED", format!("Failed to connect to provider: {e}"))
-        })?;
+    let resp = crate::providers::adapter::send_with_net_retry(|| {
+        http_client
+            .post(target_url)
+            .header("Authorization", format!("Bearer {}", config.select_api_key()))
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream")
+            .body(raw_body.to_string())
+    }, 1).await
+        .map_err(|e| AppError::new("PASS_THROUGH_STREAM_FAILED",
+            format!("Failed to connect to provider: {e}")))?;
 
     let upstream_status = resp.status();
     if !upstream_status.is_success() {
@@ -147,7 +148,7 @@ async fn handle_stream(
         }).to_string();
 
         log_to_db(
-            db, request_id, &config.name, model,
+            db, client_type, "/v1/chat/completions", request_id, &config.name, model,
             &sanitize(raw_body, config.api_key()),
             "", Some(&truncate(&sanitized, 2000)),
             &trace, upstream_status.as_u16() as i64, latency,
@@ -172,6 +173,7 @@ async fn handle_stream(
     let raw_req = sanitize(raw_body, config.api_key());
     let target = target_url.to_string();
     let api_key = config.api_key().to_string();
+    let client_type_owned = client_type.to_string();
 
     tokio::spawn(async move {
         let mut stream = resp.bytes_stream();
@@ -211,7 +213,7 @@ async fn handle_stream(
         let sanitized_sse = sanitize(&sse_log, &api_key);
         if let Some(conn) = lock_db(&db_clone) {
             let _ = crate::storage::request_logs::insert(
-                &conn, &req_id, "Client", &provider_name, &model_clone,
+                &conn, &req_id, &client_type_owned, &provider_name, &model_clone,
                 "/v1/chat/completions", 200, latency,
                 Some(&raw_req), None,
                 None, None,
@@ -267,6 +269,8 @@ fn truncate(s: &str, max: usize) -> String {
 
 fn log_to_db(
     db: &Arc<Mutex<Connection>>,
+    client_type: &str,
+    route: &str,
     request_id: &str,
     provider: &str,
     model: &str,
@@ -279,8 +283,8 @@ fn log_to_db(
 ) {
     if let Some(conn) = lock_db(db) {
         let _ = crate::storage::request_logs::insert(
-            &conn, request_id, "Client", provider, model,
-            "/v1/chat/completions", status_code, latency_ms,
+            &conn, request_id, client_type, provider, model,
+            route, status_code, latency_ms,
             Some(raw_request), None,
             if raw_response.is_empty() { None } else { Some(raw_response) },
             None, None, None,
@@ -301,6 +305,7 @@ pub async fn handle_anthropic(
     raw_body: &str,
     request_id: &str,
     start: Instant,
+    client_type: &str,
 ) -> Result<Response, AppError> {
     let is_stream = serde_json::from_str::<serde_json::Value>(raw_body)
         .ok()
@@ -325,21 +330,25 @@ pub async fn handle_anthropic(
     }
     let rewritten_body = body_json.to_string();
 
-    // Anthropic uses x-api-key header instead of Bearer
-    let mut req_builder = http_client
-        .post(target_url)
-        .header("x-api-key", config.select_api_key())
-        .header("content-type", "application/json")
-        .header("anthropic-version", "2023-06-01");
-
-    // Inject extra headers
-    for (k, v) in &config.extra_headers {
-        req_builder = req_builder.header(k.as_str(), v.as_str());
-    }
+    // Anthropic uses x-api-key header instead of Bearer.
+    // Builder is reconstructed inside the retry closure so a transient connect
+    // failure (e.g. a dead keep-alive connection returned by the pool) can be
+    // retried with a fresh connection.
+    let build_request = || {
+        let mut b = http_client
+            .post(target_url)
+            .header("x-api-key", config.select_api_key())
+            .header("content-type", "application/json")
+            .header("anthropic-version", "2023-06-01");
+        for (k, v) in &config.extra_headers {
+            b = b.header(k.as_str(), v.as_str());
+        }
+        b.body(rewritten_body.clone())
+    };
 
     if is_stream {
         // Stream pass-through
-        let resp = req_builder.body(rewritten_body.clone()).send().await
+        let resp = crate::providers::adapter::send_with_net_retry(&build_request, 1).await
             .map_err(|e| AppError::new("PASS_THROUGH_REQUEST_FAILED", format!("Failed: {e}")))?;
 
         let status = resp.status();
@@ -347,7 +356,7 @@ pub async fn handle_anthropic(
             let body_text = resp.text().await.unwrap_or_default();
             let sanitized = sanitize(&body_text, config.api_key());
             let latency = start.elapsed().as_millis() as i64;
-            log_to_db(db, request_id, &config.name, &config.default_model,
+            log_to_db(db, client_type, "/v1/messages", request_id, &config.name, &config.default_model,
                 &sanitize(raw_body, config.api_key()), "", Some(&truncate(&sanitized, 2000)),
                 &json!({"mode":"anthropic_pass_through","target":target_url}).to_string(),
                 status.as_u16() as i64, latency);
@@ -366,6 +375,7 @@ pub async fn handle_anthropic(
         let raw_req = sanitize(raw_body, config.api_key());
         let target = target_url.to_string();
         let api_key = config.api_key().to_string();
+        let client_type_owned = client_type.to_string();
 
         tokio::spawn(async move {
             let mut stream = resp.bytes_stream();
@@ -386,7 +396,7 @@ pub async fn handle_anthropic(
             let sanitized_sse = sanitize(&sse_log, &api_key);
             if let Some(conn) = lock_db(&db_clone) {
                 let _ = crate::storage::request_logs::insert(
-                    &conn, &req_id, "Claude Code", &provider_name, &model,
+                    &conn, &req_id, client_type_owned.as_str(), &provider_name, &model,
                     "/v1/messages", 200, latency,
                     Some(&raw_req), None, None, None,
                     Some(&truncate(&sanitized_sse, MAX_SSE_LOG)), None, None, Some(&trace), None, None, None,
@@ -404,7 +414,7 @@ pub async fn handle_anthropic(
             .body(body).unwrap())
     } else {
         // Non-stream
-        let resp = req_builder.body(rewritten_body.clone()).send().await
+        let resp = crate::providers::adapter::send_with_net_retry(&build_request, 1).await
             .map_err(|e| AppError::new("PASS_THROUGH_REQUEST_FAILED", format!("Failed: {e}")))?;
         let status = resp.status();
         let body_text = resp.text().await.unwrap_or_default();
@@ -412,7 +422,7 @@ pub async fn handle_anthropic(
         let latency = start.elapsed().as_millis() as i64;
         let trace = json!({"mode":"anthropic_pass_through","target":target_url}).to_string();
         let err_msg = if status.is_success() { None } else { Some(truncate(&sanitized, 2000)) };
-        log_to_db(db, request_id, &config.name, &config.default_model,
+        log_to_db(db, client_type, "/v1/messages", request_id, &config.name, &config.default_model,
             &sanitize(raw_body, config.api_key()), &sanitized,
             err_msg.as_deref(),
             &trace, status.as_u16() as i64, latency);

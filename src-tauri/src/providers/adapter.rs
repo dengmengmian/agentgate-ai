@@ -169,6 +169,47 @@ fn parse_retry_after(resp: &reqwest::Response) -> Option<u64> {
         .and_then(|s| s.parse::<u64>().ok())
 }
 
+/// True for reqwest errors that are typically retryable: connection failure,
+/// timeout, or a generic request-building error (often a closed keep-alive
+/// connection the pool handed out). Status-code errors are NOT included —
+/// they belong to the HTTP retry path.
+pub fn is_transient_net_err(e: &reqwest::Error) -> bool {
+    e.is_connect() || e.is_timeout() || e.is_request()
+}
+
+/// Send a request with retry on transient network errors. The closure must
+/// build a fresh RequestBuilder per attempt so it can be re-sent after
+/// failure. Returns the first successful response, or the last error after
+/// `max_retries` attempts.
+pub async fn send_with_net_retry<F>(
+    build: F,
+    max_retries: usize,
+) -> Result<reqwest::Response, reqwest::Error>
+where
+    F: Fn() -> reqwest::RequestBuilder,
+{
+    let mut last_err: Option<reqwest::Error> = None;
+    for attempt in 0..=max_retries {
+        match build().send().await {
+            Ok(r) => return Ok(r),
+            Err(e) => {
+                if is_transient_net_err(&e) && attempt < max_retries {
+                    eprintln!(
+                        "[net-retry] transient send error attempt {}/{}: {e}",
+                        attempt + 1, max_retries,
+                    );
+                    let backoff_ms = 200_u64 * (attempt as u64 + 1);
+                    tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                    last_err = Some(e);
+                    continue;
+                }
+                return Err(e);
+            }
+        }
+    }
+    Err(last_err.expect("loop only exits via Err when retries exhausted"))
+}
+
 /// Build an upstream error with provider-specific enhancement attached.
 /// Looks up the provider's transform impl and asks it whether the response
 /// body matches a known error pattern that warrants a friendlier suggestion
@@ -210,13 +251,20 @@ pub async fn send_non_stream(
             req_builder = req_builder.header(k.as_str(), v.as_str());
         }
 
-        let resp = req_builder
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| {
-                AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to provider: {e}"))
-            })?;
+        let resp = match req_builder.json(&body).send().await {
+            Ok(r) => r,
+            Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
+                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
+                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                continue;
+            }
+            Err(e) => {
+                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Failed to connect to provider: {e}")));
+            }
+        };
 
         let status = resp.status();
 
@@ -277,13 +325,20 @@ pub async fn send_stream(
             req_builder = req_builder.header(k.as_str(), v.as_str());
         }
 
-        let resp = req_builder
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| {
-                AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to provider: {e}"))
-            })?;
+        let resp = match req_builder.json(&body).send().await {
+            Ok(r) => r,
+            Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
+                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
+                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                continue;
+            }
+            Err(e) => {
+                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Failed to connect to provider: {e}")));
+            }
+        };
 
         let status = resp.status();
         if status.is_success() {
@@ -339,11 +394,20 @@ pub async fn send_anthropic_non_stream(
             req_builder = req_builder.header(k.as_str(), v.as_str());
         }
 
-        let resp = req_builder
-            .json(body)
-            .send()
-            .await
-            .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Claude: {e}")))?;
+        let resp = match req_builder.json(body).send().await {
+            Ok(r) => r,
+            Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
+                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
+                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                continue;
+            }
+            Err(e) => {
+                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Failed to connect to Claude: {e}")));
+            }
+        };
 
         let status = resp.status();
         if status.is_success() {
@@ -403,11 +467,20 @@ pub async fn send_anthropic_stream(
             req_builder = req_builder.header(k.as_str(), v.as_str());
         }
 
-        let resp = req_builder
-            .json(body)
-            .send()
-            .await
-            .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Claude: {e}")))?;
+        let resp = match req_builder.json(body).send().await {
+            Ok(r) => r,
+            Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
+                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
+                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                continue;
+            }
+            Err(e) => {
+                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Failed to connect to Claude: {e}")));
+            }
+        };
 
         let status = resp.status();
         if status.is_success() {
@@ -448,13 +521,26 @@ pub async fn send_gemini_non_stream(
     let mut last_err = None;
 
     for attempt in 0..=MAX_RETRIES {
-        let resp = client.post(&url)
+        let resp = match client.post(&url)
             .header("Authorization", format!("Bearer {}", config.select_api_key()))
             .header("Content-Type", "application/json")
             .json(body)
             .send()
             .await
-            .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Gemini: {e}")))?;
+        {
+            Ok(r) => r,
+            Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
+                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
+                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                continue;
+            }
+            Err(e) => {
+                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Failed to connect to Gemini: {e}")));
+            }
+        };
 
         let status = resp.status();
         if status.is_success() {
@@ -498,14 +584,27 @@ pub async fn send_gemini_stream(
     let mut last_err = None;
 
     for attempt in 0..=MAX_RETRIES {
-        let resp = client.post(&url)
+        let resp = match client.post(&url)
             .header("Authorization", format!("Bearer {}", config.select_api_key()))
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")
             .json(body)
             .send()
             .await
-            .map_err(|e| AppError::new("PROVIDER_REQUEST_FAILED", format!("Failed to connect to Gemini: {e}")))?;
+        {
+            Ok(r) => r,
+            Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
+                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
+                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                continue;
+            }
+            Err(e) => {
+                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
+                    format!("Failed to connect to Gemini: {e}")));
+            }
+        };
 
         let status = resp.status();
         if status.is_success() {

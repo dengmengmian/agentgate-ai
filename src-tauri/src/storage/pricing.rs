@@ -33,6 +33,20 @@ const DEFAULTS: &[(&str, &str, f64, f64)] = &[
     // Kimi
     ("kimi", "kimi-k2", 1.00, 4.00),
     ("kimi", "kimi-for-coding", 1.00, 4.00),
+    // Xiaomi MiMo (海外 USD pricing per platform.xiaomimimo.com).
+    // mimo-v2-pro has a 256K-1M context tier at 2x price; we use the ≤256K
+    // tier here since that's the common case. Users on long-context plans
+    // can override via the Pricing settings UI.
+    // TTS family is free (limited-time), modeled as 0 here.
+    ("mimo", "mimo-v2.5-pro", 0.435, 0.87),
+    ("mimo", "mimo-v2.5", 0.14, 0.28),
+    ("mimo", "mimo-v2-pro", 1.00, 3.00),
+    ("mimo", "mimo-v2-omni", 0.40, 2.00),
+    ("mimo", "mimo-v2-flash", 0.10, 0.30),
+    ("mimo", "mimo-v2.5-tts", 0.00, 0.00),
+    ("mimo", "mimo-v2.5-tts-voiceclone", 0.00, 0.00),
+    ("mimo", "mimo-v2.5-tts-voicedesign", 0.00, 0.00),
+    ("mimo", "mimo-v2-tts", 0.00, 0.00),
     // MiniMax
     ("minimax", "MiniMax-M1", 1.00, 8.00),
     // GLM
@@ -65,8 +79,22 @@ pub fn ensure_defaults(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Strip a trailing `[qualifier]` suffix like `mimo-v2.5-pro[1m]` →
+/// `mimo-v2.5-pro`. MiMo and DeepSeek use this suffix to request long
+/// context on the Claude Code endpoint, but the pricing table is keyed by
+/// base model id, so matching needs the suffix removed.
+fn strip_model_qualifier(model: &str) -> &str {
+    if let Some(stripped) = model.strip_suffix(']') {
+        if let Some(open) = stripped.rfind('[') {
+            return &stripped[..open];
+        }
+    }
+    model
+}
+
 /// Get the price for a specific provider + model.
-/// Priority: exact custom match → exact default match → wildcard custom → wildcard default → None.
+/// Priority: exact custom match → exact default match → base-id match (qualifier
+/// stripped) → wildcard custom → wildcard default → None.
 pub fn get_price(conn: &Connection, provider: &str, model: &str) -> Option<(f64, f64)> {
     let provider_lower = provider.to_lowercase();
 
@@ -81,7 +109,21 @@ pub fn get_price(conn: &Connection, provider: &str, model: &str) -> Option<(f64,
         return Some(row);
     }
 
-    // 2. Wildcard match
+    // 2. Base-id match after stripping a `[qualifier]` suffix.
+    let base = strip_model_qualifier(model);
+    if base != model {
+        if let Ok(row) = conn.query_row(
+            "SELECT input_price, output_price FROM model_pricing
+             WHERE LOWER(provider) = ?1 AND model_pattern = ?2
+             ORDER BY is_custom DESC LIMIT 1",
+            params![&provider_lower, base],
+            |row| Ok((row.get::<_, f64>(0)?, row.get::<_, f64>(1)?)),
+        ) {
+            return Some(row);
+        }
+    }
+
+    // 3. Wildcard match
     if let Ok(row) = conn.query_row(
         "SELECT input_price, output_price FROM model_pricing
          WHERE LOWER(provider) = ?1 AND model_pattern = '*'
@@ -234,6 +276,47 @@ mod tests {
         let (inp, out) = price.unwrap();
         assert!((inp - 2.0).abs() < 0.01);
         assert!((out - 8.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn mimo_defaults_present() {
+        let conn = setup_db();
+        ensure_defaults(&conn).unwrap();
+        let (inp, out) = get_price(&conn, "mimo", "mimo-v2.5-pro").expect("v2.5-pro priced");
+        assert!((inp - 0.435).abs() < 1e-4);
+        assert!((out - 0.87).abs() < 1e-4);
+
+        let (inp, out) = get_price(&conn, "mimo", "mimo-v2-flash").expect("flash priced");
+        assert!((inp - 0.10).abs() < 1e-4);
+        assert!((out - 0.30).abs() < 1e-4);
+
+        // TTS family is free
+        let (inp, out) = get_price(&conn, "mimo", "mimo-v2.5-tts").expect("tts priced");
+        assert_eq!(inp, 0.0);
+        assert_eq!(out, 0.0);
+    }
+
+    #[test]
+    fn qualifier_suffix_strips_to_base_id() {
+        let conn = setup_db();
+        ensure_defaults(&conn).unwrap();
+        // [1m] suffix used by Claude Code path on MiMo / DeepSeek must
+        // still match the base-id price entry.
+        let mimo = get_price(&conn, "mimo", "mimo-v2.5-pro[1m]")
+            .expect("mimo-v2.5-pro[1m] should resolve to mimo-v2.5-pro");
+        let ds = get_price(&conn, "deepseek", "deepseek-v4-pro[1m]")
+            .expect("deepseek-v4-pro[1m] should resolve to deepseek-v4-pro");
+        assert!((mimo.0 - 0.435).abs() < 1e-4);
+        assert!((ds.0 - 2.0).abs() < 1e-4);
+    }
+
+    #[test]
+    fn unknown_qualifier_falls_through_to_base() {
+        let conn = setup_db();
+        ensure_defaults(&conn).unwrap();
+        // Any qualifier is stripped before matching; bogus qualifier still resolves.
+        let price = get_price(&conn, "mimo", "mimo-v2.5-pro[128k]");
+        assert!(price.is_some());
     }
 
     #[test]
