@@ -38,7 +38,7 @@ describe("detectProviderType", () => {
 
   it("recognizes DeepSeek by exact sk- + 32 hex shape", () => {
     // Real DeepSeek key shape.
-    expect(detectProviderType("sk-d08fa321f8b845718b4f9ba2d3b4edab")).toBe("deepseek");
+    expect(detectProviderType("sk-abcdef0123456789abcdef0123456789")).toBe("deepseek");
     expect(detectProviderType("sk-0123456789abcdef0123456789abcdef")).toBe("deepseek");
   });
 
@@ -77,7 +77,7 @@ describe("detectProviderType", () => {
   it("trims surrounding whitespace before matching", () => {
     expect(detectProviderType("  sk-ant-abc  ")).toBe("anthropic");
     expect(
-      detectProviderType("\n sk-d08fa321f8b845718b4f9ba2d3b4edab \n"),
+      detectProviderType("\n sk-abcdef0123456789abcdef0123456789 \n"),
     ).toBe("deepseek");
   });
 });
@@ -85,7 +85,7 @@ describe("detectProviderType", () => {
 describe("detectProvider", () => {
   it("returns label alongside type", () => {
     expect(detectProvider("sk-ant-abc")).toEqual({ type: "anthropic", label: "Anthropic" });
-    expect(detectProvider("sk-d08fa321f8b845718b4f9ba2d3b4edab")).toEqual({
+    expect(detectProvider("sk-abcdef0123456789abcdef0123456789")).toEqual({
       type: "deepseek",
       label: "DeepSeek",
     });
