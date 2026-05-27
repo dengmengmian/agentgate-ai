@@ -225,20 +225,37 @@ pub fn detect() -> CodexConfigStatus {
 }
 
 pub fn generate_snippet(host: &str, port: i64, bearer_token: &str) -> String {
-    // `experimental_bearer_token` carries the per-provider auth — Codex CLI
-    // uses this as `Authorization: Bearer …` for any request routed through
-    // the `agentgate` model_provider. Crucially this means we never touch
-    // `auth.json`: the ChatGPT OAuth tokens stay intact and the IDE plugin
-    // continues to detect Codex as configured. Borrowed from cc-switch's
-    // surgical-config-only design.
+    // Layout notes:
+    //
+    // - `model = "auto"` — Codex's special "let the provider decide" value.
+    //   Earlier builds used `"gpt-5.5"` to coerce Codex into the Responses
+    //   API path, but the IDE / Codex.app sees `gpt-5.5` as an unknown
+    //   model and greys out the ChatGPT panel as a result. `auto` is
+    //   recognised by both the CLI and the GUI and resolves at request
+    //   time through AgentGate's own routing.
+    //
+    // - `wire_api = "responses"` already pins the body shape, so model name
+    //   only matters for the CLI/IDE display picker — `auto` is fine.
+    //
+    // - `experimental_bearer_token` carries the per-provider auth so we
+    //   never have to touch `auth.json` (keeping ChatGPT OAuth tokens
+    //   intact for the IDE plugin's "configured?" probe). `env_key` is the
+    //   Codex-stable alternative but it'd force users to `export
+    //   AGENTGATE_API_KEY=...` in their shell — a regression vs our
+    //   current zero-touch behaviour.
+    //
+    // - `supports_websockets = false` is informative but defaults to
+    //   false; included for clarity and to satisfy any IDE picker that
+    //   demands an explicit declaration.
     format!(
-        r#"model = "gpt-5.5"
+        r#"model = "auto"
 model_provider = "agentgate"
 
 [model_providers.agentgate]
-name = "AgentGate"
+name = "AgentGate Local Proxy"
 base_url = "http://{host}:{port}/v1"
 wire_api = "responses"
+supports_websockets = false
 experimental_bearer_token = "{bearer_token}""#,
     )
 }
@@ -385,13 +402,24 @@ mod tests {
     #[test]
     fn test_generate_snippet() {
         let snippet = generate_snippet("127.0.0.1", 9090, "ag_local_abc123");
-        assert!(snippet.contains("model = \"gpt-5.5\""));
+        assert!(
+            snippet.contains("model = \"auto\""),
+            "model must be \"auto\" — \"gpt-5.5\" was a synthetic name that triggered \
+             the Codex.app IDE plugin to grey out (model picker validates against \
+             a known list and rejected the fake name)."
+        );
         assert!(snippet.contains("model_provider = \"agentgate\""));
+        assert!(snippet.contains("name = \"AgentGate Local Proxy\""));
         assert!(snippet.contains("base_url = \"http://127.0.0.1:9090/v1\""));
         assert!(snippet.contains("wire_api = \"responses\""));
+        assert!(snippet.contains("supports_websockets = false"));
         assert!(
             snippet.contains("experimental_bearer_token = \"ag_local_abc123\""),
             "snippet must carry the bearer token so auth.json can stay untouched"
+        );
+        assert!(
+            !snippet.contains("gpt-5.5"),
+            "regression guard — never re-introduce the gpt-5.5 placeholder"
         );
     }
 
