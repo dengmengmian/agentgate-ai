@@ -173,11 +173,15 @@ pub fn delete_provider(id: String, state: State<'_, AppState>) -> Result<bool, A
 
 #[tauri::command]
 pub fn set_active_provider(
+    app_handle: tauri::AppHandle,
     id: String,
     state: State<'_, AppState>,
 ) -> Result<ProviderView, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    let provider = storage::providers::set_active(&conn, &id)?;
+    let provider = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::providers::set_active(&conn, &id)?
+    };
+    crate::app::tray::refresh_tray(&app_handle);
     Ok(provider.to_view())
 }
 
@@ -696,6 +700,7 @@ pub async fn start_gateway(app_handle: tauri::AppHandle, state: State<'_, AppSta
     }
 
     let _ = app_handle.emit("pet-bubble", serde_json::json!({ "text": "Gateway started", "text_zh": "网关已启动", "type": "success" }));
+    crate::app::tray::refresh_tray(&app_handle);
     get_gateway_status(state)
 }
 
@@ -723,6 +728,7 @@ pub async fn stop_gateway(app_handle: tauri::AppHandle, state: State<'_, AppStat
     }
 
     let _ = app_handle.emit("pet-bubble", serde_json::json!({ "text": "Gateway stopped", "text_zh": "网关已停止", "type": "info" }));
+    crate::app::tray::refresh_tray(&app_handle);
     get_gateway_status(state)
 }
 

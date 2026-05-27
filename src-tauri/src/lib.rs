@@ -318,6 +318,8 @@ pub fn run() {
         });
 }
 
+pub fn is_chinese_locale_pub() -> bool { is_chinese_locale() }
+
 fn is_chinese_locale() -> bool {
     ["LC_ALL", "LC_MESSAGES", "LANG"]
         .iter()
@@ -357,31 +359,25 @@ fn macos_system_locale_is_chinese() -> bool {
 
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let zh = is_chinese_locale();
+    // Build a minimal placeholder menu; `app::tray::refresh_tray` rebuilds
+    // it with dynamic items (active provider, today count, switch submenu)
+    // immediately after the tray is registered.
     let show = MenuItemBuilder::with_id("show", if zh { "显示 AgentGate" } else { "Show AgentGate" }).build(app)?;
-    let start_gw = MenuItemBuilder::with_id("start_gateway", if zh { "启动网关" } else { "Start Gateway" }).build(app)?;
-    let stop_gw = MenuItemBuilder::with_id("stop_gateway", if zh { "停止网关" } else { "Stop Gateway" }).build(app)?;
-    let restart_gw = MenuItemBuilder::with_id("restart_gateway", if zh { "重启网关" } else { "Restart Gateway" }).build(app)?;
-    let toggle_pet = MenuItemBuilder::with_id("toggle_pet", if zh { "显示/隐藏宠物" } else { "Toggle Pet" }).build(app)?;
     let quit = MenuItemBuilder::with_id("quit", if zh { "退出" } else { "Quit" }).build(app)?;
+    let placeholder_menu = MenuBuilder::new(app).item(&show).separator().item(&quit).build()?;
 
-    let menu = MenuBuilder::new(app)
-        .item(&show)
-        .separator()
-        .item(&start_gw)
-        .item(&stop_gw)
-        .item(&restart_gw)
-        .separator()
-        .item(&toggle_pet)
-        .separator()
-        .item(&quit)
-        .build()?;
-
-    let _tray = TrayIconBuilder::new()
+    let _tray = TrayIconBuilder::with_id(app::tray::TRAY_ID)
         .icon(app.default_window_icon().unwrap().clone())
-        .tooltip(if zh { "AgentGate - 网关已停止" } else { "AgentGate - Gateway Stopped" })
-        .menu(&menu)
+        .tooltip("AgentGate")
+        .menu(&placeholder_menu)
         .on_menu_event(move |app, event| {
-            match event.id().as_ref() {
+            let id = event.id().as_ref().to_string();
+            // Dynamic id: switch_active:<provider_id>
+            if id.starts_with("switch_active:") {
+                app::tray::handle_switch_active(app, &id);
+                return;
+            }
+            match id.as_str() {
                 "show" => {
                     if let Some(w) = app.get_webview_window("main") {
                         let _ = w.show();
@@ -448,6 +444,11 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             }
         })
         .build(app)?;
+
+    // Paint the dynamic menu (active provider, today count, switch submenu)
+    // immediately, then kick off the 30 s periodic refresh.
+    app::tray::refresh_tray(&app.handle());
+    app::tray::start_periodic_refresh(app.handle().clone());
 
     Ok(())
 }
