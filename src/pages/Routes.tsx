@@ -18,7 +18,6 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { CapabilityIcons } from "@/components/common/CapabilityIcons";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
-import { RuntimeFooter } from "@/components/common/RuntimeFooter";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
@@ -467,7 +466,6 @@ export function Routes() {
           onClose={() => setConditionsTarget(null)}
         />
       )}
-      <RuntimeFooter />
     </div>
   );
 }

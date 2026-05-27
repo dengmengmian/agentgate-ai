@@ -777,6 +777,15 @@ pub fn list_request_logs(
 }
 
 #[tauri::command]
+pub fn count_request_logs(
+    filter: RequestLogFilter,
+    state: State<'_, AppState>,
+) -> Result<i64, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::request_logs::count(&conn, &filter)
+}
+
+#[tauri::command]
 pub fn get_request_log_detail(
     id: String,
     state: State<'_, AppState>,

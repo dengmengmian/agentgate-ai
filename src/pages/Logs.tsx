@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ScrollText, RefreshCcw } from "lucide-react";
+import { ScrollText, RefreshCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { RequestLogTable } from "@/components/logs/RequestLogTable";
 import { RequestDetailDrawer } from "@/components/logs/RequestDetailDrawer";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -9,6 +9,8 @@ import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import type { RequestLogListItem } from "@/types/request-log";
 import type { RequestLogDetail } from "@/types/request-log";
+
+const PAGE_SIZE = 100;
 
 export function Logs() {
   const { t } = useI18n();
@@ -21,25 +23,42 @@ export function Logs() {
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
 
+  // Pagination
+  const [page, setPage] = useState(1); // 1-indexed
+  const [total, setTotal] = useState(0);
+
+  // Reset to page 1 whenever filters change.
+  useEffect(() => {
+    setPage(1);
+  }, [keyword, statusFilter]);
+
   const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.listRequestLogs({
+      const filter = {
         keyword: keyword || undefined,
         status: statusFilter || undefined,
-        limit: 200,
-      });
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+      };
+      const [data, count] = await Promise.all([
+        api.listRequestLogs(filter),
+        api.countRequestLogs(filter),
+      ]);
       setLogs(data);
+      setTotal(count);
     } catch (err) {
       toast("error", (err as api.AppError).message);
     } finally {
       setLoading(false);
     }
-  }, [keyword, statusFilter]);
+  }, [keyword, statusFilter, page]);
 
   useEffect(() => {
     loadLogs();
   }, [loadLogs]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const handleSelect = async (item: RequestLogListItem) => {
     try {
@@ -66,7 +85,7 @@ export function Logs() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <p className="shrink-0 text-xs text-text-muted whitespace-nowrap">
-            {logs.length} {t("logs.requests")}
+            共 {total.toLocaleString()} {t("logs.requests")}
           </p>
           <input
             type="text"
@@ -112,7 +131,37 @@ export function Logs() {
           description={t("logs.no_logs_desc")}
         />
       ) : (
-        <RequestLogTable requests={logs} onSelect={handleSelect} />
+        <>
+          <RequestLogTable requests={logs} onSelect={handleSelect} />
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between rounded-xl border border-border bg-card px-5 py-2.5">
+              <span className="text-xs text-text-muted">
+                第 <span className="font-mono text-text-primary">{page}</span> / {totalPages} 页
+                <span className="ml-3 text-text-muted/60">
+                  显示 {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} 条
+                </span>
+              </span>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1 || loading}
+                  className="flex items-center gap-1 rounded-md bg-card-secondary px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-40 disabled:hover:bg-card-secondary disabled:hover:text-text-secondary"
+                >
+                  <ChevronLeft className="h-3 w-3" />
+                  上一页
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages || loading}
+                  className="flex items-center gap-1 rounded-md bg-card-secondary px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-40 disabled:hover:bg-card-secondary disabled:hover:text-text-secondary"
+                >
+                  下一页
+                  <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <RequestDetailDrawer

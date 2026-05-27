@@ -3,6 +3,60 @@ use rusqlite::Connection;
 use crate::errors::AppError;
 use crate::models::request_log::{RequestLogDetail, RequestLogFilter, RequestLogListItem};
 
+/// Count rows matching the filter — used by the Logs page to compute the
+/// total page count without fetching all rows. Shares the same WHERE-clause
+/// construction as `list()` to guarantee identical filtering semantics.
+pub fn count(conn: &Connection, filter: &RequestLogFilter) -> Result<i64, AppError> {
+    let mut sql = String::from("SELECT COUNT(*) FROM request_logs WHERE 1=1");
+    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    let mut idx = 1;
+
+    if let Some(ref client) = filter.client {
+        sql.push_str(&format!(" AND client = ?{idx}"));
+        param_values.push(Box::new(client.clone()));
+        idx += 1;
+    }
+    if let Some(ref provider) = filter.provider {
+        sql.push_str(&format!(" AND provider = ?{idx}"));
+        param_values.push(Box::new(provider.clone()));
+        idx += 1;
+    }
+    if let Some(ref status) = filter.status {
+        match status.as_str() {
+            "success" => {
+                sql.push_str(&format!(" AND status_code >= ?{} AND status_code < ?{}", idx, idx + 1));
+                param_values.push(Box::new(200i64));
+                param_values.push(Box::new(300i64));
+                idx += 2;
+            }
+            "error" => {
+                sql.push_str(&format!(" AND (status_code >= ?{} OR status_code < ?{})", idx, idx + 1));
+                param_values.push(Box::new(400i64));
+                param_values.push(Box::new(200i64));
+                idx += 2;
+            }
+            _ => {}
+        }
+    }
+    if let Some(ref keyword) = filter.keyword {
+        let like = format!("%{keyword}%");
+        sql.push_str(&format!(
+            " AND (request_id LIKE ?{idx} OR error_message LIKE ?{} OR model LIKE ?{} OR route LIKE ?{})",
+            idx + 1, idx + 2, idx + 3
+        ));
+        param_values.push(Box::new(like.clone()));
+        param_values.push(Box::new(like.clone()));
+        param_values.push(Box::new(like.clone()));
+        param_values.push(Box::new(like));
+    }
+
+    let params: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|b| &**b as &dyn rusqlite::types::ToSql).collect();
+    let total: i64 = conn
+        .query_row(&sql, rusqlite::params_from_iter(params.iter()), |r| r.get(0))
+        .map_err(|e| AppError::from(e))?;
+    Ok(total)
+}
+
 pub fn list(conn: &Connection, filter: RequestLogFilter) -> Result<Vec<RequestLogListItem>, AppError> {
     let mut sql = String::from(
         "SELECT id, request_id, timestamp, client, provider, model, route, status_code, latency_ms, error_message

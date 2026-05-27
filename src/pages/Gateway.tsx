@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { Radio, Play, Square, RotateCcw, Settings, Save } from "lucide-react";
-import { StatusBadge } from "@/components/common/StatusBadge";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
@@ -109,168 +108,99 @@ export function Gateway() {
     return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
   }
 
+  const startedAt = status.started_at
+    ? new Date(status.started_at).toLocaleTimeString()
+    : null;
+  const listenUrl = `http://${status.host}:${status.port}`;
+
   return (
-    <div className="space-y-6">
-      {/* Status Card */}
-      <div className="rounded-xl border border-border bg-card p-6">
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent-soft">
-              <Radio className="h-6 w-6 text-accent" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-text-primary">
-                {t("gateway.local_gateway")}
-              </h2>
-              <p className="text-xs text-text-muted">
-                {t("gateway.protocol_conversion")}
-              </p>
-            </div>
+    <div className="space-y-4">
+      {/* ── 1. Status strip — endpoint, active provider, started_at, controls.
+              Topbar already shows running/stopped + host:port. Status badge
+              + decorative big icon dropped. ── */}
+      <div className="rounded-xl border border-border bg-card px-5 py-4" style={{ boxShadow: "var(--shadow-sm)" }}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+            <span className="flex items-center gap-2 text-text-primary">
+              <Radio className="h-3.5 w-3.5 text-accent" />
+              <span className="font-medium">{t("gateway.local_gateway")}</span>
+            </span>
+            <span className="text-text-muted/40">·</span>
+            <a
+              href={listenUrl}
+              className="font-mono text-accent hover:underline"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {listenUrl}
+            </a>
+            <span className="text-text-muted/40">·</span>
+            <span className="text-text-secondary">
+              <span className="text-text-muted">{t("gateway.active_provider")} </span>
+              <span className="text-text-primary">{status.active_provider ?? t("common.none")}</span>
+            </span>
+            {startedAt && (
+              <>
+                <span className="text-text-muted/40">·</span>
+                <span className="text-text-secondary">
+                  <span className="text-text-muted">{t("gateway.started_at")} </span>
+                  <span className="font-mono text-text-primary">{startedAt}</span>
+                </span>
+              </>
+            )}
           </div>
-          <StatusBadge variant={status.running ? "success" : "muted"}>
-            {status.running ? t("topbar.running") : t("topbar.stopped")}
-          </StatusBadge>
+          <div className="flex items-center gap-2">
+            {status.running ? (
+              <>
+                <button
+                  onClick={handleStop}
+                  className="flex items-center gap-1.5 rounded-md bg-error-soft px-2.5 py-1 text-xs font-medium text-error transition-colors hover:bg-error/20"
+                >
+                  <Square className="h-3 w-3" />
+                  {t("gateway.stop")}
+                </button>
+                <button
+                  onClick={handleRestart}
+                  className="flex items-center gap-1.5 rounded-md bg-warning-soft px-2.5 py-1 text-xs font-medium text-warning transition-colors hover:bg-warning/20"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  {t("gateway.restart")}
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={handleStart}
+                className="flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-accent/90"
+              >
+                <Play className="h-3 w-3" />
+                {t("gateway.start")}
+              </button>
+            )}
+          </div>
         </div>
-
-        {/* Listening status */}
-        {status.running && (
-          <p className="mb-4 text-xs text-success">
-            {t("gateway.listening")} http://{status.host}:{status.port}
-          </p>
-        )}
-        {!status.running && (
-          <p className="mb-4 text-xs text-text-muted">{t("gateway.not_listening")}</p>
-        )}
         {dirty && status.running && (
-          <p className="mb-4 text-xs text-warning">
-            {t("gateway.settings_changed")}
-          </p>
+          <p className="mt-2 text-[11px] text-warning">{t("gateway.settings_changed")}</p>
         )}
-
-        {/* Controls */}
-        <div className="mb-6 flex gap-3">
-          {status.running ? (
-            <>
-              <button
-                onClick={handleStop}
-                className="flex items-center gap-2 rounded-md bg-error-soft px-4 py-2 text-xs font-medium text-error transition-colors hover:bg-error/20"
-              >
-                <Square className="h-3.5 w-3.5" />
-                {t("gateway.stop")}
-              </button>
-              <button
-                onClick={handleRestart}
-                className="flex items-center gap-2 rounded-md bg-warning-soft px-4 py-2 text-xs font-medium text-warning transition-colors hover:bg-warning/20"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                {t("gateway.restart")}
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={handleStart}
-              className="flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-accent/90"
-            >
-              <Play className="h-3.5 w-3.5" />
-              {t("gateway.start")}
-            </button>
-          )}
-        </div>
-
-        {/* Status info */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
-          <div className="flex justify-between border-b border-border/50 pb-2">
-            <span className="text-text-muted">{t("gateway.active_provider")}</span>
-            <span className="text-text-primary">
-              {status.active_provider ?? t("common.none")}
-            </span>
-          </div>
-          <div className="flex justify-between border-b border-border/50 pb-2">
-            <span className="text-text-muted">{t("gateway.started_at")}</span>
-            <span className="font-mono text-text-primary">
-              {status.started_at
-                ? new Date(status.started_at).toLocaleTimeString()
-                : "—"}
-            </span>
-          </div>
-        </div>
-
-        {/* Compatibility info */}
-        <div className="mt-4 flex flex-wrap gap-3 text-[11px]">
-          <span className="rounded-md bg-card-secondary px-2.5 py-1 text-text-secondary">
-            {t("gateway.codex_compat")}: <span className="text-success">{t("gateway.enabled")}</span>
-          </span>
-          <span className="rounded-md bg-card-secondary px-2.5 py-1 text-text-secondary">
-            {t("gateway.tool_call_streaming")}: <span className="text-success">{t("gateway.enabled")}</span>
-          </span>
-          <span className="rounded-md bg-card-secondary px-2.5 py-1 text-text-secondary">
-            {t("gateway.deepseek_cleaner")}: <span className="text-success">{t("gateway.enabled")}</span>
-          </span>
-        </div>
       </div>
 
-      {/* Route Modes */}
-      <div className="rounded-xl border border-border bg-card p-6">
-        <h3 className="mb-4 text-sm font-semibold text-text-primary">
-          {t("gateway.route_modes")}
-        </h3>
-        <div className="space-y-2">
-          {[
-            { method: "GET", path: "/health", mode: "internal" },
-            { method: "GET", path: "/v1/models", mode: "internal" },
-            { method: "POST", path: "/v1/responses", mode: "transform", detail: "Responses → Chat Completions" },
-            { method: "POST", path: "/responses", mode: "transform", detail: "alias" },
-            { method: "POST", path: "/v1/chat/completions", mode: "pass-through", detail: "Chat Completions → Chat Completions" },
-            { method: "POST", path: "/chat/completions", mode: "pass-through", detail: "alias" },
-          ].map((r) => (
-            <div
-              key={r.path}
-              className="flex items-center justify-between rounded-md border border-border/50 bg-card-secondary px-4 py-2 text-xs"
-            >
-              <div className="flex items-center gap-3">
-                <span className="w-10 rounded bg-bg px-1.5 py-0.5 text-center font-mono text-[10px] text-text-muted">
-                  {r.method}
-                </span>
-                <span className="font-mono text-text-primary">{r.path}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                {r.detail && (
-                  <span className="text-text-muted">{r.detail}</span>
-                )}
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  r.mode === "pass-through"
-                    ? "bg-accent-soft text-accent"
-                    : r.mode === "transform"
-                      ? "bg-warning-soft text-warning"
-                      : "bg-hover text-text-muted"
-                }`}>
-                  {r.mode}
-                </span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Settings */}
-      <div className="rounded-xl border border-border bg-card p-6">
+      {/* ── 2. Configuration — the editable settings ── */}
+      <div className="rounded-xl border border-border bg-card p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
             <Settings className="h-4 w-4 text-text-muted" />
             {t("gateway.configuration")}
           </h3>
-          {dirty && (
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90"
-            >
-              <Save className="h-3.5 w-3.5" />
-              {t("gateway.save")}
-            </button>
-          )}
+          <button
+            onClick={handleSave}
+            disabled={!dirty}
+            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {t("gateway.save")}
+          </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <SettingsField label={t("gateway.listen_address")}>
             <input
               value={host}
@@ -283,6 +213,15 @@ export function Gateway() {
               type="number"
               value={port}
               onChange={(e) => { setPort(e.target.value); markDirty(); }}
+              className="form-input"
+            />
+          </SettingsField>
+          <SettingsField label={t("gateway.log_retention")}>
+            <input
+              type="number"
+              value={logRetention}
+              onChange={(e) => { setLogRetention(e.target.value); markDirty(); }}
+              min={1}
               className="form-input"
             />
           </SettingsField>
@@ -321,20 +260,58 @@ export function Gateway() {
               </span>
             </label>
           </SettingsField>
-          <SettingsField label={t("gateway.log_retention")}>
-            <input
-              type="number"
-              value={logRetention}
-              onChange={(e) => { setLogRetention(e.target.value); markDirty(); }}
-              min={1}
-              className="form-input"
-            />
-          </SettingsField>
+        </div>
+      </div>
+
+      {/* ── 3. Route reference — what the gateway exposes ── */}
+      <div className="rounded-xl border border-border bg-card p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
+        <h3 className="mb-3 text-sm font-semibold text-text-primary">
+          {t("gateway.route_modes")}
+        </h3>
+        <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
+          {ROUTE_REFERENCE.map((r) => (
+            <div
+              key={r.path}
+              className="flex items-center justify-between rounded-md border border-border/50 bg-card-secondary px-3 py-1.5 text-xs"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="w-10 shrink-0 rounded bg-bg px-1.5 py-0.5 text-center font-mono text-[10px] text-text-muted">
+                  {r.method}
+                </span>
+                <span className="truncate font-mono text-text-primary">{r.path}</span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                {r.detail && (
+                  <span className="hidden text-[10px] text-text-muted lg:inline">{r.detail}</span>
+                )}
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                  r.mode === "pass-through"
+                    ? "bg-accent-soft text-accent"
+                    : r.mode === "transform"
+                      ? "bg-warning-soft text-warning"
+                      : "bg-hover text-text-muted"
+                }`}>
+                  {r.mode}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
 }
+
+const ROUTE_REFERENCE: { method: string; path: string; mode: string; detail?: string }[] = [
+  { method: "GET", path: "/health", mode: "internal" },
+  { method: "GET", path: "/v1/models", mode: "internal" },
+  { method: "POST", path: "/v1/responses", mode: "transform", detail: "Responses → Chat Completions" },
+  { method: "POST", path: "/responses", mode: "transform", detail: "alias" },
+  { method: "POST", path: "/v1/chat/completions", mode: "pass-through", detail: "Chat Completions → Chat Completions" },
+  { method: "POST", path: "/chat/completions", mode: "pass-through", detail: "alias" },
+  { method: "POST", path: "/v1/messages", mode: "transform", detail: "Anthropic Messages → Chat Completions" },
+  { method: "POST", path: "/v1beta/models/{model}:generateContent", mode: "transform", detail: "Gemini → Chat Completions" },
+];
 
 function SettingsField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
