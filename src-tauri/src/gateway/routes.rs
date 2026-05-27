@@ -1618,6 +1618,71 @@ mod tests {
         headers.insert("user-agent", "MyCustomAgent/1.0".parse().unwrap());
         assert_eq!(detect_client_from_ua(&headers, "Default"), "MyCustomAgent/1.0");
     }
+
+    fn responses_req_with_input(input: serde_json::Value) -> ResponsesRequest {
+        ResponsesRequest {
+            model: Some("gpt-5".into()),
+            input,
+            instructions: None,
+            system: None,
+            previous_response_id: None,
+            tools: None,
+            tool_choice: None,
+            stream: Some(false),
+            temperature: None,
+            top_p: None,
+            max_output_tokens: None,
+            parallel_tool_calls: None,
+            reasoning: None,
+            text: None,
+            metadata: None,
+            seed: None,
+            stop: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            extra: Default::default(),
+        }
+    }
+
+    #[test]
+    fn request_contains_images_picks_up_historic_image() {
+        // Image is in an EARLIER user turn; the most recent user turn is text-only.
+        // Prior to the fix this returned false and MiMo got `image_url` in the
+        // converted body without promotion → 404 from upstream.
+        let req = responses_req_with_input(json!([
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_image", "image_url": {"url": "https://example.com/x.png"}}
+            ]},
+            {"type": "message", "role": "assistant", "content": "I see a cat."},
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "what color is it?"}
+            ]}
+        ]));
+        assert!(request_contains_images(&req), "history image must trigger has_images=true");
+    }
+
+    #[test]
+    fn request_contains_images_false_when_no_image_anywhere() {
+        let req = responses_req_with_input(json!([
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "hi"}
+            ]}
+        ]));
+        assert!(!request_contains_images(&req));
+    }
+
+    #[test]
+    fn request_contains_images_ignores_assistant_content() {
+        let req = responses_req_with_input(json!([
+            {"type": "message", "role": "assistant", "content": [
+                {"type": "image_url", "image_url": {"url": "x"}}
+            ]},
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "hi"}
+            ]}
+        ]));
+        assert!(!request_contains_images(&req), "assistant turns are not user input");
+    }
 }
 
 fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayError> {
@@ -1641,8 +1706,8 @@ fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayE
     Ok(provider)
 }
 
-/// Check if a Responses API request contains image content in its input.
-/// Check if the last user message in the request contains images.
+/// Check if the request contains image content anywhere in the conversation
+/// (current turn or replayed history).
 pub fn request_contains_images_pub(req: &ResponsesRequest) -> bool {
     request_contains_images(req)
 }
@@ -1660,16 +1725,20 @@ fn request_contains_images(req: &ResponsesRequest) -> bool {
 
     match &req.input {
         Value::Array(items) => {
-            // Only check the LAST user message — not the entire history.
-            // Codex includes previous messages (some with images) in multi-turn input.
-            // We only care if the NEW message has images.
-            items.iter().rev().find(|item| {
+            // Scan ALL user messages in history, not just the last one. Codex
+            // replays the full conversation on every turn — if an early turn
+            // had an image, the converted body still carries `image_url` parts.
+            // MiMo upstream routes that body to its vision endpoint and 404s
+            // ("No endpoints found that support image input") when the resolved
+            // model can't accept images. Treating any historic image as
+            // has_images=true lets `promote_for_capabilities` swap to a vision
+            // model (e.g. mimo-v2.5) for the rest of the conversation.
+            items.iter().any(|item| {
                 let t = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
                 let role = item.get("role").and_then(|r| r.as_str()).unwrap_or("");
-                t == "message" && role == "user"
-            }).map(|msg| {
-                msg.get("content").map(content_has_images).unwrap_or(false)
-            }).unwrap_or(false)
+                if t != "message" || role != "user" { return false; }
+                item.get("content").map(content_has_images).unwrap_or(false)
+            })
         }
         _ => false,
     }

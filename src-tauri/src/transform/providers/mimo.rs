@@ -17,6 +17,13 @@ const THINKING_STRIPS_TEMPERATURE: &[&str] = &["mimo-v2.5-pro", "mimo-v2.5"];
 // the official model page (Omni row has multimodal + tools but no web_search).
 const MIMO_NO_WEB_SEARCH: &[&str] = &["mimo-v2-omni"];
 
+// MiMo models that DO accept image_url content parts. Anything else routes to
+// MiMo's text-only endpoint and 404s with "No endpoints found that support
+// image input" the instant it sees a single image_url in the body — even when
+// the image is just history context replayed by Codex. We strip historic
+// images for non-vision targets so the request body remains valid.
+const MIMO_VISION_MODELS: &[&str] = &["mimo-v2.5", "mimo-v2-omni"];
+
 fn strip_qualifier(model: &str) -> &str {
     if let Some(stripped) = model.strip_suffix(']') {
         if let Some(open) = stripped.rfind('[') {
@@ -64,6 +71,32 @@ impl super::ProviderTransform for MimoProvider {
         // Strip [1m]/[...] qualifier before comparing against the capability lists.
         let base_model = strip_qualifier(req.model.as_str()).to_string();
         let model = base_model.as_str();
+
+        // Strip historic image_url parts when the resolved model lacks vision.
+        // Codex replays full conversation history including prior images; if
+        // promotion couldn't swap to a vision model (e.g. user enabled only
+        // mimo-v2.5-pro), MiMo's router 404s the moment it sees `image_url`.
+        // Dropping image parts loses visual context but keeps the chat alive.
+        if !MIMO_VISION_MODELS.contains(&model) {
+            for msg in &mut req.messages {
+                if let Some(Value::Array(parts)) = &msg.content {
+                    let has_image = parts.iter().any(|p| {
+                        p.get("type").and_then(|t| t.as_str()) == Some("image_url")
+                    });
+                    if has_image {
+                        let text_only: Vec<Value> = parts.iter()
+                            .filter(|p| p.get("type").and_then(|t| t.as_str()) != Some("image_url"))
+                            .cloned()
+                            .collect();
+                        msg.content = if text_only.is_empty() {
+                            Some(Value::String(String::new()))
+                        } else {
+                            Some(Value::Array(text_only))
+                        };
+                    }
+                }
+            }
+        }
 
         // Strip temperature in thinking mode for v2.5-pro / v2.5 — upstream
         // forces it to 1.0 anyway.
@@ -307,6 +340,81 @@ mod tests {
             MimoProvider.finalize_request(&mut r, &None);
             assert!(r.tools.is_some(), "{model} should keep web_search tool");
         }
+    }
+
+    #[test]
+    fn non_vision_model_strips_historic_image_url() {
+        let mut r = req("mimo-v2.5-pro");
+        r.messages = vec![ChatMessage {
+            role: "user".into(),
+            content: Some(json!([
+                {"type": "text", "text": "what's in this image?"},
+                {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}},
+            ])),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }];
+        MimoProvider.finalize_request(&mut r, &None);
+        let parts = r.messages[0].content.as_ref().unwrap().as_array().unwrap();
+        assert_eq!(parts.len(), 1, "image_url part should be stripped");
+        assert_eq!(parts[0]["type"], "text");
+    }
+
+    #[test]
+    fn vision_model_preserves_image_url() {
+        let mut r = req("mimo-v2.5");
+        r.messages = vec![ChatMessage {
+            role: "user".into(),
+            content: Some(json!([
+                {"type": "text", "text": "what's in this image?"},
+                {"type": "image_url", "image_url": {"url": "https://example.com/img.png"}},
+            ])),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }];
+        MimoProvider.finalize_request(&mut r, &None);
+        let parts = r.messages[0].content.as_ref().unwrap().as_array().unwrap();
+        assert_eq!(parts.len(), 2, "v2.5 supports vision, image should be preserved");
+    }
+
+    #[test]
+    fn omni_with_qualifier_preserves_image_url() {
+        let mut r = req("mimo-v2-omni[1m]");
+        r.messages = vec![ChatMessage {
+            role: "user".into(),
+            content: Some(json!([
+                {"type": "image_url", "image_url": {"url": "x"}},
+            ])),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }];
+        MimoProvider.finalize_request(&mut r, &None);
+        let parts = r.messages[0].content.as_ref().unwrap().as_array().unwrap();
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0]["type"], "image_url");
+    }
+
+    #[test]
+    fn image_only_content_becomes_empty_string_for_non_vision_model() {
+        let mut r = req("mimo-v2-pro");
+        r.messages = vec![ChatMessage {
+            role: "user".into(),
+            content: Some(json!([
+                {"type": "image_url", "image_url": {"url": "x"}},
+            ])),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }];
+        MimoProvider.finalize_request(&mut r, &None);
+        assert_eq!(r.messages[0].content.as_ref().unwrap().as_str(), Some(""));
     }
 
     #[test]
