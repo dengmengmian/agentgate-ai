@@ -104,6 +104,11 @@ pub async fn handle_responses(
     let candidates = selection.candidates.clone();
     let raw_body = sanitize_body(&body);
 
+    // Derive a stable session-affinity key. Used at two points: candidate
+    // reordering (prefer the provider that hit the upstream prompt cache last
+    // time) and post-response recording (write affinity when cached_tokens>0).
+    let session_id = crate::gateway::session_affinity::derive_from_responses(&req);
+
     // Detect if request contains images (for vision-aware routing)
     let request_has_images = request_contains_images(&req);
 
@@ -136,6 +141,24 @@ pub async fn handle_responses(
             for c in &candidates {
                 if c.provider_id != selection.provider.id && !c.in_cooldown {
                     attempt_order.push(c);
+                }
+            }
+        }
+    }
+
+    // Session affinity: if the previous turn of this conversation hit the
+    // upstream prompt cache on a specific provider, move that provider to
+    // the front of attempt_order. Skip when the affinity provider isn't in
+    // the candidate set or is in cooldown — affinity is a hint, not a pin.
+    if let Some(ref sid) = session_id {
+        if let Some(entry) = crate::gateway::session_affinity::lookup(sid) {
+            if let Some(pos) = attempt_order
+                .iter()
+                .position(|c| c.provider_id == entry.provider_id && !c.in_cooldown)
+            {
+                if pos > 0 {
+                    let preferred = attempt_order.remove(pos);
+                    attempt_order.insert(0, preferred);
                 }
             }
         }
@@ -185,9 +208,9 @@ pub async fn handle_responses(
             let converted_json = serde_json::to_string_pretty(&anthropic_body).unwrap_or_default();
             let is_stream = req.stream.unwrap_or(false);
             if is_stream {
-                handle_anthropic_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
+                handle_anthropic_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
             } else {
-                handle_anthropic_non_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
+                handle_anthropic_non_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
             }
         } else if config.is_gemini() {
             // Gemini API conversion
@@ -202,9 +225,9 @@ pub async fn handle_responses(
             let converted_json = serde_json::to_string_pretty(&gemini_body).unwrap_or_default();
             let is_stream = req.stream.unwrap_or(false);
             if is_stream {
-                handle_gemini_stream_response(state.clone(), config.clone(), gemini_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
+                handle_gemini_stream_response(state.clone(), config.clone(), gemini_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
             } else {
-                handle_gemini_non_stream_response(state.clone(), config.clone(), gemini_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
+                handle_gemini_non_stream_response(state.clone(), config.clone(), gemini_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
             }
         } else {
             // Chat Completions path (default: transform Responses → Chat Completions)
@@ -231,9 +254,9 @@ pub async fn handle_responses(
             let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
             let is_stream = chat_req.stream;
             if is_stream {
-                handle_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
+                handle_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
             } else {
-                handle_non_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone()).await
+                handle_non_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
             }
         };
 
@@ -299,6 +322,8 @@ async fn handle_non_stream_response(
     model: String,
     start: Instant,
     client_type: String,
+    session_id: Option<String>,
+    provider_id: String,
 ) -> Result<Response, GatewayError> {
     let result = adapter::send_non_stream(&state.http_client, &config, &chat_req).await;
 
@@ -433,6 +458,14 @@ async fn handle_non_stream_response(
             // Extract token usage from upstream
             let (in_tok, out_tok) = extract_usage(&upstream_json);
 
+            // Record session affinity if the upstream reported cache hits.
+            // Skipped silently when no session_id (short prompts) or usage is absent.
+            if let Some(ref sid) = session_id {
+                if let Some(usage) = chat_resp.usage.as_ref() {
+                    crate::gateway::session_affinity::record_if_cache_hit(sid, &provider_id, usage);
+                }
+            }
+
             // Log success
             let trace = json!({ "response_id": &resp_id, "stream": false }).to_string();
             log_request_success(
@@ -470,6 +503,8 @@ async fn handle_stream_response(
     model: String,
     start: Instant,
     client_type: String,
+    session_id: Option<String>,
+    provider_id: String,
 ) -> Result<Response, GatewayError> {
     let upstream_resp = adapter::send_stream(&state.http_client, &config, &chat_req).await;
 
@@ -495,12 +530,21 @@ async fn handle_stream_response(
             let raw_req = raw_request.clone();
             let conv_req = converted_request.clone();
             let sent_messages = chat_req.messages.clone();
+            let sa_session = session_id.clone();
+            let sa_provider = provider_id.clone();
 
             // Spawn task to process upstream SSE and send converted events
             tokio::spawn(async move {
                 let mut acc = SseAccumulator::new(resp_id, model_clone.clone());
 
                 let result = crate::gateway::sse::process_upstream_stream(boot, tx, &mut acc).await;
+
+                // Record session affinity when the upstream confirmed a cache
+                // hit (acc.usage was normalized to the Responses-shape during
+                // stream processing — input_tokens_details.cached_tokens etc.).
+                if let (Some(ref sid), Some(usage)) = (sa_session.as_ref(), acc.usage.as_ref()) {
+                    crate::gateway::session_affinity::record_if_cache_hit(sid, &sa_provider, usage);
+                }
 
                 let latency = start.elapsed().as_millis() as i64;
                 let tc_list = acc.tool_calls_list();
@@ -604,6 +648,8 @@ async fn handle_anthropic_non_stream_response(
     model: String,
     start: Instant,
     client_type: String,
+    session_id: Option<String>,
+    provider_id: String,
 ) -> Result<Response, GatewayError> {
     let result = adapter::send_anthropic_non_stream(&state.http_client, &config, &body).await;
 
@@ -669,6 +715,13 @@ async fn handle_anthropic_non_stream_response(
             let latency = start.elapsed().as_millis() as i64;
             let (in_tok, out_tok) = extract_anthropic_usage(&upstream_json);
 
+            // Record session affinity on Anthropic cache_read_input_tokens hit.
+            if let Some(ref sid) = session_id {
+                if let Some(usage) = upstream_json.get("usage") {
+                    crate::gateway::session_affinity::record_if_cache_hit(sid, &provider_id, usage);
+                }
+            }
+
             let trace = json!({"response_id": &resp_id, "stream": false, "protocol": "anthropic_messages"}).to_string();
             log_request_success(
                 &state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
@@ -699,6 +752,8 @@ async fn handle_anthropic_stream_response(
     model: String,
     start: Instant,
     client_type: String,
+    session_id: Option<String>,
+    provider_id: String,
 ) -> Result<Response, GatewayError> {
     let upstream_resp = adapter::send_anthropic_stream(&state.http_client, &config, &body).await;
 
@@ -713,6 +768,8 @@ async fn handle_anthropic_stream_response(
             let req_id = request_id.clone();
             let raw_req = raw_request.clone();
             let conv_req = converted_request.clone();
+            let sa_session = session_id.clone();
+            let sa_provider = provider_id.clone();
 
             tokio::spawn(async move {
                 let mut acc = AnthropicSseAccumulator::new(resp_id, model_clone.clone());
@@ -720,6 +777,10 @@ async fn handle_anthropic_stream_response(
 
                 let latency = start.elapsed().as_millis() as i64;
                 let tc_list = acc.tool_calls_list();
+
+                if let (Some(ref sid), Some(usage)) = (sa_session.as_ref(), acc.usage.as_ref()) {
+                    crate::gateway::session_affinity::record_if_cache_hit(sid, &sa_provider, usage);
+                }
 
                 match result {
                     Ok(()) => {
@@ -789,7 +850,14 @@ async fn handle_gemini_non_stream_response(
     model: String,
     start: Instant,
     client_type: String,
+    session_id: Option<String>,
+    provider_id: String,
 ) -> Result<Response, GatewayError> {
+    // Gemini's usage object doesn't currently expose a prompt-cache hit
+    // counter, so the affinity record below is effectively a no-op today;
+    // the params are wired for parity and forward-compat (if Gemini API
+    // adds it later, we'll start writing affinity without further plumbing).
+    let _ = (&session_id, &provider_id);
     let result = adapter::send_gemini_non_stream(&state.http_client, &config, &body, &model).await;
 
     match result {
@@ -849,6 +917,11 @@ async fn handle_gemini_non_stream_response(
             });
             let latency = start.elapsed().as_millis() as i64;
             let (in_tok, out_tok) = extract_gemini_usage(&upstream_json);
+            if let Some(ref sid) = session_id {
+                if let Some(usage) = upstream_json.get("usageMetadata") {
+                    crate::gateway::session_affinity::record_if_cache_hit(sid, &provider_id, usage);
+                }
+            }
             let trace = json!({"response_id": &resp_id, "stream": false, "protocol": "gemini"}).to_string();
             log_request_success(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
@@ -875,7 +948,11 @@ async fn handle_gemini_stream_response(
     model: String,
     start: Instant,
     client_type: String,
+    session_id: Option<String>,
+    provider_id: String,
 ) -> Result<Response, GatewayError> {
+    // See note in `handle_gemini_non_stream_response` — params wired for parity.
+    let _ = (&session_id, &provider_id);
     let upstream_resp = adapter::send_gemini_stream(&state.http_client, &config, &body, &model).await;
 
     match upstream_resp {

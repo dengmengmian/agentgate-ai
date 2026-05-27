@@ -8,4 +8,5 @@ pub mod route_decision;
 pub mod pass_through;
 pub mod provider_selector;
 pub mod session_store;
+pub mod session_affinity;
 pub mod anthropic_model_suffix;
