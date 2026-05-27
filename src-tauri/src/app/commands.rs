@@ -1258,8 +1258,10 @@ pub fn get_request_stats_range(
 }
 
 /// Live runtime KPIs surfaced in the bottom footer of Dashboard / Routes.
-/// All counters are gateway-side state — no DB joins beyond today's success
-/// rate, so polling at 5 s is cheap.
+/// Combines runtime-only state (active_requests, uptime) with lifetime
+/// aggregate metrics that used to live in a separate "累计" strip. Today
+/// stats are intentionally NOT included here — the Dashboard's "今日"
+/// strip already covers them, the footer focuses on the long-running view.
 #[derive(serde::Serialize)]
 pub struct RuntimeKpis {
     /// Currently in-flight requests at the proxy layer.
@@ -1268,9 +1270,12 @@ pub struct RuntimeKpis {
     pub uptime_seconds: i64,
     pub gateway_running: bool,
     pub gateway_port: u16,
-    /// Today's success rate as a 0-100 percentage; 0 when no requests yet.
-    pub success_rate_today: f64,
-    pub total_today: i64,
+    /// Lifetime totals — folded in from the old "累计" strip so the footer
+    /// is the single source of truth for "long-running scoreboard" info.
+    pub total_requests: i64,
+    pub total_tokens: i64,
+    pub total_cost: f64,
+    pub success_rate_lifetime: f64,
 }
 
 #[tauri::command]
@@ -1290,21 +1295,15 @@ pub fn get_runtime_kpis(state: State<'_, AppState>) -> Result<RuntimeKpis, AppEr
 
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
     let stats = storage::request_logs::get_stats(&conn)?;
-    // Today's success rate from today's totals only (lifetime success_rate is misleading
-    // when there's been a recent outage but lifetime is dominated by years-good history).
-    let success_rate_today = if stats.today_total > 0 {
-        let today_success = stats.today_total - stats.today_errors;
-        ((today_success as f64 / stats.today_total as f64) * 100.0).round()
-    } else {
-        0.0
-    };
     Ok(RuntimeKpis {
         active_requests,
         uptime_seconds,
         gateway_running,
         gateway_port,
-        success_rate_today,
-        total_today: stats.today_total,
+        total_requests: stats.total,
+        total_tokens: stats.total_input_tokens + stats.total_output_tokens,
+        total_cost: stats.total_cost,
+        success_rate_lifetime: stats.success_rate,
     })
 }
 

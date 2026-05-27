@@ -7,7 +7,6 @@ import {
   BarChart3,
 } from "lucide-react";
 import { RecentRequests } from "@/components/dashboard/RecentRequests";
-import { StatusBadge } from "@/components/common/StatusBadge";
 import { RuntimeFooter } from "@/components/common/RuntimeFooter";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
@@ -95,13 +94,13 @@ export function Dashboard() {
     </div>
   );
 
-  const avgCost = stats && stats.total > 0 ? stats.total_cost / stats.total : 0;
-  const totalTokens = stats ? stats.total_input_tokens + stats.total_output_tokens : 0;
   const todayTokens = stats ? stats.today_input_tokens + stats.today_output_tokens : 0;
 
   return (
     <div className="space-y-4">
-      {/* ── 1. Gateway strip — one line: status + endpoint + active provider + controls ── */}
+      {/* ── 1. Gateway strip — active provider, protocol chain, controls.
+              host:port + running badge live in the global Topbar; we don't
+              repeat them here. ── */}
       <div className="rounded-xl border border-border bg-card px-5 py-3" style={{ boxShadow: "var(--shadow-sm)" }}>
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
@@ -110,17 +109,16 @@ export function Dashboard() {
             </div>
             <div className="flex min-w-0 items-baseline gap-3">
               <span className="text-sm font-semibold text-text-primary">{t("dashboard.gateway")}</span>
-              <span className="truncate font-mono text-[11px] text-text-muted">{status.host}:{status.port}</span>
+              <span className="truncate text-xs text-text-secondary">
+                {status.active_provider ?? t("common.none")}
+              </span>
               <span className="hidden text-text-muted/40 md:inline">·</span>
-              <span className="hidden truncate text-xs text-text-secondary md:inline">
-                {status.active_provider ?? t("common.none")} · {status.input_protocol} → {status.output_protocol}
+              <span className="hidden truncate font-mono text-[11px] text-text-muted md:inline">
+                {status.input_protocol} → {status.output_protocol}
               </span>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <StatusBadge variant={status.running ? "success" : "muted"}>
-              {status.running ? t("topbar.running") : t("topbar.stopped")}
-            </StatusBadge>
             {status.running ? (
               <>
                 <button onClick={handleStop} className="flex items-center gap-1 rounded-md bg-error-soft px-2.5 py-1 text-[11px] font-medium text-error transition-colors hover:bg-error/20">
@@ -334,25 +332,7 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* ── 4. Cumulative summary — single compact line, secondary importance ── */}
-      {stats && (
-        <div className="rounded-xl border border-border bg-card px-5 py-2.5">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-text-muted">
-            <span className="font-medium text-text-secondary">{t("stats.total_label") || "累计"}</span>
-            <span><span className="font-mono text-text-primary">{stats.total.toLocaleString()}</span> {t("stats.requests")}</span>
-            <span className="text-text-muted/40">·</span>
-            <span><span className="font-mono text-text-primary">{formatTokens(totalTokens)}</span> tokens</span>
-            <span className="text-text-muted/40">·</span>
-            <span className="font-mono text-text-primary">{formatCost(stats.total_cost)}</span>
-            <span className="text-text-muted/40">·</span>
-            <span><span className="font-mono text-text-primary">{stats.success_rate}%</span> {t("stats.success_rate_label") || "成功"}</span>
-            <span className="text-text-muted/40">·</span>
-            <span>{t("stats.avg_per_request") || "均"} <span className="font-mono text-text-primary">{formatCost(avgCost)}</span>/{t("stats.req_unit") || "req"}</span>
-          </div>
-        </div>
-      )}
-
-      {/* ── 5. Tool status — single row of colored dots ── */}
+      {/* ── 4. Tool status — single row of colored dots ── */}
       <div className="rounded-xl border border-border bg-card px-5 py-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <span className="text-xs font-semibold text-text-secondary">{t("dashboard.tool_status")}</span>

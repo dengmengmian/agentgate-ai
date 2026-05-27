@@ -37,8 +37,10 @@ export interface RuntimeKpis {
   uptime_seconds: number;
   gateway_running: boolean;
   gateway_port: number;
-  success_rate_today: number;
-  total_today: number;
+  total_requests: number;
+  total_tokens: number;
+  total_cost: number;
+  success_rate_lifetime: number;
 }
 
 export interface ProviderStat {

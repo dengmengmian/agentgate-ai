@@ -1,11 +1,15 @@
 // Sticky bottom KPI footer surfaced on Dashboard + Routes.
 //
-// Polls `get_runtime_kpis` every 5 s — counters all live in gateway-side
-// memory + one cheap SQLite COUNT for today's totals. Cheap enough to keep
-// the footer alive without a "Refresh" button.
+// Single source of truth for the "long-running scoreboard" view. Combines:
+//   - runtime-only:  active_requests, uptime
+//   - lifetime:      total_requests, total_tokens, total_cost, success_rate
+//
+// Deliberately omits today_* metrics — the Dashboard's "今日" strip already
+// covers them, and duplicating them here led to two overlapping bottom
+// blocks. Polls every 5 s.
 
 import { useEffect, useState } from "react";
-import { Activity, TrendingUp, Clock, Cpu } from "lucide-react";
+import { Activity, Clock, TrendingUp, Database, DollarSign, CheckCircle2 } from "lucide-react";
 import * as api from "@/lib/api";
 import type { RuntimeKpis } from "@/types/stats";
 
@@ -19,6 +23,19 @@ function formatUptime(secs: number): string {
   if (h > 0) return `${h}h ${m}m`;
   if (m > 0) return `${m}m ${s}s`;
   return `${s}s`;
+}
+
+function formatTokens(n: number): string {
+  if (n === 0) return "0";
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+function formatCost(n: number): string {
+  if (n === 0) return "$0";
+  if (n < 0.01) return `$${n.toFixed(4)}`;
+  return `$${n.toFixed(2)}`;
 }
 
 interface MetricProps {
@@ -70,25 +87,25 @@ export function RuntimeFooter() {
 
   if (!kpis) return null;
 
-  // success_rate_today is rendered as a percent string; show "—" before any
-  // requests have come in (denominator 0).
-  const rateStr = kpis.total_today > 0 ? `${kpis.success_rate_today.toFixed(1)}%` : "—";
+  const rateStr = kpis.total_requests > 0 ? `${kpis.success_rate_lifetime.toFixed(0)}%` : "—";
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       <Metric icon={<Activity className="h-3.5 w-3.5" />} label="活跃连接" value={String(kpis.active_requests)} />
-      <Metric icon={<TrendingUp className="h-3.5 w-3.5" />} label="今日请求" value={kpis.total_today.toLocaleString()} />
-      <Metric
-        icon={<Cpu className="h-3.5 w-3.5" />}
-        label="今日成功率"
-        value={rateStr}
-        tone={kpis.total_today > 0 && kpis.success_rate_today < 90 ? "default" : "accent"}
-      />
       <Metric
         icon={<Clock className="h-3.5 w-3.5" />}
         label="运行时间"
         value={kpis.gateway_running ? formatUptime(kpis.uptime_seconds) : "已停止"}
         tone={kpis.gateway_running ? "default" : "muted"}
+      />
+      <Metric icon={<TrendingUp className="h-3.5 w-3.5" />} label="累计请求" value={kpis.total_requests.toLocaleString()} />
+      <Metric icon={<Database className="h-3.5 w-3.5" />} label="累计 Tokens" value={formatTokens(kpis.total_tokens)} />
+      <Metric icon={<DollarSign className="h-3.5 w-3.5" />} label="累计费用" value={formatCost(kpis.total_cost)} />
+      <Metric
+        icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+        label="累计成功率"
+        value={rateStr}
+        tone={kpis.total_requests > 0 && kpis.success_rate_lifetime < 90 ? "default" : "accent"}
       />
     </div>
   );
