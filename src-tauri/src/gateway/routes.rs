@@ -77,12 +77,19 @@ pub async fn list_models(headers: HeaderMap, AxumState(state): AxumState<Gateway
 pub async fn handle_responses(
     headers: HeaderMap,
     AxumState(state): AxumState<GatewayState>,
-    body: String,
+    body: bytes::Bytes,
 ) -> Result<Response, GatewayError> {
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!("req_{}", uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string());
     let client_type = detect_client_from_ua(&headers, "Codex");
+
+    // Decompress if needed — Codex.app with `requires_openai_auth = true`
+    // gzip-compresses the request body to match the production OpenAI flow.
+    let body = crate::gateway::body_decode::decode(&headers, body).map_err(|e| {
+        log_request_error(&state.db, &client_type, "/v1/responses", &request_id, "", None, &e, start.elapsed().as_millis() as i64);
+        GatewayError(e)
+    })?;
 
     // 1. Parse request
     let req: ResponsesRequest = serde_json::from_str(&body).map_err(|e| {
@@ -1061,12 +1068,17 @@ pub async fn handle_gemini_generate(
     headers: HeaderMap,
     axum::extract::Path(model_path): axum::extract::Path<String>,
     AxumState(state): AxumState<GatewayState>,
-    body: String,
+    body: bytes::Bytes,
 ) -> Result<Response, GatewayError> {
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!("req_{}", uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string());
     let client_type = detect_client_from_ua(&headers, "Gemini CLI");
+
+    let body = crate::gateway::body_decode::decode(&headers, body).map_err(|e| {
+        log_request_error(&state.db, &client_type, "/v1beta/generateContent", &request_id, "", None, &e, start.elapsed().as_millis() as i64);
+        GatewayError(e)
+    })?;
 
     // Extract model name from path (e.g. "gemini-2.5-flash" from "gemini-2.5-flash:generateContent")
     let model_name = model_path.split(':').next().unwrap_or(&model_path).to_string();
@@ -1225,12 +1237,17 @@ pub async fn handle_gemini_generate(
 pub async fn handle_chat_completions(
     headers: HeaderMap,
     AxumState(state): AxumState<GatewayState>,
-    body: String,
+    body: bytes::Bytes,
 ) -> Result<Response, GatewayError> {
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!("req_{}", &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]);
     let client_type = detect_client_from_ua(&headers, "Generic");
+
+    let body = crate::gateway::body_decode::decode(&headers, body).map_err(|e| {
+        log_request_error(&state.db, &client_type, "/v1/chat/completions", &request_id, "", None, &e, start.elapsed().as_millis() as i64);
+        GatewayError(e)
+    })?;
 
     let selection = crate::gateway::provider_selector::select_for_failover(
         &state.db, "openai_chat_completions", None, None,
@@ -1314,12 +1331,17 @@ pub async fn handle_chat_completions(
 pub async fn handle_messages(
     headers: HeaderMap,
     AxumState(state): AxumState<GatewayState>,
-    body: String,
+    body: bytes::Bytes,
 ) -> Result<Response, GatewayError> {
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!("req_{}", &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]);
     let client_type = detect_client_from_ua(&headers, "Claude Code");
+
+    let body = crate::gateway::body_decode::decode(&headers, body).map_err(|e| {
+        log_request_error(&state.db, &client_type, "/v1/messages", &request_id, "", None, &e, start.elapsed().as_millis() as i64);
+        GatewayError(e)
+    })?;
 
     // Select provider — try anthropic_messages protocol first, then openai_responses as fallback
     let selection = crate::gateway::provider_selector::select_for_failover(

@@ -17,6 +17,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap",
+ "flate2",
  "futures",
  "open",
  "rand",
