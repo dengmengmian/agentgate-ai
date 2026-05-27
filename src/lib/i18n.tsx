@@ -318,7 +318,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "stats.avg_latency": { en: "Avg Latency", zh: "平均延迟" },
   "stats.today": { en: "Today", zh: "今日" },
   "stats.today_errors": { en: "Today Errors", zh: "今日错误" },
-  "stats.daily_chart": { en: "Daily Requests (7 days)", zh: "每日请求（7 天）" },
+  "stats.daily_chart": { en: "Daily Requests", zh: "每日请求" },
   "stats.top_providers": { en: "Top Providers", zh: "热门服务商" },
   "stats.errors_label": { en: "errors", zh: "错误" },
   "stats.input_tokens": { en: "Input Tokens", zh: "输入 Token" },
