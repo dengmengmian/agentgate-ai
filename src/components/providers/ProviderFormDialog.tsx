@@ -4,6 +4,7 @@ import { PROVIDER_TYPES, PROTOCOLS, ALL_CAPABILITIES, CAPABILITY_LABELS } from "
 import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/common/Toast";
 import * as api from "@/lib/api";
+import { detectProviderType } from "@/lib/keyDetection";
 import type {
   ProviderView,
   CreateProviderInput,
@@ -127,26 +128,9 @@ export function ProviderFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providerType, apiKeys, isEdit]);
 
-  // API Key auto-detection
-  const detectProviderFromKey = (key: string): string | null => {
-    const k = key.trim();
-    if (!k) return null;
-    if (k.startsWith("sk-ant-")) return "anthropic";
-    if (k.startsWith("tp-")) return "mimo";  // MiMo token-plan keys
-    if (k.startsWith("deepseek-")) return "deepseek";
-    if (k.startsWith("sk-or-")) return "openrouter";
-    if (k.startsWith("gsk_")) return "groq";
-    if (k.startsWith("xai-")) return "xai";
-    if (k.startsWith("pplx-")) return "perplexity";
-    // Generic sk- could be OpenAI, SiliconFlow, Kimi, etc.
-    // Default to OpenAI for sk- prefix
-    if (k.startsWith("sk-")) return "openai";
-    return null;
-  };
-
   const handleQuickKeyChange = (key: string) => {
     setQuickKey(key);
-    setDetectedType(detectProviderFromKey(key));
+    setDetectedType(detectProviderType(key));
   };
 
   const handleQuickCreate = () => {

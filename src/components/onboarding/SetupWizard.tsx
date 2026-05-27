@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Zap, CheckCircle, XCircle, Loader2, ArrowRight, Key, Monitor, Rocket } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
+import { detectProvider } from "@/lib/keyDetection";
 
 interface Props {
   onComplete: () => void;
@@ -15,17 +16,6 @@ interface ToolDetection {
   detected: boolean;
   checked: boolean;
 }
-
-// API key prefix → provider type (matches ProviderFormDialog presets)
-const KEY_PATTERNS: [RegExp, string, string][] = [
-  [/^sk-ant-/, "anthropic", "Anthropic"],
-  [/^deepseek-/, "deepseek", "DeepSeek"],
-  [/^sk-or-/, "openrouter", "OpenRouter"],
-  [/^gsk_/, "groq", "Groq"],
-  [/^xai-/, "xai", "xAI"],
-  [/^pplx-/, "perplexity", "Perplexity"],
-  [/^sk-/, "openai", "OpenAI"],
-];
 
 // Presets (duplicated subset from ProviderFormDialog to avoid circular deps)
 const QUICK_PRESETS: Record<string, { baseUrl: string; protocols: string[]; defaultModel: string; reasoningModel?: string; anthropicBaseUrl?: string; responsesBaseUrl?: string; extraHeaders?: string }> = {
@@ -49,14 +39,8 @@ export function SetupWizard({ onComplete }: Props) {
   // Step 1: detect provider from key
   const handleKeyChange = (key: string) => {
     setApiKey(key);
-    const k = key.trim();
-    for (const [pattern, type, name] of KEY_PATTERNS) {
-      if (pattern.test(k)) {
-        setDetectedProvider({ type, name });
-        return;
-      }
-    }
-    setDetectedProvider(null);
+    const result = detectProvider(key);
+    setDetectedProvider(result ? { type: result.type, name: result.label } : null);
   };
 
   // Step 2: detect installed tools

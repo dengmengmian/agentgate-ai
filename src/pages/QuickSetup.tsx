@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Key, Monitor, Rocket, CheckCircle, XCircle, Loader2, ArrowRight } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
+import { detectProvider } from "@/lib/keyDetection";
 
 type Step = "key" | "tools" | "setup" | "done";
 
@@ -12,16 +13,6 @@ interface ToolDetection {
   detected: boolean;
   checked: boolean;
 }
-
-const KEY_PATTERNS: [RegExp, string, string][] = [
-  [/^sk-ant-/, "anthropic", "Anthropic"],
-  [/^deepseek-/, "deepseek", "DeepSeek"],
-  [/^sk-or-/, "openrouter", "OpenRouter"],
-  [/^gsk_/, "groq", "Groq"],
-  [/^xai-/, "xai", "xAI"],
-  [/^pplx-/, "perplexity", "Perplexity"],
-  [/^sk-/, "openai", "OpenAI"],
-];
 
 const QUICK_PRESETS: Record<string, { baseUrl: string; protocols: string[]; defaultModel: string; reasoningModel?: string; anthropicBaseUrl?: string; responsesBaseUrl?: string; extraHeaders?: string }> = {
   anthropic: { baseUrl: "https://api.anthropic.com", protocols: ["anthropic_messages"], defaultModel: "claude-sonnet-4-6" },
@@ -44,11 +35,8 @@ export function QuickSetup() {
 
   const handleKeyChange = (key: string) => {
     setApiKey(key);
-    const k = key.trim();
-    for (const [pattern, type, name] of KEY_PATTERNS) {
-      if (pattern.test(k)) { setDetectedProvider({ type, name }); return; }
-    }
-    setDetectedProvider(null);
+    const result = detectProvider(key);
+    setDetectedProvider(result ? { type: result.type, name: result.label } : null);
   };
 
   const handleGoToTools = async () => {
