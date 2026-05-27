@@ -84,8 +84,14 @@ impl SseAccumulator {
 }
 
 /// Process upstream Chat Completions SSE and emit Responses API SSE events.
+///
+/// The caller is expected to have already run `sse_bootstrap::bootstrap_detect`
+/// on the upstream response so any HTTP-200-with-error-frame failure mode has
+/// been turned into a clean Err that triggers failover before we commit to
+/// streaming. The `Bootstrap.prefix` carries whatever bytes the bootstrap
+/// scan already consumed — we replay those first, then drain the live stream.
 pub async fn process_upstream_stream(
-    response: reqwest::Response,
+    boot: crate::gateway::sse_bootstrap::Bootstrap,
     tx: mpsc::Sender<String>,
     acc: &mut SseAccumulator,
 ) -> Result<(), String> {
@@ -98,223 +104,300 @@ pub async fn process_upstream_stream(
     // NOTE: output_item.added is deferred until first text delta to avoid
     // emitting a spurious empty message item for tool-call-only responses.
 
-    let mut stream = response.bytes_stream();
-    let mut buffer = String::new();
+    let mut stream = boot.stream;
+    let mut buffer = String::from_utf8_lossy(&boot.prefix).into_owned();
     let mut has_text = false;
     let mut has_tool_calls = false;
     let mut message_item_emitted = false;
 
-    while let Some(chunk_result) = stream.next().await {
-        let chunk_bytes = match chunk_result {
-            Ok(b) => b,
-            Err(e) => {
-                send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &format!("Stream error: {e}"))).await;
-                return Err(format!("Stream read error: {e}"));
-            }
-        };
-
-        buffer.push_str(&String::from_utf8_lossy(&chunk_bytes));
-
+    // Drain the prefix buffer before we ever poll the live stream — preserves
+    // any complete SSE frames that bootstrap already pulled.
+    loop {
+        // First, parse out any complete lines already buffered.
         while let Some(line_end) = buffer.find('\n') {
             let line = buffer[..line_end].trim_end_matches('\r').to_string();
             buffer = buffer[line_end + 1..].to_string();
 
-            if line.is_empty() || line.starts_with(':') {
-                continue;
+            match dispatch_line(
+                &line,
+                &tx,
+                acc,
+                &mut has_text,
+                &mut has_tool_calls,
+                &mut message_item_emitted,
+            )
+            .await
+            {
+                LineOutcome::Continue => {}
+                LineOutcome::Done(result) => return result,
             }
+        }
 
-            // "data: {...}" and "data:{...}" — some providers omit the space
-            let Some(data) = line.strip_prefix("data:").map(|d| d.trim()) else { continue };
-
-            if data == "[DONE]" {
-                return finalize(tx, acc, has_text, has_tool_calls).await;
+        // Then pull more from upstream.
+        let chunk_bytes = match stream.next().await {
+            Some(Ok(b)) => b,
+            Some(Err(e)) => {
+                send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &format!("Stream error: {e}"))).await;
+                return Err(format!("Stream read error: {e}"));
             }
-
-            acc.log_event(data);
-
-            let Ok(chunk) = serde_json::from_str::<ChatCompletionChunk>(data) else { continue };
-
-            // Capture usage from chunk (DeepSeek sends it on the last chunk)
-            if let Some(ref u) = chunk.usage {
-                acc.usage = Some(normalize_usage(u));
-            }
-
-            let Some(choices) = &chunk.choices else { continue };
-
-            for choice in choices {
-                let Some(delta) = &choice.delta else { continue };
-
-                // ── Text content (with <think> tag splitting) ──
-                if let Some(ref content) = delta.content {
-                    if !content.is_empty() {
-                        // Split <think> tags — MiniMax embeds thinking in content
-                        let (text, thinking) = crate::transform::responses_to_chat::split_think_tags(content);
-                        if let Some(ref tk) = thinking {
-                            acc.reasoning_content.push_str(tk);
-                        }
-                        if !text.is_empty() {
-                            if !message_item_emitted {
-                                send(&tx, &ev::output_item_added_message(&acc.msg_item_id, 0)).await;
-                                send(&tx, &ev::content_part_added(&acc.msg_item_id, 0, 0)).await;
-                                acc.text_content_started = true;
-                                message_item_emitted = true;
-                            }
-                            has_text = true;
-                            acc.full_text.push_str(&text);
-                            send(&tx, &ev::output_text_delta(&acc.msg_item_id, 0, 0, &text)).await;
-                        }
-                    }
+            None => {
+                if has_text || has_tool_calls {
+                    return finalize(tx, acc, has_text, has_tool_calls).await;
                 }
+                send(
+                    &tx,
+                    &ev::response_failed(&acc.response_id, &acc.model, "Stream ended unexpectedly"),
+                )
+                .await;
+                return Err("Stream ended without [DONE]".to_string());
+            }
+        };
 
-                // ── Reasoning content ──
-                if let Some(ref rc) = delta.reasoning_content {
-                    if !rc.is_empty() {
-                        if !message_item_emitted {
-                            send(&tx, &ev::output_item_added_message(&acc.msg_item_id, 0)).await;
-                            message_item_emitted = true;
-                        }
-                        // Inject "**Thinking**\n\n" header so Codex TUI shows reasoning
+        buffer.push_str(&String::from_utf8_lossy(&chunk_bytes));
+    }
+}
+
+enum LineOutcome {
+    Continue,
+    Done(Result<(), String>),
+}
+
+/// Per-line SSE dispatch — shared between the prefix replay and the live
+/// stream so a frame straddling the boundary is handled identically.
+async fn dispatch_line(
+    line: &str,
+    tx: &mpsc::Sender<String>,
+    acc: &mut SseAccumulator,
+    has_text: &mut bool,
+    has_tool_calls: &mut bool,
+    message_item_emitted: &mut bool,
+) -> LineOutcome {
+    if line.is_empty() || line.starts_with(':') {
+        return LineOutcome::Continue;
+    }
+
+    let Some(data) = line.strip_prefix("data:").map(|d| d.trim()) else {
+        return LineOutcome::Continue;
+    };
+
+    if data == "[DONE]" {
+        return LineOutcome::Done(finalize(tx.clone(), acc, *has_text, *has_tool_calls).await);
+    }
+
+    acc.log_event(data);
+
+    let Ok(chunk) = serde_json::from_str::<ChatCompletionChunk>(data) else {
+        return LineOutcome::Continue;
+    };
+
+    if let Some(ref u) = chunk.usage {
+        acc.usage = Some(normalize_usage(u));
+    }
+
+    let Some(choices) = &chunk.choices else {
+        return LineOutcome::Continue;
+    };
+
+    process_choices(
+        choices,
+        tx,
+        acc,
+        has_text,
+        has_tool_calls,
+        message_item_emitted,
+    )
+    .await;
+
+    LineOutcome::Continue
+}
+
+async fn process_choices(
+    choices: &[crate::protocol::chat_completions::ChunkChoice],
+    tx: &mpsc::Sender<String>,
+    acc: &mut SseAccumulator,
+    has_text: &mut bool,
+    has_tool_calls: &mut bool,
+    message_item_emitted: &mut bool,
+) {
+    for choice in choices {
+        let Some(delta) = &choice.delta else { continue };
+
+        // ── Text content (with <think> tag splitting) ──
+        if let Some(ref content) = delta.content {
+            if !content.is_empty() {
+                // Split <think> tags — MiniMax embeds thinking in content
+                let (text, thinking) =
+                    crate::transform::responses_to_chat::split_think_tags(content);
+                if let Some(ref tk) = thinking {
+                    acc.reasoning_content.push_str(tk);
+                }
+                if !text.is_empty() {
+                    if !*message_item_emitted {
+                        send(tx, &ev::output_item_added_message(&acc.msg_item_id, 0)).await;
+                        send(tx, &ev::content_part_added(&acc.msg_item_id, 0, 0)).await;
+                        acc.text_content_started = true;
+                        *message_item_emitted = true;
+                    }
+                    *has_text = true;
+                    acc.full_text.push_str(&text);
+                    send(tx, &ev::output_text_delta(&acc.msg_item_id, 0, 0, &text)).await;
+                }
+            }
+        }
+
+        // ── Reasoning content ──
+        if let Some(ref rc) = delta.reasoning_content {
+            if !rc.is_empty() {
+                if !*message_item_emitted {
+                    send(tx, &ev::output_item_added_message(&acc.msg_item_id, 0)).await;
+                    *message_item_emitted = true;
+                }
+                // Inject "**Thinking**\n\n" header so Codex TUI shows reasoning
+                if acc.reasoning_content.is_empty() {
+                    acc.reasoning_content.push_str("**Thinking**\n\n");
+                }
+                acc.reasoning_content.push_str(rc);
+            }
+        }
+
+        // ── reasoning_details array (o3/o4 native) ──
+        if let Some(ref details) = delta.reasoning_details {
+            for detail in details {
+                if let Some(text) = detail.get("text").and_then(|t| t.as_str()) {
+                    if !text.is_empty() {
                         if acc.reasoning_content.is_empty() {
                             acc.reasoning_content.push_str("**Thinking**\n\n");
                         }
-                        acc.reasoning_content.push_str(rc);
-                    }
-                }
-
-                // ── reasoning_details array (o3/o4 native) ──
-                if let Some(ref details) = delta.reasoning_details {
-                    for detail in details {
-                        if let Some(text) = detail.get("text").and_then(|t| t.as_str()) {
-                            if !text.is_empty() {
-                                if acc.reasoning_content.is_empty() {
-                                    acc.reasoning_content.push_str("**Thinking**\n\n");
-                                }
-                                acc.reasoning_content.push_str(text);
-                            }
-                        }
-                    }
-                }
-
-                // ── Web-search annotations / citations ──
-                // MiMo emits these on the first streaming chunk; OpenAI's
-                // search-preview models emit per chunk. Forward each as an
-                // `output_text.annotation.added` event so the client can
-                // surface citations in real time, and accumulate them for the
-                // final output_item.done message.
-                if let Some(ref anns) = delta.annotations {
-                    for ann in anns {
-                        let annotation_index = acc.annotations.len();
-                        send(&tx, &ev::output_text_annotation_added(
-                            &acc.msg_item_id, 0, 0, annotation_index, ann,
-                        )).await;
-                        acc.annotations.push(ann.clone());
-                    }
-                }
-
-                // ── Legacy delta.function_call → synthetic tool_call ──
-                if let Some(ref fc) = delta.function_call {
-                    has_tool_calls = true;
-                    let idx = 0usize;
-                    if !acc.tool_calls.contains_key(&idx) {
-                        acc.tool_calls.insert(idx, AccumulatedToolCall {
-                            id: format!("call_legacy_{}", acc.response_id.replace("resp_", "")),
-                            name: String::new(), arguments: String::new(),
-                            emitted_added: false, last_args_len: 0,
-                        });
-                    }
-                    let tc = acc.tool_calls.get_mut(&idx).unwrap();
-                    if let Some(name) = fc.get("name").and_then(|n| n.as_str()) {
-                        tc.name.push_str(name);
-                    }
-                    if let Some(args) = fc.get("arguments").and_then(|a| a.as_str()) {
-                        tc.arguments.push_str(args);
-                    }
-                    if !tc.emitted_added && !tc.name.is_empty() {
-                        let item_id = format!("fc_{}", tc.id);
-                        send(&tx, &ev::function_call_added(&item_id, 1, &tc.id, &tc.name)).await;
-                        tc.emitted_added = true;
-                    }
-                    if tc.emitted_added && tc.arguments.len() > tc.last_args_len {
-                        let delta_args = &tc.arguments[tc.last_args_len..];
-                        let item_id = format!("fc_{}", tc.id);
-                        send(&tx, &ev::function_call_arguments_delta(&item_id, 1, delta_args)).await;
-                        tc.last_args_len = tc.arguments.len();
-                    }
-                }
-
-                // ── Tool calls (streaming deltas) ──
-                if let Some(ref tcs) = delta.tool_calls {
-                    has_tool_calls = true;
-                    for tc_delta in tcs {
-                        let idx = tc_delta.index.unwrap_or(0) as usize;
-
-                        // Ensure entry exists
-                        if !acc.tool_calls.contains_key(&idx) {
-                            acc.tool_calls.insert(idx, AccumulatedToolCall {
-                                id: String::new(),
-                                name: String::new(),
-                                arguments: String::new(),
-                                emitted_added: false,
-                                last_args_len: 0,
-                            });
-                        }
-
-                        let tc = acc.tool_calls.get_mut(&idx).unwrap();
-
-                        // Accumulate id (only first delta usually has it)
-                        if let Some(ref id) = tc_delta.id {
-                            if tc.id.is_empty() {
-                                tc.id = clamp_call_id(id);
-                            }
-                        }
-
-                        // Accumulate function name
-                        if let Some(ref func) = tc_delta.function {
-                            if let Some(ref name) = func.name {
-                                tc.name.push_str(name);
-                            }
-                            if let Some(ref args) = func.arguments {
-                                tc.arguments.push_str(args);
-                            }
-                        }
-
-                        // Generate stable id if missing
-                        if tc.id.is_empty() {
-                            tc.id = format!("call_{}_{}", acc.response_id.replace("resp_", ""), idx);
-                        }
-
-                        // Emit function_call added event once we have name
-                        if !tc.emitted_added && !tc.name.is_empty() {
-                            let item_id = format!("fc_{}", tc.id);
-                            let oi = acc.next_output_index;
-                            acc.next_output_index += 1;
-                            send(&tx, &ev::function_call_added(&item_id, oi, &tc.id, &tc.name)).await;
-                            tc.emitted_added = true;
-                        }
-
-                        // Emit arguments delta
-                        if tc.emitted_added && tc.arguments.len() > tc.last_args_len {
-                            let delta_args = &tc.arguments[tc.last_args_len..];
-                            let item_id = format!("fc_{}", tc.id);
-                            // We need the output_index for this tool call.
-                            // Since we increment next_output_index after adding, the index is:
-                            // (next_output_index - number_of_remaining_unemitted) ... this is complex.
-                            // Simpler: use idx + 1 as output_index (0 = message, 1+ = tool calls).
-                            send(&tx, &ev::function_call_arguments_delta(&item_id, idx + 1, delta_args)).await;
-                            tc.last_args_len = tc.arguments.len();
-                        }
+                        acc.reasoning_content.push_str(text);
                     }
                 }
             }
         }
-    }
 
-    // Stream ended without [DONE]
-    if has_text || has_tool_calls {
-        finalize(tx, acc, has_text, has_tool_calls).await
-    } else {
-        send(&tx, &ev::response_failed(&acc.response_id, &acc.model, "Stream ended unexpectedly")).await;
-        Err("Stream ended without [DONE]".to_string())
+        // ── Web-search annotations / citations ──
+        // MiMo emits these on the first streaming chunk; OpenAI's
+        // search-preview models emit per chunk. Forward each as an
+        // `output_text.annotation.added` event so the client can
+        // surface citations in real time, and accumulate them for the
+        // final output_item.done message.
+        if let Some(ref anns) = delta.annotations {
+            for ann in anns {
+                let annotation_index = acc.annotations.len();
+                send(
+                    tx,
+                    &ev::output_text_annotation_added(
+                        &acc.msg_item_id,
+                        0,
+                        0,
+                        annotation_index,
+                        ann,
+                    ),
+                )
+                .await;
+                acc.annotations.push(ann.clone());
+            }
+        }
+
+        // ── Legacy delta.function_call → synthetic tool_call ──
+        if let Some(ref fc) = delta.function_call {
+            *has_tool_calls = true;
+            let idx = 0usize;
+            if !acc.tool_calls.contains_key(&idx) {
+                acc.tool_calls.insert(
+                    idx,
+                    AccumulatedToolCall {
+                        id: format!("call_legacy_{}", acc.response_id.replace("resp_", "")),
+                        name: String::new(),
+                        arguments: String::new(),
+                        emitted_added: false,
+                        last_args_len: 0,
+                    },
+                );
+            }
+            let tc = acc.tool_calls.get_mut(&idx).unwrap();
+            if let Some(name) = fc.get("name").and_then(|n| n.as_str()) {
+                tc.name.push_str(name);
+            }
+            if let Some(args) = fc.get("arguments").and_then(|a| a.as_str()) {
+                tc.arguments.push_str(args);
+            }
+            if !tc.emitted_added && !tc.name.is_empty() {
+                let item_id = format!("fc_{}", tc.id);
+                send(tx, &ev::function_call_added(&item_id, 1, &tc.id, &tc.name)).await;
+                tc.emitted_added = true;
+            }
+            if tc.emitted_added && tc.arguments.len() > tc.last_args_len {
+                let delta_args = &tc.arguments[tc.last_args_len..];
+                let item_id = format!("fc_{}", tc.id);
+                send(
+                    tx,
+                    &ev::function_call_arguments_delta(&item_id, 1, delta_args),
+                )
+                .await;
+                tc.last_args_len = tc.arguments.len();
+            }
+        }
+
+        // ── Tool calls (streaming deltas) ──
+        if let Some(ref tcs) = delta.tool_calls {
+            *has_tool_calls = true;
+            for tc_delta in tcs {
+                let idx = tc_delta.index.unwrap_or(0) as usize;
+
+                if !acc.tool_calls.contains_key(&idx) {
+                    acc.tool_calls.insert(
+                        idx,
+                        AccumulatedToolCall {
+                            id: String::new(),
+                            name: String::new(),
+                            arguments: String::new(),
+                            emitted_added: false,
+                            last_args_len: 0,
+                        },
+                    );
+                }
+
+                let tc = acc.tool_calls.get_mut(&idx).unwrap();
+
+                if let Some(ref id) = tc_delta.id {
+                    if tc.id.is_empty() {
+                        tc.id = clamp_call_id(id);
+                    }
+                }
+
+                if let Some(ref func) = tc_delta.function {
+                    if let Some(ref name) = func.name {
+                        tc.name.push_str(name);
+                    }
+                    if let Some(ref args) = func.arguments {
+                        tc.arguments.push_str(args);
+                    }
+                }
+
+                if tc.id.is_empty() {
+                    tc.id = format!("call_{}_{}", acc.response_id.replace("resp_", ""), idx);
+                }
+
+                if !tc.emitted_added && !tc.name.is_empty() {
+                    let item_id = format!("fc_{}", tc.id);
+                    let oi = acc.next_output_index;
+                    acc.next_output_index += 1;
+                    send(tx, &ev::function_call_added(&item_id, oi, &tc.id, &tc.name)).await;
+                    tc.emitted_added = true;
+                }
+
+                if tc.emitted_added && tc.arguments.len() > tc.last_args_len {
+                    let delta_args = &tc.arguments[tc.last_args_len..];
+                    let item_id = format!("fc_{}", tc.id);
+                    send(
+                        tx,
+                        &ev::function_call_arguments_delta(&item_id, idx + 1, delta_args),
+                    )
+                    .await;
+                    tc.last_args_len = tc.arguments.len();
+                }
+            }
+        }
     }
 }
 

@@ -475,6 +475,16 @@ async fn handle_stream_response(
 
     match upstream_resp {
         Ok(response) => {
+            // Bootstrap-validate the upstream stream: read the leading window
+            // before any byte reaches the client so HTTP-200-with-error-frame
+            // failures (quota/ban/rate-limit emitted mid-stream by MiMo / GLM
+            // / DeepSeek) become a clean Err that triggers failover instead
+            // of a half-streamed broken response to the client.
+            let boot = match crate::gateway::sse_bootstrap::bootstrap_detect(response).await {
+                Ok(b) => b,
+                Err(e) => return Err(GatewayError(e)),
+            };
+
             let resp_id = format!("resp_{}", &request_id[4..]);
             let (tx, rx) = mpsc::channel::<String>(256);
 
@@ -490,7 +500,7 @@ async fn handle_stream_response(
             tokio::spawn(async move {
                 let mut acc = SseAccumulator::new(resp_id, model_clone.clone());
 
-                let result = crate::gateway::sse::process_upstream_stream(response, tx, &mut acc).await;
+                let result = crate::gateway::sse::process_upstream_stream(boot, tx, &mut acc).await;
 
                 let latency = start.elapsed().as_millis() as i64;
                 let tc_list = acc.tool_calls_list();
