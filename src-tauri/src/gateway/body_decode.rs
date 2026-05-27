@@ -21,6 +21,11 @@ use std::io::Read;
 /// Decode the request body, honouring `Content-Encoding`. Returns the
 /// decoded UTF-8 string ready for JSON parsing. Identity / absent encoding
 /// is the common case and short-circuits to a single allocation.
+///
+/// Supported encodings: gzip / x-gzip / deflate / br / zstd / identity.
+/// Modern clients (Codex.app, ChatGPT desktop) default to zstd; older /
+/// generic ones use gzip or deflate. Brotli covers some browser-style
+/// stacks that may show up via embedded webviews.
 pub fn decode(headers: &HeaderMap, body: Bytes) -> Result<String, AppError> {
     let encoding = headers
         .get(axum::http::header::CONTENT_ENCODING)
@@ -28,14 +33,29 @@ pub fn decode(headers: &HeaderMap, body: Bytes) -> Result<String, AppError> {
         .unwrap_or("")
         .to_ascii_lowercase();
 
-    let decoded: Vec<u8> = match encoding.as_str() {
+    // Strip optional " ; q=..." weights some clients append.
+    let primary = encoding
+        .split(',')
+        .next()
+        .unwrap_or("")
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_string();
+
+    let decoded: Vec<u8> = match primary.as_str() {
         "" | "identity" => body.to_vec(),
         "gzip" | "x-gzip" => decompress_gzip(&body)?,
         "deflate" => decompress_deflate(&body)?,
-        // Some clients chain encodings ("gzip, br" etc.). Take the first
-        // recognised one — almost always single-encoding in practice.
+        "br" => decompress_brotli(&body)?,
+        "zstd" => decompress_zstd(&body)?,
+        // Some clients chain encodings ("gzip, br" etc.). Try each in
+        // order — almost always single-encoding in practice.
         multi if multi.contains("gzip") => decompress_gzip(&body)?,
         multi if multi.contains("deflate") => decompress_deflate(&body)?,
+        multi if multi.contains("br") => decompress_brotli(&body)?,
+        multi if multi.contains("zstd") => decompress_zstd(&body)?,
         other => {
             return Err(AppError::new(
                 "UNSUPPORTED_CONTENT_ENCODING",
@@ -66,6 +86,26 @@ fn decompress_deflate(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut out = Vec::with_capacity(data.len() * 2);
     decoder.read_to_end(&mut out).map_err(|e| {
         AppError::new("DEFLATE_DECODE_FAILED", format!("Failed to decompress deflate body: {e}"))
+    })?;
+    Ok(out)
+}
+
+fn decompress_brotli(data: &[u8]) -> Result<Vec<u8>, AppError> {
+    let mut decoder = brotli::Decompressor::new(data, 4096);
+    let mut out = Vec::with_capacity(data.len() * 3);
+    decoder.read_to_end(&mut out).map_err(|e| {
+        AppError::new("BROTLI_DECODE_FAILED", format!("Failed to decompress brotli body: {e}"))
+    })?;
+    Ok(out)
+}
+
+fn decompress_zstd(data: &[u8]) -> Result<Vec<u8>, AppError> {
+    let mut decoder = zstd::stream::Decoder::new(data).map_err(|e| {
+        AppError::new("ZSTD_DECODE_FAILED", format!("Failed to init zstd decoder: {e}"))
+    })?;
+    let mut out = Vec::with_capacity(data.len() * 3);
+    decoder.read_to_end(&mut out).map_err(|e| {
+        AppError::new("ZSTD_DECODE_FAILED", format!("Failed to decompress zstd body: {e}"))
     })?;
     Ok(out)
 }
@@ -149,10 +189,39 @@ mod tests {
     }
 
     #[test]
+    fn decompresses_zstd_body() {
+        let payload = br#"{"model":"gpt-4","input":"hi"}"#;
+        let compressed = Bytes::from(zstd::stream::encode_all(&payload[..], 3).unwrap());
+        let out = decode(&hdrs(Some("zstd")), compressed).unwrap();
+        assert_eq!(out, r#"{"model":"gpt-4","input":"hi"}"#);
+    }
+
+    #[test]
+    fn decompresses_brotli_body() {
+        let payload = b"brotli payload";
+        let mut compressed = Vec::new();
+        {
+            let mut writer = brotli::CompressorWriter::new(&mut compressed, 4096, 4, 22);
+            writer.write_all(payload).unwrap();
+        }
+        let out = decode(&hdrs(Some("br")), Bytes::from(compressed)).unwrap();
+        assert_eq!(out, "brotli payload");
+    }
+
+    #[test]
     fn rejects_unknown_encoding() {
         let body = Bytes::from_static(b"x");
-        let err = decode(&hdrs(Some("zstd")), body).unwrap_err();
+        let err = decode(&hdrs(Some("xpress")), body).unwrap_err();
         assert_eq!(err.code, "UNSUPPORTED_CONTENT_ENCODING");
+    }
+
+    #[test]
+    fn strips_quality_factors_from_encoding_header() {
+        // Some clients append "; q=1.0" quality factors.
+        let payload = br#"{"x":1}"#;
+        let compressed = Bytes::from(zstd::stream::encode_all(&payload[..], 3).unwrap());
+        let out = decode(&hdrs(Some("zstd; q=1.0")), compressed).unwrap();
+        assert_eq!(out, r#"{"x":1}"#);
     }
 
     #[test]
