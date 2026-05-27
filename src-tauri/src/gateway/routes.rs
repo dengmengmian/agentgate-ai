@@ -1533,6 +1533,75 @@ mod tests {
         assert!(db.lock().is_err(), "Mutex should be poisoned");
         assert!(lock_db(&db).is_some(), "lock_db should recover from poisoned mutex");
     }
+
+    #[test]
+    fn test_detect_client_from_ua_empty() {
+        let headers = HeaderMap::new();
+        assert_eq!(detect_client_from_ua(&headers, "Default"), "Default");
+    }
+
+    #[test]
+    fn test_detect_client_from_ua_claude_code() {
+        let mut headers = HeaderMap::new();
+        headers.insert("user-agent", "claude-code/0.1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&headers, "Default"), "Claude Code");
+    }
+
+    #[test]
+    fn test_detect_client_from_ua_codex() {
+        let mut headers = HeaderMap::new();
+        headers.insert("user-agent", "codex-cli/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&headers, "Default"), "Codex");
+    }
+
+    #[test]
+    fn test_detect_client_from_ua_openai_sdk() {
+        let mut headers = HeaderMap::new();
+        headers.insert("user-agent", "openai-python/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&headers, "Default"), "OpenAI SDK");
+    }
+
+    #[test]
+    fn test_detect_client_from_ua_openai_sdk_codex_route() {
+        let mut headers = HeaderMap::new();
+        headers.insert("user-agent", "openai-python/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&headers, "Codex"), "Codex");
+    }
+
+    #[test]
+    fn test_detect_client_from_ua_cursor() {
+        let mut headers = HeaderMap::new();
+        headers.insert("user-agent", "Cursor/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&headers, "Default"), "Cursor");
+    }
+
+    #[test]
+    fn test_detect_client_from_ua_python_sdk() {
+        let mut headers = HeaderMap::new();
+        headers.insert("user-agent", "python-requests/2.28".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&headers, "Default"), "Python SDK");
+    }
+
+    #[test]
+    fn test_detect_client_from_ua_node_sdk() {
+        let mut headers = HeaderMap::new();
+        headers.insert("user-agent", "node-fetch/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&headers, "Default"), "Node SDK");
+    }
+
+    #[test]
+    fn test_detect_client_from_ua_curl() {
+        let mut headers = HeaderMap::new();
+        headers.insert("user-agent", "curl/7.64.1".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&headers, "Default"), "curl");
+    }
+
+    #[test]
+    fn test_detect_client_from_ua_unknown() {
+        let mut headers = HeaderMap::new();
+        headers.insert("user-agent", "MyCustomAgent/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&headers, "Default"), "MyCustomAgent/1.0");
+    }
 }
 
 fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayError> {
