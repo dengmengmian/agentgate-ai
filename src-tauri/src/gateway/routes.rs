@@ -457,6 +457,11 @@ async fn handle_non_stream_response(
 
             // Extract token usage from upstream
             let (in_tok, out_tok) = extract_usage(&upstream_json);
+            let (cache_w, cache_r) = chat_resp
+                .usage
+                .as_ref()
+                .map(|u| crate::storage::request_logs::extract_cache_tokens(u))
+                .unwrap_or((None, None));
 
             // Record session affinity if the upstream reported cache hits.
             // Skipped silently when no session_id (short prompts) or usage is absent.
@@ -474,7 +479,7 @@ async fn handle_non_stream_response(
                 &serde_json::to_string_pretty(&responses_resp).unwrap_or_default(),
                 if tool_calls_json.is_empty() { None } else { Some(&tool_calls_json) },
                 &config.name, &model, 200, latency, Some(&trace),
-                in_tok, out_tok,
+                in_tok, out_tok, cache_w, cache_r,
             );
 
             Ok(Json(responses_resp).into_response())
@@ -594,6 +599,9 @@ async fn handle_stream_response(
                             (u.get("input_tokens").and_then(|v| v.as_i64()),
                              u.get("output_tokens").and_then(|v| v.as_i64()))
                         }).unwrap_or((None, None));
+                        let (cache_w, cache_r) = acc.usage.as_ref()
+                            .map(crate::storage::request_logs::extract_cache_tokens)
+                            .unwrap_or((None, None));
 
                         log_request_success(
                             &db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req,
@@ -601,7 +609,7 @@ async fn handle_stream_response(
                             &truncate_str(&acc.full_text, 10000),
                             tool_calls_json.as_deref(),
                             &provider_name, &model_clone, 200, latency,
-                            Some(&trace), in_tok, out_tok,
+                            Some(&trace), in_tok, out_tok, cache_w, cache_r,
                         );
                     }
                     Err(err_msg) => {
@@ -714,6 +722,9 @@ async fn handle_anthropic_non_stream_response(
             });
             let latency = start.elapsed().as_millis() as i64;
             let (in_tok, out_tok) = extract_anthropic_usage(&upstream_json);
+            let (cache_w, cache_r) = upstream_json.get("usage")
+                .map(crate::storage::request_logs::extract_cache_tokens)
+                .unwrap_or((None, None));
 
             // Record session affinity on Anthropic cache_read_input_tokens hit.
             if let Some(ref sid) = session_id {
@@ -728,7 +739,7 @@ async fn handle_anthropic_non_stream_response(
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&responses_resp).unwrap_or_default(),
                 if tool_calls_json.is_empty() { None } else { Some(&tool_calls_json) },
-                &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok,
+                &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok, cache_w, cache_r,
             );
 
             Ok(Json(responses_resp).into_response())
@@ -801,12 +812,15 @@ async fn handle_anthropic_stream_response(
                             (u.get("input_tokens").and_then(|v| v.as_i64()),
                              u.get("output_tokens").and_then(|v| v.as_i64()))
                         }).unwrap_or((None, None));
+                        let (cache_w, cache_r) = acc.usage.as_ref()
+                            .map(crate::storage::request_logs::extract_cache_tokens)
+                            .unwrap_or((None, None));
 
                         log_request_success(
                             &db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req, "",
                             &truncate_str(&acc.full_text, 10000),
                             None, &provider_name, &model_clone, 200, latency,
-                            Some(&trace), in_tok, out_tok,
+                            Some(&trace), in_tok, out_tok, cache_w, cache_r,
                         );
                     }
                     Err(err_msg) => {
@@ -934,7 +948,7 @@ async fn handle_gemini_non_stream_response(
             log_request_success(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&responses_resp).unwrap_or_default(),
-                None, &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok);
+                None, &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok, None, None);
             Ok(Json(responses_resp).into_response())
         }
         Err(err) => {
@@ -1003,7 +1017,7 @@ async fn handle_gemini_stream_response(
                         log_request_success(&db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req, "",
                             &truncate_str(&acc.full_text, 10000),
                             None, &provider_name, &model_clone, 200, latency,
-                            Some(&trace), in_tok, out_tok);
+                            Some(&trace), in_tok, out_tok, None, None);
                     }
                     Err(err_msg) => {
                         let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
@@ -1165,7 +1179,7 @@ pub async fn handle_gemini_generate(
             let latency = start.elapsed().as_millis() as i64;
             let trace = json!({"response_id": &req_id, "stream": true, "protocol": "gemini_input"}).to_string();
             log_request_success(&db, &client_type, "/v1beta/generateContent", &req_id, &raw_req, &conv_req, "", &full_text[..full_text.len().min(10000)],
-                None, &provider_name, &model_clone, 200, latency, Some(&trace), None, None);
+                None, &provider_name, &model_clone, 200, latency, Some(&trace), None, None, None, None);
         });
 
         let stream = ReceiverStream::new(rx);
@@ -1193,7 +1207,7 @@ pub async fn handle_gemini_generate(
                 log_request_success(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json,
                     &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                     &serde_json::to_string_pretty(&gemini_resp).unwrap_or_default(),
-                    None, &config.name, &resolved_model, 200, latency, Some(&trace), in_tok, out_tok);
+                    None, &config.name, &resolved_model, 200, latency, Some(&trace), in_tok, out_tok, None, None);
                 Ok(Json(gemini_resp).into_response())
             }
             Err(err) => {
@@ -1367,11 +1381,14 @@ pub async fn handle_messages(
             let response = crate::protocol::anthropic_messages::from_chat_response(&upstream_json, &model);
             let latency = start.elapsed().as_millis() as i64;
             let (in_tok, out_tok) = extract_usage(&upstream_json);
+            let (cache_w, cache_r) = upstream_json.get("usage")
+                .map(crate::storage::request_logs::extract_cache_tokens)
+                .unwrap_or((None, None));
             let trace = json!({"mode": "transform", "protocol": "anthropic_messages"}).to_string();
             log_request_success(&state.db, &client_type, "/v1/messages", &request_id, &raw, &converted_json,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&response).unwrap_or_default(),
-                None, &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok);
+                None, &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok, cache_w, cache_r);
             Ok(Json(response).into_response())
         }
         Err(err) => {
@@ -1932,6 +1949,7 @@ fn lock_db(db: &Arc<Mutex<Connection>>) -> Option<std::sync::MutexGuard<'_, Conn
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn log_request_success(
     db: &Arc<Mutex<Connection>>,
     client_type: &str,
@@ -1949,6 +1967,8 @@ fn log_request_success(
     trace_json: Option<&str>,
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
+    cache_write_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
 ) {
     if let Some(conn) = lock_db(db) {
         // Calculate cost from pricing table
@@ -1963,6 +1983,7 @@ fn log_request_success(
             if converted_response.is_empty() { None } else { Some(converted_response) },
             None, tool_calls, None, trace_json,
             input_tokens, output_tokens, cost,
+            cache_write_tokens, cache_read_tokens,
         );
     }
 }
@@ -2004,6 +2025,7 @@ fn log_request_error_full(
             Some(&error_msg),
             Some(&trace),
             None, None, None, // no cost for errors
+            None, None,       // no cache tokens for errors
         );
     }
 }

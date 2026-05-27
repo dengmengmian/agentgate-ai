@@ -236,7 +236,8 @@ async fn handle_stream(
                 Some(&truncate(&sanitized_sse, MAX_SSE_LOG)),
                 None, None,
                 Some(&trace),
-                None, None, None, // no cost for pass-through
+                None, None, None, // no cost / tokens parsed on stream pass-through
+                None, None,        // no cache tokens
             );
         }
     });
@@ -307,6 +308,7 @@ fn log_to_db(
             error_message,
             Some(trace_json),
             None, None, None,
+            None, None,
         );
     }
 }
@@ -416,6 +418,7 @@ pub async fn handle_anthropic(
                     "/v1/messages", 200, latency,
                     Some(&raw_req), None, None, None,
                     Some(&truncate(&sanitized_sse, MAX_SSE_LOG)), None, None, Some(&trace), None, None, None,
+                    None, None,
                 );
             }
         });

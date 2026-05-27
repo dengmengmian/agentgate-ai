@@ -227,6 +227,29 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute_batch("ALTER TABLE request_logs ADD COLUMN trace_json TEXT;")?;
     }
 
+    // Migration: split cache tokens into Write vs Read so the dashboard can
+    // show the real value of session affinity / prompt caching. Upstream
+    // formats:
+    //   - Anthropic: usage.cache_creation_input_tokens (Write)
+    //                usage.cache_read_input_tokens     (Read)
+    //   - OpenAI Responses:    input_tokens_details.cached_tokens     (Read)
+    //   - OpenAI Chat Completions: prompt_tokens_details.cached_tokens (Read)
+    //   - Some Chinese providers: bare `cached_tokens` (Read)
+    // OpenAI-family doesn't separately track cache writes; we leave Write as
+    // NULL for those rows so the UI can render "—" rather than a misleading 0.
+    let has_cwt: bool = conn
+        .prepare("SELECT cache_write_tokens FROM request_logs LIMIT 0")
+        .is_ok();
+    if !has_cwt {
+        conn.execute_batch("ALTER TABLE request_logs ADD COLUMN cache_write_tokens INTEGER;")?;
+    }
+    let has_crt: bool = conn
+        .prepare("SELECT cache_read_tokens FROM request_logs LIMIT 0")
+        .is_ok();
+    if !has_crt {
+        conn.execute_batch("ALTER TABLE request_logs ADD COLUMN cache_read_tokens INTEGER;")?;
+    }
+
     // Ensure gateway_settings has exactly one row
     let count: i64 =
         conn.query_row("SELECT COUNT(*) FROM gateway_settings", [], |row| row.get(0))?;

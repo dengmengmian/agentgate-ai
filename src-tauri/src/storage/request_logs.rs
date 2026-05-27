@@ -147,6 +147,8 @@ pub fn insert(
     input_tokens: Option<i64>,
     output_tokens: Option<i64>,
     cost: Option<f64>,
+    cache_write_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
 ) -> Result<(), AppError> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -155,16 +157,46 @@ pub fn insert(
         "INSERT INTO request_logs (id, request_id, timestamp, client, provider, model, route,
                 status_code, latency_ms, raw_request, converted_request, raw_response,
                 converted_response, sse_events, tool_calls, error_message, trace_json,
-                input_tokens, output_tokens, cost)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+                input_tokens, output_tokens, cost, cache_write_tokens, cache_read_tokens)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
         rusqlite::params![
             &id, request_id, &now, client, provider, model, route,
             status_code, latency_ms, raw_request, converted_request, raw_response,
             converted_response, sse_events, tool_calls, error_message, trace_json,
-            input_tokens, output_tokens, cost,
+            input_tokens, output_tokens, cost, cache_write_tokens, cache_read_tokens,
         ],
     )?;
     Ok(())
+}
+
+/// Pull `(cache_write_tokens, cache_read_tokens)` out of any supported upstream
+/// usage shape. Returns `(None, None)` when neither is present so the row
+/// keeps "unknown" semantics rather than misleading zeroes.
+///
+/// Recognised shapes:
+///   - Anthropic Messages: `cache_creation_input_tokens` / `cache_read_input_tokens`
+///   - OpenAI Responses: `input_tokens_details.cached_tokens` (Read only)
+///   - OpenAI Chat Completions: `prompt_tokens_details.cached_tokens` (Read only)
+///   - Bare field used by some Chinese providers: `cached_tokens` (Read only)
+pub fn extract_cache_tokens(usage: &serde_json::Value) -> (Option<i64>, Option<i64>) {
+    let write = usage
+        .get("cache_creation_input_tokens")
+        .and_then(|v| v.as_i64());
+    let read = usage
+        .get("cache_read_input_tokens")
+        .and_then(|v| v.as_i64())
+        .or_else(|| {
+            usage
+                .pointer("/input_tokens_details/cached_tokens")
+                .and_then(|v| v.as_i64())
+        })
+        .or_else(|| {
+            usage
+                .pointer("/prompt_tokens_details/cached_tokens")
+                .and_then(|v| v.as_i64())
+        })
+        .or_else(|| usage.get("cached_tokens").and_then(|v| v.as_i64()));
+    (write, read)
 }
 
 pub fn clear(conn: &Connection) -> Result<bool, AppError> {
@@ -175,76 +207,151 @@ pub fn clear(conn: &Connection) -> Result<bool, AppError> {
 /// Get request statistics.
 /// Consolidated into fewer queries to reduce lock hold time.
 pub fn get_stats(conn: &Connection) -> Result<RequestStats, AppError> {
+    get_stats_for_range(conn, 7)
+}
+
+/// Compute stats over a sliding window of `daily_window` past days. The
+/// always-on totals (lifetime) plus today aggregates are independent of the
+/// window; only the `daily` Vec changes shape (length == daily_window, today
+/// last). Today's `cached_tokens` etc. are still pulled from the lifetime
+/// query path so dashboard cards stay correct regardless of selected range.
+pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<RequestStats, AppError> {
+    let daily_window = daily_window.clamp(1, 365);
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let today_prefix = format!("{today}%");
 
-    // Single query for all global + today aggregates
-    let (total, success, errors, avg_latency, total_input_tokens, total_output_tokens,
-         today_total, today_errors, today_input_tokens, today_output_tokens,
-         total_cost, today_cost): (i64, i64, i64, f64, i64, i64, i64, i64, i64, i64, f64, f64) =
-        conn.query_row(
-            "SELECT
-                COUNT(*),
-                COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN status_code >= 400 OR status_code < 200 THEN 1 ELSE 0 END), 0),
-                COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0),
-                COALESCE(SUM(input_tokens), 0),
-                COALESCE(SUM(output_tokens), 0),
-                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 AND (status_code >= 400 OR status_code < 200) THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN input_tokens ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN output_tokens ELSE 0 END), 0),
-                COALESCE(SUM(cost), 0.0),
-                COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN cost ELSE 0.0 END), 0.0)
-            FROM request_logs",
-            [&today_prefix],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?)),
-        )?;
+    // Single query for all global + today aggregates (now incl. cache W/R)
+    let (
+        total,
+        success,
+        errors,
+        avg_latency,
+        total_input_tokens,
+        total_output_tokens,
+        today_total,
+        today_errors,
+        today_input_tokens,
+        today_output_tokens,
+        total_cost,
+        today_cost,
+        total_cache_write,
+        total_cache_read,
+        today_cache_write,
+        today_cache_read,
+    ): (i64, i64, i64, f64, i64, i64, i64, i64, i64, i64, f64, f64, i64, i64, i64, i64) = conn.query_row(
+        "SELECT
+            COUNT(*),
+            COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN status_code >= 400 OR status_code < 200 THEN 1 ELSE 0 END), 0),
+            COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0),
+            COALESCE(SUM(input_tokens), 0),
+            COALESCE(SUM(output_tokens), 0),
+            COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN timestamp LIKE ?1 AND (status_code >= 400 OR status_code < 200) THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN input_tokens ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN output_tokens ELSE 0 END), 0),
+            COALESCE(SUM(cost), 0.0),
+            COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN cost ELSE 0.0 END), 0.0),
+            COALESCE(SUM(cache_write_tokens), 0),
+            COALESCE(SUM(cache_read_tokens), 0),
+            COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN cache_write_tokens ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN cache_read_tokens ELSE 0 END), 0)
+        FROM request_logs",
+        [&today_prefix],
+        |r| {
+            Ok((
+                r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?,
+                r.get(6)?, r.get(7)?, r.get(8)?, r.get(9)?, r.get(10)?, r.get(11)?,
+                r.get(12)?, r.get(13)?, r.get(14)?, r.get(15)?,
+            ))
+        },
+    )?;
 
-    // Daily stats (last 7 days) — single query with GROUP BY
-    let seven_days_ago = (chrono::Utc::now() - chrono::Duration::days(6)).format("%Y-%m-%d").to_string();
-    let mut daily_map: std::collections::HashMap<String, (i64, i64, i64, i64, f64)> = std::collections::HashMap::new();
+    // Daily aggregation over the requested window — single GROUP BY query.
+    let window_start = (chrono::Utc::now() - chrono::Duration::days(daily_window - 1))
+        .format("%Y-%m-%d")
+        .to_string();
+    let mut daily_map: std::collections::HashMap<String, (i64, i64, i64, i64, f64, i64, i64)> =
+        std::collections::HashMap::new();
     let mut stmt = conn.prepare(
         "SELECT substr(timestamp, 1, 10) as day,
                 COUNT(*),
                 SUM(CASE WHEN status_code >= 400 OR status_code < 200 THEN 1 ELSE 0 END),
                 COALESCE(SUM(input_tokens), 0),
                 COALESCE(SUM(output_tokens), 0),
-                COALESCE(SUM(cost), 0.0)
+                COALESCE(SUM(cost), 0.0),
+                COALESCE(SUM(cache_write_tokens), 0),
+                COALESCE(SUM(cache_read_tokens), 0)
          FROM request_logs
          WHERE timestamp >= ?1
-         GROUP BY day"
+         GROUP BY day",
     )?;
-    let rows = stmt.query_map([&seven_days_ago], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?, r.get::<_, i64>(3)?, r.get::<_, i64>(4)?, r.get::<_, f64>(5)?))
+    let rows = stmt.query_map([&window_start], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, i64>(2)?,
+            r.get::<_, i64>(3)?,
+            r.get::<_, i64>(4)?,
+            r.get::<_, f64>(5)?,
+            r.get::<_, i64>(6)?,
+            r.get::<_, i64>(7)?,
+        ))
     })?;
     for row in rows {
-        if let Ok((day, count, errs, inp, outp, cost)) = row {
-            daily_map.insert(day, (count, errs, inp, outp, cost));
+        if let Ok((day, count, errs, inp, outp, cost, cw, cr)) = row {
+            daily_map.insert(day, (count, errs, inp, outp, cost, cw, cr));
         }
     }
     let mut daily = Vec::new();
-    for i in (0..7).rev() {
-        let day = (chrono::Utc::now() - chrono::Duration::days(i)).format("%Y-%m-%d").to_string();
-        let (count, errs, inp, outp, cost) = daily_map.get(&day).copied().unwrap_or((0, 0, 0, 0, 0.0));
-        daily.push(DailyStat { date: day, total: count, errors: errs, success: count - errs, input_tokens: inp, output_tokens: outp, cost });
+    for i in (0..daily_window).rev() {
+        let day = (chrono::Utc::now() - chrono::Duration::days(i))
+            .format("%Y-%m-%d")
+            .to_string();
+        let (count, errs, inp, outp, cost, cw, cr) =
+            daily_map.get(&day).copied().unwrap_or((0, 0, 0, 0, 0.0, 0, 0));
+        daily.push(DailyStat {
+            date: day,
+            total: count,
+            errors: errs,
+            success: count - errs,
+            input_tokens: inp,
+            output_tokens: outp,
+            cost,
+            cache_write_tokens: cw,
+            cache_read_tokens: cr,
+        });
     }
 
-    // Top providers
-    let mut stmt = conn.prepare("SELECT provider, COUNT(*) as cnt FROM request_logs WHERE provider IS NOT NULL GROUP BY provider ORDER BY cnt DESC LIMIT 5")?;
-    let providers: Vec<ProviderStat> = stmt.query_map([], |r| {
-        Ok(ProviderStat { name: r.get(0)?, count: r.get(1)? })
-    })?.filter_map(|r| r.ok()).collect();
+    // Top providers — lifetime, unchanged
+    let mut stmt = conn.prepare(
+        "SELECT provider, COUNT(*) as cnt FROM request_logs WHERE provider IS NOT NULL GROUP BY provider ORDER BY cnt DESC LIMIT 5",
+    )?;
+    let providers: Vec<ProviderStat> = stmt
+        .query_map([], |r| Ok(ProviderStat { name: r.get(0)?, count: r.get(1)? }))?
+        .filter_map(|r| r.ok())
+        .collect();
 
     Ok(RequestStats {
-        total, success, errors,
+        total,
+        success,
+        errors,
         success_rate: if total > 0 { (success as f64 / total as f64 * 100.0).round() } else { 0.0 },
         avg_latency_ms: avg_latency.round() as i64,
-        today_total, today_errors,
-        total_input_tokens, total_output_tokens,
-        today_input_tokens, today_output_tokens,
-        total_cost, today_cost,
-        daily, providers,
+        today_total,
+        today_errors,
+        total_input_tokens,
+        total_output_tokens,
+        today_input_tokens,
+        today_output_tokens,
+        total_cost,
+        today_cost,
+        total_cache_write_tokens: total_cache_write,
+        total_cache_read_tokens: total_cache_read,
+        today_cache_write_tokens: today_cache_write,
+        today_cache_read_tokens: today_cache_read,
+        daily,
+        providers,
     })
 }
 
@@ -265,6 +372,10 @@ pub struct RequestStats {
     pub today_output_tokens: i64,
     pub total_cost: f64,
     pub today_cost: f64,
+    pub total_cache_write_tokens: i64,
+    pub total_cache_read_tokens: i64,
+    pub today_cache_write_tokens: i64,
+    pub today_cache_read_tokens: i64,
     pub daily: Vec<DailyStat>,
     pub providers: Vec<ProviderStat>,
 }
@@ -278,6 +389,8 @@ pub struct DailyStat {
     pub input_tokens: i64,
     pub output_tokens: i64,
     pub cost: f64,
+    pub cache_write_tokens: i64,
+    pub cache_read_tokens: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -406,7 +519,9 @@ mod tests {
                 tool_calls TEXT,
                 error_message TEXT,
                 cost REAL,
-                trace_json TEXT
+                trace_json TEXT,
+                cache_write_tokens INTEGER,
+                cache_read_tokens INTEGER
             );",
         )
         .unwrap();
@@ -426,8 +541,96 @@ mod tests {
         assert_eq!(stats.total_input_tokens, 0);
         assert_eq!(stats.total_output_tokens, 0);
         assert_eq!(stats.total_cost, 0.0);
+        assert_eq!(stats.total_cache_write_tokens, 0);
+        assert_eq!(stats.total_cache_read_tokens, 0);
+        assert_eq!(stats.today_cache_write_tokens, 0);
+        assert_eq!(stats.today_cache_read_tokens, 0);
         assert_eq!(stats.daily.len(), 7);
         assert!(stats.providers.is_empty());
+    }
+
+    #[test]
+    fn stats_for_range_returns_matching_window_size() {
+        let conn = empty_logs_db();
+        assert_eq!(get_stats_for_range(&conn, 1).unwrap().daily.len(), 1);
+        assert_eq!(get_stats_for_range(&conn, 14).unwrap().daily.len(), 14);
+        assert_eq!(get_stats_for_range(&conn, 30).unwrap().daily.len(), 30);
+    }
+
+    #[test]
+    fn stats_for_range_clamps_negative_and_huge_values() {
+        let conn = empty_logs_db();
+        // Below 1 clamps to 1, above 365 clamps to 365.
+        assert_eq!(get_stats_for_range(&conn, 0).unwrap().daily.len(), 1);
+        assert_eq!(get_stats_for_range(&conn, -5).unwrap().daily.len(), 1);
+        assert_eq!(get_stats_for_range(&conn, 999).unwrap().daily.len(), 365);
+    }
+
+    #[test]
+    fn extract_cache_tokens_anthropic_format() {
+        let usage = serde_json::json!({
+            "input_tokens": 100,
+            "cache_creation_input_tokens": 80,
+            "cache_read_input_tokens": 20,
+        });
+        let (w, r) = extract_cache_tokens(&usage);
+        assert_eq!(w, Some(80));
+        assert_eq!(r, Some(20));
+    }
+
+    #[test]
+    fn extract_cache_tokens_openai_responses_format() {
+        let usage = serde_json::json!({
+            "input_tokens": 100,
+            "input_tokens_details": {"cached_tokens": 60},
+            "output_tokens": 30,
+        });
+        let (w, r) = extract_cache_tokens(&usage);
+        assert_eq!(w, None, "OpenAI Responses doesn't surface cache writes");
+        assert_eq!(r, Some(60));
+    }
+
+    #[test]
+    fn extract_cache_tokens_openai_chat_completions_format() {
+        let usage = serde_json::json!({
+            "prompt_tokens": 100,
+            "prompt_tokens_details": {"cached_tokens": 45},
+            "completion_tokens": 20,
+        });
+        let (w, r) = extract_cache_tokens(&usage);
+        assert_eq!(w, None);
+        assert_eq!(r, Some(45));
+    }
+
+    #[test]
+    fn extract_cache_tokens_bare_field() {
+        let usage = serde_json::json!({"cached_tokens": 7});
+        let (w, r) = extract_cache_tokens(&usage);
+        assert_eq!(w, None);
+        assert_eq!(r, Some(7));
+    }
+
+    #[test]
+    fn extract_cache_tokens_empty_usage_returns_none() {
+        let usage = serde_json::json!({});
+        let (w, r) = extract_cache_tokens(&usage);
+        assert_eq!(w, None);
+        assert_eq!(r, None);
+    }
+
+    #[test]
+    fn extract_cache_tokens_prefers_anthropic_over_openai_when_both_present() {
+        // Pathological: provider that emits both keys. Anthropic Write field
+        // is unambiguous; Read fields are equivalent so we don't care which
+        // wins for Read as long as both are non-null.
+        let usage = serde_json::json!({
+            "cache_creation_input_tokens": 50,
+            "cache_read_input_tokens": 25,
+            "input_tokens_details": {"cached_tokens": 99},
+        });
+        let (w, r) = extract_cache_tokens(&usage);
+        assert_eq!(w, Some(50));
+        assert_eq!(r, Some(25), "anthropic cache_read takes priority over openai cached_tokens");
     }
 
     #[test]

@@ -1246,6 +1246,68 @@ pub fn get_request_stats(state: State<'_, AppState>) -> Result<crate::storage::r
     storage::request_logs::get_stats(&conn)
 }
 
+/// Stats over a configurable window (in days). Dashboard date-range tabs
+/// (今天/7天/14天/30天) call this with 1/7/14/30 respectively.
+#[tauri::command]
+pub fn get_request_stats_range(
+    days: i64,
+    state: State<'_, AppState>,
+) -> Result<crate::storage::request_logs::RequestStats, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::request_logs::get_stats_for_range(&conn, days)
+}
+
+/// Live runtime KPIs surfaced in the bottom footer of Dashboard / Routes.
+/// All counters are gateway-side state — no DB joins beyond today's success
+/// rate, so polling at 5 s is cheap.
+#[derive(serde::Serialize)]
+pub struct RuntimeKpis {
+    /// Currently in-flight requests at the proxy layer.
+    pub active_requests: u64,
+    /// Seconds since the gateway was started; 0 when stopped.
+    pub uptime_seconds: i64,
+    pub gateway_running: bool,
+    pub gateway_port: u16,
+    /// Today's success rate as a 0-100 percentage; 0 when no requests yet.
+    pub success_rate_today: f64,
+    pub total_today: i64,
+}
+
+#[tauri::command]
+pub fn get_runtime_kpis(state: State<'_, AppState>) -> Result<RuntimeKpis, AppError> {
+    let runtime = state.gateway_runtime.lock()
+        .map_err(|_| AppError::internal("Runtime lock failed"))?;
+    let active_requests = runtime.active_requests.as_ref()
+        .map(|c| c.load(std::sync::atomic::Ordering::Relaxed))
+        .unwrap_or(0);
+    let gateway_running = runtime.running;
+    let gateway_port = runtime.port;
+    let uptime_seconds = runtime.started_at.as_deref()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|started| (chrono::Utc::now() - started.with_timezone(&chrono::Utc)).num_seconds())
+        .unwrap_or(0);
+    drop(runtime);
+
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let stats = storage::request_logs::get_stats(&conn)?;
+    // Today's success rate from today's totals only (lifetime success_rate is misleading
+    // when there's been a recent outage but lifetime is dominated by years-good history).
+    let success_rate_today = if stats.today_total > 0 {
+        let today_success = stats.today_total - stats.today_errors;
+        ((today_success as f64 / stats.today_total as f64) * 100.0).round()
+    } else {
+        0.0
+    };
+    Ok(RuntimeKpis {
+        active_requests,
+        uptime_seconds,
+        gateway_running,
+        gateway_port,
+        success_rate_today,
+        total_today: stats.today_total,
+    })
+}
+
 // ── Diagnostics Commands ───────────────────────────────────────
 
 #[tauri::command]

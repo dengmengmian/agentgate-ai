@@ -282,6 +282,8 @@ pub fn run() {
             commands::reset_all_provider_runtime_status,
             // Stats
             commands::get_request_stats,
+            commands::get_request_stats_range,
+            commands::get_runtime_kpis,
             // Diagnostics
             commands::run_health_check,
             commands::run_database_check,
