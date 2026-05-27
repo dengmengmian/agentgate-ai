@@ -2,9 +2,61 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.1.0] - 2026-05-27
+
+This release lands the full Xiaomi MiMo integration, brings the Codex.app
+IDE plugin back to life under AgentGate (the "hijack OpenAI provider +
+`requires_openai_auth`" pattern), adds session affinity / SSE bootstrap
+detection / cache-token observability, and consolidates the dashboard
+into a tighter 5-block layout. The gateway also now decodes gzip / zstd /
+brotli request bodies so modern HTTP clients (Codex.app, ChatGPT desktop)
+don't 500 on us.
 
 ### Added / 新增
+
+- **Codex.app IDE plugin compatibility / Codex.app IDE 插件兼容**
+  - 改用「劫持 OpenAI provider + `requires_openai_auth = true`」配置写法：`model_provider = "OpenAI"` + `[model_providers.OpenAI]` 把 `base_url` 指向本地网关。Codex.app 把它当成官方 provider，IDE 插件 / Browser / Computer-Use / Mobile / 配额查询全部可用，同时对话请求实际走 AgentGate。
+  - `auth.json` 完全不再被改写 —— ChatGPT OAuth tokens / `auth_mode = "chatgpt"` 全程保留
+  - 旧版本污染 `auth.json` 的安全网：检测到 `{"OPENAI_API_KEY":"ag_local_...", no tokens}` 时自动从备份恢复
+  - 工具卡上新增「原生模式 / 代理模式」状态说明 + 切换按钮
+- **Compressed request body support / 压缩请求体支持**
+  - 网关 4 个 POST handler（`/v1/responses` / `/v1/chat/completions` / `/v1/messages` / `/v1beta/...`）改用 `Bytes` extractor + `body_decode` 模块
+  - 支持 `gzip` / `x-gzip` / `deflate` / `br` / `zstd` / `identity`，链式 encoding 与 quality factor 都能解析
+  - 不再因 Codex.app 默认 zstd 压缩或 ChatGPT 桌面客户端默认 gzip 而 500 报 "invalid utf-8 sequence"
+- **Session affinity / 会话亲和**
+  - 上游回 `cached_tokens > 0` 时记录 `(session_id → provider_id)` 1 小时绑定
+  - 同会话后续请求优先复用同 provider，最大化 prompt cache 命中
+  - Session ID 是 `first_user_message + sorted_tool_names` 的稳定指纹，跨多轮不变
+  - 识别四种 cache 字段格式：Anthropic / OpenAI Responses / Chat Completions / 中国厂商 bare 字段
+- **SSE bootstrap detection / SSE 流首段保护**
+  - 上游 HTTP 200 但首段 SSE 帧里塞 `event: error` 或 `data: {"error":...}` 时（quota / ban / rate-limit），首 16KB 窗口内捕获并失败转移到下一候选 provider
+  - 客户端看到的是「另一个 provider 的正常流」，零感知
+  - 覆盖 Chat Completions / Anthropic / Gemini / 纯 pass-through 4 条流式路径
+- **Cache token Write / Read split / 缓存 token 拆分**
+  - `request_logs` 表加 `cache_write_tokens` + `cache_read_tokens` 两列
+  - Dashboard 今日条下方新增「缓存」inline footer，命中率自动计算
+  - 让 session_affinity 的省钱效果可视化
+- **Dashboard date-range tabs / 时段切换**
+  - 今天 / 7天 / 14天 / 30天 tab 切趋势图
+  - 30 天密集视图自适应：bar 宽度收窄、label 间隔抽稀、tokens 副标签隐藏
+  - 后端 `get_stats_for_range(days)` 支持任意窗口
+- **Runtime KPI footer / 全局 KPI 页脚**
+  - Dashboard 底部新增 6 项实时指标：活跃连接 / 运行时间 / 累计请求 / 累计 Tokens / 累计费用 / 累计成功率
+  - 5s 轮询，counter 全来自网关内存 + 一次 COUNT 查询，几乎零开销
+- **Tray menu live status / 托盘菜单实时状态**
+  - macOS 菜单栏图标点开显示：当前 active provider / 今日请求数 / 网关运行端口
+  - 「切换服务商」子菜单一键切换 active provider，✓ 标记当前选中
+  - 30 秒周期自刷新，gateway start / stop / 切换 active 时即时更新
+- **Logs pagination / 日志分页**
+  - 每页 100 条，分页栏显示「第 N / M 页 · 显示 a–b 条」
+  - 关键词 / 状态过滤切换时自动回到第一页
+  - 新 `count_request_logs` Tauri 命令共享 list 的 WHERE 子句，filter 语义一致
+- **mimo2codex 转换层移植 / Conversion layer port**
+  - encrypted_content 跨轮传递（出站 `response.output_item.done` 带 reasoning item，Codex 回传时还原 `reasoning_content`，跨进程重启不丢思考链）
+  - Orphan tool_call 自动占位补全（避免上游 400 "missing tool message"）
+  - Web search annotations 流式透传（`response.output_text.annotation.added` 事件 + 最终 done 内嵌 citations）
+  - Context overflow 统一文案（trait 默认实现 + MimoProvider override）
+  - Tool args delta 已存在的细粒度推流验证
 
 - **Xiaomi MiMo as first-class provider / 小米 MiMo provider 一等公民支持**
   - 完整 5 个聊天模型：`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`
@@ -61,8 +113,20 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed / 修复
 
+- **MiMo / Codex 多轮历史图片穿透**：Codex 每轮回放整段会话，若早期一轮带图，后续即使纯文字也带 `image_url` → MiMo 路由到图片 endpoint 报 404。修复：`request_contains_images` 改扫全历史触发 capability promotion；MiMo `finalize_request` 对非 vision 模型剥除历史 `image_url`
+- **DeepSeek API key 识别**：`sk-` + 32 位小写 hex 是 DeepSeek key 的精确形态，但旧 prefix-only 检测把它错认为 OpenAI。集中到 `lib/keyDetection.ts` 统一 18 条规则
+- **Dashboard 30 天图溢出**：bar gap / 宽度 / label 密度按 bar 数量动态调节；趋势图永久全宽，热门 provider 改横向 inline 条
+- **Dashboard 标题字符串撞名**：i18n 字典里写死的「每日请求（7 天）」叠加动态后缀变成「每日请求（7 天）· 30 天」，改成纯「每日请求」
+- **路由页冗余 KPI footer**：Dashboard 已经有 KPI footer，Routes 页删除以避免重复
+- **网关页布局碎片化**：3 个过度装饰卡 → 状态条 / 配置 / 路由参考 3 个精简块；删除与 Topbar 重复的 host:port + 运行中徽章
 - 日志硬编码"Codex"/"/v1/responses"导致 Claude Code 和 chat completions 透传错误归类
 - Vision 探针对 MiMo 等返回非-400 错误码的上游误报"支持视觉"
+
+### Tests / 测试
+
+- Rust 单元测试 508 → **581 全绿**（+73 covering body_decode / session_affinity / sse_bootstrap / codex hijack-OpenAI / cache token extraction / range stats / tray tooltip / image detection 等）
+- Vitest 56 → **75**（+19 covering keyDetection + 既有覆盖）
+- 集成 smoke test `release_preflight_smoke` 扩展：新增 responses_strict / anthropic_messages / multi_turn 三段，10/10 通过真实 MiMo / DeepSeek 上游
 
 ---
 
