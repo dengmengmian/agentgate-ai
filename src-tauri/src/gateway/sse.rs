@@ -7,15 +7,14 @@ use crate::transform::reasoning_store;
 use crate::protocol::responses_events as ev;
 
 const MAX_EVENTS_LOG_SIZE: usize = 1_000_000; // 1MB
-const MAX_CALL_ID_LEN: usize = 64; // Responses API spec limit
-
-/// Truncate tool call ID to 64 chars (Responses API requirement).
+/// Sanitize tool call ID (whitelist `[a-zA-Z0-9_-]`, max 64 chars).
+///
+/// Thin wrapper around `transform::tool_calls::sanitize_call_id` so the response
+/// path stays symmetric with the request path — same id transformation applied
+/// at every boundary means no per-session mapping table is needed for the
+/// client to re-correlate tool results.
 fn clamp_call_id(id: &str) -> String {
-    if id.len() <= MAX_CALL_ID_LEN {
-        id.to_string()
-    } else {
-        id[..MAX_CALL_ID_LEN].to_string()
-    }
+    crate::transform::tool_calls::sanitize_call_id(id).into_owned()
 }
 
 /// Accumulated tool call from streaming deltas.
@@ -47,11 +46,19 @@ pub struct SseAccumulator {
     events_size: usize,
     next_output_index: usize,
     text_content_started: bool,
+    /// Output index reserved for the reasoning item when the first reasoning
+    /// chunk arrives. `None` if no reasoning has streamed yet — set lazily so
+    /// non-thinking responses don't emit a spurious empty reasoning item.
+    reasoning_output_index: Option<usize>,
+    /// Cached reasoning item id matching `output_item_added_reasoning`; used
+    /// by subsequent deltas + the finalize close-out.
+    reasoning_item_id: String,
 }
 
 impl SseAccumulator {
     pub fn new(response_id: String, model: String) -> Self {
         let msg_item_id = format!("msg_{}", &response_id.replace("resp_", ""));
+        let reasoning_item_id = format!("rs_{}", &response_id.replace("resp_", ""));
         Self {
             response_id,
             msg_item_id,
@@ -65,6 +72,8 @@ impl SseAccumulator {
             events_size: 0,
             next_output_index: 1, // 0 is reserved for the message item
             text_content_started: false,
+            reasoning_output_index: None,
+            reasoning_item_id,
         }
     }
 
@@ -137,8 +146,9 @@ pub async fn process_upstream_stream(
         let chunk_bytes = match stream.next().await {
             Some(Ok(b)) => b,
             Some(Err(e)) => {
-                send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &format!("Stream error: {e}"))).await;
-                return Err(format!("Stream read error: {e}"));
+                let msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);
+                send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &msg)).await;
+                return Err(msg);
             }
             None => {
                 if has_text || has_tool_calls {
@@ -257,6 +267,7 @@ async fn process_choices(
                     acc.reasoning_content.push_str("**Thinking**\n\n");
                 }
                 acc.reasoning_content.push_str(rc);
+                stream_reasoning_delta(tx, acc, rc).await;
             }
         }
 
@@ -269,6 +280,7 @@ async fn process_choices(
                             acc.reasoning_content.push_str("**Thinking**\n\n");
                         }
                         acc.reasoning_content.push_str(text);
+                        stream_reasoning_delta(tx, acc, text).await;
                     }
                 }
             }
@@ -420,15 +432,17 @@ async fn finalize(
     // `encrypted_content`. Codex round-trips this verbatim, so the trace
     // survives process restarts and multi-turn tool calls preserve their
     // reasoning_content (required by MiMo / DeepSeek thinking-mode upstream).
-    // Emitted BEFORE message / function_call items so it precedes them in
-    // the conversation history Codex builds.
     if !acc.reasoning_content.is_empty() {
-        let reasoning_item_id = format!("rs_{}", &acc.response_id.replace("resp_", ""));
-        let oi = acc.next_output_index;
-        // Note: we don't mutate next_output_index here because acc is &; we
-        // only need a unique output_index. Using a dedicated slot keeps it
-        // distinct from message (0) and tool_calls (1+).
-        send(&tx, &ev::output_item_done_reasoning(&reasoning_item_id, oi, &acc.reasoning_content)).await;
+        // Reuse the oi reserved during streaming if delta events were emitted;
+        // otherwise (non-streaming reasoning paths, providers that surface
+        // reasoning only in the final chunk) allocate fresh — keeps
+        // back-compat with consumers that don't subscribe to delta events.
+        let oi = acc.reasoning_output_index.unwrap_or(acc.next_output_index);
+        if acc.reasoning_output_index.is_some() {
+            // Streamed: close out the summary text before the item.done.
+            send(&tx, &ev::reasoning_summary_text_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content)).await;
+        }
+        send(&tx, &ev::output_item_done_reasoning(&acc.reasoning_item_id, oi, &acc.reasoning_content)).await;
     }
 
     // Close text content if any
@@ -458,6 +472,27 @@ async fn finalize(
 
 async fn send(tx: &mpsc::Sender<String>, event: &str) {
     let _ = tx.send(event.to_string()).await;
+}
+
+/// 发送一段 reasoning 增量。首次调用会顺手把 reasoning 的 output_item
+/// 占位事件先打出去（output_item.added），后续仅发 delta。output_index
+/// 在首次时从 `acc.next_output_index` 抢占——这样和 tool_calls 共用
+/// 同一个递增空间，不会冲突。
+async fn stream_reasoning_delta(tx: &mpsc::Sender<String>, acc: &mut SseAccumulator, delta: &str) {
+    if delta.is_empty() {
+        return;
+    }
+    let oi = match acc.reasoning_output_index {
+        Some(oi) => oi,
+        None => {
+            let oi = acc.next_output_index;
+            acc.next_output_index += 1;
+            acc.reasoning_output_index = Some(oi);
+            send(tx, &ev::output_item_added_reasoning(&acc.reasoning_item_id, oi)).await;
+            oi
+        }
+    };
+    send(tx, &ev::reasoning_summary_text_delta(&acc.reasoning_item_id, oi, 0, delta)).await;
 }
 
 /// Normalize upstream usage to Responses API format.
@@ -587,5 +622,54 @@ mod tests {
         assert_eq!(tc.id, "call_1");
         assert_eq!(tc.name, "search");
         assert_eq!(tc.arguments, "{\"q\":\"hi\"}");
+    }
+
+    #[tokio::test]
+    async fn stream_reasoning_delta_first_chunk_emits_added_and_delta() {
+        let mut acc = SseAccumulator::new("resp_xyz".to_string(), "deepseek".to_string());
+        let (tx, mut rx) = mpsc::channel::<String>(8);
+        stream_reasoning_delta(&tx, &mut acc, "Hello").await;
+        drop(tx);
+
+        let first = rx.recv().await.expect("expected added event");
+        let second = rx.recv().await.expect("expected delta event");
+        assert!(first.contains("response.output_item.added"), "got: {first}");
+        assert!(first.contains("\"type\":\"reasoning\""), "got: {first}");
+        assert!(first.contains("rs_xyz"), "got: {first}");
+        assert!(second.contains("response.reasoning_summary_text.delta"), "got: {second}");
+        assert!(second.contains("\"delta\":\"Hello\""), "got: {second}");
+        assert!(rx.recv().await.is_none(), "only added + delta on first chunk");
+        assert_eq!(acc.reasoning_output_index, Some(1));
+        // next_output_index advanced so tool calls won't reuse the reasoning slot.
+        assert_eq!(acc.next_output_index, 2);
+    }
+
+    #[tokio::test]
+    async fn stream_reasoning_delta_subsequent_chunks_emit_delta_only() {
+        let mut acc = SseAccumulator::new("resp_xyz".to_string(), "deepseek".to_string());
+        let (tx, mut rx) = mpsc::channel::<String>(8);
+        stream_reasoning_delta(&tx, &mut acc, "A").await;
+        // Drain the first two events (added + delta).
+        let _ = rx.recv().await;
+        let _ = rx.recv().await;
+        stream_reasoning_delta(&tx, &mut acc, "B").await;
+        drop(tx);
+
+        let second_delta = rx.recv().await.expect("second delta");
+        assert!(second_delta.contains("response.reasoning_summary_text.delta"));
+        assert!(second_delta.contains("\"delta\":\"B\""));
+        assert!(rx.recv().await.is_none(), "no second added event");
+        assert_eq!(acc.next_output_index, 2, "index reserved only once");
+    }
+
+    #[tokio::test]
+    async fn stream_reasoning_delta_empty_is_noop() {
+        let mut acc = SseAccumulator::new("resp_xyz".to_string(), "deepseek".to_string());
+        let (tx, mut rx) = mpsc::channel::<String>(8);
+        stream_reasoning_delta(&tx, &mut acc, "").await;
+        drop(tx);
+
+        assert!(rx.recv().await.is_none(), "empty delta must not emit events");
+        assert!(acc.reasoning_output_index.is_none());
     }
 }

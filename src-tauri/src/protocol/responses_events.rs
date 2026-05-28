@@ -111,6 +111,60 @@ pub fn output_item_done_message_with_annotations(
     sse("response.output_item.done", json!({ "type": "response.output_item.done", "output_index": output_index, "item": item }))
 }
 
+/// Open a reasoning output_item placeholder. Emit this when the first reasoning
+/// chunk arrives so downstream consumers (Codex IDE plugin, Claude Code TUI)
+/// know an upcoming series of `response.reasoning_summary_text.delta` events
+/// belongs to a real item — without this, deltas would arrive against an
+/// unknown `item_id`.
+pub fn output_item_added_reasoning(item_id: &str, output_index: usize) -> String {
+    sse("response.output_item.added", json!({
+        "type": "response.output_item.added",
+        "output_index": output_index,
+        "item": {
+            "id": item_id,
+            "type": "reasoning",
+            "status": "in_progress",
+            "summary": [],
+        }
+    }))
+}
+
+/// Incremental reasoning text chunk. Emitted as the upstream's thinking-mode
+/// tokens arrive so the UI can render "thinking..." live instead of waiting
+/// for the entire trace at finalize.
+pub fn reasoning_summary_text_delta(
+    item_id: &str,
+    output_index: usize,
+    summary_index: usize,
+    delta: &str,
+) -> String {
+    sse("response.reasoning_summary_text.delta", json!({
+        "type": "response.reasoning_summary_text.delta",
+        "item_id": item_id,
+        "output_index": output_index,
+        "summary_index": summary_index,
+        "delta": delta,
+    }))
+}
+
+/// Close the streamed reasoning summary. Always paired with a preceding
+/// `output_item_added_reasoning` and one or more `reasoning_summary_text_delta`.
+/// Followed by `output_item_done_reasoning` at finalize.
+pub fn reasoning_summary_text_done(
+    item_id: &str,
+    output_index: usize,
+    summary_index: usize,
+    text: &str,
+) -> String {
+    sse("response.reasoning_summary_text.done", json!({
+        "type": "response.reasoning_summary_text.done",
+        "item_id": item_id,
+        "output_index": output_index,
+        "summary_index": summary_index,
+        "text": text,
+    }))
+}
+
 /// Emit a `reasoning` output_item with the full reasoning trace pinned in
 /// `encrypted_content`. Codex echoes this item verbatim in subsequent
 /// requests' `input` array, letting the gateway re-inject the trace into

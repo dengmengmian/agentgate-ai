@@ -5,11 +5,11 @@ use serde_json::{json, Value};
 use crate::protocol::responses_events as ev;
 
 const MAX_EVENTS_LOG_SIZE: usize = 1_000_000;
-const MAX_CALL_ID_LEN: usize = 64;
 
+/// Sanitize tool call ID (whitelist `[a-zA-Z0-9_-]`, max 64 chars).
+/// Symmetric with the request path via `transform::tool_calls::sanitize_call_id`.
 fn clamp_call_id(id: &str) -> String {
-    if id.len() <= MAX_CALL_ID_LEN { id.to_string() }
-    else { id[..MAX_CALL_ID_LEN].to_string() }
+    crate::transform::tool_calls::sanitize_call_id(id).into_owned()
 }
 
 /// Accumulated tool call from Claude streaming.
@@ -35,11 +35,14 @@ pub struct AnthropicSseAccumulator {
     next_output_index: usize,
     text_item_emitted: bool,
     msg_item_id: String,
+    reasoning_output_index: Option<usize>,
+    reasoning_item_id: String,
 }
 
 impl AnthropicSseAccumulator {
     pub fn new(response_id: String, model: String) -> Self {
         let msg_item_id = format!("msg_{}", response_id.replace("resp_", ""));
+        let reasoning_item_id = format!("rs_{}", response_id.replace("resp_", ""));
         Self {
             response_id, model,
             full_text: String::new(),
@@ -51,6 +54,8 @@ impl AnthropicSseAccumulator {
             next_output_index: 0,
             text_item_emitted: false,
             msg_item_id,
+            reasoning_output_index: None,
+            reasoning_item_id,
         }
     }
 
@@ -88,7 +93,7 @@ pub async fn process_anthropic_stream(
             let chunk = match stream.next().await {
                 Some(Ok(b)) => b,
                 Some(Err(e)) => {
-                    let err_msg = format!("Stream error: {e}");
+                    let err_msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);
                     send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &err_msg)).await;
                     return Err(err_msg);
                 }
@@ -226,6 +231,7 @@ pub async fn process_anthropic_stream(
                                     acc.reasoning_content.push_str("**Thinking**\n\n");
                                 }
                                 acc.reasoning_content.push_str(thinking);
+                                stream_reasoning_delta(&tx, acc, thinking).await;
                             }
                         }
                         _ => {}
@@ -273,11 +279,41 @@ pub async fn process_anthropic_stream(
     Ok(())
 }
 
+/// 发送一段 reasoning 增量（Anthropic thinking_delta → Responses API delta）。
+/// 首次调用占位 output_item.added(reasoning) 并抢占 output_index。
+async fn stream_reasoning_delta(
+    tx: &mpsc::Sender<String>,
+    acc: &mut AnthropicSseAccumulator,
+    delta: &str,
+) {
+    if delta.is_empty() {
+        return;
+    }
+    let oi = match acc.reasoning_output_index {
+        Some(oi) => oi,
+        None => {
+            let oi = acc.next_output_index;
+            acc.next_output_index += 1;
+            acc.reasoning_output_index = Some(oi);
+            send(tx, &ev::output_item_added_reasoning(&acc.reasoning_item_id, oi)).await;
+            oi
+        }
+    };
+    send(tx, &ev::reasoning_summary_text_delta(&acc.reasoning_item_id, oi, 0, delta)).await;
+}
+
 async fn finalize(acc: &mut AnthropicSseAccumulator, tx: &mpsc::Sender<String>) {
     // Store reasoning for multi-turn
     if !acc.reasoning_content.is_empty() {
         let tc_ids: Vec<String> = acc.tool_calls.values().map(|tc| tc.id.clone()).collect();
         crate::transform::reasoning_store::store(&acc.full_text, &acc.reasoning_content, &tc_ids);
+    }
+
+    // Close streamed reasoning summary, if any. Emitted before text/tool dones
+    // so the order matches OpenAI Responses canonical event ordering.
+    if let Some(oi) = acc.reasoning_output_index {
+        send(tx, &ev::reasoning_summary_text_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content)).await;
+        send(tx, &ev::output_item_done_reasoning(&acc.reasoning_item_id, oi, &acc.reasoning_content)).await;
     }
 
     // Text done events
