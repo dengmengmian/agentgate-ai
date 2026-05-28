@@ -201,6 +201,28 @@ fn make_stream_error(status: u16, msg: &str, detail: &str) -> AppError {
     .with_detail(format!("Provider returned HTTP {status}; {detail}"))
 }
 
+/// 把上游 `bytes_stream()` 抛出的 `reqwest::Error` 转成人类可读的消息。
+///
+/// 当 `read_timeout` 触发（连续 60s 上游没发任何字节）时给出明确的中文文案，
+/// 指明这是 idle timeout 而非整请求超时；其它错误（连接 RST、解码失败等）
+/// 维持原 reqwest 错误描述。各 SSE/pass-through 处理器在 `Some(Err(e))` 分支
+/// 调用这个函数生成给下游的 error message / response.failed event。
+pub fn describe_stream_error(e: &reqwest::Error) -> String {
+    if e.is_timeout() {
+        return format!(
+            "上游响应静默超过 {} 秒未发送新数据，AgentGate 已主动放弃等待。\
+             常见原因：thinking 模型 + 长 prompt 首字过慢、上游短暂抖动、或上游本身卡住。\
+             建议重发请求；若 route profile 有其它 candidate，下一次会自动转到下个 provider。",
+            STREAM_READ_IDLE_HINT_SECS
+        );
+    }
+    format!("上游响应流读取失败：{e}。可能是网络抖动或上游主动断连。请重试。")
+}
+
+/// 仅用于错误文案的提示数字，必须与 `gateway::server` 里 `.read_timeout(...)`
+/// 的秒数保持一致（HTTP 层 idle 超时）。
+pub const STREAM_READ_IDLE_HINT_SECS: u64 = 60;
+
 fn next_data_payload(text: &str, event_line: &str) -> Option<String> {
     let mut iter = text.lines();
     while let Some(l) = iter.next() {

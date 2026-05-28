@@ -209,7 +209,12 @@ async fn handle_stream(
                     let _ = tx.send(text).await;
                 }
                 Err(e) => {
-                    let _ = tx.send(format!("data: {{\"error\":\"stream interrupted: {e}\"}}\n\n")).await;
+                    let msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);
+                    let payload = format!(
+                        "data: {}\n\n",
+                        serde_json::json!({"error": {"message": msg, "type": "upstream_stream_idle"}})
+                    );
+                    let _ = tx.send(payload).await;
                     break;
                 }
             }
@@ -406,7 +411,15 @@ pub async fn handle_anthropic(
                         if sse_size < MAX_SSE_LOG { let to_add = text.len().min(MAX_SSE_LOG - sse_size); sse_log.push_str(&text[..to_add]); sse_size += to_add; }
                         let _ = tx.send(text).await;
                     }
-                    Err(_) => break,
+                    Err(e) => {
+                        let msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);
+                        let payload = format!(
+                            "event: error\ndata: {}\n\n",
+                            json!({"type":"error","error":{"type":"upstream_stream_idle","message":msg}})
+                        );
+                        let _ = tx.send(payload).await;
+                        break;
+                    }
                 }
             }
             let latency = start.elapsed().as_millis() as i64;

@@ -82,7 +82,7 @@ pub async fn process_gemini_stream(
             let chunk = match stream.next().await {
                 Some(Ok(b)) => b,
                 Some(Err(e)) => {
-                    let err_msg = format!("Stream error: {e}");
+                    let err_msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);
                     send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &err_msg)).await;
                     return Err(err_msg);
                 }

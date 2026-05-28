@@ -1153,7 +1153,15 @@ pub async fn handle_gemini_generate(
                 if bootstrap_replayed {
                     let chunk = match stream.next().await {
                         Some(Ok(b)) => b,
-                        Some(Err(_)) => break,
+                        Some(Err(e)) => {
+                            let msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);
+                            let payload = format!(
+                                "data: {}\n\n",
+                                json!({"error": {"code": 500, "status": "INTERNAL", "message": msg}})
+                            );
+                            let _ = tx.send(payload).await;
+                            break;
+                        }
                         None => break,
                     };
                     buffer.push_str(&String::from_utf8_lossy(&chunk));
