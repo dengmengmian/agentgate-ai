@@ -21,6 +21,19 @@ import type { ToolConfigView } from "@/types/tool";
 import type { RequestLogListItem } from "@/types/request-log";
 import type { RequestStats } from "@/types/stats";
 
+/// 极简 deep equal：JSON 字符串化对比。dashboard 数据 payload 不大
+/// （几个 KB），常数时间。避免 5 秒轮询每次都触发 React 重渲让数字
+/// 闪烁、按钮 hover 状态丢失。
+function shallowEqual<T>(a: T, b: T): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  try {
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch {
+    return false;
+  }
+}
+
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
@@ -108,11 +121,14 @@ export function Dashboard() {
             toast("success", t("dashboard.first_request_seen"));
           }
 
-          setStatus(s);
-          setTools(tl);
-          setProviderCount(ps.length);
-          setRecentLogs(l);
-          setStats(st);
+          // Incremental update：只在数据实际变化时 setState，避免每 5 秒整页
+          // re-render 让数字闪烁、按钮跳动。浅比对 JSON 字符串虽然不最高效，
+          // 但对这点 payload 来说是常数时间，且写法最直接。
+          setStatus(prev => shallowEqual(prev, s) ? prev : s);
+          setTools(prev => shallowEqual(prev, tl) ? prev : tl);
+          setProviderCount(prev => prev === ps.length ? prev : ps.length);
+          setRecentLogs(prev => shallowEqual(prev, l) ? prev : l);
+          setStats(prev => shallowEqual(prev, st) ? prev : st);
         }
       } catch (err) {
         if (!cancelled) toast("error", (err as api.AppError).message);

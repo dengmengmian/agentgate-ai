@@ -20,6 +20,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
+import { usePolling } from "@/lib/usePolling";
 import * as api from "@/lib/api";
 import type { RouteProfileView, RouteProfileDetail, RoutingConditions } from "@/types/route-profile";
 import type { ProviderView } from "@/types/provider";
@@ -73,6 +74,8 @@ export function Routes() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  // 周期 + focus 刷新——让后台 cooldown 变化、新加的 provider 立即可见
+  usePolling(load);
 
   const selectProfile = async (id: string) => {
     try {

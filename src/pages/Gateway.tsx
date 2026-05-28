@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Radio, Play, Square, RotateCcw, Settings, Save } from "lucide-react";
+import { Radio, Play, Square, RotateCcw, Settings, Save, AlertTriangle } from "lucide-react";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
@@ -178,10 +178,55 @@ export function Gateway() {
             )}
           </div>
         </div>
-        {dirty && status.running && (
+        {dirty && (
           <p className="mt-2 text-[11px] text-warning">{t("gateway.settings_changed")}</p>
         )}
       </div>
+
+      {/* 已保存的设置 != 运行中的设置时显示重启 banner——避免用户改了 port
+          但 gateway 还在用旧 port 听，请求莫名连不上。一键重启把保存的设置
+          应用到运行实例。 */}
+      {status.running && settings && (
+        settings.host !== status.host
+        || settings.port !== status.port
+        || settings.input_protocol !== status.input_protocol
+        || settings.output_protocol !== status.output_protocol
+      ) && (
+        <div className="rounded-xl border border-warning/30 bg-warning-soft px-4 py-3" style={{ boxShadow: "var(--shadow-sm)" }}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-warning mt-0.5" />
+              <div>
+                <p className="text-xs font-medium text-text-primary">{t("gateway.restart_required_title")}</p>
+                <p className="mt-0.5 text-[11px] text-text-secondary">
+                  {t("gateway.restart_required_desc")}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono">
+                  {settings.host !== status.host && (
+                    <span>host: <span className="text-text-muted line-through">{status.host}</span> → <span className="text-warning">{settings.host}</span></span>
+                  )}
+                  {settings.port !== status.port && (
+                    <span>port: <span className="text-text-muted line-through">{status.port}</span> → <span className="text-warning">{settings.port}</span></span>
+                  )}
+                  {settings.input_protocol !== status.input_protocol && (
+                    <span>input: <span className="text-warning">{settings.input_protocol}</span></span>
+                  )}
+                  {settings.output_protocol !== status.output_protocol && (
+                    <span>output: <span className="text-warning">{settings.output_protocol}</span></span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={handleRestart}
+              className="shrink-0 flex items-center gap-1.5 rounded-md bg-warning px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-warning/90"
+            >
+              <RotateCcw className="h-3 w-3" />
+              {t("gateway.restart_now")}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── 2. Configuration — the editable settings ── */}
       <div className="rounded-xl border border-border bg-card p-5" style={{ boxShadow: "var(--shadow-sm)" }}>

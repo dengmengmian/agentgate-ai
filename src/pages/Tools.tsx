@@ -24,6 +24,7 @@ import { CopyButton } from "@/components/common/CopyButton";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
+import { usePolling } from "@/lib/usePolling";
 import * as api from "@/lib/api";
 import type { CodexConfigStatus, ClaudeCodeEnvStatus, OpenCodeConfigStatus, GeminiCliConfigStatus, AtomCodeConfigStatus } from "@/types/config";
 
@@ -76,6 +77,8 @@ export function Tools() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  // window focus 时刷新——从终端切回时立刻看到 Codex 应用配置后的状态变化
+  usePolling(load, 15_000);
 
   const handleApplyCodex = async () => {
     try {

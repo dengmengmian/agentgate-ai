@@ -3,10 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { Plus, Inbox, Search } from "lucide-react";
 import { ProviderCard } from "@/components/providers/ProviderCard";
 import { ProviderFormDialog } from "@/components/providers/ProviderFormDialog";
+import { TestConnectionDialog } from "@/components/providers/TestConnectionDialog";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
+import { usePolling } from "@/lib/usePolling";
 import * as api from "@/lib/api";
 import type {
   ProviderView,
@@ -23,6 +25,7 @@ export function Providers() {
   const [editTarget, setEditTarget] = useState<ProviderView | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProviderView | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [testingProvider, setTestingProvider] = useState<ProviderView | null>(null);
   const [search, setSearch] = useState("");
 
   // 过滤：name / provider_type / default_model 任一匹配（大小写不敏感）。
@@ -51,6 +54,10 @@ export function Providers() {
   useEffect(() => {
     loadProviders();
   }, [loadProviders]);
+
+  // 周期刷新 + window focus 时刷新——让后台 runtime_status 变化（如请求
+  // 失败被 cooldown）能实时反映到这页的 badge 上。
+  usePolling(loadProviders);
 
   const handleCreate = async (input: CreateProviderInput | UpdateProviderInput) => {
     try {
@@ -117,37 +124,17 @@ export function Providers() {
     }
   };
 
-  const handleTest = async (provider: ProviderView) => {
+  const handleTest = (provider: ProviderView) => {
+    // 不再用 3 个 toast 串行——改为 TestConnectionDialog 实时显示三步进度
+    // （连接 / capability autofill / cache detect）。dialog 自己管异步。
     setTestingId(provider.id);
-    try {
-      // 1. Connectivity check — verifies API key + base_url.
-      const result = await api.testProvider(provider.id);
-      if (!result.success) {
-        toast("error", result.message);
-        loadProviders();
-        return;
-      }
-      toast("success", result.message);
+    setTestingProvider(provider);
+  };
 
-      // 2. Auto-fill missing rows in the capability matrix from seed defaults.
-      //    Preserves manual edits. No upstream calls — purely name-pattern based.
-      try {
-        const filled = await api.autofillProviderCapabilities(provider.id);
-        if (filled > 0) toast("success", `已自动识别 ${filled} 个模型的能力`);
-      } catch { /* best-effort */ }
-
-      // 3. Cache probe (anthropic-style providers only).
-      try {
-        const cacheResult = await api.detectProviderCache(provider.id);
-        if (cacheResult.success) toast("success", cacheResult.message);
-      } catch { /* best-effort */ }
-
-      loadProviders();
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    } finally {
-      setTestingId(null);
-    }
+  const handleTestDone = () => {
+    setTestingId(null);
+    setTestingProvider(null);
+    loadProviders();
   };
 
   return (
@@ -227,6 +214,12 @@ export function Providers() {
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      <TestConnectionDialog
+        provider={testingProvider}
+        onClose={handleTestDone}
+        onSuccess={loadProviders}
       />
     </div>
   );
