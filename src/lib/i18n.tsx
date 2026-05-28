@@ -136,7 +136,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.endpoints_hint": { en: "Each checked protocol is a native pass-through path. Unchecked client protocols still work via translation.", zh: "勾选的协议表示上游原生支持该入口（直连）。未勾选的客户端协议仍可通过协议转换工作。" },
   "providers.model_mapping": { en: "Model Mapping", zh: "模型映射" },
   "providers.model_mapping_hint": { en: "Map client model names (e.g. gpt-5.5, claude-sonnet-4-6) to provider models.", zh: "将客户端模型名（如 gpt-5.5、claude-sonnet-4-6）映射到供应商模型。" },
-  "providers.model_mapping_hint_v2": { en: "Usually not needed — unknown model names automatically fall back to default model. Only configure if you want different client model names to route to different upstream models within this provider.", zh: "通常无需配置——网关会自动把未识别的模型名 fallback 到 default model。仅当你想让同一供应商对不同请求模型名分流到不同上游模型时才用。" },
+  "providers.model_mapping_hint_v2": { en: "Only needed when the client model name differs from the upstream model. Native pass-through keeps the model name unchanged unless a mapping matches; protocol conversion uses mapping first, then falls back to the provider's default model for compatibility.", zh: "仅当客户端模型名和上游模型名不一致时需要。原生直通未命中映射时会保留模型名；协议转换会优先使用映射，未配置时用默认模型兜底以保持兼容。" },
   "providers.pass_through_prefix": { en: "Native", zh: "直连" },
   "providers.pass_through_tooltip": { en: "Upstream natively speaks this protocol — no translation needed for this client type.", zh: "上游原生支持该协议——这种客户端走直连，无需协议转换。" },
   "providers.select_client_model": { en: "Select client model...", zh: "选择客户端模型..." },
