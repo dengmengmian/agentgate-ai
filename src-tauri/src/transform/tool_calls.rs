@@ -9,6 +9,37 @@ use crate::transform::schema_cleaner::clean_schema_for_deepseek;
 /// Tool call id 上限。OpenAI Responses API 规范长度上限 64；其它上游通常更宽松。
 pub const MAX_CALL_ID_LEN: usize = 64;
 
+/// Tool **name** 上限。Anthropic / OpenAI 都是 `^[a-zA-Z0-9_-]{1,128}$`。
+pub const MAX_TOOL_NAME_LEN: usize = 128;
+
+/// 规范化 tool name。Anthropic / OpenAI 都要求 `^[a-zA-Z0-9_-]{1,128}$`，
+/// 含 `.` / `:` / 中文 等字符上游会 400。非法字符替 `_`，超长截断 128。
+/// 空名兜底为 `unknown_tool`——空名上游也会拒。
+///
+/// 与 [`sanitize_call_id`] 同样的**对称纯函数**设计：在请求侧和响应侧都
+/// 调用，client 拿回的 tool_use.name 与上游所见 name 自动一致，无需 reverse map。
+pub fn sanitize_tool_name(name: &str) -> Cow<'_, str> {
+    let needs_truncate = name.len() > MAX_TOOL_NAME_LEN;
+    let has_invalid = name
+        .bytes()
+        .any(|b| !(b.is_ascii_alphanumeric() || b == b'_' || b == b'-'));
+    if !needs_truncate && !has_invalid && !name.is_empty() {
+        return Cow::Borrowed(name);
+    }
+    let mut out = String::with_capacity(name.len().min(MAX_TOOL_NAME_LEN));
+    for ch in name.chars().take(MAX_TOOL_NAME_LEN) {
+        if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    if out.is_empty() {
+        out.push_str("unknown_tool");
+    }
+    Cow::Owned(out)
+}
+
 /// 规范化 tool call id：白名单 `[a-zA-Z0-9_-]`，超过 [`MAX_CALL_ID_LEN`] 截断。
 ///
 /// 设计原则：**对称纯函数**。在请求侧（Responses → Chat / Anthropic）和响应侧
@@ -422,6 +453,39 @@ mod tests {
     fn sanitize_call_id_unicode_collapses_to_underscores() {
         // Each non-ASCII char counts as one position, replaced by one '_'.
         assert_eq!(sanitize_call_id("调用1").as_ref(), "__1");
+    }
+
+    #[test]
+    fn sanitize_tool_name_passes_clean_names() {
+        assert!(matches!(sanitize_tool_name("get_weather"), Cow::Borrowed(_)));
+        assert!(matches!(sanitize_tool_name("search-web-v2"), Cow::Borrowed(_)));
+        assert!(matches!(sanitize_tool_name("MyTool123"), Cow::Borrowed(_)));
+    }
+
+    #[test]
+    fn sanitize_tool_name_replaces_dots_and_unicode() {
+        assert_eq!(sanitize_tool_name("foo.bar.baz").as_ref(), "foo_bar_baz");
+        assert_eq!(sanitize_tool_name("查询天气").as_ref(), "____");
+        assert_eq!(sanitize_tool_name("tool:v1").as_ref(), "tool_v1");
+        assert_eq!(sanitize_tool_name("a b c").as_ref(), "a_b_c");
+    }
+
+    #[test]
+    fn sanitize_tool_name_truncates_to_128() {
+        let long = "a".repeat(200);
+        assert_eq!(sanitize_tool_name(&long).len(), MAX_TOOL_NAME_LEN);
+    }
+
+    #[test]
+    fn sanitize_tool_name_empty_placeholder() {
+        assert_eq!(sanitize_tool_name("").as_ref(), "unknown_tool");
+    }
+
+    #[test]
+    fn sanitize_tool_name_idempotent() {
+        let once = sanitize_tool_name("a.b/c").into_owned();
+        let twice = sanitize_tool_name(&once).into_owned();
+        assert_eq!(once, twice);
     }
 
     #[test]

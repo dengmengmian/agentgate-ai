@@ -93,15 +93,30 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
     // 5. Enforce strict user/assistant alternation
     all_messages = merge_consecutive_role_messages(all_messages);
 
-    // 6. Convert tools
-    let tools = req.tools.as_ref().map(|t| convert_tools(t));
+    // 6. Convert tools + tool_choice。"none" 语义是"禁用工具"——Anthropic
+    //    没有 type=none，正确做法是**根本不发 tools 字段**而非映射成 auto
+    //    （映射成 auto 模型仍可能选用工具，违背 client 明确意图）。
+    let suppress_tools = matches!(
+        req.tool_choice.as_ref().and_then(|v| v.as_str()),
+        Some("none")
+    );
+    let tools = if suppress_tools {
+        None
+    } else {
+        req.tools.as_ref().map(|t| convert_tools(t))
+    };
 
     // 7. Convert tool_choice + 注入 disable_parallel_tool_use（如果 client
     //    设了 parallel_tool_calls: false）。Anthropic 把"禁用并行"放在
     //    tool_choice 对象里，不是顶层字段；client 没显式给 tool_choice 时
     //    我们补一个 auto 让它有地方挂这个开关。
-    let mut tool_choice = req.tool_choice.as_ref().map(convert_tool_choice);
-    if req.parallel_tool_calls == Some(false) {
+    //    "none" 已通过 suppress_tools 处理，这里跳过 tool_choice 设置。
+    let mut tool_choice = if suppress_tools {
+        None
+    } else {
+        req.tool_choice.as_ref().map(convert_tool_choice)
+    };
+    if req.parallel_tool_calls == Some(false) && !suppress_tools {
         let mut tc = tool_choice.unwrap_or_else(|| json!({"type": "auto"}));
         if let Some(obj) = tc.as_object_mut() {
             obj.insert("disable_parallel_tool_use".to_string(), json!(true));
@@ -546,21 +561,25 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
             "function" => {
                 if let Some(func) = tool.get("function") {
                     // Structure B: {type: "function", function: {name, description, parameters}}
-                    let name = func.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                    let raw_name = func.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                    let name = crate::transform::tool_calls::sanitize_tool_name(raw_name);
                     let desc = func.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                    let params = func.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
+                    let mut params = func.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
+                    crate::transform::schema_cleaner::clean_schema_for_anthropic(&mut params);
                     result.push(json!({
-                        "name": name,
+                        "name": name.as_ref(),
                         "description": desc,
                         "input_schema": params
                     }));
                 } else {
                     // Structure A: flat {type: "function", name, description, parameters}
-                    let name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                    let raw_name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("");
+                    let name = crate::transform::tool_calls::sanitize_tool_name(raw_name);
                     let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                    let params = tool.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
+                    let mut params = tool.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
+                    crate::transform::schema_cleaner::clean_schema_for_anthropic(&mut params);
                     result.push(json!({
-                        "name": name,
+                        "name": name.as_ref(),
                         "description": desc,
                         "input_schema": params
                     }));
@@ -573,10 +592,14 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                         if sub.get("type").and_then(|t| t.as_str()) == Some("function") {
                             let name = sub.get("name").and_then(|n| n.as_str()).unwrap_or("");
                             let desc = sub.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                            let params = sub.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
+                            let mut params = sub.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
+                            crate::transform::schema_cleaner::clean_schema_for_anthropic(&mut params);
                             let prefixed = if ns_name.is_empty() { name.to_string() } else { format!("{ns_name}__{name}") };
+                            // sanitize 在 prefix 拼接之后做——namespace 名+`__`+sub 名
+                            // 整体可能超 128 或含非法字符。
+                            let sanitized = crate::transform::tool_calls::sanitize_tool_name(&prefixed);
                             result.push(json!({
-                                "name": prefixed,
+                                "name": sanitized.as_ref(),
                                 "description": desc,
                                 "input_schema": params
                             }));
@@ -585,10 +608,11 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                 }
             }
             "custom" => {
-                let name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("custom_tool");
+                let raw_name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("custom_tool");
+                let name = crate::transform::tool_calls::sanitize_tool_name(raw_name);
                 let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or("");
                 result.push(json!({
-                    "name": name,
+                    "name": name.as_ref(),
                     "description": desc,
                     "input_schema": {"type": "object", "properties": {"input": {"type": "string"}}, "required": ["input"]}
                 }));
