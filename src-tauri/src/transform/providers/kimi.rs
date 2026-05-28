@@ -17,6 +17,35 @@ impl super::ProviderTransform for KimiProvider {
     fn provider_type(&self) -> &str {
         "kimi"
     }
+
+    fn enhance_error(&self, status: u16, body: &str) -> Option<String> {
+        use crate::transform::providers as p;
+        if p::detect_insufficient_balance(status, body) {
+            return Some(
+                "Kimi 账户余额 / 配额不足。\n\
+                 • 充值入口：https://platform.moonshot.cn/console/account\n\
+                 • 用量查询：https://platform.moonshot.cn/console/usage\n\
+                 • AgentGate 会自动 failover 到其它非冷却 provider。"
+                    .to_string(),
+            );
+        }
+        if p::detect_auth_error(status, body) {
+            return Some(
+                "Kimi API key 无效 / 过期。\n\
+                 • 重建 key：https://platform.moonshot.cn/console/api-keys"
+                    .to_string(),
+            );
+        }
+        if p::detect_rate_limit(status, body) {
+            return Some(
+                "Kimi 触发限流。RPM / TPM 上限因账户级别不同：\n\
+                 • https://platform.moonshot.cn/console/info 查看你的速率配额\n\
+                 • AgentGate 已冷却该 provider，路由会优先尝试其它候选"
+                    .to_string(),
+            );
+        }
+        p::detect_context_overflow(status, body)
+    }
 }
 
 #[cfg(test)]

@@ -14,6 +14,29 @@ impl super::ProviderTransform for MiniMaxProvider {
     fn provider_type(&self) -> &str {
         "minimax"
     }
+
+    fn enhance_error(&self, status: u16, body: &str) -> Option<String> {
+        use crate::transform::providers as p;
+        if p::detect_insufficient_balance(status, body) {
+            return Some(
+                "MiniMax 账户余额不足。\n\
+                 • 充值入口：https://platform.minimaxi.com/user-center/finance/balance\n\
+                 • 用量查询：https://platform.minimaxi.com/user-center/finance/usage"
+                    .to_string(),
+            );
+        }
+        if p::detect_auth_error(status, body) {
+            return Some(
+                "MiniMax API key 无效 / 过期。\n\
+                 • 重建 key：https://platform.minimaxi.com/user-center/basic-information/interface-key"
+                    .to_string(),
+            );
+        }
+        if p::detect_rate_limit(status, body) {
+            return Some("MiniMax 触发限流。AgentGate 已冷却该 provider，路由会自动切换候选。".to_string());
+        }
+        p::detect_context_overflow(status, body)
+    }
 }
 
 #[cfg(test)]

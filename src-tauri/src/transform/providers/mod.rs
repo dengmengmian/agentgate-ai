@@ -67,6 +67,84 @@ pub trait ProviderTransform: Send + Sync {
     }
 }
 
+/// Shared detection for "insufficient balance / quota / credit" 4xx errors.
+/// Returns a generic suggestion text; callers (per-provider enhance_error)
+/// can wrap with a provider-specific top-up URL.
+pub fn detect_insufficient_balance(status: u16, body_snippet: &str) -> bool {
+    if status != 402 && status != 403 && status != 429 && status != 400 {
+        return false;
+    }
+    let lower = body_snippet.to_ascii_lowercase();
+    const MARKERS: &[&str] = &[
+        "insufficient_balance",
+        "insufficient balance",
+        "insufficient_quota",
+        "insufficient quota",
+        "credit_balance",
+        "out of credit",
+        "no credits",
+        "account balance",
+        "billing_hard_limit_reached",
+        "balance is too low",
+        "exceeded your current quota",
+        "余额不足",
+        "余额为",
+        "账户余额",
+        "请充值",
+        "请前往",
+        "费用已超",
+    ];
+    MARKERS.iter().any(|m| lower.contains(m))
+}
+
+/// Shared detection for "invalid / missing / expired API key" 401 / 403 errors.
+pub fn detect_auth_error(status: u16, body_snippet: &str) -> bool {
+    if status != 401 && status != 403 {
+        return false;
+    }
+    let lower = body_snippet.to_ascii_lowercase();
+    const MARKERS: &[&str] = &[
+        "invalid_api_key",
+        "invalid api key",
+        "invalid token",
+        "incorrect api key",
+        "authentication_error",
+        "authentication failed",
+        "unauthorized",
+        "api key not valid",
+        "api_key_invalid",
+        "missing api key",
+        "expired",
+        "未授权",
+        "鉴权失败",
+        "认证失败",
+        "api key 无效",
+    ];
+    MARKERS.iter().any(|m| lower.contains(m))
+}
+
+/// Shared detection for rate-limit 429 (also some 503 with retry-after).
+pub fn detect_rate_limit(status: u16, body_snippet: &str) -> bool {
+    if status != 429 && status != 503 {
+        return false;
+    }
+    let lower = body_snippet.to_ascii_lowercase();
+    const MARKERS: &[&str] = &[
+        "rate_limit",
+        "rate limit",
+        "too many requests",
+        "too_many_requests",
+        "tpm_limit",
+        "rpm_limit",
+        "quota_exceeded",
+        "请求过于频繁",
+        "速率限制",
+        "请求过快",
+    ];
+    // 429 alone is usually rate limit even without marker text
+    status == 429 || MARKERS.iter().any(|m| lower.contains(m))
+}
+
 /// Shared detection for "context window exceeded" 400s across providers.
 /// Pattern set covers OpenAI / Anthropic / DeepSeek / MiMo / Kimi / MiniMax /
 /// generic Chinese wording. Case-insensitive substring match against the
@@ -102,6 +180,83 @@ pub fn detect_context_overflow(status: u16, body_snippet: &str) -> Option<String
         )
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod detector_tests {
+    use super::*;
+
+    #[test]
+    fn balance_markers_trigger() {
+        for (status, snippet) in [
+            (402, r#"{"error":{"code":"insufficient_balance"}}"#),
+            (403, "Insufficient Balance"),
+            (400, "余额不足，请前往充值"),
+            (429, "exceeded your current quota"),
+            (400, "credit_balance is too low"),
+            (400, "billing_hard_limit_reached"),
+        ] {
+            assert!(detect_insufficient_balance(status, snippet),
+                "should detect: {status} / {snippet}");
+        }
+    }
+
+    #[test]
+    fn balance_skips_unrelated_status() {
+        assert!(!detect_insufficient_balance(200, "Insufficient Balance"));
+        assert!(!detect_insufficient_balance(500, "余额不足"));
+        assert!(!detect_insufficient_balance(400, "completely unrelated error"));
+    }
+
+    #[test]
+    fn auth_markers_trigger() {
+        for (status, snippet) in [
+            (401, "Unauthorized"),
+            (401, r#"{"error":{"type":"authentication_error"}}"#),
+            (401, "Invalid API key"),
+            (403, "api_key_invalid"),
+            (403, "未授权访问"),
+            (401, "鉴权失败"),
+        ] {
+            assert!(detect_auth_error(status, snippet), "should detect: {status} / {snippet}");
+        }
+    }
+
+    #[test]
+    fn auth_skips_non_4xx() {
+        assert!(!detect_auth_error(429, "Unauthorized"));
+        assert!(!detect_auth_error(500, "Invalid API key"));
+    }
+
+    #[test]
+    fn rate_limit_triggers_on_429_even_without_marker() {
+        // Some upstreams return just "429 Too Many Requests" with empty body.
+        assert!(detect_rate_limit(429, ""));
+        assert!(detect_rate_limit(429, "anything at all"));
+    }
+
+    #[test]
+    fn rate_limit_503_needs_marker() {
+        assert!(detect_rate_limit(503, "rate_limit"));
+        assert!(!detect_rate_limit(503, ""));
+    }
+
+    #[test]
+    fn rate_limit_skips_other_status() {
+        assert!(!detect_rate_limit(200, "rate_limit"));
+        assert!(!detect_rate_limit(400, "rate_limit"));
+    }
+
+    #[test]
+    fn detectors_are_independent_no_overlap() {
+        // A pure balance error shouldn't be flagged as auth or rate_limit.
+        let snippet = "余额不足";
+        assert!(detect_insufficient_balance(402, snippet));
+        assert!(!detect_auth_error(402, snippet));
+        // 429 always means rate_limit even with balance-ish text, that's
+        // intentional — `detect_insufficient_balance` returns true too on
+        // 429 with quota markers, callers check balance first by convention.
     }
 }
 

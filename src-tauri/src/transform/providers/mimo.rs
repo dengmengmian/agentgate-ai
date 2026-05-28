@@ -140,6 +140,7 @@ impl super::ProviderTransform for MimoProvider {
     }
 
     fn enhance_error(&self, status: u16, body: &str) -> Option<String> {
+        use crate::transform::providers as p;
         // 400 "webSearchEnabled is false" — the account doesn't have the
         // Web Search Plugin activated. Surface a one-click activation hint
         // instead of letting the raw upstream string confuse the user.
@@ -151,8 +152,31 @@ impl super::ProviderTransform for MimoProvider {
                     .to_string(),
             );
         }
+        if p::detect_insufficient_balance(status, body) {
+            return Some(
+                "MiMo 账户余额 / Token Plan 配额不足。\n\
+                 • 用量与充值：https://platform.xiaomimimo.com/#/console/usage\n\
+                 • 如果用的是 Token Plan，可在 https://platform.xiaomimimo.com/#/console/token-plan 查看剩余\n\
+                 • AgentGate 路由会自动 failover 到其它非冷却 provider。"
+                    .to_string(),
+            );
+        }
+        if p::detect_auth_error(status, body) {
+            return Some(
+                "MiMo API key 无效 / 过期。\n\
+                 • 重建 key：https://platform.xiaomimimo.com/#/console/keys\n\
+                 • 注意 sk-* key 走 PAYG 端点，tp-* key 走 Token Plan 端点。"
+                    .to_string(),
+            );
+        }
+        if p::detect_rate_limit(status, body) {
+            return Some(
+                "MiMo 触发限流。AgentGate 已冷却该 provider，路由会优先尝试其它候选。"
+                    .to_string(),
+            );
+        }
         // Fall back to shared context-overflow detection.
-        crate::transform::providers::detect_context_overflow(status, body)
+        p::detect_context_overflow(status, body)
     }
 }
 
