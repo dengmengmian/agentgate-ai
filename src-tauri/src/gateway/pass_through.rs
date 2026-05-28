@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::http::{header, StatusCode};
+use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::Response;
 use futures::StreamExt;
 use rusqlite::Connection;
@@ -15,6 +15,52 @@ use crate::providers::adapter::ProviderConfig;
 const MAX_LOG_BODY: usize = 50_000;
 const MAX_SSE_LOG: usize = 1_000_000;
 
+/// Anthropic 透传路径需要把客户端的几个 protocol-level header 透到上游，
+/// 否则用户没法启用 context-1m / prompt-caching 这类 beta 能力。
+/// 名单严格白名单：authorization / host / hop-by-hop / cookie 类**不**列入。
+const ANTHROPIC_FORWARD_HEADERS: &[&str] = &["anthropic-beta", "anthropic-version"];
+
+/// OpenAI 兼容透传路径转发的客户端 header 白名单。
+const OPENAI_FORWARD_HEADERS: &[&str] = &[
+    "openai-beta",
+    "openai-organization",
+    "openai-project",
+];
+
+/// RFC 7230 hop-by-hop header 黑名单——reverse proxy 不能在两端之间透传这些。
+/// 目前 pass_through 构造给 client 的 Response 只显式设了 Content-Type，
+/// **不**转发上游响应 header，所以这个黑名单在现有代码里实际没被用到。
+/// 留在这里是给未来想加"转发 anthropic-ratelimit-* / x-request-id 给 client"
+/// 那种功能的人当 checklist——上游响应的任何 header forwarding 实现都必须
+/// 用这个黑名单过滤掉 hop-by-hop，否则会破坏 client 端 HTTP 语义。
+#[allow(dead_code)]
+const HOP_BY_HOP_HEADERS: &[&str] = &[
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "transfer-encoding",
+    "upgrade",
+];
+
+fn forward_client_headers(
+    mut builder: reqwest::RequestBuilder,
+    client_headers: Option<&HeaderMap>,
+    whitelist: &[&str],
+) -> reqwest::RequestBuilder {
+    let Some(headers) = client_headers else { return builder };
+    for name in whitelist {
+        if let Some(v) = headers.get(*name).and_then(|h| h.to_str().ok()) {
+            if !v.is_empty() {
+                builder = builder.header(*name, v);
+            }
+        }
+    }
+    builder
+}
+
 /// Handle a Chat Completions pass-through request (stream or non-stream).
 pub async fn handle(
     http_client: &reqwest::Client,
@@ -25,6 +71,7 @@ pub async fn handle(
     request_id: &str,
     start: Instant,
     client_type: &str,
+    client_headers: Option<&HeaderMap>,
 ) -> Result<Response, AppError> {
     let mut body_json: serde_json::Value = serde_json::from_str(raw_body)
         .unwrap_or(serde_json::json!({}));
@@ -43,9 +90,9 @@ pub async fn handle(
     let rewritten_body = body_json.to_string();
 
     if is_stream {
-        handle_stream(http_client, db, config, target_url, &rewritten_body, request_id, &model, start, client_type).await
+        handle_stream(http_client, db, config, target_url, &rewritten_body, request_id, &model, start, client_type, client_headers).await
     } else {
-        handle_non_stream(http_client, db, config, target_url, &rewritten_body, request_id, &model, start, client_type).await
+        handle_non_stream(http_client, db, config, target_url, &rewritten_body, request_id, &model, start, client_type, client_headers).await
     }
 }
 
@@ -59,12 +106,14 @@ async fn handle_non_stream(
     model: &str,
     start: Instant,
     client_type: &str,
+    client_headers: Option<&HeaderMap>,
 ) -> Result<Response, AppError> {
     let resp = crate::providers::adapter::send_with_net_retry(|| {
-        http_client
+        let b = http_client
             .post(target_url)
             .header("Authorization", format!("Bearer {}", config.select_api_key()))
-            .header("Content-Type", "application/json")
+            .header("Content-Type", "application/json");
+        forward_client_headers(b, client_headers, OPENAI_FORWARD_HEADERS)
             .body(raw_body.to_string())
     }, 1).await
         .map_err(|e| AppError::new("PASS_THROUGH_REQUEST_FAILED",
@@ -120,13 +169,15 @@ async fn handle_stream(
     model: &str,
     start: Instant,
     client_type: &str,
+    client_headers: Option<&HeaderMap>,
 ) -> Result<Response, AppError> {
     let resp = crate::providers::adapter::send_with_net_retry(|| {
-        http_client
+        let b = http_client
             .post(target_url)
             .header("Authorization", format!("Bearer {}", config.select_api_key()))
             .header("Content-Type", "application/json")
-            .header("Accept", "text/event-stream")
+            .header("Accept", "text/event-stream");
+        forward_client_headers(b, client_headers, OPENAI_FORWARD_HEADERS)
             .body(raw_body.to_string())
     }, 1).await
         .map_err(|e| AppError::new("PASS_THROUGH_STREAM_FAILED",
@@ -192,7 +243,11 @@ async fn handle_stream(
             let to_add = prefix_text.len().min(MAX_SSE_LOG);
             sse_log.push_str(&prefix_text[..to_add]);
             sse_size += to_add;
-            let _ = tx.send(prefix_text).await;
+            if tx.send(prefix_text).await.is_err() {
+                // Client dropped before first byte landed—放弃 stream，避免
+                // 继续把上游 token 灌进黑洞。
+                return;
+            }
         }
 
         let mut stream = boot.stream;
@@ -206,7 +261,12 @@ async fn handle_stream(
                         sse_log.push_str(&text[..to_add]);
                         sse_size += to_add;
                     }
-                    let _ = tx.send(text).await;
+                    // tx.send 在 client 已断开（mpsc receiver drop）时返回 Err。
+                    // 显式 break——不然 reqwest 仍在从上游读，浪费 token + 占
+                    // 用 keep-alive 连接。
+                    if tx.send(text).await.is_err() {
+                        break;
+                    }
                 }
                 Err(e) => {
                     let msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);
@@ -329,6 +389,7 @@ pub async fn handle_anthropic(
     request_id: &str,
     start: Instant,
     client_type: &str,
+    client_headers: Option<&HeaderMap>,
 ) -> Result<Response, AppError> {
     let is_stream = serde_json::from_str::<serde_json::Value>(raw_body)
         .ok()
@@ -362,10 +423,17 @@ pub async fn handle_anthropic(
             .post(target_url)
             .header("x-api-key", config.select_api_key())
             .header("content-type", "application/json")
+            // 默认 anthropic-version；若 client 显式带了同名 header，
+            // 下面 forward_client_headers 会覆盖这条——reqwest 同 header
+            // 重复 set 会保留最后一次的值。
             .header("anthropic-version", "2023-06-01");
         for (k, v) in &config.extra_headers {
             b = b.header(k.as_str(), v.as_str());
         }
+        // 把 client 的 anthropic-beta（如 context-1m-2025-08-07）+
+        // anthropic-version（如果 client 想用更新版本）透到上游。其它
+        // header 一律不转发（host / authorization 等敏感字段不能漏出去）。
+        b = forward_client_headers(b, client_headers, ANTHROPIC_FORWARD_HEADERS);
         b.body(rewritten_body.clone())
     };
 
@@ -409,7 +477,10 @@ pub async fn handle_anthropic(
                     Ok(bytes) => {
                         let text = String::from_utf8_lossy(&bytes).to_string();
                         if sse_size < MAX_SSE_LOG { let to_add = text.len().min(MAX_SSE_LOG - sse_size); sse_log.push_str(&text[..to_add]); sse_size += to_add; }
-                        let _ = tx.send(text).await;
+                        // Client 断开则提前退出，省 upstream token。
+                        if tx.send(text).await.is_err() {
+                            break;
+                        }
                     }
                     Err(e) => {
                         let msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);

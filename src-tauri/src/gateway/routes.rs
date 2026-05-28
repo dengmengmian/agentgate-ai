@@ -198,7 +198,7 @@ pub async fn handle_responses(
             // Pass-through: provider has explicit Responses API endpoint
             let target_url = config.responses_url();
             crate::gateway::pass_through::handle(
-                &state.http_client, &state.db, &config, &target_url, &body, &request_id, start, &client_type,
+                &state.http_client, &state.db, &config, &target_url, &body, &request_id, start, &client_type, Some(&headers),
             ).await.map_err(|e| GatewayError(e))
         } else if config.is_anthropic() {
             // Claude Messages API conversion (only for Anthropic-type providers)
@@ -1310,7 +1310,7 @@ pub async fn handle_chat_completions(
         }
 
         let result = crate::gateway::pass_through::handle(
-            &state.http_client, &state.db, &config, &decision.target_url, &body, &request_id, start, &client_type,
+            &state.http_client, &state.db, &config, &decision.target_url, &body, &request_id, start, &client_type, Some(&headers),
         ).await;
 
         match result {
@@ -1379,7 +1379,7 @@ pub async fn handle_messages(
         {
             let target = config.anthropic_messages_url();
             return crate::gateway::pass_through::handle_anthropic(
-                &state.http_client, &state.db, &config, &target, &body, &request_id, start, &client_type,
+                &state.http_client, &state.db, &config, &target, &body, &request_id, start, &client_type, Some(&headers),
             ).await.map_err(|e| {
                 log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &raw, None, &e, start.elapsed().as_millis() as i64);
                 GatewayError(e)
