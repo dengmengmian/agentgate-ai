@@ -1120,6 +1120,9 @@ pub async fn handle_gemini_generate(
         GatewayError(e)
     })?;
     chat_req.stream = is_stream;
+    if !is_stream {
+        chat_req.stream_options = None;
+    }
 
     let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
 
