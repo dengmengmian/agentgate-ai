@@ -248,7 +248,6 @@ fn convert_input(input: &Value, system_blocks: &mut Vec<Value>) -> Result<Vec<Va
 fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Result<Vec<Value>, AppError> {
     let mut messages: Vec<Value> = Vec::new();
     let mut pending_tool_uses: Vec<Value> = Vec::new();
-    let pending_text: Option<String> = None;
     // 从 reasoning 项里解码出来的 thinking 块，等到下一个 assistant 输出
     // （message:assistant / function_call）时 prepend 到 content 数组——
     // Anthropic 要求 thinking 块必须在同一条 assistant message 里、且
@@ -392,7 +391,6 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
     }
 
     flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
-    let _ = pending_text; // 当前未使用，预留给未来 assistant text 分流
     Ok(messages)
 }
 
@@ -565,7 +563,7 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                     let name = crate::transform::tool_calls::sanitize_tool_name(raw_name);
                     let desc = func.get("description").and_then(|d| d.as_str()).unwrap_or("");
                     let mut params = func.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
-                    crate::transform::schema_cleaner::clean_schema_for_anthropic(&mut params);
+                    crate::transform::schema_cleaner::clean_schema_for_deepseek(&mut params);
                     result.push(json!({
                         "name": name.as_ref(),
                         "description": desc,
@@ -577,7 +575,7 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                     let name = crate::transform::tool_calls::sanitize_tool_name(raw_name);
                     let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or("");
                     let mut params = tool.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
-                    crate::transform::schema_cleaner::clean_schema_for_anthropic(&mut params);
+                    crate::transform::schema_cleaner::clean_schema_for_deepseek(&mut params);
                     result.push(json!({
                         "name": name.as_ref(),
                         "description": desc,
@@ -593,7 +591,7 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                             let name = sub.get("name").and_then(|n| n.as_str()).unwrap_or("");
                             let desc = sub.get("description").and_then(|d| d.as_str()).unwrap_or("");
                             let mut params = sub.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
-                            crate::transform::schema_cleaner::clean_schema_for_anthropic(&mut params);
+                            crate::transform::schema_cleaner::clean_schema_for_deepseek(&mut params);
                             let prefixed = if ns_name.is_empty() { name.to_string() } else { format!("{ns_name}__{name}") };
                             // sanitize 在 prefix 拼接之后做——namespace 名+`__`+sub 名
                             // 整体可能超 128 或含非法字符。

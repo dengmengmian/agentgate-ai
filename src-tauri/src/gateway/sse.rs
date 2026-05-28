@@ -7,16 +7,6 @@ use crate::transform::reasoning_store;
 use crate::protocol::responses_events as ev;
 
 const MAX_EVENTS_LOG_SIZE: usize = 1_000_000; // 1MB
-/// Sanitize tool call ID (whitelist `[a-zA-Z0-9_-]`, max 64 chars).
-///
-/// Thin wrapper around `transform::tool_calls::sanitize_call_id` so the response
-/// path stays symmetric with the request path — same id transformation applied
-/// at every boundary means no per-session mapping table is needed for the
-/// client to re-correlate tool results.
-fn clamp_call_id(id: &str) -> String {
-    crate::transform::tool_calls::sanitize_call_id(id).into_owned()
-}
-
 /// Accumulated tool call from streaming deltas.
 #[derive(Debug, Clone)]
 pub struct AccumulatedToolCall {
@@ -385,7 +375,7 @@ async fn process_choices(
 
                 if let Some(ref id) = tc_delta.id {
                     if tc.id.is_empty() {
-                        tc.id = clamp_call_id(id);
+                        tc.id = crate::transform::tool_calls::sanitize_call_id(id).into_owned();
                     }
                 }
 

@@ -6,12 +6,6 @@ use crate::protocol::responses_events as ev;
 
 const MAX_EVENTS_LOG_SIZE: usize = 1_000_000;
 
-/// Sanitize tool call ID (whitelist `[a-zA-Z0-9_-]`, max 64 chars).
-/// Symmetric with the request path via `transform::tool_calls::sanitize_call_id`.
-fn clamp_call_id(id: &str) -> String {
-    crate::transform::tool_calls::sanitize_call_id(id).into_owned()
-}
-
 /// Accumulated tool call from Claude streaming.
 #[derive(Debug, Clone)]
 pub struct AccumulatedToolCall {
@@ -198,7 +192,7 @@ pub async fn process_anthropic_stream(
                         "tool_use" => {
                             let id = block.get("id").and_then(|i| i.as_str()).unwrap_or("");
                             let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                            let clamped_id = clamp_call_id(id);
+                            let clamped_id = crate::transform::tool_calls::sanitize_call_id(id).into_owned();
                             let oi = acc.next_output_index;
                             acc.next_output_index += 1;
                             let item_id = format!("fc_{}", clamped_id);
@@ -403,23 +397,8 @@ async fn send(tx: &mpsc::Sender<String>, event: &str) {
 mod tests {
     use super::*;
 
-    #[test]
-    fn clamp_call_id_short() {
-        assert_eq!(clamp_call_id("abc"), "abc");
-    }
-
-    #[test]
-    fn clamp_call_id_exact_length() {
-        let id = "a".repeat(64);
-        assert_eq!(clamp_call_id(&id).len(), 64);
-    }
-
-    #[test]
-    fn clamp_call_id_long() {
-        let id = "a".repeat(100);
-        let clamped = clamp_call_id(&id);
-        assert_eq!(clamped.len(), 64);
-    }
+    // call_id sanitize 行为已在 transform::tool_calls::tests 全面覆盖；
+    // 这里曾有 clamp_call_id 包装函数的局部测试，函数已删除。
 
     #[test]
     fn accumulator_new() {

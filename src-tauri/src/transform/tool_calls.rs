@@ -12,55 +12,28 @@ pub const MAX_CALL_ID_LEN: usize = 64;
 /// Tool **name** 上限。Anthropic / OpenAI 都是 `^[a-zA-Z0-9_-]{1,128}$`。
 pub const MAX_TOOL_NAME_LEN: usize = 128;
 
-/// 规范化 tool name。Anthropic / OpenAI 都要求 `^[a-zA-Z0-9_-]{1,128}$`，
-/// 含 `.` / `:` / 中文 等字符上游会 400。非法字符替 `_`，超长截断 128。
-/// 空名兜底为 `unknown_tool`——空名上游也会拒。
+/// 规范化 tool call id / tool name 这类**标识符**：白名单 `[a-zA-Z0-9_-]`、
+/// 超长截断、空值占位。两个语义共用一个实现，区别只在最大长度和兜底占位符。
 ///
-/// 与 [`sanitize_call_id`] 同样的**对称纯函数**设计：在请求侧和响应侧都
-/// 调用，client 拿回的 tool_use.name 与上游所见 name 自动一致，无需 reverse map。
-pub fn sanitize_tool_name(name: &str) -> Cow<'_, str> {
-    let needs_truncate = name.len() > MAX_TOOL_NAME_LEN;
-    let has_invalid = name
-        .bytes()
-        .any(|b| !(b.is_ascii_alphanumeric() || b == b'_' || b == b'-'));
-    if !needs_truncate && !has_invalid && !name.is_empty() {
-        return Cow::Borrowed(name);
-    }
-    let mut out = String::with_capacity(name.len().min(MAX_TOOL_NAME_LEN));
-    for ch in name.chars().take(MAX_TOOL_NAME_LEN) {
-        if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
-            out.push(ch);
-        } else {
-            out.push('_');
-        }
-    }
-    if out.is_empty() {
-        out.push_str("unknown_tool");
-    }
-    Cow::Owned(out)
-}
-
-/// 规范化 tool call id：白名单 `[a-zA-Z0-9_-]`，超过 [`MAX_CALL_ID_LEN`] 截断。
+/// 设计原则：**对称纯函数**。在请求侧（Responses → Chat / Anthropic）和响应
+/// 侧（Chat / Anthropic SSE → Responses）都调用同一个函数，client 回传时
+/// 携带的 id/name 与上游所见自动一致，**不需要任何会话级映射表**。
 ///
-/// 设计原则：**对称纯函数**。在请求侧（Responses → Chat / Anthropic）和响应侧
-/// （Chat / Anthropic SSE → Responses）都调用同一个函数，client 回传 tool_result
-/// 携带的 id 与上游所见 id 自动一致，**不需要任何会话级映射表**。
-///
-/// 触发原因：Codex.app 偶尔产出含 `:` `/` `.` 等字符的 call_id，MiMo/DeepSeek
-/// 这类严格的 chat-completions 上游会 400。OpenAI 自身较宽松，但严格白名单
-/// 是最小公分母。
+/// 触发原因：Codex.app 偶尔产出含 `:` / `/` / `.` 等字符的 call_id，
+/// MiMo/DeepSeek 这类严格上游会 400。Tool name 含中文 / 点号同理。
+/// 严格白名单是三家协议的最小公分母。
 ///
 /// 仅当输入合法且长度未超时返回 [`Cow::Borrowed`]——绝大多数请求零分配。
-pub fn sanitize_call_id(id: &str) -> Cow<'_, str> {
-    let needs_truncate = id.len() > MAX_CALL_ID_LEN;
-    let has_invalid = id
+fn sanitize_identifier<'a>(input: &'a str, max_len: usize, empty_placeholder: &str) -> Cow<'a, str> {
+    let needs_truncate = input.len() > max_len;
+    let has_invalid = input
         .bytes()
         .any(|b| !(b.is_ascii_alphanumeric() || b == b'_' || b == b'-'));
-    if !needs_truncate && !has_invalid && !id.is_empty() {
-        return Cow::Borrowed(id);
+    if !needs_truncate && !has_invalid && !input.is_empty() {
+        return Cow::Borrowed(input);
     }
-    let mut out = String::with_capacity(id.len().min(MAX_CALL_ID_LEN));
-    for ch in id.chars().take(MAX_CALL_ID_LEN) {
+    let mut out = String::with_capacity(input.len().min(max_len));
+    for ch in input.chars().take(max_len) {
         if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
             out.push(ch);
         } else {
@@ -68,30 +41,37 @@ pub fn sanitize_call_id(id: &str) -> Cow<'_, str> {
         }
     }
     if out.is_empty() {
-        out.push_str("call_unknown");
+        out.push_str(empty_placeholder);
     }
     Cow::Owned(out)
 }
 
-/// Convert Responses API tools to Chat Completions tools format.
-/// Handles structure A (flat), structure B (nested function), namespace tools, and custom tools.
-/// Returns (converted_tools, namespace_map) where namespace_map maps function name -> namespace.
+/// Tool call id sanitize。详见 [`sanitize_identifier`] 设计说明。
+pub fn sanitize_call_id(id: &str) -> Cow<'_, str> {
+    sanitize_identifier(id, MAX_CALL_ID_LEN, "call_unknown")
+}
+
+/// Tool name sanitize。详见 [`sanitize_identifier`] 设计说明。
+pub fn sanitize_tool_name(name: &str) -> Cow<'_, str> {
+    sanitize_identifier(name, MAX_TOOL_NAME_LEN, "unknown_tool")
+}
+
+/// Convert Responses API tools to Chat Completions tools format —— 简化入口，
+/// 适用于不需要 provider-type / capability matrix 的场景（如 Anthropic
+/// fallback 转 Chat 时）。完整能力请走 [`convert_tools_with_matrix`]。
 pub fn convert_tools(tools: &[Value], clean_for_deepseek: bool) -> Vec<Value> {
-    convert_tools_for_provider(tools, clean_for_deepseek, "")
+    convert_tools_with_matrix(tools, clean_for_deepseek, "", "", &Default::default())
 }
 
-/// Convert tools with provider-type awareness (e.g. Kimi web_search).
-pub fn convert_tools_for_provider(tools: &[Value], clean_for_deepseek: bool, provider_type: &str) -> Vec<Value> {
-    convert_tools_with_matrix(tools, clean_for_deepseek, provider_type, "", &Default::default())
-}
-
-/// Same as convert_tools_for_provider but consults the per-model capability
-/// matrix to decide whether to emit MiMo's `web_search` builtin. If the matrix
-/// has an entry for the target model AND that entry doesn't include
-/// "web_search", we skip emission — lets users disable forwarding per model
-/// (e.g. when the MiMo account has no Web Search Plugin activated).
+/// Convert Responses API tools to Chat Completions tools format with provider-
+/// type + per-model capability matrix awareness. Handles structure A (flat),
+/// structure B (nested function), namespace tools, custom tools, and provider-
+/// specific builtins (Kimi `web_search`, MiMo `web_search`).
 ///
-/// Matrix-empty behavior is unchanged for back-compat.
+/// `matrix` 是 model → capability set 的映射。若 matrix 含 target model 条目
+/// 且该条目**不**包含 "web_search"，跳过 MiMo `web_search` 注入——允许用户
+/// 按模型禁用（例如 MiMo 账号没开 Web Search Plugin）。matrix 空时退化为
+/// 旧的"为 MiMo 总是 emit web_search"行为，向后兼容。
 pub fn convert_tools_with_matrix(
     tools: &[Value],
     clean_for_deepseek: bool,
@@ -561,7 +541,7 @@ mod tests {
     #[test]
     fn test_convert_tools_web_search_kimi() {
         let tools = vec![json!({"type": "web_search"})];
-        let result = convert_tools_for_provider(&tools, false, "kimi");
+        let result = convert_tools_with_matrix(&tools, false, "kimi", "", &Default::default());
         assert_eq!(result.len(), 1);
         assert_eq!(result[0]["type"], "builtin_function");
         assert_eq!(result[0]["function"]["name"], "$web_search");
@@ -570,14 +550,14 @@ mod tests {
     #[test]
     fn test_convert_tools_web_search_non_kimi() {
         let tools = vec![json!({"type": "web_search"})];
-        let result = convert_tools_for_provider(&tools, false, "openai");
+        let result = convert_tools_with_matrix(&tools, false, "openai", "", &Default::default());
         assert!(result.is_empty());
     }
 
     #[test]
     fn test_convert_tools_web_search_mimo_minimal() {
         let tools = vec![json!({"type": "web_search_preview"})];
-        let result = convert_tools_for_provider(&tools, false, "mimo");
+        let result = convert_tools_with_matrix(&tools, false, "mimo", "", &Default::default());
         assert_eq!(result.len(), 1);
         assert_eq!(result[0]["type"], "web_search");
     }
@@ -640,7 +620,7 @@ mod tests {
             "limit": 10,
             "user_location": {"country": "CN"}
         })];
-        let result = convert_tools_for_provider(&tools, false, "mimo");
+        let result = convert_tools_with_matrix(&tools, false, "mimo", "", &Default::default());
         assert_eq!(result.len(), 1);
         assert_eq!(result[0]["type"], "web_search");
         assert_eq!(result[0]["max_keyword"], 3);

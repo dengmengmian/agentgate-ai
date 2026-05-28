@@ -27,23 +27,11 @@ const OPENAI_FORWARD_HEADERS: &[&str] = &[
     "openai-project",
 ];
 
-/// RFC 7230 hop-by-hop header 黑名单——reverse proxy 不能在两端之间透传这些。
-/// 目前 pass_through 构造给 client 的 Response 只显式设了 Content-Type，
-/// **不**转发上游响应 header，所以这个黑名单在现有代码里实际没被用到。
-/// 留在这里是给未来想加"转发 anthropic-ratelimit-* / x-request-id 给 client"
-/// 那种功能的人当 checklist——上游响应的任何 header forwarding 实现都必须
-/// 用这个黑名单过滤掉 hop-by-hop，否则会破坏 client 端 HTTP 语义。
-#[allow(dead_code)]
-const HOP_BY_HOP_HEADERS: &[&str] = &[
-    "connection",
-    "keep-alive",
-    "proxy-authenticate",
-    "proxy-authorization",
-    "te",
-    "trailer",
-    "transfer-encoding",
-    "upgrade",
-];
+// 注：pass_through 当前**不**转发上游响应 header（只显式设 Content-Type），
+// 所以不需要 hop-by-hop 黑名单。未来若加 anthropic-ratelimit-* / x-request-id
+// 等上游响应 header 转发，必须先过滤掉 RFC 7230 hop-by-hop 头：
+// connection / keep-alive / proxy-authenticate / proxy-authorization / te /
+// trailer / transfer-encoding / upgrade。
 
 fn forward_client_headers(
     mut builder: reqwest::RequestBuilder,

@@ -1,15 +1,16 @@
 use serde_json::Value;
 
-/// Anthropic 路径的 schema 清洗——目前与 DeepSeek 一致（strip `strict` /
-/// `additionalProperties` / null-valued props / 递归子树）。Anthropic 不识
-/// 别 OpenAI-only 字段如 `strict:true`，原样塞过去通常被忽略但**少数情
-/// 况会 400**；统一过一遍 cleaner 保险。
-pub fn clean_schema_for_anthropic(value: &mut Value) {
-    clean_schema_for_deepseek(value);
-}
-
-/// Recursively clean JSON schema to be DeepSeek-compatible.
-/// Removes `strict`, `additionalProperties` (false), null-valued properties.
+/// 递归剥除上游 JSON schema 里不被严格上游识别的字段：`strict`、
+/// `additionalProperties`（任意值）、null-valued properties。同时递归进
+/// `properties` / `items` / `anyOf` / `oneOf` / `allOf` / `$defs` / `definitions`
+/// 子树。
+///
+/// 用于以下场景：
+/// - **DeepSeek / 严格 OpenAI 兼容上游**：会拒识别 `strict:true` 等 OpenAI 字段
+/// - **Anthropic**：通常忽略未知字段，但少数情况会 400；过一遍 cleaner 更稳
+///
+/// 函数无 provider 特化逻辑，名字带 "deepseek" 是历史原因——调用方按场景
+/// 自行决定是否调用即可。
 pub fn clean_schema_for_deepseek(value: &mut Value) {
     match value {
         Value::Object(map) => {
