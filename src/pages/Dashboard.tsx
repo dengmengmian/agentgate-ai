@@ -5,7 +5,10 @@ import {
   Square,
   RotateCcw,
   BarChart3,
+  Rocket,
+  ArrowRight,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { RecentRequests } from "@/components/dashboard/RecentRequests";
 import { RuntimeFooter } from "@/components/common/RuntimeFooter";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -79,21 +82,24 @@ export function Dashboard() {
   const [tools, setTools] = useState<ToolConfigView[]>([]);
   const [recentLogs, setRecentLogs] = useState<RequestLogListItem[]>([]);
   const [stats, setStats] = useState<RequestStats | null>(null);
+  const [providerCount, setProviderCount] = useState<number | null>(null);
   const [rangeDays, setRangeDays] = useState<RangeDays>(7);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [s, tl, l, st] = await Promise.all([
+        const [s, tl, l, st, ps] = await Promise.all([
           api.getGatewayStatus(),
           api.listTools(),
           api.listRequestLogs({ limit: 5 }),
           api.getRequestStatsRange(rangeDays),
+          api.listProviders(),
         ]);
         if (!cancelled) {
           setStatus(s);
           setTools(tl);
+          setProviderCount(ps.length);
           setRecentLogs(l);
           setStats(st);
         }
@@ -161,8 +167,34 @@ export function Dashboard() {
         </div>
       </div>
 
+      {/* ── 0/1 providers 时显示新手引导卡，替代一片空白的 stats ── */}
+      {providerCount === 0 && (
+        <Link
+          to="/quick-setup"
+          className="group block rounded-xl border-2 border-dashed border-accent/30 bg-accent-soft/30 p-6 transition-colors hover:border-accent/60 hover:bg-accent-soft/50"
+        >
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-accent text-white">
+              <Rocket className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-base font-semibold text-text-primary">
+                {t("dashboard.empty_title")}
+              </h3>
+              <p className="mt-1 text-sm text-text-secondary">
+                {t("dashboard.empty_desc")}
+              </p>
+              <div className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent group-hover:gap-2 transition-all">
+                {t("dashboard.empty_cta")}
+                <ArrowRight className="h-4 w-4" />
+              </div>
+            </div>
+          </div>
+        </Link>
+      )}
+
       {/* ── 2. Today card — 5 primary metrics + cache inline footer when present ── */}
-      {stats && (
+      {providerCount !== 0 && stats && (
         <div className="rounded-xl border border-border bg-card px-6 py-4" style={{ boxShadow: "var(--shadow-sm)" }}>
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">{t("stats.today")}</span>

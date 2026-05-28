@@ -4,17 +4,23 @@ import { cn } from "@/lib/utils";
 
 export type ToastType = "success" | "error" | "warning";
 
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface ToastMessage {
   id: number;
   type: ToastType;
   message: string;
+  action?: ToastAction;
 }
 
 let toastId = 0;
-let addToastFn: ((type: ToastType, message: string) => void) | null = null;
+let addToastFn: ((type: ToastType, message: string, action?: ToastAction) => void) | null = null;
 
-export function toast(type: ToastType, message: string) {
-  addToastFn?.(type, message);
+export function toast(type: ToastType, message: string, opts?: { action?: ToastAction }) {
+  addToastFn?.(type, message, opts?.action);
 }
 
 const icons = {
@@ -40,9 +46,9 @@ const TOAST_DURATION = 4000;
 export function ToastContainer() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const addToast = useCallback((type: ToastType, message: string) => {
+  const addToast = useCallback((type: ToastType, message: string, action?: ToastAction) => {
     const id = ++toastId;
-    setToasts((prev) => [...prev, { id, type, message }]);
+    setToasts((prev) => [...prev, { id, type, message, action }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, TOAST_DURATION);
@@ -90,6 +96,17 @@ function ToastItem({ toast: t, onDismiss }: { toast: ToastMessage; onDismiss: (i
       <div className="flex items-center gap-3">
         <Icon className={cn("h-4 w-4 shrink-0", iconColors[t.type])} />
         <span className="text-xs text-text-primary">{t.message}</span>
+        {t.action && (
+          <button
+            onClick={() => { t.action?.onClick(); onDismiss(t.id); }}
+            className={cn(
+              "ml-1 shrink-0 rounded px-2 py-0.5 text-[11px] font-medium underline-offset-2 hover:underline",
+              iconColors[t.type]
+            )}
+          >
+            {t.action.label}
+          </button>
+        )}
         <button
           onClick={() => onDismiss(t.id)}
           className="ml-2 shrink-0 text-text-muted hover:text-text-primary"

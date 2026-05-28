@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Plus, Inbox } from "lucide-react";
 import { ProviderCard } from "@/components/providers/ProviderCard";
 import { ProviderFormDialog } from "@/components/providers/ProviderFormDialog";
@@ -15,6 +16,7 @@ import type {
 
 export function Providers() {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [providers, setProviders] = useState<ProviderView[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -40,11 +42,19 @@ export function Providers() {
   const handleCreate = async (input: CreateProviderInput | UpdateProviderInput) => {
     try {
       const created = await api.createProvider(input as CreateProviderInput);
-      toast("success", t("providers.created"));
       setFormOpen(false);
       // Auto-detect vision support for new provider
       api.detectProviderVision(created.id).catch(() => {});
       api.detectProviderCache(created.id).catch(() => {});
+      // 添加后总 provider ≥2 时提示用户可以做失败转移——跨页提示，避免
+      // 用户配完想做 failover 还得自己探索"Routing"页在哪。
+      if (providers.length >= 1) {
+        toast("success", `${t("providers.created")} · ${t("providers.hint_setup_failover")}`, {
+          action: { label: t("providers.go_routing"), onClick: () => navigate("/routes") },
+        });
+      } else {
+        toast("success", t("providers.created"));
+      }
       loadProviders();
     } catch (err) {
       toast("error", (err as api.AppError).message);
