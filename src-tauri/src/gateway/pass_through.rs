@@ -424,9 +424,9 @@ pub async fn handle_anthropic(
     let requested = body_json.get("model").and_then(|v| v.as_str()).unwrap_or("");
     let (base_model, model_resolution) = resolve_native_model(requested, model_override, &config.default_model);
     let trace_mode = native_trace_mode(model_override);
-    // Preserve explicit Anthropic-only model qualifiers (for example [1m])
-    // only on the Anthropic passthrough path. OpenAI/Codex paths use their
-    // own resolved model value before reaching this handler.
+    // Provider-specific final model cleanup for Anthropic passthrough.
+    // OpenAI/Codex paths use their own resolved model value before reaching
+    // this handler.
     let model = crate::gateway::anthropic_model_suffix::for_anthropic(
         &config.provider_type,
         &base_model,

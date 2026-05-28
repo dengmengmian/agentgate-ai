@@ -80,6 +80,7 @@ fn merge_mapping(
     profile: MappingProfile,
 ) -> BTreeMap<String, String> {
     let mut mapping = parse_mapping(current_json);
+    repair_legacy_1m_recommendations(&mut mapping, provider_type, default_model, reasoning_model);
     for (client, upstream) in
         recommended_pairs(provider_type, default_model, reasoning_model, profile)
     {
@@ -104,7 +105,6 @@ fn recommended_pairs(
         .unwrap_or(default_model)
         .to_string();
     let small = default_model.to_string();
-    let primary_1m = with_1m_suffix(&primary);
 
     let mut pairs = Vec::new();
     if matches!(profile, MappingProfile::All | MappingProfile::Codex) {
@@ -128,7 +128,7 @@ fn recommended_pairs(
 
     if matches!(profile, MappingProfile::All | MappingProfile::ClaudeCode) {
         for model in CLAUDE_PRIMARY_MODELS {
-            pairs.push(((*model).to_string(), primary_1m.clone()));
+            pairs.push(((*model).to_string(), primary.clone()));
         }
         for model in CLAUDE_SMALL_MODELS {
             pairs.push(((*model).to_string(), small.clone()));
@@ -138,15 +138,30 @@ fn recommended_pairs(
     pairs
 }
 
-fn with_1m_suffix(model: &str) -> String {
-    let model = model.trim();
-    if model.ends_with("[1m]") {
-        model.to_string()
-    } else if model.ends_with(']') {
-        let base = model.rfind('[').map(|idx| &model[..idx]).unwrap_or(model);
-        format!("{base}[1m]")
-    } else {
-        format!("{model}[1m]")
+fn repair_legacy_1m_recommendations(
+    mapping: &mut BTreeMap<String, String>,
+    provider_type: &str,
+    default_model: &str,
+    reasoning_model: Option<&str>,
+) {
+    let primary = reasoning_model
+        .filter(|m| !m.trim().is_empty())
+        .unwrap_or(default_model)
+        .trim();
+    if primary.is_empty() {
+        return;
+    }
+
+    let pt = provider_type.trim().to_lowercase();
+    if !(pt == "mimo" || pt == "xiaomi" || pt.contains("mimo") || pt == "deepseek") {
+        return;
+    }
+
+    let legacy = format!("{primary}[1m]");
+    for model in CLAUDE_PRIMARY_MODELS {
+        if mapping.get(*model).map(|v| v.as_str()) == Some(legacy.as_str()) {
+            mapping.insert((*model).to_string(), primary.to_string());
+        }
     }
 }
 
@@ -168,7 +183,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mimo_recommends_codex_and_claude_1m() {
+    fn mimo_recommends_codex_and_claude_without_1m() {
         let mapping = merge_mapping(
             None,
             "mimo",
@@ -180,7 +195,7 @@ mod tests {
         assert_eq!(mapping.get("gpt-5.4-mini").unwrap(), "mimo-v2.5-pro");
         assert_eq!(
             mapping.get("claude-sonnet-4-6").unwrap(),
-            "mimo-v2.5-pro[1m]"
+            "mimo-v2.5-pro"
         );
         assert_eq!(
             mapping.get("claude-haiku-4-5-20251001").unwrap(),
@@ -189,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn deepseek_routes_mini_to_flash_and_primary_to_1m_for_claude() {
+    fn deepseek_routes_mini_to_flash_and_primary_to_reasoning_for_claude() {
         let mapping = merge_mapping(
             None,
             "deepseek",
@@ -201,7 +216,7 @@ mod tests {
         assert_eq!(mapping.get("gpt-5.4-mini").unwrap(), "deepseek-v4-flash");
         assert_eq!(
             mapping.get("claude-opus-4-6").unwrap(),
-            "deepseek-v4-pro[1m]"
+            "deepseek-v4-pro"
         );
         assert_eq!(
             mapping.get("claude-haiku-4-5-20251001").unwrap(),
@@ -224,7 +239,7 @@ mod tests {
     }
 
     #[test]
-    fn claude_code_recommendation_forces_1m_qualifier() {
+    fn claude_code_recommendation_preserves_existing_qualifier_on_default_model() {
         let mapping = merge_mapping(
             None,
             "mimo",
@@ -234,7 +249,22 @@ mod tests {
         );
         assert_eq!(
             mapping.get("claude-sonnet-4-6").unwrap(),
-            "mimo-v2.5-pro[1m]"
+            "mimo-v2.5-pro[128k]"
+        );
+    }
+
+    #[test]
+    fn legacy_auto_1m_mapping_is_repaired() {
+        let mapping = merge_mapping(
+            Some(r#"{"claude-sonnet-4-6":"mimo-v2.5-pro[1m]"}"#),
+            "mimo",
+            "mimo-v2.5-pro",
+            Some("mimo-v2.5-pro"),
+            MappingProfile::ClaudeCode,
+        );
+        assert_eq!(
+            mapping.get("claude-sonnet-4-6").unwrap(),
+            "mimo-v2.5-pro"
         );
     }
 }

@@ -487,6 +487,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "onboarding.start_setup": { en: "Start Setup", zh: "开始配置" },
   "onboarding.setting_up": { en: "Setting up...", zh: "配置中..." },
   "onboarding.creating_provider": { en: "Creating provider", zh: "创建供应商" },
+  "onboarding.detecting_capabilities": { en: "Fetching models & detecting capabilities", zh: "拉取模型并识别能力" },
   "onboarding.starting_gateway": { en: "Starting gateway", zh: "启动网关" },
   "onboarding.configuring": { en: "Configuring", zh: "配置" },
   "onboarding.testing": { en: "Testing connection", zh: "测试连接" },

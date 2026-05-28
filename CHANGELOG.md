@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-05-29
+
+### 修复
+
+- **MiMo / DeepSeek 不再自动配置 `[1m]` 模型** —— Claude Code 推荐映射默认使用普通模型 ID，历史自动生成的 `[1m]` 映射会在后续保存 / 应用配置时修正；Anthropic 直连发送前也会剥离 MiMo / DeepSeek 的旧 `[1m]` 后缀，避免上游返回 `Not supported model`。
+- **快速配置改为测试本轮创建的供应商** —— 快速配置创建 Provider 后会立即设为 active，最后的连接测试不再沿用旧的 Chat 默认路由，避免用户贴了小米 key 却实际打到 DeepSeek。
+- **快速配置补齐模型和能力识别** —— 与“添加供应商”的“拉取并识别能力”保持一致：自动拉取模型、写入 `supported_models`、识别 `model_capabilities`，并选择 default / reasoning model。
+- **连接测试展示失败详情** —— 快速配置 / 首次向导的“测试连接”失败时显示后端错误，例如余额不足、鉴权失败或网关健康检查失败。
+
 ## [1.2.0] - 2026-05-28
 
 围绕"新手第一次配 Provider 不知道填啥"这条主线做了一轮大改。
@@ -9,7 +18,7 @@ All notable changes to this project will be documented in this file.
 ### 新增
 
 - **MiMo 按 key 类型自动选域名** —— `sk-*` 按量付费 key 使用 `api.xiaomimimo.com`，`tp-*` Token Plan key 使用 `token-plan-cn.xiaomimimo.com`；GUI 快速添加、首次向导、手动表单、后端 create/update、headless `provider-add` 都走同一套规则，避免 key 和 host 不匹配导致 401。
-- **MiMo / DeepSeek 推荐模型映射自动补齐** —— 创建 Provider、拉取模型、测试连接成功、应用 Codex / Claude Code 配置时自动补齐缺失映射，不覆盖用户已有项。Codex 的 `gpt-*` 自动映射到对应上游模型；Claude Code 的 `claude-*` 默认映射到 MiMo / DeepSeek 的 1M 后缀模型（如 `mimo-v2.5-pro[1m]` / `deepseek-v4-pro[1m]`）。
+- **MiMo / DeepSeek 推荐模型映射自动补齐** —— 创建 Provider、拉取模型、测试连接成功、应用 Codex / Claude Code 配置时自动补齐缺失映射。Codex 的 `gpt-*` 自动映射到对应上游模型；Claude Code 的 `claude-*` 默认映射到普通 MiMo / DeepSeek 模型，不再自动配置 `[1m]` 后缀。
 - **Provider 表单 3 段重构** —— 新手填表卡点：旧表单一上来 8+ 字段平铺加能力矩阵默认展开，跟用户脑里的"选个 Provider 粘 Key 就完事"模型不匹配。新结构：
   - Section A 基础：只露 type / name / api key（custom 类型才显式露 base_url）
   - Section B 模型与能力：合并"拉取模型"+"自动识别能力"为一个按钮，能力矩阵默认折叠
@@ -145,7 +154,7 @@ don't 500 on us.
   - 测试按钮升级：连通性 + 自动识别合并填充缺失行（保留用户手动编辑）
   - Provider 卡片 / Routes 页改用图标行（👁🎤🔊🎞🧠🌐）替代单一 `supports_vision` 徽章
 - **`[1m]` suffix handling / 长上下文后缀处理**
-  - MiMo / DeepSeek 官方 Claude Code 路径支持 `mimo-v2.5-pro[1m]` / `deepseek-v4-pro[1m]` 等显式模型 ID；AgentGate 默认原样发送，已写 `[1m]` 的用户配置 / model_mapping 原样保留
+  - MiMo / DeepSeek Claude Code 路径默认使用普通模型 ID；历史 `[1m]` 自动推荐映射会在后续保存 / 应用配置时修正回普通模型
   - Codex（OpenAI）路径完全不动
 - **Codex `web_search_preview` → MiMo `web_search` 翻译**
   - Codex 用户的联网搜索能力穿透到 MiMo 上游

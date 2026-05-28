@@ -4,6 +4,7 @@ import { Key, Monitor, Rocket, CheckCircle, XCircle, Loader2, ArrowRight } from 
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { detectProvider } from "@/lib/keyDetection";
+import { fetchDetectAndPersistProviderModels } from "@/lib/providerAutoSetup";
 import { resolveProviderPresetForKey } from "@/data/providerPresets";
 
 type Step = "key" | "tools" | "setup" | "done";
@@ -15,6 +16,12 @@ interface ToolDetection {
   checked: boolean;
 }
 
+interface SetupLogEntry {
+  label: string;
+  status: "pending" | "running" | "ok" | "error";
+  detail?: string;
+}
+
 export function QuickSetup() {
   const { t } = useI18n();
   const navigate = useNavigate();
@@ -22,7 +29,7 @@ export function QuickSetup() {
   const [apiKey, setApiKey] = useState("");
   const [detectedProvider, setDetectedProvider] = useState<{ type: string; name: string } | null>(null);
   const [tools, setTools] = useState<ToolDetection[]>([]);
-  const [setupLog, setSetupLog] = useState<Array<{ label: string; status: "pending" | "running" | "ok" | "error" }>>([]);
+  const [setupLog, setSetupLog] = useState<SetupLogEntry[]>([]);
 
   const handleKeyChange = (key: string) => {
     setApiKey(key);
@@ -44,9 +51,13 @@ export function QuickSetup() {
   const handleSetup = async () => {
     setStep("setup");
     const log: typeof setupLog = [];
-    const addLog = (label: string, status: "pending" | "running" | "ok" | "error") => {
+    const addLog = (label: string, status: "pending" | "running" | "ok" | "error", detail?: string) => {
       const idx = log.findIndex(l => l.label === label);
-      if (idx >= 0) { log[idx].status = status; } else { log.push({ label, status }); }
+      if (idx >= 0) {
+        log[idx] = { ...log[idx], status, detail };
+      } else {
+        log.push({ label, status, detail });
+      }
       setSetupLog([...log]);
     };
 
@@ -54,7 +65,7 @@ export function QuickSetup() {
     if (!preset) return;
     addLog(t("onboarding.creating_provider"), "running");
     try {
-      await api.createProvider({
+      const provider = await api.createProvider({
         name: detectedProvider!.name,
         provider_type: detectedProvider!.type,
         base_url: preset.baseUrl,
@@ -69,7 +80,17 @@ export function QuickSetup() {
         extra_headers: preset.extraHeaders ?? undefined,
         auto_cache_control: true,
       });
+      await api.setActiveProvider(provider.id);
       addLog(t("onboarding.creating_provider"), "ok");
+
+      addLog(t("onboarding.detecting_capabilities"), "running");
+      try {
+        const { models } = await fetchDetectAndPersistProviderModels(provider.id, detectedProvider!.type);
+        const detail = models.length ? `${models.length} ${t("providers.toast_models_and_caps")}` : t("providers.test.autofill_none");
+        addLog(t("onboarding.detecting_capabilities"), "ok", detail);
+      } catch (err) {
+        addLog(t("onboarding.detecting_capabilities"), "error", err instanceof Error ? err.message : String(err));
+      }
     } catch {
       addLog(t("onboarding.creating_provider"), "error");
       setStep("done"); return;
@@ -97,8 +118,11 @@ export function QuickSetup() {
     addLog(t("onboarding.testing"), "running");
     try {
       const test = await api.testToolConnection();
-      addLog(t("onboarding.testing"), test.provider_ok ? "ok" : "error");
-    } catch { addLog(t("onboarding.testing"), "error"); }
+      const detail = test.provider_ok ? undefined : (test.error ?? "Gateway or provider test failed");
+      addLog(t("onboarding.testing"), test.provider_ok ? "ok" : "error", detail);
+    } catch (err) {
+      addLog(t("onboarding.testing"), "error", err instanceof Error ? err.message : String(err));
+    }
 
     setStep("done");
   };
@@ -200,12 +224,17 @@ export function QuickSetup() {
 
           <div className="space-y-3">
             {setupLog.map((entry, i) => (
-              <div key={i} className="flex items-center gap-3 text-sm">
+              <div key={i} className="flex items-start gap-3 text-sm">
                 {entry.status === "running" ? <Loader2 className="h-4 w-4 animate-spin text-accent" />
                   : entry.status === "ok" ? <CheckCircle className="h-4 w-4 text-success" />
                   : entry.status === "error" ? <XCircle className="h-4 w-4 text-error" />
                   : <div className="h-4 w-4 rounded-full border-2 border-border" />}
-                <span className="text-text-primary">{entry.label}</span>
+                <div className="min-w-0">
+                  <div className="text-text-primary">{entry.label}</div>
+                  {entry.detail && (
+                    <div className="mt-1 max-w-full break-words text-xs text-error">{entry.detail}</div>
+                  )}
+                </div>
               </div>
             ))}
           </div>

@@ -68,7 +68,7 @@ AgentGate is a **local model gateway** for AI coding agents. One entry point con
   - **Aggregator**: OpenRouter
   - **Custom**: any OpenAI-compatible endpoint (vLLM / Ollama / LiteLLM / local proxies)
 - MiMo first-class support: 5 chat models (`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`), multi-turn `reasoning_content` round-trip, `sk-*` and `tp-*` keys auto-route to the correct MiMo host, friendly `webSearchEnabled` error mapping
-- `[1m]` long-context suffix support on the Claude Code passthrough path: MiMo and DeepSeek can use explicit suffixed model IDs such as `mimo-v2.5-pro[1m]` or `deepseek-v4-pro[1m]`; AgentGate sends models unchanged unless you configure that suffix in the model or model mapping.
+- Claude Code passthrough for MiMo / DeepSeek uses ordinary provider model IDs by default; AgentGate no longer auto-configures `[1m]` suffixed models.
 - Route Profiles with multi-provider priority chains, auto-matched by protocol
 - Manual switching or automatic failover
 - Provider cooldown and runtime status tracking
@@ -537,8 +537,8 @@ Providers marked **Provider-specific handling** have dedicated transform code in
 
 | Provider | Type | Native Protocols | Provider-Specific Handling |
 |---|---|---|---|
-| Xiaomi MiMo | `mimo` | Chat + Anthropic | Multi-turn `reasoning_content` round-trip, `tp-*` host auto-routing, temperature strip in thinking mode, tool_choice non-auto strip, omni web_search strip, explicit `[1m]` model suffix passthrough on CC path, web_search builtin gated by matrix, friendly Web Search Plugin error hint |
-| DeepSeek | `deepseek` | Chat + Anthropic | Image stripping (text-only models), reasoning injection, schema cleaning, message reordering, explicit `[1m]` model suffix passthrough on CC path |
+| Xiaomi MiMo | `mimo` | Chat + Anthropic | Multi-turn `reasoning_content` round-trip, `tp-*` host auto-routing, temperature strip in thinking mode, tool_choice non-auto strip, omni web_search strip, web_search builtin gated by matrix, friendly Web Search Plugin error hint |
+| DeepSeek | `deepseek` | Chat + Anthropic | Image stripping (text-only models), reasoning injection, schema cleaning, message reordering |
 | Anthropic (Claude) | `anthropic` | Anthropic Messages (native) | `tool_use`/`tool_result`, `input_schema`, thinking budget, native cache_control |
 | OpenAI | `openai` | Chat + Responses | None (Responses passthrough or Chat conversion) |
 | Google Gemini | `google_gemini` | Chat (compat endpoint) | None |
@@ -694,7 +694,7 @@ Claude Code sends Messages API request
   → ① Auth passes
   → ② Matches Claude Code Default Route Profile
   → ③ DeepSeek has anthropic_base_url → native passthrough
-  → Model Mapping: claude-sonnet-4-6 → deepseek-v4-pro[1m] (optional)
+  → Model Mapping: claude-sonnet-4-6 → deepseek-v4-pro
   → Replace URL with api.deepseek.com/anthropic + inject API key
   → Request body proxied as-is → SSE response stream proxied as-is
   → ④ Log request

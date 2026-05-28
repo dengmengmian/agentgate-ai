@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
-import { pickModels } from "@/lib/modelHeuristics";
+import { fetchDetectAndPersistProviderModels } from "@/lib/providerAutoSetup";
 import * as api from "@/lib/api";
 import type {
   ProviderView,
@@ -83,15 +83,8 @@ export function Providers() {
       const providerType = (input as CreateProviderInput).provider_type;
       (async () => {
         try {
-          const models = await api.fetchProviderModels(created.id);
+          const { models } = await fetchDetectAndPersistProviderModels(created.id, providerType);
           if (!models.length) return;
-          const seeded = await api.seedModelCapabilities(providerType, models).catch(() => null);
-          const picked = pickModels(models);
-          await api.updateProvider(created.id, {
-            default_model: picked.default,
-            reasoning_model: picked.reasoning,
-            ...(seeded ? { model_capabilities: JSON.stringify(seeded) } : {}),
-          });
           loadProviders();
           toast("success", `${models.length} ${t("providers.toast_auto_setup")}`);
         } catch { /* silent: 用户可去编辑页手动拉 */ }

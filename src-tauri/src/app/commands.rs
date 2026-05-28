@@ -1459,10 +1459,26 @@ pub async fn test_tool_connection(state: State<'_, AppState>) -> Result<serde_js
     }
 
     // Step 3: Test provider with a minimal request
+    let test_model = {
+        let conn = state.db.lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
+        let route_model = storage::route_profiles::get_default_for_protocol(&conn, "openai_chat_completions")?
+            .and_then(|profile| profile.active_provider_id)
+            .and_then(|provider_id| storage::providers::get_by_id(&conn, &provider_id).ok())
+            .map(|provider| provider.default_model);
+        route_model
+            .or_else(|| {
+                storage::providers::list_all(&conn).ok()
+                    .and_then(|providers| providers.into_iter()
+                        .find(|provider| provider.enabled && provider.is_active)
+                        .map(|provider| provider.default_model))
+            })
+            .unwrap_or_else(|| "test".to_string())
+    };
     let token = crate::security::local_token::read_token().unwrap_or_default();
     let test_url = format!("http://{}:{}/v1/chat/completions", host, port);
     let test_body = serde_json::json!({
-        "model": "test",
+        "model": test_model,
         "messages": [{"role": "user", "content": "hi"}],
         "max_tokens": 1,
     });
@@ -1496,6 +1512,7 @@ pub async fn test_tool_connection(state: State<'_, AppState>) -> Result<serde_js
         "config_ok": true,
         "gateway_ok": true,
         "provider_ok": provider_ok,
+        "test_model": test_body.get("model").and_then(|v| v.as_str()).unwrap_or("test"),
         "error": error,
     }))
 }

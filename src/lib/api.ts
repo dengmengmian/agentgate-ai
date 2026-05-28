@@ -462,6 +462,7 @@ export interface ConnectionTestResult {
   config_ok: boolean;
   gateway_ok: boolean;
   provider_ok: boolean;
+  test_model?: string;
   error?: string;
 }
 
