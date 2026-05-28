@@ -1,13 +1,62 @@
+use axum::body::Body;
 use axum::routing::{get, post};
 use axum::Router;
+use http_body::{Body as HttpBody, Frame, SizeHint};
 use rusqlite::Connection;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 use tokio::sync::oneshot;
 
 use crate::errors::AppError;
 use crate::gateway::routes::{self, GatewayState};
+
+/// 包一层 Body，使 active-requests 计数器在 **body 真正流完**（或被
+/// drop——客户端断开）时才 decrement。
+///
+/// 修复的 bug：axum 的 `middleware::from_fn` 模式里 `next.run(req).await`
+/// 在 response **headers 发完**就返回，**body 还没流给客户端**——对 99%
+/// 是 SSE 流式请求的 AI gateway 来说，这个 await 几毫秒就完事，counter
+/// 在 dashboard 3 秒一拉之前早就回 0 了，"活跃连接"永远显示 0。
+///
+/// 现在 increment 在 middleware 入口、decrement 在这个 wrapper 的 Drop
+/// 里——body 完整流完或客户端断开后才触发，反映真实在飞的请求数。
+struct CountingBody {
+    inner: Body,
+    counter: Arc<AtomicU64>,
+    decremented: bool,
+}
+
+impl Drop for CountingBody {
+    fn drop(&mut self) {
+        if !self.decremented {
+            self.counter.fetch_sub(1, Ordering::Relaxed);
+            self.decremented = true;
+        }
+    }
+}
+
+impl HttpBody for CountingBody {
+    type Data = bytes::Bytes;
+    type Error = axum::Error;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        Pin::new(&mut self.inner).poll_frame(cx)
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.inner.is_end_stream()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        self.inner.size_hint()
+    }
+}
 
 /// Start the gateway HTTP server. Returns shutdown sender, join handle,
 /// active-request counter, and the actually-bound port (useful when callers
@@ -63,8 +112,11 @@ pub async fn start(
             async move {
                 counter.fetch_add(1, Ordering::Relaxed);
                 let response = next.run(req).await;
-                counter.fetch_sub(1, Ordering::Relaxed);
-                response
+                // 不在这 decrement —— next.run 对 streaming 响应几毫秒就返回，
+                // body 还没流给 client。包一层 CountingBody，body Drop 时才减。
+                let (parts, body) = response.into_parts();
+                let wrapped = CountingBody { inner: body, counter, decremented: false };
+                axum::http::Response::from_parts(parts, Body::new(wrapped))
             }
         }))
         .with_state(state);

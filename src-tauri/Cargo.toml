@@ -33,6 +33,9 @@ uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.12", features = ["json", "stream", "gzip", "brotli", "zstd"] }
 tokio = { version = "1", features = ["full"] }
 axum = "0.7"
+# 用于包装 axum Body 实现 active-requests 计数器（gateway/server.rs::CountingBody）。
+# transitively 通过 axum/reqwest 已经在依赖图里——这里显式声明只是稳定 API。
+http-body = "1"
 futures = "0.3"
 async-stream = "0.3"
 tokio-stream = "0.1"

@@ -20,6 +20,7 @@ dependencies = [
  "clap",
  "flate2",
  "futures",
+ "http-body",
  "open",
  "rand",
  "reqwest 0.12.28",
