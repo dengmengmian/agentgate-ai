@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, RefreshCcw, Loader2, Sparkles } from "lucide-react";
 import { PROVIDER_TYPES, PROTOCOLS, ALL_CAPABILITIES, CAPABILITY_LABELS } from "@/types/provider";
+import { PROVIDER_PRESETS } from "@/data/providerPresets";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/common/Toast";
 import * as api from "@/lib/api";
@@ -51,39 +52,6 @@ export function ProviderFormDialog({
   const [quickMode, setQuickMode] = useState(true);
   const [quickKey, setQuickKey] = useState("");
   const [detectedType, setDetectedType] = useState<string | null>(null);
-
-  // Presets per provider type
-  const PROVIDER_PRESETS: Record<string, { baseUrl: string; protocols: string[]; defaultModel: string; reasoningModel?: string; anthropicBaseUrl?: string; responsesBaseUrl?: string; extraHeaders?: string }> = {
-    // Tier 1: Major providers
-    anthropic: { baseUrl: "https://api.anthropic.com", protocols: ["anthropic_messages"], defaultModel: "claude-sonnet-4-6" },
-    deepseek: { baseUrl: "https://api.deepseek.com", protocols: ["openai_chat_completions"], defaultModel: "deepseek-v4-flash", reasoningModel: "deepseek-v4-pro", anthropicBaseUrl: "https://api.deepseek.com/anthropic" },
-    openai: { baseUrl: "https://api.openai.com", protocols: ["openai_chat_completions", "openai_responses"], defaultModel: "gpt-4o", responsesBaseUrl: "https://api.openai.com" },
-    google_gemini: { baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", protocols: ["openai_chat_completions"], defaultModel: "gemini-2.5-flash" },
-    xai: { baseUrl: "https://api.x.ai", protocols: ["openai_chat_completions"], defaultModel: "grok-3-latest" },
-    mistral: { baseUrl: "https://api.mistral.ai", protocols: ["openai_chat_completions"], defaultModel: "mistral-large-latest" },
-    // Tier 2: Inference providers
-    groq: { baseUrl: "https://api.groq.com/openai", protocols: ["openai_chat_completions"], defaultModel: "llama-3.3-70b-versatile" },
-    together: { baseUrl: "https://api.together.xyz", protocols: ["openai_chat_completions"], defaultModel: "meta-llama/Llama-3.3-70B-Instruct-Turbo" },
-    fireworks: { baseUrl: "https://api.fireworks.ai/inference", protocols: ["openai_chat_completions"], defaultModel: "accounts/fireworks/models/llama-v3p1-70b-instruct" },
-    cerebras: { baseUrl: "https://api.cerebras.ai", protocols: ["openai_chat_completions"], defaultModel: "llama-3.3-70b" },
-    perplexity: { baseUrl: "https://api.perplexity.ai", protocols: ["openai_chat_completions"], defaultModel: "sonar-pro" },
-    cohere: { baseUrl: "https://api.cohere.com/compatibility", protocols: ["openai_chat_completions"], defaultModel: "command-r-plus" },
-    // China providers
-    mimo: { baseUrl: "https://api.xiaomimimo.com/v1", protocols: ["openai_chat_completions"], defaultModel: "mimo-v2.5-pro", reasoningModel: "mimo-v2.5-pro", anthropicBaseUrl: "https://api.xiaomimimo.com/anthropic" },
-    kimi: { baseUrl: "https://api.moonshot.cn", protocols: ["openai_chat_completions"], defaultModel: "kimi-k2", extraHeaders: '{"User-Agent":"KimiCLI/1.40.0"}' },
-    minimax: { baseUrl: "https://api.minimax.chat", protocols: ["openai_chat_completions"], defaultModel: "MiniMax-M1" },
-    glm: { baseUrl: "https://open.bigmodel.cn/api/paas/v4/chat/completions", protocols: ["openai_chat_completions"], defaultModel: "glm-4-plus", anthropicBaseUrl: "https://open.bigmodel.cn/api/anthropic" },
-    dashscope: { baseUrl: "https://dashscope.aliyuncs.com/compatible-mode", protocols: ["openai_chat_completions"], defaultModel: "qwen-max", anthropicBaseUrl: "https://dashscope.aliyuncs.com/apps/anthropic" },
-    siliconflow: { baseUrl: "https://api.siliconflow.cn", protocols: ["openai_chat_completions"], defaultModel: "deepseek-ai/DeepSeek-V3" },
-    volcengine: { baseUrl: "https://ark.cn-beijing.volces.com/api/v3/chat/completions", protocols: ["openai_chat_completions"], defaultModel: "doubao-pro-256k" },
-    baichuan: { baseUrl: "https://api.baichuan-ai.com", protocols: ["openai_chat_completions"], defaultModel: "Baichuan4" },
-    stepfun: { baseUrl: "https://api.stepfun.com", protocols: ["openai_chat_completions"], defaultModel: "step-2-16k" },
-    yi: { baseUrl: "https://api.lingyiwanwu.com", protocols: ["openai_chat_completions"], defaultModel: "yi-large" },
-    // Aggregators
-    openrouter: { baseUrl: "https://openrouter.ai/api", protocols: ["openai_chat_completions"], defaultModel: "deepseek/deepseek-v4-flash" },
-    // Custom
-    custom_openai_compatible: { baseUrl: "", protocols: ["openai_chat_completions"], defaultModel: "" },
-  };
 
   // MiMo runs two host pairs depending on the key tier:
   //   sk-* (按量付费) → api.xiaomimimo.com

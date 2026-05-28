@@ -4,6 +4,7 @@ import { Key, Monitor, Rocket, CheckCircle, XCircle, Loader2, ArrowRight } from 
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { detectProvider } from "@/lib/keyDetection";
+import { PROVIDER_PRESETS } from "@/data/providerPresets";
 
 type Step = "key" | "tools" | "setup" | "done";
 
@@ -13,16 +14,6 @@ interface ToolDetection {
   detected: boolean;
   checked: boolean;
 }
-
-const QUICK_PRESETS: Record<string, { baseUrl: string; protocols: string[]; defaultModel: string; reasoningModel?: string; anthropicBaseUrl?: string; responsesBaseUrl?: string; extraHeaders?: string }> = {
-  anthropic: { baseUrl: "https://api.anthropic.com", protocols: ["anthropic_messages"], defaultModel: "claude-sonnet-4-6" },
-  deepseek: { baseUrl: "https://api.deepseek.com", protocols: ["openai_chat_completions"], defaultModel: "deepseek-v4-flash", reasoningModel: "deepseek-v4-pro", anthropicBaseUrl: "https://api.deepseek.com/anthropic" },
-  openai: { baseUrl: "https://api.openai.com", protocols: ["openai_chat_completions", "openai_responses"], defaultModel: "gpt-4o", responsesBaseUrl: "https://api.openai.com" },
-  openrouter: { baseUrl: "https://openrouter.ai/api", protocols: ["openai_chat_completions"], defaultModel: "deepseek/deepseek-v4-flash" },
-  groq: { baseUrl: "https://api.groq.com/openai", protocols: ["openai_chat_completions"], defaultModel: "llama-3.3-70b-versatile" },
-  xai: { baseUrl: "https://api.x.ai", protocols: ["openai_chat_completions"], defaultModel: "grok-3-latest" },
-  perplexity: { baseUrl: "https://api.perplexity.ai", protocols: ["openai_chat_completions"], defaultModel: "sonar-pro" },
-};
 
 export function QuickSetup() {
   const { t } = useI18n();
@@ -59,7 +50,7 @@ export function QuickSetup() {
       setSetupLog([...log]);
     };
 
-    const preset = QUICK_PRESETS[detectedProvider!.type];
+    const preset = PROVIDER_PRESETS[detectedProvider!.type];
     addLog(t("onboarding.creating_provider"), "running");
     try {
       await api.createProvider({
