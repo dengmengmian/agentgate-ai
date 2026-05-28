@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Inbox } from "lucide-react";
+import { Plus, Inbox, Search } from "lucide-react";
 import { ProviderCard } from "@/components/providers/ProviderCard";
 import { ProviderFormDialog } from "@/components/providers/ProviderFormDialog";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -23,6 +23,19 @@ export function Providers() {
   const [editTarget, setEditTarget] = useState<ProviderView | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProviderView | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  // 过滤：name / provider_type / default_model 任一匹配（大小写不敏感）。
+  // provider 数少时不显示搜索框（减少视觉噪音），>= 5 个才出现。
+  const filteredProviders = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return providers;
+    return providers.filter((p) =>
+      p.name.toLowerCase().includes(q) ||
+      p.provider_type.toLowerCase().includes(q) ||
+      p.default_model.toLowerCase().includes(q)
+    );
+  }, [providers, search]);
 
   const loadProviders = useCallback(async () => {
     try {
@@ -139,10 +152,25 @@ export function Providers() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-text-muted">
-          {providers.length} {t("providers.configured")}
-        </p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-1 items-center gap-3">
+          <p className="shrink-0 text-xs text-text-muted">
+            {search ? `${filteredProviders.length} / ${providers.length}` : providers.length} {t("providers.configured")}
+          </p>
+          {/* provider 数 >=5 时显示搜索框——少于 5 个时直接看完更快 */}
+          {providers.length >= 5 && (
+            <div className="relative max-w-xs flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-muted" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("providers.search_placeholder")}
+                className="form-input w-full pl-8 text-xs"
+              />
+            </div>
+          )}
+        </div>
         <button
           onClick={() => {
             setEditTarget(null);
@@ -163,9 +191,11 @@ export function Providers() {
           title={t("providers.no_providers")}
           description={t("providers.add_first")}
         />
+      ) : filteredProviders.length === 0 ? (
+        <p className="text-xs text-text-muted">{t("providers.no_match")}</p>
       ) : (
         <div className="grid grid-cols-2 gap-4">
-          {providers.map((provider) => (
+          {filteredProviders.map((provider) => (
             <ProviderCard
               key={provider.id}
               provider={provider}

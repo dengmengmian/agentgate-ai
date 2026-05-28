@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Stethoscope } from "lucide-react";
+import { Stethoscope, Search } from "lucide-react";
 import * as api from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import type { GatewayStatus } from "@/types/gateway";
 
-export function Topbar() {
+const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+
+export function Topbar({ onOpenCmdK }: { onOpenCmdK?: () => void }) {
   const { t } = useI18n();
   const location = useLocation();
   const navigate = useNavigate();
@@ -41,6 +43,18 @@ export function Topbar() {
       <h1 className="text-sm font-semibold text-text-primary">{t(titleKey)}</h1>
 
       <div className="flex items-center gap-2">
+        {/* Cmd+K 触发器——让用户发现这个快捷键的存在。点击也能打开。 */}
+        {onOpenCmdK && (
+          <button
+            type="button"
+            onClick={onOpenCmdK}
+            title={t("cmdk.placeholder")}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card-secondary px-2 text-[11px] text-text-muted transition-colors hover:text-text-primary hover:bg-hover"
+          >
+            <Search className="h-3.5 w-3.5" />
+            <kbd className="font-sans">{IS_MAC ? "⌘" : "Ctrl"}+K</kbd>
+          </button>
+        )}
         {status && (
           <div className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
             status.running
@@ -60,21 +74,19 @@ export function Topbar() {
             )}
           </div>
         )}
-        {/* 诊断快捷入口：始终可见、stopped 时高亮——故障排查路径从"先想到
-            侧边栏第 7 项"缩短到"一眼看到"。点击跳 /diagnostics。 */}
-        <button
-          type="button"
-          onClick={() => navigate("/diagnostics")}
-          title={t("nav.diagnostics")}
-          aria-label={t("nav.diagnostics")}
-          className={`inline-flex h-7 items-center justify-center rounded-full border px-2 transition-colors ${
-            status && !status.running
-              ? "border-warning/30 bg-warning-soft text-warning hover:bg-warning/20"
-              : "border-border bg-card-secondary text-text-muted hover:text-text-primary hover:bg-hover"
-          }`}
-        >
-          <Stethoscope className="h-3.5 w-3.5" />
-        </button>
+        {/* 诊断快捷入口：只在 stopped 时显眼出现——running 健康状态下完全
+            隐藏，避免视觉噪音。点击跳 /diagnostics。 */}
+        {status && !status.running && (
+          <button
+            type="button"
+            onClick={() => navigate("/diagnostics")}
+            title={t("nav.diagnostics")}
+            aria-label={t("nav.diagnostics")}
+            className="inline-flex h-7 items-center justify-center rounded-full border border-warning/30 bg-warning-soft px-2 text-warning transition-colors hover:bg-warning/20"
+          >
+            <Stethoscope className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </header>
   );

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2, Settings2, Database, Info, PawPrint } from "lucide-react";
+import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2, Settings2, Database, Info, PawPrint, ChevronDown, ChevronRight } from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
@@ -254,12 +254,14 @@ export function Settings() {
             <ConfigBackupSection />
 
 
-            <section className="rounded-xl border border-border bg-card p-5">
-              <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
-                <DollarSign className="h-4 w-4 text-accent" />{t("settings.model_pricing")}
-              </h3>
-              <p className="mb-3 text-[11px] text-text-muted">{t("settings.model_pricing_desc")}</p>
-
+            {/* 模型定价表默认折叠——用户配 1 次就再也不动，平铺时挤压日常常看的
+                日志保留 / 配置导入导出。点击 header 展开。 */}
+            <CollapsibleSection
+              icon={DollarSign}
+              title={t("settings.model_pricing")}
+              hint={t("settings.model_pricing_desc")}
+              badge={`${pricing.length}`}
+            >
               <div className="overflow-hidden rounded-md border border-border">
                 <table className="w-full text-xs">
                   <thead>
@@ -297,7 +299,7 @@ export function Settings() {
                   toast("success", t("settings.pricing_saved"));
                 } catch (err) { toast("error", (err as api.AppError).message); }
               }} />
-            </section>
+            </CollapsibleSection>
           </>
         )}
 
@@ -489,6 +491,43 @@ function ConfigBackupSection() {
         onConfirm={handleConfirmImport}
         onCancel={() => setPendingImportJson(null)}
       />
+    </section>
+  );
+}
+
+/// 可折叠 section：header 永远显示，body 默认折叠、点击展开。用于低频
+/// 但占空间的设置（如模型定价表）——避免它把日常常用的"日志保留/配置
+/// 导入导出"挤到下面要滚屏才能看见。
+function CollapsibleSection({
+  icon: Icon,
+  title,
+  hint,
+  badge,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  hint?: string;
+  badge?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <section className="rounded-xl border border-border bg-card p-5">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+          <Icon className="h-4 w-4 text-accent" />
+          {title}
+          {badge && <span className="rounded-full bg-card-secondary px-1.5 py-0.5 text-[10px] font-normal text-text-muted">{badge}</span>}
+        </div>
+        {open ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
+      </button>
+      {hint && open && <p className="mt-3 text-[11px] text-text-muted">{hint}</p>}
+      {open && <div className="mt-4">{children}</div>}
     </section>
   );
 }

@@ -13,11 +13,31 @@ const translations: Record<string, Record<Locale, string>> = {
   "nav.diagnostics": { en: "Diagnostics", zh: "诊断" },
   "nav.quick_setup": { en: "Quick Setup", zh: "快速配置" },
   "nav.settings": { en: "Settings", zh: "设置" },
+  "nav.collapse": { en: "Collapse sidebar", zh: "折叠侧边栏" },
+  "nav.expand": { en: "Expand sidebar", zh: "展开侧边栏" },
+
+  // ── Command palette ──
+  "cmdk.placeholder": { en: "Jump to page, run action…  (⌘K)", zh: "跳转页面 / 执行操作…  (⌘K)" },
+  "cmdk.no_results": { en: "No matching commands", zh: "没有匹配的命令" },
+  "cmdk.navigate": { en: "navigate", zh: "选择" },
+  "cmdk.select": { en: "select", zh: "确认" },
+  "cmdk.page": { en: "Page", zh: "页面" },
+  "cmdk.action": { en: "Action", zh: "操作" },
+  "cmdk.edit_provider": { en: "Edit provider", zh: "编辑服务商" },
+  "cmdk.start_gateway": { en: "Start gateway service", zh: "启动服务" },
+  "cmdk.stop_gateway": { en: "Stop gateway service", zh: "停止服务" },
+  "cmdk.restart_gateway": { en: "Restart gateway service", zh: "重启服务" },
+  "cmdk.theme_dark": { en: "Switch to dark theme", zh: "切换到暗色主题" },
+  "cmdk.theme_light": { en: "Switch to light theme", zh: "切换到亮色主题" },
   "topbar.gateway": { en: "Gateway", zh: "网关" },
   "topbar.running": { en: "Running", zh: "运行中" },
   "topbar.stopped": { en: "Stopped", zh: "已停止" },
 
   // ── Dashboard ──
+  "dashboard.first_request_seen": {
+    en: "✓ First request received — AgentGate is working!",
+    zh: "✓ 收到首个请求 —— AgentGate 跑通了！",
+  },
   "dashboard.empty_title": { en: "Get started in 60 seconds", zh: "60 秒上手 AgentGate" },
   "dashboard.empty_desc": {
     en: "Paste any AI provider API key — AgentGate auto-detects the provider, configures your AI coding agents (Codex, Claude Code, Gemini CLI…), and you're ready to go.",
@@ -73,6 +93,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.default_model": { en: "Default Model", zh: "默认模型" },
   "providers.reasoning_model": { en: "Reasoning Model", zh: "推理模型" },
   "providers.timeout": { en: "Timeout", zh: "超时" },
+  "providers.search_placeholder": { en: "Filter providers...", zh: "筛选服务商..." },
+  "providers.no_match": { en: "No providers match the filter.", zh: "没有匹配的服务商" },
   "providers.created": { en: "Provider created", zh: "服务商已创建" },
   "providers.hint_setup_failover": { en: "Set up failover chain?", zh: "顺手配下失败转移？" },
   "providers.go_routing": { en: "Routing →", zh: "去配置 →" },
@@ -154,6 +176,10 @@ const translations: Record<string, Record<Locale, string>> = {
   "logs.no_logs_desc": { en: "Logs will appear here once the gateway processes requests", zh: "网关处理请求后，日志将显示在此处" },
   "logs.search": { en: "Search...", zh: "搜索..." },
   "logs.all": { en: "All", zh: "全部" },
+  "logs.all_providers": { en: "All providers", zh: "全部服务商" },
+  "logs.all_clients": { en: "All clients", zh: "全部客户端" },
+  "logs.filter_provider": { en: "Filter by provider", zh: "按服务商筛选" },
+  "logs.filter_client": { en: "Filter by client", zh: "按客户端筛选" },
   "logs.success": { en: "Success", zh: "成功" },
   "logs.error": { en: "Error", zh: "错误" },
   "logs.time": { en: "Time", zh: "时间" },
@@ -434,6 +460,16 @@ const translations: Record<string, Record<Locale, string>> = {
   "onboarding.complete": { en: "All set!", zh: "配置完成！" },
   "onboarding.partial": { en: "Setup completed with issues", zh: "配置完成（部分失败）" },
   "onboarding.done": { en: "Get Started", zh: "开始使用" },
+  "onboarding.next_step_title": {
+    en: "✓ Setup complete — now run your AI agent in terminal",
+    zh: "✓ 配置完成——现在去终端运行你的 AI agent",
+  },
+  "onboarding.next_step_desc": {
+    en: "AgentGate is listening locally and your clients (Codex / Claude Code / …) are wired. Open your terminal and run your agent — requests will flow through.",
+    zh: "AgentGate 本地服务已经在监听，客户端（Codex / Claude Code 等）也已配置完毕。打开终端跑你的命令，请求会自动通过。",
+  },
+  "onboarding.go_to_clients": { en: "View Clients →", zh: "查看客户端 →" },
+  "onboarding.back_to_overview": { en: "Back to Overview", zh: "返回概览" },
 
   // ── Settings about ──
   "settings.license": { en: "License", zh: "开源协议" },
