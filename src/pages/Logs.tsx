@@ -9,6 +9,10 @@ import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import type { RequestLogListItem } from "@/types/request-log";
 import type { RequestLogDetail } from "@/types/request-log";
+import type { ProviderView } from "@/types/provider";
+
+// 客户端候选——detect_client_from_ua 用的固定列表。
+const KNOWN_CLIENTS = ["Codex", "Claude Code", "OpenCode", "Gemini CLI", "AtomCode", "Generic"];
 
 const PAGE_SIZE = 100;
 
@@ -22,15 +26,24 @@ export function Logs() {
   // Filters
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [providerFilter, setProviderFilter] = useState("");
+  const [clientFilter, setClientFilter] = useState("");
+  const [providerOptions, setProviderOptions] = useState<ProviderView[]>([]);
 
   // Pagination
   const [page, setPage] = useState(1); // 1-indexed
   const [total, setTotal] = useState(0);
 
+  // 初次加载 provider 候选——用 name 而不是 id，因为 request_logs.provider
+  // 字段存的是 name 字符串（见 routes.rs log_request_success 调用）。
+  useEffect(() => {
+    api.listProviders().then(setProviderOptions).catch(() => {});
+  }, []);
+
   // Reset to page 1 whenever filters change.
   useEffect(() => {
     setPage(1);
-  }, [keyword, statusFilter]);
+  }, [keyword, statusFilter, providerFilter, clientFilter]);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -38,6 +51,8 @@ export function Logs() {
       const filter = {
         keyword: keyword || undefined,
         status: statusFilter || undefined,
+        provider: providerFilter || undefined,
+        client: clientFilter || undefined,
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
       };
@@ -52,7 +67,7 @@ export function Logs() {
     } finally {
       setLoading(false);
     }
-  }, [keyword, statusFilter, page]);
+  }, [keyword, statusFilter, providerFilter, clientFilter, page]);
 
   useEffect(() => {
     loadLogs();
@@ -97,11 +112,31 @@ export function Logs() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="form-input w-32"
+            className="form-input w-28"
           >
             <option value="">{t("logs.all")}</option>
             <option value="success">{t("logs.success")}</option>
             <option value="error">{t("logs.error")}</option>
+          </select>
+          {providerOptions.length > 1 && (
+            <select
+              value={providerFilter}
+              onChange={(e) => setProviderFilter(e.target.value)}
+              className="form-input w-36"
+              title={t("logs.filter_provider")}
+            >
+              <option value="">{t("logs.all_providers")}</option>
+              {providerOptions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+            </select>
+          )}
+          <select
+            value={clientFilter}
+            onChange={(e) => setClientFilter(e.target.value)}
+            className="form-input w-32"
+            title={t("logs.filter_client")}
+          >
+            <option value="">{t("logs.all_clients")}</option>
+            {KNOWN_CLIENTS.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div className="flex items-center gap-2">

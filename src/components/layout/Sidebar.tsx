@@ -10,6 +10,8 @@ import {
   Stethoscope,
   Settings,
   Rocket,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { cn } from "@/lib/utils";
@@ -33,6 +35,13 @@ export function Sidebar() {
   const { t } = useI18n();
   const [version, setVersion] = useState("");
   const [showQuickSetup, setShowQuickSetup] = useState(false);
+  // 折叠状态：用 localStorage 持久化——用户折叠后下次打开仍是折叠的。
+  const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem("agentgate_sidebar_collapsed") === "1");
+  const toggleCollapse = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem("agentgate_sidebar_collapsed", next ? "1" : "0");
+  };
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
 
   // Show quick setup only if: no providers AND not manually hidden
@@ -47,29 +56,63 @@ export function Sidebar() {
   }, []);
 
   return (
-    <aside className="flex w-52 shrink-0 flex-col border-r border-border bg-sidebar">
-      {/* Logo */}
-      <div className="flex h-14 items-center gap-2.5 border-b border-border px-5">
-        <svg className="h-10 w-10" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="256" cy="256" r="180" stroke="currentColor" strokeWidth="16" opacity="0.2" className="text-accent" />
-          <ellipse cx="256" cy="256" rx="180" ry="100" stroke="currentColor" strokeWidth="16" opacity="0.35" className="text-accent" transform="rotate(-25 256 256)" />
-          <ellipse cx="256" cy="256" rx="180" ry="100" stroke="currentColor" strokeWidth="16" opacity="0.35" className="text-accent" transform="rotate(25 256 256)" />
-          <circle cx="256" cy="256" r="56" stroke="currentColor" strokeWidth="16" fill="none" className="text-accent" />
-          <circle cx="256" cy="256" r="30" fill="currentColor" className="text-accent" />
-        </svg>
-        <span className="text-sm font-semibold tracking-tight text-text-primary">
-          AgentGate
-        </span>
+    <aside className={cn(
+      "flex shrink-0 flex-col border-r border-border bg-sidebar transition-[width] duration-150",
+      collapsed ? "w-14" : "w-52"
+    )}>
+      {/* Logo + collapse toggle */}
+      <div className={cn(
+        "flex h-14 items-center border-b border-border",
+        collapsed ? "justify-center px-2" : "justify-between px-5"
+      )}>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <svg className="h-10 w-10 shrink-0" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="256" cy="256" r="180" stroke="currentColor" strokeWidth="16" opacity="0.2" className="text-accent" />
+            <ellipse cx="256" cy="256" rx="180" ry="100" stroke="currentColor" strokeWidth="16" opacity="0.35" className="text-accent" transform="rotate(-25 256 256)" />
+            <ellipse cx="256" cy="256" rx="180" ry="100" stroke="currentColor" strokeWidth="16" opacity="0.35" className="text-accent" transform="rotate(25 256 256)" />
+            <circle cx="256" cy="256" r="56" stroke="currentColor" strokeWidth="16" fill="none" className="text-accent" />
+            <circle cx="256" cy="256" r="30" fill="currentColor" className="text-accent" />
+          </svg>
+          {!collapsed && (
+            <span className="text-sm font-semibold tracking-tight text-text-primary truncate">
+              AgentGate
+            </span>
+          )}
+        </div>
+        {!collapsed && (
+          <button
+            type="button"
+            onClick={toggleCollapse}
+            title={t("nav.collapse")}
+            className="shrink-0 rounded p-1 text-text-muted hover:bg-hover hover:text-text-primary"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
+      {/* 折叠态：单独一个展开按钮放在 logo 下面，避免点 logo 误折叠 */}
+      {collapsed && (
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          title={t("nav.expand")}
+          className="mt-2 mx-auto rounded p-1.5 text-text-muted hover:bg-hover hover:text-text-primary"
+        >
+          <PanelLeftOpen className="h-4 w-4" />
+        </button>
+      )}
+
       {/* Navigation */}
-      <nav className="flex flex-1 flex-col gap-0.5 px-3 pt-3">
+      <nav className={cn("flex flex-1 flex-col gap-0.5 pt-3", collapsed ? "px-2" : "px-3")}>
         {showQuickSetup && (
           <NavLink
             to="/quick-setup"
+            title={collapsed ? t("nav.quick_setup") : undefined}
             className={({ isActive }) =>
               cn(
-                "group relative mb-1 flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150",
+                "group relative mb-1 flex items-center rounded-lg text-[13px] font-medium transition-all duration-150",
+                collapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2",
                 isActive
                   ? "bg-accent-soft text-accent"
                   : "text-accent hover:bg-accent-soft"
@@ -78,11 +121,11 @@ export function Sidebar() {
           >
             {({ isActive }) => (
               <>
-                {isActive && (
+                {isActive && !collapsed && (
                   <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />
                 )}
                 <Rocket className="h-4 w-4 shrink-0" />
-                {t("nav.quick_setup")}
+                {!collapsed && t("nav.quick_setup")}
               </>
             )}
           </NavLink>
@@ -92,9 +135,11 @@ export function Sidebar() {
             key={item.to}
             to={item.to}
             end={item.to === "/"}
+            title={collapsed ? t(item.labelKey) : undefined}
             className={({ isActive }) =>
               cn(
-                "group relative flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150",
+                "group relative flex items-center rounded-lg text-[13px] font-medium transition-all duration-150",
+                collapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2",
                 isActive
                   ? "bg-accent-soft text-accent"
                   : "text-text-secondary hover:bg-hover hover:text-text-primary"
@@ -103,11 +148,11 @@ export function Sidebar() {
           >
             {({ isActive }) => (
               <>
-                {isActive && (
+                {isActive && !collapsed && (
                   <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />
                 )}
                 <item.icon className="h-4 w-4 shrink-0" />
-                {t(item.labelKey)}
+                {!collapsed && t(item.labelKey)}
               </>
             )}
           </NavLink>
@@ -115,9 +160,11 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="border-t border-border px-5 py-3">
-        <p className="text-[11px] text-text-muted">{version ? `v${version}` : ""}</p>
-      </div>
+      {!collapsed && (
+        <div className="border-t border-border px-5 py-3">
+          <p className="text-[11px] text-text-muted">{version ? `v${version}` : ""}</p>
+        </div>
+      )}
     </aside>
   );
 }
