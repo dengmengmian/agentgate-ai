@@ -513,8 +513,12 @@ pub async fn detect_provider_cache(
         }
     };
 
+    // Cache 探测每次跑 2 次 HTTP，timeout 硬上限 15s：
+    // 上游若不支持 Anthropic 格式（如错配了 anthropic_base_url 的 OpenAI 系 provider），
+    // 否则会卡满 provider 默认 timeout（往往 120s+），前端 dialog 永远在转。
+    let probe_timeout = std::cmp::min(provider.timeout_seconds as u64, 15);
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(provider.timeout_seconds as u64))
+        .timeout(std::time::Duration::from_secs(probe_timeout))
         .build()
         .map_err(|e| AppError::internal(format!("HTTP client error: {e}")))?;
 

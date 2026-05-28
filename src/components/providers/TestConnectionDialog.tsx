@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckCircle, XCircle, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -34,6 +34,13 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
   const [connectivity, setConnectivity] = useState<StepState>({ status: "pending" });
   const [autofill, setAutofill] = useState<StepState>({ status: "pending" });
   const [cacheDetect, setCacheDetect] = useState<StepState>({ status: "pending" });
+
+  // 用 ref 持有最新回调——避免父组件（Providers）每次 polling re-render 产生新闭包，
+  // 导致 useEffect 依赖变了重跑测试。useEffect 只跟 provider.id 走。
+  const onCloseRef = useRef(onClose);
+  const onSuccessRef = useRef(onSuccess);
+  onCloseRef.current = onClose;
+  onSuccessRef.current = onSuccess;
 
   useEffect(() => {
     if (!provider) return;
@@ -77,32 +84,44 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
       }
 
       // 3. Cache detect
+      // 仅 anthropic 类型 / 配了 anthropic_base_url 的 provider 才跑后端探测。
+      // 否则直接 skip——以前后端会发两次 HTTP 给 Anthropic 端点，OpenAI 系
+      // provider 收到 Anthropic 格式要么慢拒要么卡满 timeout，dialog 一直转。
       if (cancelled) return;
-      setCacheDetect({ status: "running" });
-      try {
-        const r = await api.detectProviderCache(provider.id);
-        if (cancelled) return;
-        setCacheDetect({
-          status: r.success ? "ok" : "skipped",
-          detail: r.message,
-        });
-      } catch (err) {
-        if (!cancelled) setCacheDetect({ status: "error", detail: (err as api.AppError).message });
+      const cacheEligible = provider.provider_type === "anthropic"
+        || provider.provider_type === "claude"
+        || !!provider.anthropic_base_url;
+      if (!cacheEligible) {
+        setCacheDetect({ status: "skipped", detail: t("providers.test.cache_skipped_not_anthropic") });
+      } else {
+        setCacheDetect({ status: "running" });
+        try {
+          const r = await api.detectProviderCache(provider.id);
+          if (cancelled) return;
+          setCacheDetect({
+            status: r.success ? "ok" : "skipped",
+            detail: r.message,
+          });
+        } catch (err) {
+          if (!cancelled) setCacheDetect({ status: "error", detail: (err as api.AppError).message });
+        }
       }
 
       // 全成功（含 skipped）→ 自动关闭
       if (!cancelled) {
         setTimeout(() => {
           if (!cancelled) {
-            onSuccess?.();
-            onClose();
+            onSuccessRef.current?.();
+            onCloseRef.current();
           }
         }, 1500);
       }
     })();
 
     return () => { cancelled = true; };
-  }, [provider, onClose, onSuccess, t]);
+    // 故意只依赖 provider.id：回调走 ref，t 文案改了不需要重跑测试
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [provider?.id]);
 
   if (!provider) return null;
 
