@@ -1,0 +1,240 @@
+use std::collections::BTreeMap;
+
+use rusqlite::{params, Connection};
+
+use crate::errors::AppError;
+use crate::models::provider::{CreateProviderInput, Provider};
+
+const CODEX_MODELS: &[&str] = &["gpt-5.5", "gpt-5.4", "gpt-5.3-codex", "gpt-5.2"];
+const CODEX_MINI_MODELS: &[&str] = &["gpt-5.4-mini"];
+const CLAUDE_PRIMARY_MODELS: &[&str] = &["claude-sonnet-4-6", "claude-opus-4-6"];
+const CLAUDE_SMALL_MODELS: &[&str] = &["claude-haiku-4-5-20251001"];
+
+#[derive(Debug, Clone, Copy)]
+pub enum MappingProfile {
+    All,
+    Codex,
+    ClaudeCode,
+}
+
+pub fn apply_to_create_input(input: &mut CreateProviderInput) {
+    let current = input.model_mapping.as_deref();
+    let merged = merge_mapping(
+        current,
+        &input.provider_type,
+        input.default_model.as_str(),
+        input.reasoning_model.as_deref(),
+        MappingProfile::All,
+    );
+    input.model_mapping = mapping_to_json_option(&merged);
+}
+
+pub fn supplement_provider(
+    conn: &Connection,
+    provider_id: &str,
+    profile: MappingProfile,
+) -> Result<usize, AppError> {
+    let provider = crate::storage::providers::get_by_id(conn, provider_id)?;
+    let before = parse_mapping(provider.model_mapping.as_deref());
+    let after = merge_for_provider(&provider, profile);
+    if after == before {
+        return Ok(0);
+    }
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let mapping_json = serde_json::to_string(&after)
+        .map_err(|e| AppError::internal(format!("Failed to serialize model mapping: {e}")))?;
+    conn.execute(
+        "UPDATE providers SET model_mapping=?1, updated_at=?2 WHERE id=?3",
+        params![mapping_json, now, provider_id],
+    )?;
+    Ok(after.len().saturating_sub(before.len()))
+}
+
+pub fn supplement_active_provider(
+    conn: &Connection,
+    profile: MappingProfile,
+) -> Result<usize, AppError> {
+    let settings = crate::storage::gateway_settings::get(conn)?;
+    let Some(provider_id) = settings.active_provider_id else {
+        return Ok(0);
+    };
+    supplement_provider(conn, &provider_id, profile)
+}
+
+fn merge_for_provider(provider: &Provider, profile: MappingProfile) -> BTreeMap<String, String> {
+    merge_mapping(
+        provider.model_mapping.as_deref(),
+        &provider.provider_type,
+        &provider.default_model,
+        provider.reasoning_model.as_deref(),
+        profile,
+    )
+}
+
+fn merge_mapping(
+    current_json: Option<&str>,
+    provider_type: &str,
+    default_model: &str,
+    reasoning_model: Option<&str>,
+    profile: MappingProfile,
+) -> BTreeMap<String, String> {
+    let mut mapping = parse_mapping(current_json);
+    for (client, upstream) in
+        recommended_pairs(provider_type, default_model, reasoning_model, profile)
+    {
+        mapping.entry(client).or_insert(upstream);
+    }
+    mapping
+}
+
+fn recommended_pairs(
+    provider_type: &str,
+    default_model: &str,
+    reasoning_model: Option<&str>,
+    profile: MappingProfile,
+) -> Vec<(String, String)> {
+    let pt = provider_type.trim().to_lowercase();
+    if !(pt == "mimo" || pt == "xiaomi" || pt.contains("mimo") || pt == "deepseek") {
+        return Vec::new();
+    }
+
+    let primary = reasoning_model
+        .filter(|m| !m.trim().is_empty())
+        .unwrap_or(default_model)
+        .to_string();
+    let small = default_model.to_string();
+    let primary_1m = with_1m_suffix(&primary);
+
+    let mut pairs = Vec::new();
+    if matches!(profile, MappingProfile::All | MappingProfile::Codex) {
+        let codex_primary = if pt == "deepseek" {
+            primary.clone()
+        } else {
+            default_model.to_string()
+        };
+        let codex_small = if pt == "deepseek" {
+            small.clone()
+        } else {
+            default_model.to_string()
+        };
+        for model in CODEX_MODELS {
+            pairs.push(((*model).to_string(), codex_primary.clone()));
+        }
+        for model in CODEX_MINI_MODELS {
+            pairs.push(((*model).to_string(), codex_small.clone()));
+        }
+    }
+
+    if matches!(profile, MappingProfile::All | MappingProfile::ClaudeCode) {
+        for model in CLAUDE_PRIMARY_MODELS {
+            pairs.push(((*model).to_string(), primary_1m.clone()));
+        }
+        for model in CLAUDE_SMALL_MODELS {
+            pairs.push(((*model).to_string(), small.clone()));
+        }
+    }
+
+    pairs
+}
+
+fn with_1m_suffix(model: &str) -> String {
+    let model = model.trim();
+    if model.ends_with("[1m]") {
+        model.to_string()
+    } else if model.ends_with(']') {
+        let base = model.rfind('[').map(|idx| &model[..idx]).unwrap_or(model);
+        format!("{base}[1m]")
+    } else {
+        format!("{model}[1m]")
+    }
+}
+
+fn parse_mapping(json: Option<&str>) -> BTreeMap<String, String> {
+    json.and_then(|s| serde_json::from_str::<BTreeMap<String, String>>(s).ok())
+        .unwrap_or_default()
+}
+
+fn mapping_to_json_option(mapping: &BTreeMap<String, String>) -> Option<String> {
+    if mapping.is_empty() {
+        None
+    } else {
+        serde_json::to_string(mapping).ok()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mimo_recommends_codex_and_claude_1m() {
+        let mapping = merge_mapping(
+            None,
+            "mimo",
+            "mimo-v2.5-pro",
+            Some("mimo-v2.5-pro"),
+            MappingProfile::All,
+        );
+        assert_eq!(mapping.get("gpt-5.5").unwrap(), "mimo-v2.5-pro");
+        assert_eq!(mapping.get("gpt-5.4-mini").unwrap(), "mimo-v2.5-pro");
+        assert_eq!(
+            mapping.get("claude-sonnet-4-6").unwrap(),
+            "mimo-v2.5-pro[1m]"
+        );
+        assert_eq!(
+            mapping.get("claude-haiku-4-5-20251001").unwrap(),
+            "mimo-v2.5-pro"
+        );
+    }
+
+    #[test]
+    fn deepseek_routes_mini_to_flash_and_primary_to_1m_for_claude() {
+        let mapping = merge_mapping(
+            None,
+            "deepseek",
+            "deepseek-v4-flash",
+            Some("deepseek-v4-pro"),
+            MappingProfile::All,
+        );
+        assert_eq!(mapping.get("gpt-5.5").unwrap(), "deepseek-v4-pro");
+        assert_eq!(mapping.get("gpt-5.4-mini").unwrap(), "deepseek-v4-flash");
+        assert_eq!(
+            mapping.get("claude-opus-4-6").unwrap(),
+            "deepseek-v4-pro[1m]"
+        );
+        assert_eq!(
+            mapping.get("claude-haiku-4-5-20251001").unwrap(),
+            "deepseek-v4-flash"
+        );
+    }
+
+    #[test]
+    fn existing_user_mapping_wins() {
+        let existing = r#"{"gpt-5.5":"custom-model"}"#;
+        let mapping = merge_mapping(
+            existing.into(),
+            "deepseek",
+            "deepseek-v4-flash",
+            Some("deepseek-v4-pro"),
+            MappingProfile::Codex,
+        );
+        assert_eq!(mapping.get("gpt-5.5").unwrap(), "custom-model");
+        assert_eq!(mapping.get("gpt-5.4").unwrap(), "deepseek-v4-pro");
+    }
+
+    #[test]
+    fn claude_code_recommendation_forces_1m_qualifier() {
+        let mapping = merge_mapping(
+            None,
+            "mimo",
+            "mimo-v2.5-pro[128k]",
+            None,
+            MappingProfile::ClaudeCode,
+        );
+        assert_eq!(
+            mapping.get("claude-sonnet-4-6").unwrap(),
+            "mimo-v2.5-pro[1m]"
+        );
+    }
+}

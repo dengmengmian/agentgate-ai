@@ -258,7 +258,7 @@ docker compose up
 | **模型与能力** | 默认模型 · 推理模型 · `拉取并识别能力` 按钮 · 能力矩阵折叠开关 | 创建 Provider 后**后台自动跑**：拉模型列表 → 按名字 seed 矩阵 → 挑最新非 mini 作 default、最新推理系作 reasoning，**不用手点** |
 | **高级** *（默认折叠，"通常无需修改"）* | 协议+对应 URL 合并视图（Chat / Responses / Anthropic 各自一行）· 额外请求头 · 超时 · 自动 cache 控制 · 模型映射 | 协议每勾一个，下面就显示对应 URL——一眼看清"这个上游同时支持哪些原生入口" |
 
-**模型映射** 放在高级最底部是有原因的：**通常无需配置**。只有当客户端模型名和上游模型名不一致时才需要配置。原生直通未命中映射时会保留 `model` 原样；协议转换会优先使用映射，未配置时用 `default_model` 兜底，以兼容 Codex / Claude Code / Gemini CLI 这类客户端。
+**模型映射** 放在高级最底部是有原因的：**通常无需配置**。创建 Provider、拉取模型、测试 Provider、应用 Codex / Claude Code 配置时，AgentGate 会为 MiMo / DeepSeek 自动补齐推荐映射，且不覆盖已有映射。原生直通未命中映射时会保留 `model` 原样；协议转换会优先使用映射，未配置时用 `default_model` 兜底，以兼容 Codex / Claude Code / Gemini CLI 这类客户端。
 
 **各 Provider 配置示例：**
 

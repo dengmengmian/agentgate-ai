@@ -92,7 +92,7 @@ pub fn get_provider(id: String, state: State<'_, AppState>) -> Result<ProviderVi
 
 #[tauri::command]
 pub fn create_provider(
-    input: CreateProviderInput,
+    mut input: CreateProviderInput,
     state: State<'_, AppState>,
 ) -> Result<ProviderView, AppError> {
     if input.name.trim().is_empty() {
@@ -109,6 +109,7 @@ pub fn create_provider(
             return Err(AppError::validation("Timeout must be greater than 0"));
         }
     }
+    storage::recommended_mappings::apply_to_create_input(&mut input);
 
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::create(&conn, input)?;
@@ -232,6 +233,11 @@ pub async fn fetch_provider_models(
                             "UPDATE providers SET supported_models=?1, updated_at=?2 WHERE id=?3",
                             rusqlite::params![&models_json, chrono::Utc::now().to_rfc3339(), &id],
                         );
+                        let _ = storage::recommended_mappings::supplement_provider(
+                            &conn,
+                            &id,
+                            storage::recommended_mappings::MappingProfile::All,
+                        );
                         return Ok(models);
                     }
                 }
@@ -292,6 +298,11 @@ pub async fn test_provider(
                 {
                     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
                     storage::providers::update_status(&conn, &id, "connected")?;
+                    let _ = storage::recommended_mappings::supplement_provider(
+                        &conn,
+                        &id,
+                        storage::recommended_mappings::MappingProfile::All,
+                    );
                 }
                 return Ok(ProviderTestResult {
                     success: true,
@@ -1045,6 +1056,10 @@ pub fn detect_codex_config() -> Result<crate::tools::codex::CodexConfigStatus, A
 pub fn apply_codex_config(state: State<'_, AppState>) -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
     let (host, port) = {
         let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let _ = storage::recommended_mappings::supplement_active_provider(
+            &conn,
+            storage::recommended_mappings::MappingProfile::Codex,
+        );
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
     };
@@ -1055,6 +1070,10 @@ pub fn apply_codex_config(state: State<'_, AppState>) -> Result<crate::tools::co
 #[tauri::command]
 pub fn toggle_codex_provider(state: State<'_, AppState>) -> Result<crate::tools::codex::ToggleResult, AppError> {
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let _ = storage::recommended_mappings::supplement_active_provider(
+        &conn,
+        storage::recommended_mappings::MappingProfile::Codex,
+    );
     let settings = storage::gateway_settings::get(&conn)?;
     crate::tools::codex::toggle_provider(&settings.host, settings.port)
 }
@@ -1084,6 +1103,10 @@ pub fn detect_claude_code_env() -> Result<crate::tools::claude_code::ClaudeCodeE
 pub fn apply_claude_code_config(state: State<'_, AppState>) -> Result<crate::tools::claude_code::ApplyConfigResult, AppError> {
     let (host, port) = {
         let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let _ = storage::recommended_mappings::supplement_active_provider(
+            &conn,
+            storage::recommended_mappings::MappingProfile::ClaudeCode,
+        );
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
     };
@@ -1093,6 +1116,10 @@ pub fn apply_claude_code_config(state: State<'_, AppState>) -> Result<crate::too
 #[tauri::command]
 pub fn toggle_claude_code_provider(state: State<'_, AppState>) -> Result<crate::tools::claude_code::ToggleResult, AppError> {
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let _ = storage::recommended_mappings::supplement_active_provider(
+        &conn,
+        storage::recommended_mappings::MappingProfile::ClaudeCode,
+    );
     let settings = storage::gateway_settings::get(&conn)?;
     crate::tools::claude_code::toggle_provider(&settings.host, settings.port, "claude-sonnet-4-6")
 }

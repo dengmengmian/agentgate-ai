@@ -274,7 +274,7 @@ Launch AgentGate → **Providers** → **Add Provider**
 | **Models & Capabilities** | Default model · Reasoning model · `Fetch & detect` button · capability matrix toggle | On a freshly created provider, this is **auto-run in the background** — you get newest non-mini model as default + newest reasoning model + per-model capability matrix without clicking anything |
 | **Advanced** *(collapsed, "usually no need to touch")* | Protocols + their endpoints (Chat / Responses / Anthropic) · Extra Headers · Timeout · Auto cache control · Model Mapping | Each protocol you tick shows its own URL — one place to read "which native endpoints this upstream supports" |
 
-**Model Mapping** is at the bottom of Advanced for a reason: usually not needed. Use it only when the client model name differs from the upstream model name. Native pass-through keeps `model` unchanged unless a mapping matches; protocol conversion uses mapping first, then falls back to `default_model` for compatibility with clients like Codex, Claude Code, and Gemini CLI.
+**Model Mapping** is at the bottom of Advanced for a reason: usually not needed. AgentGate auto-fills recommended MiMo / DeepSeek mappings when you create the provider, fetch models, test the provider, or apply Codex / Claude Code config. Existing mappings are preserved. Native pass-through keeps `model` unchanged unless a mapping matches; protocol conversion uses mapping first, then falls back to `default_model` for compatibility with clients like Codex, Claude Code, and Gemini CLI.
 
 **Provider configuration examples:**
 

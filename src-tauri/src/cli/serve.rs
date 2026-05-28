@@ -203,7 +203,7 @@ fn cmd_provider_add(cli: &Cli, provider_type: &str, name: Option<&str>, api_key:
         s
     };
 
-    let input = agentgate_lib::models::provider::CreateProviderInput {
+    let mut input = agentgate_lib::models::provider::CreateProviderInput {
         name: label.clone(),
         provider_type: provider_type.to_string(),
         base_url: base_url.to_string(),
@@ -221,6 +221,7 @@ fn cmd_provider_add(cli: &Cli, provider_type: &str, name: Option<&str>, api_key:
         timeout_seconds: Some(120),
         enabled: Some(true),
     };
+    agentgate_lib::storage::recommended_mappings::apply_to_create_input(&mut input);
 
     match agentgate_lib::storage::providers::create(&conn, input) {
         Ok(p) => {

@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### 新增
 
+- **MiMo / DeepSeek 推荐模型映射自动补齐** —— 创建 Provider、拉取模型、测试连接成功、应用 Codex / Claude Code 配置时自动补齐缺失映射，不覆盖用户已有项。Codex 的 `gpt-*` 自动映射到对应上游模型；Claude Code 的 `claude-*` 默认映射到 MiMo / DeepSeek 的 1M 后缀模型（如 `mimo-v2.5-pro[1m]` / `deepseek-v4-pro[1m]`）。
 - **Provider 表单 3 段重构** —— 新手填表卡点：旧表单一上来 8+ 字段平铺加能力矩阵默认展开，跟用户脑里的"选个 Provider 粘 Key 就完事"模型不匹配。新结构：
   - Section A 基础：只露 type / name / api key（custom 类型才显式露 base_url）
   - Section B 模型与能力：合并"拉取模型"+"自动识别能力"为一个按钮，能力矩阵默认折叠
