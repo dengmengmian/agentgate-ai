@@ -180,12 +180,28 @@ pub fn output_item_done_reasoning(
     output_index: usize,
     reasoning_text: &str,
 ) -> String {
+    output_item_done_reasoning_with_blocks(item_id, output_index, reasoning_text, &[])
+}
+
+/// 与 [`output_item_done_reasoning`] 相同，但额外把 Anthropic thinking 块
+/// 的签名信息编码进 `encrypted_content`——下一轮 client 把整个 reasoning
+/// 项原样回传，AgentGate 即可解码出含签名的 thinking 块回放给 Anthropic，
+/// 满足 sig-chain 校验。当 `blocks` 为空时退化为旧行为（encrypted_content
+/// = reasoning_text 纯文本）。
+pub fn output_item_done_reasoning_with_blocks(
+    item_id: &str,
+    output_index: usize,
+    reasoning_text: &str,
+    blocks: &[crate::transform::thinking_blocks::ThinkingBlock],
+) -> String {
+    let encrypted_content = crate::transform::thinking_blocks::encode_for_encrypted_content(blocks)
+        .unwrap_or_else(|| reasoning_text.to_string());
     let item = json!({
         "id": item_id,
         "type": "reasoning",
         "status": "completed",
         "summary": [{"type": "summary_text", "text": reasoning_text}],
-        "encrypted_content": reasoning_text,
+        "encrypted_content": encrypted_content,
     });
     sse(
         "response.output_item.done",
@@ -242,15 +258,59 @@ pub fn function_call_done(item_id: &str, output_index: usize, call_id: &str, nam
 }
 
 pub fn response_completed(response_id: &str, model: &str, usage: Option<&Value>) -> String {
+    response_completed_with_stop_reason(response_id, model, usage, None)
+}
+
+/// 与 [`response_completed`] 相同，但根据上游 stop_reason / finish_reason 映射
+/// 出 Responses 协议的 `status` + `incomplete_details`。`stop_reason` 接受三家
+/// 任意一种字符串：
+/// - Anthropic: `end_turn` / `max_tokens` / `stop_sequence` / `tool_use` / `refusal`
+/// - OpenAI Chat: `stop` / `length` / `tool_calls` / `function_call` / `content_filter`
+/// - Gemini: `STOP` / `MAX_TOKENS` / `SAFETY` 等
+///
+/// 未识别的 stop_reason 退化为 `status: completed`、`incomplete_details: null`，
+/// 与不传任何 stop_reason 时的行为一致——稳妥兜底。
+pub fn response_completed_with_stop_reason(
+    response_id: &str,
+    model: &str,
+    usage: Option<&Value>,
+    stop_reason: Option<&str>,
+) -> String {
     let default_usage = json!({
         "input_tokens": 0, "output_tokens": 0, "total_tokens": 0,
         "input_tokens_details": { "cached_tokens": 0 },
         "output_tokens_details": { "reasoning_tokens": 0 }
     });
     let u = usage.unwrap_or(&default_usage);
-    let mut envelope = build_envelope(response_id, model, "completed");
+    let (status, incomplete_details) = map_stop_reason(stop_reason);
+    let mut envelope = build_envelope(response_id, model, status);
     envelope["usage"] = u.clone();
+    envelope["incomplete_details"] = incomplete_details;
     sse("response.completed", json!({"type": "response.completed", "response": envelope}))
+}
+
+/// 三家 stop_reason → Responses (status, incomplete_details) 映射。
+fn map_stop_reason(stop_reason: Option<&str>) -> (&'static str, Value) {
+    let Some(reason) = stop_reason else {
+        return ("completed", Value::Null);
+    };
+    match reason {
+        // 正常完成
+        "end_turn" | "stop" | "stop_sequence" | "tool_use" | "tool_calls"
+        | "function_call" | "STOP" => ("completed", Value::Null),
+        // 命中输出长度上限
+        "max_tokens" | "length" | "MAX_TOKENS" => (
+            "incomplete",
+            json!({ "reason": "max_output_tokens" }),
+        ),
+        // 安全审查 / 内容过滤
+        "content_filter" | "SAFETY" | "RECITATION" | "refusal" => (
+            "incomplete",
+            json!({ "reason": "content_filter" }),
+        ),
+        // 未识别——按完成处理但留个 reason 字段供 client 调试
+        _ => ("completed", Value::Null),
+    }
 }
 
 pub fn response_failed(response_id: &str, model: &str, error_msg: &str) -> String {
@@ -291,6 +351,51 @@ mod tests {
         assert!(s.starts_with("event: response.completed"));
         assert!(s.contains("\"status\":\"completed\""));
         assert!(s.contains("10"));
+    }
+
+    #[test]
+    fn map_stop_reason_completed_variants() {
+        for r in ["end_turn", "stop", "stop_sequence", "tool_use", "tool_calls", "function_call", "STOP"] {
+            let (status, det) = map_stop_reason(Some(r));
+            assert_eq!(status, "completed", "{r}");
+            assert!(det.is_null(), "{r}");
+        }
+    }
+
+    #[test]
+    fn map_stop_reason_max_tokens_three_ways() {
+        for r in ["max_tokens", "length", "MAX_TOKENS"] {
+            let (status, det) = map_stop_reason(Some(r));
+            assert_eq!(status, "incomplete", "{r}");
+            assert_eq!(det["reason"], "max_output_tokens", "{r}");
+        }
+    }
+
+    #[test]
+    fn map_stop_reason_content_filter() {
+        for r in ["content_filter", "SAFETY", "RECITATION", "refusal"] {
+            let (status, det) = map_stop_reason(Some(r));
+            assert_eq!(status, "incomplete", "{r}");
+            assert_eq!(det["reason"], "content_filter", "{r}");
+        }
+    }
+
+    #[test]
+    fn map_stop_reason_none_or_unknown_completes() {
+        let (status, det) = map_stop_reason(None);
+        assert_eq!(status, "completed");
+        assert!(det.is_null());
+        let (status, det) = map_stop_reason(Some("some_future_reason"));
+        assert_eq!(status, "completed");
+        assert!(det.is_null());
+    }
+
+    #[test]
+    fn response_completed_with_max_tokens_status() {
+        reset_sequence();
+        let s = response_completed_with_stop_reason("r1", "claude", None, Some("max_tokens"));
+        assert!(s.contains("\"status\":\"incomplete\""));
+        assert!(s.contains("\"reason\":\"max_output_tokens\""));
     }
 
     #[test]

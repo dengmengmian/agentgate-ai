@@ -134,6 +134,7 @@ pub fn convert_with_provider_matrix(
         stop: req.stop.clone(),
         frequency_penalty: req.frequency_penalty,
         presence_penalty: req.presence_penalty,
+        parallel_tool_calls: req.parallel_tool_calls,
     };
 
     // 8. Provider-specific finalization (thinking, reasoning_effort, response_format overrides)

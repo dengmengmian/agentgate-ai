@@ -37,6 +37,12 @@ pub struct AnthropicSseAccumulator {
     msg_item_id: String,
     reasoning_output_index: Option<usize>,
     reasoning_item_id: String,
+    /// 按到达顺序累积的 thinking 块——含签名 / redacted data，给下一轮
+    /// 多轮 thinking-mode 工具调用回放签名链用。
+    pub thinking_blocks: Vec<crate::transform::thinking_blocks::ThinkingBlock>,
+    /// Anthropic message_delta 携带的 `stop_reason`（end_turn / max_tokens /
+    /// stop_sequence / tool_use / refusal），映射到 Responses status 用。
+    pub stop_reason: Option<String>,
 }
 
 impl AnthropicSseAccumulator {
@@ -56,6 +62,8 @@ impl AnthropicSseAccumulator {
             msg_item_id,
             reasoning_output_index: None,
             reasoning_item_id,
+            thinking_blocks: Vec::new(),
+            stop_reason: None,
         }
     }
 
@@ -194,7 +202,19 @@ pub async fn process_anthropic_stream(
                             send(&tx, &ev::function_call_added(&item_id, oi, &clamped_id, name)).await;
                         }
                         "thinking" => {
-                            // Just track that we're in thinking mode — accumulate in deltas
+                            // 新 thinking 块开始——预留位置，文本和签名分别由
+                            // thinking_delta / signature_delta 填进来。
+                            acc.thinking_blocks.push(
+                                crate::transform::thinking_blocks::ThinkingBlock::thinking("")
+                            );
+                        }
+                        "redacted_thinking" => {
+                            // 安全系统加密的 thinking——data 字段直接给到，
+                            // 没有 delta 流式过程，必须原样保留以支持下一轮签名链。
+                            let data = block.get("data").and_then(|d| d.as_str()).unwrap_or("");
+                            acc.thinking_blocks.push(
+                                crate::transform::thinking_blocks::ThinkingBlock::redacted(data)
+                            );
                         }
                         _ => {}
                     }
@@ -231,7 +251,24 @@ pub async fn process_anthropic_stream(
                                     acc.reasoning_content.push_str("**Thinking**\n\n");
                                 }
                                 acc.reasoning_content.push_str(thinking);
+                                // 同步累积到当前 thinking 块（最新 push 的那个）。
+                                if let Some(last) = acc.thinking_blocks.last_mut() {
+                                    if last.kind == "thinking" {
+                                        last.text.push_str(thinking);
+                                    }
+                                }
                                 stream_reasoning_delta(&tx, acc, thinking).await;
+                            }
+                        }
+                        "signature_delta" => {
+                            // Anthropic 把签名分块发，但实测大多数情况一次到位。
+                            // 不管多少块，append 到当前块的 signature 字段即可。
+                            if let Some(sig) = delta.get("signature").and_then(|s| s.as_str()) {
+                                if let Some(last) = acc.thinking_blocks.last_mut() {
+                                    if last.kind == "thinking" {
+                                        last.signature.push_str(sig);
+                                    }
+                                }
                             }
                         }
                         _ => {}
@@ -247,6 +284,12 @@ pub async fn process_anthropic_stream(
                             existing["output_tokens"] = json!(out_tokens);
                         } else {
                             acc.usage = Some(json!({"input_tokens": 0, "output_tokens": out_tokens}));
+                        }
+                    }
+                    // 捕获 stop_reason 给 finalize 映射成 Responses status。
+                    if let Some(sr) = data.get("delta").and_then(|d| d.get("stop_reason")).and_then(|s| s.as_str()) {
+                        if !sr.is_empty() {
+                            acc.stop_reason = Some(sr.to_string());
                         }
                     }
                 }
@@ -310,10 +353,14 @@ async fn finalize(acc: &mut AnthropicSseAccumulator, tx: &mpsc::Sender<String>) 
     }
 
     // Close streamed reasoning summary, if any. Emitted before text/tool dones
-    // so the order matches OpenAI Responses canonical event ordering.
+    // so the order matches OpenAI Responses canonical event ordering. 把累积
+    // 的 thinking 签名块编码进 encrypted_content——下一轮 client 回传时能
+    // 还原签名链，否则 Anthropic 会因为 sig-chain 校验失败 400。
     if let Some(oi) = acc.reasoning_output_index {
         send(tx, &ev::reasoning_summary_text_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content)).await;
-        send(tx, &ev::output_item_done_reasoning(&acc.reasoning_item_id, oi, &acc.reasoning_content)).await;
+        send(tx, &ev::output_item_done_reasoning_with_blocks(
+            &acc.reasoning_item_id, oi, &acc.reasoning_content, &acc.thinking_blocks,
+        )).await;
     }
 
     // Text done events
@@ -332,8 +379,10 @@ async fn finalize(acc: &mut AnthropicSseAccumulator, tx: &mpsc::Sender<String>) 
         send(tx, &ev::function_call_done(&item_id, tc.output_index, &tc.id, &tc.name, &tc.arguments, rc)).await;
     }
 
-    // response.completed
-    send(tx, &ev::response_completed(&acc.response_id, &acc.model, acc.usage.as_ref())).await;
+    // response.completed —— 顺手把 Anthropic stop_reason 映射进 status。
+    send(tx, &ev::response_completed_with_stop_reason(
+        &acc.response_id, &acc.model, acc.usage.as_ref(), acc.stop_reason.as_deref(),
+    )).await;
 }
 
 async fn send(tx: &mpsc::Sender<String>, event: &str) {

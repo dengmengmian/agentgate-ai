@@ -32,6 +32,10 @@ pub struct ChatCompletionsRequest {
     pub frequency_penalty: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub presence_penalty: Option<f64>,
+    /// Responses 协议同名字段透传。语义一致（false = 禁用并行 tool_call）。
+    /// 上游不识别会无视，识别的（OpenAI / Kimi / 多数 OpenAI-兼容）会照办。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parallel_tool_calls: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -192,6 +196,7 @@ mod tests {
             stop: None,
             frequency_penalty: None,
             presence_penalty: None,
+            parallel_tool_calls: None,
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(!json.contains("temperature"));

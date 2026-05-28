@@ -1407,6 +1407,7 @@ pub async fn handle_messages(
         max_tokens: msg_req.max_tokens, thinking: None, stream_options: None,
         response_format: None, reasoning_effort: None,
         seed: None, stop: None, frequency_penalty: None, presence_penalty: None,
+        parallel_tool_calls: None,
     };
 
     let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();

@@ -26,6 +26,7 @@ mod tests {
             stop: None,
             frequency_penalty: None,
             presence_penalty: None,
+            parallel_tool_calls: None,
         }
     }
 

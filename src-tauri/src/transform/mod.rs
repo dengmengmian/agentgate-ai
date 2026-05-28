@@ -5,4 +5,5 @@ pub mod gemini_to_chat;
 pub mod schema_cleaner;
 pub mod tool_calls;
 pub mod reasoning_store;
+pub mod thinking_blocks;
 pub mod providers;

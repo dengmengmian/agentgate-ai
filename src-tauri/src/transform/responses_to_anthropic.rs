@@ -96,8 +96,18 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
     // 6. Convert tools
     let tools = req.tools.as_ref().map(|t| convert_tools(t));
 
-    // 7. Convert tool_choice
-    let tool_choice = req.tool_choice.as_ref().map(convert_tool_choice);
+    // 7. Convert tool_choice + 注入 disable_parallel_tool_use（如果 client
+    //    设了 parallel_tool_calls: false）。Anthropic 把"禁用并行"放在
+    //    tool_choice 对象里，不是顶层字段；client 没显式给 tool_choice 时
+    //    我们补一个 auto 让它有地方挂这个开关。
+    let mut tool_choice = req.tool_choice.as_ref().map(convert_tool_choice);
+    if req.parallel_tool_calls == Some(false) {
+        let mut tc = tool_choice.unwrap_or_else(|| json!({"type": "auto"}));
+        if let Some(obj) = tc.as_object_mut() {
+            obj.insert("disable_parallel_tool_use".to_string(), json!(true));
+        }
+        tool_choice = Some(tc);
+    }
 
     // 8. max_tokens (required by Claude)
     let max_tokens = req.max_output_tokens.unwrap_or(8192);
@@ -131,10 +141,16 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
         body["stream"] = json!(stream);
     }
     if let Some(temp) = req.temperature {
-        body["temperature"] = json!(temp);
+        // Anthropic temperature 上限 1.0；OpenAI 上限 2.0。透传 1.5 会被
+        // Anthropic 400 (`temperature: Input should be less than or equal to 1`)。
+        // clamp 是悄悄修正而非报错——用户感知不到差异（温度 1.5 vs 1.0 对
+        // 模型输出多样性差异不大），却避免了一次请求失败。
+        body["temperature"] = json!(temp.clamp(0.0, 1.0));
     }
     if let Some(top_p) = req.top_p {
-        body["top_p"] = json!(top_p);
+        // 双方都是 [0, 1]，理论上无需 clamp；防御性 clamp 一次免得 client
+        // 传 1.5 之类的非法值漏到上游。
+        body["top_p"] = json!(top_p.clamp(0.0, 1.0));
     }
     if let Some(ref stop) = req.stop {
         body["stop_sequences"] = stop.clone();
@@ -217,7 +233,12 @@ fn convert_input(input: &Value, system_blocks: &mut Vec<Value>) -> Result<Vec<Va
 fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Result<Vec<Value>, AppError> {
     let mut messages: Vec<Value> = Vec::new();
     let mut pending_tool_uses: Vec<Value> = Vec::new();
-    let mut pending_text: Option<String> = None;
+    let pending_text: Option<String> = None;
+    // 从 reasoning 项里解码出来的 thinking 块，等到下一个 assistant 输出
+    // （message:assistant / function_call）时 prepend 到 content 数组——
+    // Anthropic 要求 thinking 块必须在同一条 assistant message 里、且
+    // 出现在 text/tool_use 之前。
+    let mut pending_thinking_blocks: Vec<Value> = Vec::new();
 
     for item in items {
         let item_type = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
@@ -225,7 +246,7 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
         match item_type {
             "message" => {
                 // Flush pending tool calls
-                flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_text);
+                flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
 
                 let role = item.get("role").and_then(|r| r.as_str()).unwrap_or("user");
 
@@ -237,7 +258,8 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                         }
                     }
                     "assistant" => {
-                        let mut content_blocks: Vec<Value> = Vec::new();
+                        // thinking 块必须在 text/tool_use 之前——先 drain。
+                        let mut content_blocks: Vec<Value> = std::mem::take(&mut pending_thinking_blocks);
                         let text = extract_text(item.get("content"));
                         if !text.is_empty() {
                             content_blocks.push(json!({"type": "text", "text": text}));
@@ -294,7 +316,7 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
             }
             "function_call_output" => {
                 // Flush pending tool calls first
-                flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_text);
+                flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
 
                 let call_id = item.get("call_id").and_then(|c| c.as_str());
                 if call_id.is_none() || call_id == Some("") {
@@ -321,10 +343,19 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                 }));
             }
             "reasoning" => {
-                // Skip reasoning items — Claude handles thinking internally
+                // 上一轮 Anthropic 响应的 thinking 块——解码 encrypted_content
+                // 拿回签名链。等下一个 assistant 输出（message:assistant /
+                // function_call）出现时 prepend 进 content。如果直到本数组
+                // 结束都没遇到 assistant 输出，pending_thinking_blocks 会被
+                // 丢弃，对 Anthropic 无影响（孤立的 thinking 块没意义）。
+                if let Some(s) = item.get("encrypted_content").and_then(|v| v.as_str()) {
+                    let blocks = crate::transform::thinking_blocks::decode_from_encrypted_content(s);
+                    let anth = crate::transform::thinking_blocks::to_anthropic_content_blocks(&blocks);
+                    pending_thinking_blocks.extend(anth);
+                }
             }
             "compaction" | "context_compaction" | "compaction_summary" => {
-                flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_text);
+                flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
                 let summary = item.get("summary")
                     .or(item.get("content"))
                     .map(|v| extract_text(Some(v)))
@@ -334,7 +365,7 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
             _ => {
                 // Unknown item: try to extract as message if it has role/content
                 if let Some(role) = item.get("role").and_then(|r| r.as_str()) {
-                    flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_text);
+                    flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
                     let mapped_role = if role == "assistant" { "assistant" } else { "user" };
                     let text = extract_text(item.get("content"));
                     if !text.is_empty() {
@@ -345,15 +376,27 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
         }
     }
 
-    flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_text);
+    flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
+    let _ = pending_text; // 当前未使用，预留给未来 assistant text 分流
     Ok(messages)
 }
 
-fn flush_tool_uses(messages: &mut Vec<Value>, pending: &mut Vec<Value>, _text: &mut Option<String>) {
+fn flush_tool_uses(
+    messages: &mut Vec<Value>,
+    pending: &mut Vec<Value>,
+    pending_thinking_blocks: &mut Vec<Value>,
+) {
+    // 仅当有 tool_use 待 flush 时才生成 assistant message。如果只剩孤立的
+    // thinking_blocks（前面有 reasoning 但后面没遇到 assistant 输出就来了
+    // user 消息），就保留给下个 assistant 输出消耗；要是直到数组末尾都没人
+    // 接，会被静默丢弃——孤立 thinking 对 Anthropic 无意义，丢比硬塞强。
     if pending.is_empty() {
         return;
     }
-    messages.push(json!({"role": "assistant", "content": std::mem::take(pending)}));
+    // thinking 块必须在 tool_use 之前——Anthropic 的 content 数组顺序敏感。
+    let mut content: Vec<Value> = std::mem::take(pending_thinking_blocks);
+    content.extend(std::mem::take(pending));
+    messages.push(json!({"role": "assistant", "content": content}));
 }
 
 fn extract_text(content: Option<&Value>) -> String {
@@ -634,6 +677,73 @@ mod tests {
             max_output_tokens: None,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn reasoning_item_with_signature_prepends_thinking_block_to_function_call() {
+        // 模拟：上一轮 Anthropic 返回了 reasoning（带签名）+ tool_call，
+        // client 把它们回传，AgentGate 必须把签名块 prepend 到 assistant
+        // 的 content 数组里，否则 Anthropic 拒（thinking_required_signature）。
+        let blocks = vec![crate::transform::thinking_blocks::ThinkingBlock {
+            kind: "thinking".into(),
+            text: "Let me think...".into(),
+            signature: "sig_abc".into(),
+            data: String::new(),
+        }];
+        let encrypted = crate::transform::thinking_blocks::encode_for_encrypted_content(&blocks).unwrap();
+        let req = make_req(json!([
+            {"type": "message", "role": "user", "content": "hello"},
+            {"type": "reasoning", "id": "rs_1", "encrypted_content": encrypted},
+            {"type": "function_call", "call_id": "c1", "name": "search", "arguments": "{}"}
+        ]));
+        let mut system_blocks: Vec<Value> = vec![];
+        let messages = convert_input_array(&req.input.as_array().unwrap(), &mut system_blocks).unwrap();
+        // 倒数第二条应该是 assistant，含 thinking + tool_use 两个块
+        let assistant = messages.iter().rev().find(|m| m["role"] == "assistant").unwrap();
+        let content = assistant["content"].as_array().unwrap();
+        assert_eq!(content.len(), 2, "expected thinking + tool_use, got {content:?}");
+        assert_eq!(content[0]["type"], "thinking");
+        assert_eq!(content[0]["signature"], "sig_abc");
+        assert_eq!(content[1]["type"], "tool_use");
+    }
+
+    #[test]
+    fn reasoning_item_prepends_thinking_block_to_assistant_message() {
+        let blocks = vec![crate::transform::thinking_blocks::ThinkingBlock {
+            kind: "thinking".into(),
+            text: "step by step".into(),
+            signature: "sig1".into(),
+            data: String::new(),
+        }];
+        let encrypted = crate::transform::thinking_blocks::encode_for_encrypted_content(&blocks).unwrap();
+        let req = make_req(json!([
+            {"type": "reasoning", "id": "rs_1", "encrypted_content": encrypted},
+            {"type": "message", "role": "assistant", "content": "the answer is 42"}
+        ]));
+        let mut system_blocks: Vec<Value> = vec![];
+        let messages = convert_input_array(&req.input.as_array().unwrap(), &mut system_blocks).unwrap();
+        let assistant = messages.iter().rev().find(|m| m["role"] == "assistant").unwrap();
+        let content = assistant["content"].as_array().unwrap();
+        assert_eq!(content.len(), 2);
+        assert_eq!(content[0]["type"], "thinking");
+        assert_eq!(content[1]["type"], "text");
+    }
+
+    #[test]
+    fn reasoning_item_without_signature_is_dropped() {
+        // 旧 encrypted_content 是纯文本，解码出空块数组——不应该 emit
+        // 无签名 thinking（Anthropic 会 400）。
+        let req = make_req(json!([
+            {"type": "reasoning", "id": "rs_1", "encrypted_content": "Just a plain text summary"},
+            {"type": "function_call", "call_id": "c1", "name": "x", "arguments": "{}"}
+        ]));
+        let mut system_blocks: Vec<Value> = vec![];
+        let messages = convert_input_array(&req.input.as_array().unwrap(), &mut system_blocks).unwrap();
+        let assistant = messages.iter().rev().find(|m| m["role"] == "assistant").unwrap();
+        let content = assistant["content"].as_array().unwrap();
+        // 只有 tool_use，没有 thinking
+        assert_eq!(content.len(), 1);
+        assert_eq!(content[0]["type"], "tool_use");
     }
 
     #[test]

@@ -53,6 +53,10 @@ pub struct SseAccumulator {
     /// Cached reasoning item id matching `output_item_added_reasoning`; used
     /// by subsequent deltas + the finalize close-out.
     reasoning_item_id: String,
+    /// Last `choice.finish_reason` seen from upstream chunks. None until the
+    /// terminal chunk arrives (Chat Completions emits finish_reason only on
+    /// the last choice). Drives Responses `status`/`incomplete_details` mapping.
+    pub finish_reason: Option<String>,
 }
 
 impl SseAccumulator {
@@ -74,6 +78,7 @@ impl SseAccumulator {
             text_content_started: false,
             reasoning_output_index: None,
             reasoning_item_id,
+            finish_reason: None,
         }
     }
 
@@ -230,6 +235,13 @@ async fn process_choices(
     message_item_emitted: &mut bool,
 ) {
     for choice in choices {
+        // finish_reason 通常只在终块（delta 为空）出现。先抓后处理 delta，
+        // 这样即使 delta 为空也能记录 stop 原因供 finalize 映射 status。
+        if let Some(ref fr) = choice.finish_reason {
+            if !fr.is_empty() {
+                acc.finish_reason = Some(fr.clone());
+            }
+        }
         let Some(delta) = &choice.delta else { continue };
 
         // ── Text content (with <think> tag splitting) ──
@@ -465,8 +477,10 @@ async fn finalize(
         }
     }
 
-    // response.completed with usage
-    send(&tx, &ev::response_completed(&acc.response_id, &acc.model, acc.usage.as_ref())).await;
+    // response.completed with usage + finish_reason → Responses status/incomplete_details 映射
+    send(&tx, &ev::response_completed_with_stop_reason(
+        &acc.response_id, &acc.model, acc.usage.as_ref(), acc.finish_reason.as_deref(),
+    )).await;
     Ok(())
 }
 

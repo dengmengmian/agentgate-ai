@@ -143,6 +143,7 @@ pub fn convert(gemini_body: &Value, model: &str) -> Result<ChatCompletionsReques
         stop,
         frequency_penalty: None,
         presence_penalty: None,
+        parallel_tool_calls: None,
     })
 }
 
