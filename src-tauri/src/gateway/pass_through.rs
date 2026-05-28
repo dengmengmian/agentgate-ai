@@ -49,14 +49,16 @@ fn forward_client_headers(
     builder
 }
 
-/// Handle a Chat Completions pass-through request (stream or non-stream).
+/// Handle a native upstream pass-through request (stream or non-stream).
 pub async fn handle(
     http_client: &reqwest::Client,
     db: &Arc<Mutex<Connection>>,
     config: &ProviderConfig,
     target_url: &str,
+    route: &str,
+    client_protocol: &str,
     raw_body: &str,
-    resolved_model: Option<&str>,
+    model_override: Option<&str>,
     request_id: &str,
     start: Instant,
     client_type: &str,
@@ -67,22 +69,20 @@ pub async fn handle(
 
     let is_stream = body_json.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    // Prefer the route selector's resolved model. It has access to model_mapping
-    // and supported_models, while this lightweight ProviderConfig only carries
-    // default/reasoning models.
+    // Native pass-through is transparent by default: preserve the request model.
+    // Only rewrite when the caller supplies an explicit override (for example,
+    // model_mapping). If the client omitted model entirely, fall back to default.
     let requested = body_json.get("model").and_then(|v| v.as_str()).unwrap_or("");
-    let is_known = requested == config.default_model
-        || config.reasoning_model.as_deref() == Some(requested);
-    let model = resolved_model
+    let model = model_override
         .map(str::to_string)
-        .unwrap_or_else(|| if is_known { requested.to_string() } else { config.default_model.clone() });
+        .unwrap_or_else(|| if requested.is_empty() { config.default_model.clone() } else { requested.to_string() });
     body_json["model"] = serde_json::json!(&model);
     let rewritten_body = body_json.to_string();
 
     if is_stream {
-        handle_stream(http_client, db, config, target_url, &rewritten_body, request_id, &model, start, client_type, client_headers).await
+        handle_stream(http_client, db, config, target_url, route, client_protocol, &rewritten_body, request_id, &model, start, client_type, client_headers).await
     } else {
-        handle_non_stream(http_client, db, config, target_url, &rewritten_body, request_id, &model, start, client_type, client_headers).await
+        handle_non_stream(http_client, db, config, target_url, route, client_protocol, &rewritten_body, request_id, &model, start, client_type, client_headers).await
     }
 }
 
@@ -91,6 +91,8 @@ async fn handle_non_stream(
     db: &Arc<Mutex<Connection>>,
     config: &ProviderConfig,
     target_url: &str,
+    route: &str,
+    client_protocol: &str,
     raw_body: &str,
     request_id: &str,
     model: &str,
@@ -116,9 +118,9 @@ async fn handle_non_stream(
 
     let trace = json!({
         "mode": "pass_through",
-        "client_protocol": "openai_chat_completions",
-        "provider_protocol": "openai_chat_completions",
-        "route": "/v1/chat/completions",
+        "client_protocol": client_protocol,
+        "provider_protocol": client_protocol,
+        "route": route,
         "target_url": target_url,
         "upstream_status": upstream_status.as_u16(),
     }).to_string();
@@ -131,7 +133,7 @@ async fn handle_non_stream(
     };
 
     log_to_db(
-        db, client_type, "/v1/chat/completions", request_id, &config.name, model,
+        db, client_type, route, request_id, &config.name, model,
         &sanitize(raw_body, config.api_key()),
         &sanitized_response,
         error_msg.as_deref(),
@@ -154,6 +156,8 @@ async fn handle_stream(
     db: &Arc<Mutex<Connection>>,
     config: &ProviderConfig,
     target_url: &str,
+    route: &str,
+    client_protocol: &str,
     raw_body: &str,
     request_id: &str,
     model: &str,
@@ -181,15 +185,15 @@ async fn handle_stream(
 
         let trace = json!({
             "mode": "pass_through",
-            "client_protocol": "openai_chat_completions",
-            "provider_protocol": "openai_chat_completions",
-            "route": "/v1/chat/completions",
+            "client_protocol": client_protocol,
+            "provider_protocol": client_protocol,
+            "route": route,
             "target_url": target_url,
             "upstream_status": upstream_status.as_u16(),
         }).to_string();
 
         log_to_db(
-            db, client_type, "/v1/chat/completions", request_id, &config.name, model,
+            db, client_type, route, request_id, &config.name, model,
             &sanitize(raw_body, config.api_key()),
             "", Some(&truncate(&sanitized, 2000)),
             &trace, upstream_status.as_u16() as i64, latency,
@@ -219,6 +223,8 @@ async fn handle_stream(
     let req_id = request_id.to_string();
     let raw_req = sanitize(raw_body, config.api_key());
     let target = target_url.to_string();
+    let route_owned = route.to_string();
+    let client_protocol_owned = client_protocol.to_string();
     let api_key = config.api_key().to_string();
     let client_type_owned = client_type.to_string();
 
@@ -273,9 +279,9 @@ async fn handle_stream(
         let latency = start.elapsed().as_millis() as i64;
         let trace = serde_json::json!({
             "mode": "pass_through",
-            "client_protocol": "openai_chat_completions",
-            "provider_protocol": "openai_chat_completions",
-            "route": "/v1/chat/completions",
+            "client_protocol": &client_protocol_owned,
+            "provider_protocol": &client_protocol_owned,
+            "route": &route_owned,
             "target_url": &target,
             "stream": true,
             "sse_bytes": sse_size,
@@ -285,7 +291,7 @@ async fn handle_stream(
         if let Some(conn) = lock_db(&db_clone) {
             let _ = crate::storage::request_logs::insert(
                 &conn, &req_id, &client_type_owned, &provider_name, &model_clone,
-                "/v1/chat/completions", 200, latency,
+                &route_owned, 200, latency,
                 Some(&raw_req), None,
                 None, None,
                 Some(&truncate(&sanitized_sse, MAX_SSE_LOG)),

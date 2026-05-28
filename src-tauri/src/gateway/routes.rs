@@ -197,8 +197,9 @@ pub async fn handle_responses(
         let result = if config.has_responses_url() {
             // Pass-through: provider has explicit Responses API endpoint
             let target_url = config.responses_url();
+            let model_override = explicit_model_mapping(&provider, req.model.as_deref());
             crate::gateway::pass_through::handle(
-                &state.http_client, &state.db, &config, &target_url, &body, None, &request_id, start, &client_type, Some(&headers),
+                &state.http_client, &state.db, &config, &target_url, "/v1/responses", "openai_responses", &body, model_override.as_deref(), &request_id, start, &client_type, Some(&headers),
             ).await.map_err(|e| GatewayError(e))
         } else if config.is_anthropic() {
             // Claude Messages API conversion (only for Anthropic-type providers)
@@ -1316,8 +1317,9 @@ pub async fn handle_chat_completions(
             continue;
         }
 
+        let model_override = explicit_model_mapping(&provider, requested_model.as_deref());
         let result = crate::gateway::pass_through::handle(
-            &state.http_client, &state.db, &config, &decision.target_url, &body, Some(&candidate.model), &request_id, start, &client_type, Some(&headers),
+            &state.http_client, &state.db, &config, &decision.target_url, "/v1/chat/completions", "openai_chat_completions", &body, model_override.as_deref(), &request_id, start, &client_type, Some(&headers),
         ).await;
 
         match result {
@@ -2052,6 +2054,17 @@ fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayE
     })?;
 
     Ok(provider)
+}
+
+fn explicit_model_mapping(provider: &Provider, requested_model: Option<&str>) -> Option<String> {
+    let requested = requested_model?.trim();
+    if requested.is_empty() {
+        return None;
+    }
+    let mapping = provider.model_mapping.as_ref()?;
+    serde_json::from_str::<std::collections::HashMap<String, String>>(mapping)
+        .ok()
+        .and_then(|m| m.get(requested).cloned())
 }
 
 /// Check if the request contains image content anywhere in the conversation
