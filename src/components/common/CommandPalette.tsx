@@ -24,7 +24,7 @@ interface Action {
   id: string;
   /// 显示的标题（中英文双语）
   title: string;
-  /// 副标题/类别（如 "页面" / "服务商" / "操作"）
+  /// 副标题/类别（如 "页面" / "供应商" / "操作"）
   hint?: string;
   icon: React.ComponentType<{ className?: string }>;
   /// 搜索时匹配的额外关键词（拼音首字母等）
@@ -70,7 +70,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const actions: Action[] = useMemo(() => {
     const navActions: Action[] = [
       { id: "nav:overview", title: t("nav.overview"), hint: t("cmdk.page"), icon: LayoutDashboard, keywords: "overview dashboard 概览 首页 home", run: () => navigate("/") },
-      { id: "nav:providers", title: t("nav.providers"), hint: t("cmdk.page"), icon: Cloud, keywords: "providers 服务商 上游 ai", run: () => navigate("/providers") },
+      { id: "nav:providers", title: t("nav.providers"), hint: t("cmdk.page"), icon: Cloud, keywords: "providers 供应商 服务商 上游 ai", run: () => navigate("/providers") },
       { id: "nav:clients", title: t("nav.clients"), hint: t("cmdk.page"), icon: Monitor, keywords: "clients tools 客户端 codex claude", run: () => navigate("/tools") },
       { id: "nav:gateway", title: t("nav.gateway"), hint: t("cmdk.page"), icon: Radio, keywords: "gateway service 服务 端口 port", run: () => navigate("/gateway") },
       { id: "nav:routes", title: t("nav.routes"), hint: t("cmdk.page"), icon: GitBranch, keywords: "routes routing 路由 failover 失败转移", run: () => navigate("/routes") },

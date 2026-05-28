@@ -32,7 +32,7 @@ function deriveSuggestion(statusCode: number, message: string): string | null {
     || text.includes("unauthorized")
     || text.includes("authentication")
   ) {
-    return "API key 无效、过期或权限不足。回服务商页编辑该 provider，重新粘贴 key。";
+    return "API key 无效、过期或权限不足。回供应商页编辑该 provider，重新粘贴 key。";
   }
 
   // 限频
@@ -75,12 +75,12 @@ function deriveSuggestion(statusCode: number, message: string): string | null {
     || text.includes("timeout")
     || text.includes("超时")
   ) {
-    return "网络问题。检查本机网络 / VPN / 是否需要代理访问该服务商。";
+    return "网络问题。检查本机网络 / VPN / 是否需要代理访问该供应商。";
   }
 
   // 协议 / 参数错误
   if (statusCode === 400) {
-    return "请求被服务商拒绝（400）。看下面的「原始响应」找具体字段名，可能需要在 provider 配置里调整 model 或参数。";
+    return "请求被供应商拒绝（400）。看下面的「原始响应」找具体字段名，可能需要在 provider 配置里调整 model 或参数。";
   }
 
   // 404

@@ -125,8 +125,8 @@ fn build_menu(app: &AppHandle, snap: &Snapshot) -> Result<Menu<tauri::Wry>, Box<
     let active_label = snap
         .active_provider_name
         .as_deref()
-        .map(|n| if zh { format!("当前服务商：{n}") } else { format!("Active: {n}") })
-        .unwrap_or_else(|| if zh { "未选择服务商".into() } else { "No active provider".into() });
+        .map(|n| if zh { format!("当前供应商：{n}") } else { format!("Active: {n}") })
+        .unwrap_or_else(|| if zh { "未选择供应商".into() } else { "No active provider".into() });
     let active_item = MenuItemBuilder::with_id("info_active", active_label)
         .enabled(false)
         .build(app)?;
@@ -158,10 +158,10 @@ fn build_menu(app: &AppHandle, snap: &Snapshot) -> Result<Menu<tauri::Wry>, Box<
     // ── Switch active submenu ──
     let mut switch_builder = SubmenuBuilder::new(
         app,
-        if zh { "切换服务商" } else { "Switch active provider" },
+        if zh { "切换供应商" } else { "Switch active provider" },
     );
     if snap.providers.is_empty() {
-        let empty = MenuItemBuilder::with_id("switch_empty", if zh { "（暂无服务商）" } else { "(none configured)" })
+        let empty = MenuItemBuilder::with_id("switch_empty", if zh { "（暂无供应商）" } else { "(none configured)" })
             .enabled(false)
             .build(app)?;
         switch_builder = switch_builder.item(&empty);
