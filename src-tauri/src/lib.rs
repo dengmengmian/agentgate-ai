@@ -114,7 +114,7 @@ pub fn run() {
                                 .unwrap_or(14);
                             if let Ok(n) = storage::request_logs::cleanup_older_than(&conn, days) {
                                 if n > 0 {
-                                    tracing::info!("Cleaned up {n} old request logs (retention: {days} days)");
+                                    eprintln!("[log-cleanup] Cleaned up {n} old request logs (retention: {days} days)");
                                 }
                             }
                         }
@@ -175,7 +175,7 @@ pub fn run() {
                 builder = builder.position(pos_x, pos_y);
 
                 if let Err(e) = builder.build() {
-                    tracing::warn!("Failed to create pet window: {e}");
+                    eprintln!("[pet] Failed to create pet window: {e}");
                 }
             }
 

@@ -440,11 +440,9 @@ pub fn flatten_tool_output(output: &Value) -> String {
             // 不是 AgentGate 的 bug。但应用层应该知道：tool 返回的截图/图表
             // 等视觉信息丢了，模型只能看到"image omitted"占位符。warn 一行
             // 留给排查"为什么模型没看到我的图"。
-            tracing::warn!(
-                dropped_count = dropped_images,
-                "Tool output contained image attachments that were dropped during \
-                 Responses → Chat Completions conversion (Chat protocol does not \
-                 support images in tool messages)."
+            eprintln!(
+                "[transform] {dropped_images} image attachment(s) dropped from tool output \
+                 (Chat Completions protocol does not support images in tool messages)"
             );
             let suffix = if dropped_images > 1 { "s" } else { "" };
             chunks.push(format!(

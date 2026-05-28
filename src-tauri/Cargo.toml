@@ -32,7 +32,6 @@ uuid = { version = "1", features = ["v4"] }
 # 否则 pass-through 会把压缩字节原样转给客户端，导致 SSE 帧解析失败。
 reqwest = { version = "0.12", features = ["json", "stream", "gzip", "brotli", "zstd"] }
 tokio = { version = "1", features = ["full"] }
-tracing = "0.1"
 axum = "0.7"
 futures = "0.3"
 async-stream = "0.3"
