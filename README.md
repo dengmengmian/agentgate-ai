@@ -67,7 +67,7 @@ AgentGate is a **local model gateway** for AI coding agents. One entry point con
   - **International**: OpenAI, Anthropic (Claude), Google Gemini, xAI (Grok), Mistral, Groq, Together, Fireworks, Cerebras, Perplexity, Cohere
   - **Aggregator**: OpenRouter
   - **Custom**: any OpenAI-compatible endpoint (vLLM / Ollama / LiteLLM / local proxies)
-- MiMo first-class support: 5 chat models (`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`), multi-turn `reasoning_content` round-trip, `tp-*` key auto-routes to Token Plan host, friendly `webSearchEnabled` error mapping
+- MiMo first-class support: 5 chat models (`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`), multi-turn `reasoning_content` round-trip, `sk-*` and `tp-*` keys auto-route to the correct MiMo host, friendly `webSearchEnabled` error mapping
 - `[1m]` long-context suffix support on the Claude Code passthrough path: MiMo and DeepSeek can use explicit suffixed model IDs such as `mimo-v2.5-pro[1m]` or `deepseek-v4-pro[1m]`; AgentGate sends models unchanged unless you configure that suffix in the model or model mapping.
 - Route Profiles with multi-provider priority chains, auto-matched by protocol
 - Manual switching or automatic failover

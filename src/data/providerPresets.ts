@@ -15,6 +15,81 @@ export interface ProviderPreset {
   extraHeaders?: string;
 }
 
+export interface ProviderEndpointUrls {
+  baseUrl: string;
+  anthropicBaseUrl?: string;
+}
+
+export const MIMO_PAYG_ENDPOINTS: ProviderEndpointUrls = {
+  baseUrl: "https://api.xiaomimimo.com/v1",
+  anthropicBaseUrl: "https://api.xiaomimimo.com/anthropic",
+};
+
+export const MIMO_TOKEN_PLAN_ENDPOINTS: ProviderEndpointUrls = {
+  baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+  anthropicBaseUrl: "https://token-plan-cn.xiaomimimo.com/anthropic",
+};
+
+const KNOWN_MIMO_ENDPOINTS = new Set(
+  [MIMO_PAYG_ENDPOINTS, MIMO_TOKEN_PLAN_ENDPOINTS].flatMap((urls) =>
+    [urls.baseUrl, urls.anthropicBaseUrl].filter(Boolean) as string[]
+  )
+);
+
+export function isMimoProviderType(type: string): boolean {
+  const normalized = type.trim().toLowerCase();
+  return normalized === "mimo" || normalized === "xiaomi" || normalized.includes("mimo");
+}
+
+export function firstApiKey(raw?: string | null): string {
+  const value = raw?.trim() ?? "";
+  if (!value) return "";
+  if (value.startsWith("[")) {
+    try {
+      const keys = JSON.parse(value) as unknown;
+      if (Array.isArray(keys)) {
+        return keys.find((key) => typeof key === "string" && key.trim())?.trim() ?? "";
+      }
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+export function getMimoEndpointsForKey(apiKey?: string | null): ProviderEndpointUrls | null {
+  const key = firstApiKey(apiKey);
+  if (key.startsWith("tp-")) return MIMO_TOKEN_PLAN_ENDPOINTS;
+  if (key.startsWith("sk-")) return MIMO_PAYG_ENDPOINTS;
+  return null;
+}
+
+export function isKnownMimoEndpointUrl(url?: string | null): boolean {
+  return KNOWN_MIMO_ENDPOINTS.has(url?.trim() ?? "");
+}
+
+export function resolveProviderPresetForKey(
+  type: string,
+  apiKey?: string | null,
+  preset: ProviderPreset | undefined = PROVIDER_PRESETS[type]
+): ProviderPreset | undefined {
+  if (!preset) return undefined;
+  const mimoEndpoints = isMimoProviderType(type) ? getMimoEndpointsForKey(apiKey) : null;
+  if (!mimoEndpoints) return preset;
+  return {
+    ...preset,
+    baseUrl: mimoEndpoints.baseUrl,
+    anthropicBaseUrl: mimoEndpoints.anthropicBaseUrl,
+  };
+}
+
+export function resolveKnownProviderEndpoints(
+  type: string,
+  apiKey?: string | null
+): ProviderEndpointUrls | null {
+  return isMimoProviderType(type) ? getMimoEndpointsForKey(apiKey) : null;
+}
+
 export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
   // Tier 1: Major providers
   anthropic: {
@@ -83,11 +158,11 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
   },
   // China providers
   mimo: {
-    baseUrl: "https://api.xiaomimimo.com/v1",
+    baseUrl: MIMO_PAYG_ENDPOINTS.baseUrl,
     protocols: ["openai_chat_completions"],
     defaultModel: "mimo-v2.5-pro",
     reasoningModel: "mimo-v2.5-pro",
-    anthropicBaseUrl: "https://api.xiaomimimo.com/anthropic",
+    anthropicBaseUrl: MIMO_PAYG_ENDPOINTS.anthropicBaseUrl,
   },
   kimi: {
     baseUrl: "https://api.moonshot.cn",

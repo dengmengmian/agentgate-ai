@@ -85,7 +85,9 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Provider, AppError> {
     })
 }
 
-pub fn create(conn: &Connection, input: CreateProviderInput) -> Result<Provider, AppError> {
+pub fn create(conn: &Connection, mut input: CreateProviderInput) -> Result<Provider, AppError> {
+    crate::storage::provider_endpoints::apply_to_create_input(&mut input);
+
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
     let timeout = input.timeout_seconds.unwrap_or(120);
@@ -120,9 +122,27 @@ pub fn create(conn: &Connection, input: CreateProviderInput) -> Result<Provider,
     get_by_id(conn, &id)
 }
 
-pub fn update(conn: &Connection, id: &str, input: UpdateProviderInput) -> Result<Provider, AppError> {
+pub fn update(conn: &Connection, id: &str, mut input: UpdateProviderInput) -> Result<Provider, AppError> {
     let existing = get_by_id(conn, id)?;
     let now = chrono::Utc::now().to_rfc3339();
+
+    let effective_provider_type = input
+        .provider_type
+        .as_deref()
+        .unwrap_or(&existing.provider_type)
+        .to_string();
+    let effective_api_key = input
+        .api_key
+        .as_deref()
+        .or(existing.api_key.as_deref())
+        .map(str::to_string);
+    crate::storage::provider_endpoints::apply_to_update_input(
+        &effective_provider_type,
+        effective_api_key.as_deref(),
+        &existing.base_url,
+        existing.anthropic_base_url.as_deref(),
+        &mut input,
+    );
 
     let name = input.name.unwrap_or(existing.name);
     let provider_type = input.provider_type.unwrap_or(existing.provider_type);

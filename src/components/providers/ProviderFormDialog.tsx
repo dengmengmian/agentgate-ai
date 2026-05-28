@@ -1,7 +1,12 @@
 import { useState, useEffect } from "react";
 import { X, Loader2, Sparkles } from "lucide-react";
 import { PROVIDER_TYPES, PROTOCOLS, ALL_CAPABILITIES, CAPABILITY_LABELS } from "@/types/provider";
-import { PROVIDER_PRESETS } from "@/data/providerPresets";
+import {
+  PROVIDER_PRESETS,
+  isKnownMimoEndpointUrl,
+  resolveKnownProviderEndpoints,
+  resolveProviderPresetForKey,
+} from "@/data/providerPresets";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/common/Toast";
 import * as api from "@/lib/api";
@@ -55,19 +60,6 @@ export function ProviderFormDialog({
   const [quickKey, setQuickKey] = useState("");
   const [detectedType, setDetectedType] = useState<string | null>(null);
 
-  // MiMo runs two host pairs depending on the key tier:
-  //   sk-* (按量付费) → api.xiaomimimo.com
-  //   tp-* (Token Plan) → token-plan-cn.xiaomimimo.com
-  // Cross-host requests 401, so we swap baseUrl + anthropicBaseUrl together
-  // based on the key prefix.
-  const MIMO_PAYG = { baseUrl: "https://api.xiaomimimo.com/v1", anthropicBaseUrl: "https://api.xiaomimimo.com/anthropic" };
-  const MIMO_TOKEN_PLAN = { baseUrl: "https://token-plan-cn.xiaomimimo.com/v1", anthropicBaseUrl: "https://token-plan-cn.xiaomimimo.com/anthropic" };
-  const mimoUrlsFromKey = (key: string) =>
-    key.startsWith("tp-") ? MIMO_TOKEN_PLAN : MIMO_PAYG;
-  const isKnownMimoUrl = (url: string) =>
-    url === MIMO_PAYG.baseUrl || url === MIMO_TOKEN_PLAN.baseUrl
-      || url === MIMO_PAYG.anthropicBaseUrl || url === MIMO_TOKEN_PLAN.anthropicBaseUrl;
-
   const applyPreset = (type: string) => {
     const preset = PROVIDER_PRESETS[type];
     if (!preset || isEdit) return;
@@ -90,16 +82,17 @@ export function ProviderFormDialog({
   // dropdown, swap to the token-plan host. Only swap if the current URL is
   // one of the two known MiMo URLs (don't clobber custom edits).
   useEffect(() => {
-    if (isEdit || providerType !== "mimo") return;
+    if (providerType !== "mimo") return;
     const key = (apiKeys[0] || "").trim();
     if (!key || (!key.startsWith("tp-") && !key.startsWith("sk-"))) return;
-    const target = mimoUrlsFromKey(key);
-    if (isKnownMimoUrl(baseUrl) && baseUrl !== target.baseUrl) setBaseUrl(target.baseUrl);
-    if (isKnownMimoUrl(anthropicBaseUrl) && anthropicBaseUrl !== target.anthropicBaseUrl) {
-      setAnthropicBaseUrl(target.anthropicBaseUrl);
+    const target = resolveKnownProviderEndpoints(providerType, key);
+    if (!target) return;
+    if (isKnownMimoEndpointUrl(baseUrl) && baseUrl !== target.baseUrl) setBaseUrl(target.baseUrl);
+    if ((!anthropicBaseUrl || isKnownMimoEndpointUrl(anthropicBaseUrl)) && anthropicBaseUrl !== target.anthropicBaseUrl) {
+      setAnthropicBaseUrl(target.anthropicBaseUrl ?? "");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [providerType, apiKeys, isEdit]);
+  }, [providerType, apiKeys]);
 
   const handleQuickKeyChange = (key: string) => {
     setQuickKey(key);
@@ -114,22 +107,20 @@ export function ProviderFormDialog({
     applyPreset(type);
     setApiKeys([quickKey.trim()]);
     // Submit directly
-    const preset = PROVIDER_PRESETS[type];
+    const preset = resolveProviderPresetForKey(type, quickKey.trim());
     if (!preset) return;
     const typeLabel = PROVIDER_TYPES.find(t => t.value === type)?.label ?? type;
-    // MiMo: tp-* keys must hit the token-plan host (cross-host → 401).
-    const mimoOverride = type === "mimo" ? mimoUrlsFromKey(quickKey.trim()) : null;
     onSubmit({
       name: typeLabel,
       provider_type: type,
-      base_url: mimoOverride?.baseUrl ?? preset.baseUrl,
+      base_url: preset.baseUrl,
       api_key: quickKey.trim(),
       default_model: preset.defaultModel,
       reasoning_model: preset.reasoningModel ?? null,
       protocol: JSON.stringify(preset.protocols),
       timeout_seconds: 120,
       enabled: true,
-      anthropic_base_url: mimoOverride?.anthropicBaseUrl ?? preset.anthropicBaseUrl ?? null,
+      anthropic_base_url: preset.anthropicBaseUrl ?? null,
       responses_base_url: preset.responsesBaseUrl ?? null,
       extra_headers: preset.extraHeaders ?? null,
       auto_cache_control: true,
@@ -199,30 +190,34 @@ export function ProviderFormDialog({
     const abuStr = anthropicBaseUrl || undefined;
     const rbuStr = responsesBaseUrl || undefined;
     const mcStr = Object.keys(modelCapabilities).length > 0 ? JSON.stringify(modelCapabilities) : undefined;
+    const validKeys = apiKeys.filter(k => k.trim());
+    const keyEndpoints = resolveKnownProviderEndpoints(providerType, validKeys[0]);
+    const submitBaseUrl = keyEndpoints && isKnownMimoEndpointUrl(baseUrl) ? keyEndpoints.baseUrl : baseUrl;
+    const submitAnthropicBaseUrl = keyEndpoints && (!anthropicBaseUrl || isKnownMimoEndpointUrl(anthropicBaseUrl))
+      ? keyEndpoints.anthropicBaseUrl
+      : abuStr;
 
     if (isEdit) {
       const input: UpdateProviderInput = {
-        name, provider_type: providerType, base_url: baseUrl,
+        name, provider_type: providerType, base_url: submitBaseUrl,
         default_model: defaultModel, reasoning_model: reasoningModel || undefined,
-        supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: abuStr, responses_base_url: rbuStr,
+        supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: submitAnthropicBaseUrl, responses_base_url: rbuStr,
         auto_cache_control: autoCacheControl,
         model_capabilities: mcStr,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
-      const validKeys = apiKeys.filter(k => k.trim());
       if (validKeys.length === 1) input.api_key = validKeys[0];
       else if (validKeys.length > 1) input.api_key = JSON.stringify(validKeys);
       onSubmit(input);
     } else {
       const input: CreateProviderInput = {
-        name, provider_type: providerType, base_url: baseUrl,
+        name, provider_type: providerType, base_url: submitBaseUrl,
         default_model: defaultModel, reasoning_model: reasoningModel || undefined,
-        supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: abuStr, responses_base_url: rbuStr,
+        supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: submitAnthropicBaseUrl, responses_base_url: rbuStr,
         auto_cache_control: autoCacheControl,
         model_capabilities: mcStr,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
-      const validKeys = apiKeys.filter(k => k.trim());
       if (validKeys.length === 1) input.api_key = validKeys[0];
       else if (validKeys.length > 1) input.api_key = JSON.stringify(validKeys);
       onSubmit(input);
@@ -252,7 +247,7 @@ export function ProviderFormDialog({
               <input
                 value={quickKey}
                 onChange={(e) => handleQuickKeyChange(e.target.value)}
-                placeholder="sk-xxx / deepseek-xxx / sk-ant-xxx ..."
+                placeholder="sk-xxx / tp-xxx / deepseek-xxx / sk-ant-xxx ..."
                 className="form-input text-sm"
                 autoFocus
               />
@@ -320,7 +315,7 @@ export function ProviderFormDialog({
                     type="password"
                     value={key}
                     onChange={(e) => { const next = [...apiKeys]; next[i] = e.target.value; setApiKeys(next); }}
-                    placeholder={i === 0 ? "sk-..." : `Key ${i + 1}`}
+                    placeholder={i === 0 ? "sk-... / tp-..." : `Key ${i + 1}`}
                     className="form-input flex-1"
                   />
                   {apiKeys.length > 1 && (
@@ -347,7 +342,15 @@ export function ProviderFormDialog({
                     const vk = apiKeys.filter(k => k.trim());
                     if (vk.length === 1) saveInput.api_key = vk[0];
                     else if (vk.length > 1) saveInput.api_key = JSON.stringify(vk);
-                    if (baseUrl && baseUrl !== provider.base_url) saveInput.base_url = baseUrl;
+                    const keyEndpoints = resolveKnownProviderEndpoints(providerType, vk[0]);
+                    const nextBaseUrl = keyEndpoints && isKnownMimoEndpointUrl(baseUrl) ? keyEndpoints.baseUrl : baseUrl;
+                    const nextAnthropicBaseUrl = keyEndpoints && (!anthropicBaseUrl || isKnownMimoEndpointUrl(anthropicBaseUrl))
+                      ? keyEndpoints.anthropicBaseUrl
+                      : anthropicBaseUrl;
+                    if (nextBaseUrl && nextBaseUrl !== provider.base_url) saveInput.base_url = nextBaseUrl;
+                    if (nextAnthropicBaseUrl && nextAnthropicBaseUrl !== provider.anthropic_base_url) {
+                      saveInput.anthropic_base_url = nextAnthropicBaseUrl;
+                    }
                     if (Object.keys(saveInput).length > 0) {
                       await api.updateProvider(provider.id, saveInput);
                     }

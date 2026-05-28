@@ -4,7 +4,7 @@ import { Key, Monitor, Rocket, CheckCircle, XCircle, Loader2, ArrowRight } from 
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { detectProvider } from "@/lib/keyDetection";
-import { PROVIDER_PRESETS } from "@/data/providerPresets";
+import { resolveProviderPresetForKey } from "@/data/providerPresets";
 
 type Step = "key" | "tools" | "setup" | "done";
 
@@ -50,7 +50,8 @@ export function QuickSetup() {
       setSetupLog([...log]);
     };
 
-    const preset = PROVIDER_PRESETS[detectedProvider!.type];
+    const preset = resolveProviderPresetForKey(detectedProvider!.type, apiKey.trim());
+    if (!preset) return;
     addLog(t("onboarding.creating_provider"), "running");
     try {
       await api.createProvider({
@@ -140,7 +141,7 @@ export function QuickSetup() {
           <input
             value={apiKey}
             onChange={(e) => handleKeyChange(e.target.value)}
-            placeholder="sk-xxx / deepseek-xxx / sk-ant-xxx ..."
+            placeholder="sk-xxx / tp-xxx / deepseek-xxx / sk-ant-xxx ..."
             className="form-input text-sm"
             autoFocus
           />

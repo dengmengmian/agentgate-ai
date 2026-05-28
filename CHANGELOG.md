@@ -8,6 +8,7 @@ All notable changes to this project will be documented in this file.
 
 ### 新增
 
+- **MiMo 按 key 类型自动选域名** —— `sk-*` 按量付费 key 使用 `api.xiaomimimo.com`，`tp-*` Token Plan key 使用 `token-plan-cn.xiaomimimo.com`；GUI 快速添加、首次向导、手动表单、后端 create/update、headless `provider-add` 都走同一套规则，避免 key 和 host 不匹配导致 401。
 - **MiMo / DeepSeek 推荐模型映射自动补齐** —— 创建 Provider、拉取模型、测试连接成功、应用 Codex / Claude Code 配置时自动补齐缺失映射，不覆盖用户已有项。Codex 的 `gpt-*` 自动映射到对应上游模型；Claude Code 的 `claude-*` 默认映射到 MiMo / DeepSeek 的 1M 后缀模型（如 `mimo-v2.5-pro[1m]` / `deepseek-v4-pro[1m]`）。
 - **Provider 表单 3 段重构** —— 新手填表卡点：旧表单一上来 8+ 字段平铺加能力矩阵默认展开，跟用户脑里的"选个 Provider 粘 Key 就完事"模型不匹配。新结构：
   - Section A 基础：只露 type / name / api key（custom 类型才显式露 base_url）

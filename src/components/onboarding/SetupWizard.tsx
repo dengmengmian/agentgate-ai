@@ -3,6 +3,7 @@ import { Zap, CheckCircle, XCircle, Loader2, ArrowRight, Key, Monitor, Rocket } 
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { detectProvider } from "@/lib/keyDetection";
+import { resolveProviderPresetForKey } from "@/data/providerPresets";
 
 interface Props {
   onComplete: () => void;
@@ -16,17 +17,6 @@ interface ToolDetection {
   detected: boolean;
   checked: boolean;
 }
-
-// Presets (duplicated subset from ProviderFormDialog to avoid circular deps)
-const QUICK_PRESETS: Record<string, { baseUrl: string; protocols: string[]; defaultModel: string; reasoningModel?: string; anthropicBaseUrl?: string; responsesBaseUrl?: string; extraHeaders?: string }> = {
-  anthropic: { baseUrl: "https://api.anthropic.com", protocols: ["anthropic_messages"], defaultModel: "claude-sonnet-4-6" },
-  deepseek: { baseUrl: "https://api.deepseek.com", protocols: ["openai_chat_completions"], defaultModel: "deepseek-v4-flash", reasoningModel: "deepseek-v4-pro", anthropicBaseUrl: "https://api.deepseek.com/anthropic" },
-  openai: { baseUrl: "https://api.openai.com", protocols: ["openai_chat_completions", "openai_responses"], defaultModel: "gpt-4o", responsesBaseUrl: "https://api.openai.com" },
-  openrouter: { baseUrl: "https://openrouter.ai/api", protocols: ["openai_chat_completions"], defaultModel: "deepseek/deepseek-v4-flash" },
-  groq: { baseUrl: "https://api.groq.com/openai", protocols: ["openai_chat_completions"], defaultModel: "llama-3.3-70b-versatile" },
-  xai: { baseUrl: "https://api.x.ai", protocols: ["openai_chat_completions"], defaultModel: "grok-3-latest" },
-  perplexity: { baseUrl: "https://api.perplexity.ai", protocols: ["openai_chat_completions"], defaultModel: "sonar-pro" },
-};
 
 export function SetupWizard({ onComplete }: Props) {
   const { t } = useI18n();
@@ -87,7 +77,8 @@ export function SetupWizard({ onComplete }: Props) {
     };
 
     // 1. Create provider
-    const preset = QUICK_PRESETS[detectedProvider!.type];
+    const preset = resolveProviderPresetForKey(detectedProvider!.type, apiKey.trim());
+    if (!preset) return;
     addLog(t("onboarding.creating_provider"), "running");
     try {
       await api.createProvider({
@@ -178,7 +169,7 @@ export function SetupWizard({ onComplete }: Props) {
             <input
               value={apiKey}
               onChange={(e) => handleKeyChange(e.target.value)}
-              placeholder="sk-xxx / deepseek-xxx / sk-ant-xxx ..."
+              placeholder="sk-xxx / tp-xxx / deepseek-xxx / sk-ant-xxx ..."
               className="form-input text-sm"
               autoFocus
             />
