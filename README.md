@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Local AI Gateway for Codex, Claude Code, Gemini CLI, OpenCode & AtomCode</b><br>
-  Protocol conversion · 23+ provider presets · Smart failover · Vision-aware routing · Desktop app
+  Protocol conversion · 24 provider presets · Smart failover · Capability-aware routing · Desktop app
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@
 
 ---
 
-AgentGate is a **local model gateway** for AI coding agents. One entry point connects Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode to 23+ providers including DeepSeek, OpenAI, Anthropic, Kimi, GLM, and DashScope — with automatic protocol conversion, smart failover, and vision-aware routing.
+AgentGate is a **local model gateway** for AI coding agents. One entry point connects Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode to 24 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more — with automatic protocol conversion, smart failover, and per-model capability-aware routing.
 
 **Why not just edit config files?** AgentGate is a desktop app with a GUI — switch providers in one click, no command line needed. It supports multi-provider priority chains (A fails → auto-switch to B), image-aware routing (skip non-vision providers), request logging, token stats, and diagnostics.
 
@@ -62,7 +62,11 @@ AgentGate is a **local model gateway** for AI coding agents. One entry point con
 - Providers that don't support images at the chosen model strip the image content at the provider-specific layer, avoiding upstream 400/404
 
 **Multi-Provider Management**
-- Supports **Xiaomi MiMo**, DeepSeek, OpenAI, Anthropic, OpenRouter, Kimi, MiniMax, and custom OpenAI-compatible endpoints
+- **24 built-in presets** (auto-fill base URL / protocols / Anthropic endpoint / default model):
+  - **Domestic**: Xiaomi MiMo, DeepSeek, Kimi/Moonshot, MiniMax, GLM (Zhipu BigModel), DashScope (Aliyun Qwen), SiliconFlow, Volcengine (Doubao), Baichuan, StepFun, Yi (01.AI)
+  - **International**: OpenAI, Anthropic (Claude), Google Gemini, xAI (Grok), Mistral, Groq, Together, Fireworks, Cerebras, Perplexity, Cohere
+  - **Aggregator**: OpenRouter
+  - **Custom**: any OpenAI-compatible endpoint (vLLM / Ollama / LiteLLM / local proxies)
 - MiMo first-class support: 5 chat models (`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`), multi-turn `reasoning_content` round-trip, `tp-*` key auto-routes to Token Plan host, friendly `webSearchEnabled` error mapping
 - `[1m]` long-context suffix auto-injected on the Claude Code passthrough path for MiMo and DeepSeek 1M-capable models (transparent: users configure `mimo-v2.5-pro`, the Codex path gets the base model, Claude Code gets `mimo-v2.5-pro[1m]`)
 - Route Profiles with multi-provider priority chains, auto-matched by protocol
@@ -256,27 +260,21 @@ docker build -t agentgate . && docker run -p 9090:9090 \
 
 Launch AgentGate → **Providers** → **Add Provider**
 
-**Basic fields:**
+**Fast path (recommended) — paste API key:**
 
-| Field | Description | Example |
+1. Paste your API key (any provider) into the top input
+2. AgentGate detects the provider type from the key prefix (`sk-ant-` / `sk-` / `deepseek-` / `gsk_` / …)
+3. Click **Create** — name, base URL, protocols, default/reasoning model, capabilities are all filled in for you. Done.
+
+**Manual mode — 3 sections, only Section A is required:**
+
+| Section | Fields | Notes |
 |---|---|---|
-| Name | Display name for the provider | `DeepSeek` |
-| Type | Provider type, affects request transformation | `deepseek` |
-| Protocol | Upstream API protocol format | `OpenAI Chat Completions` |
-| Base URL | Provider API endpoint | `https://api.deepseek.com` |
-| API Key | Provider API key | `sk-...` |
-| Default Model | Model used when no match is found | `deepseek-v4-flash` |
-| Reasoning Model | Model for reasoning/thinking (optional) | `deepseek-v4-pro` |
-| Timeout | Request timeout in seconds | `120` |
+| **Basic** | Type · Name · API Key (+ Base URL only if `custom` type) | Picking a type auto-fills everything else from the preset |
+| **Models & Capabilities** | Default model · Reasoning model · `Fetch & detect` button · capability matrix toggle | On a freshly created provider, this is **auto-run in the background** — you get newest non-mini model as default + newest reasoning model + per-model capability matrix without clicking anything |
+| **Advanced** *(collapsed, "usually no need to touch")* | Protocols + their endpoints (Chat / Responses / Anthropic) · Extra Headers · Timeout · Auto cache control · Model Mapping | Each protocol you tick shows its own URL — one place to read "which native endpoints this upstream supports" |
 
-**Advanced fields:**
-
-| Field | Description | Example |
-|---|---|---|
-| Model Mapping | Maps client model names to provider models | `gpt-5.5` → `deepseek-v4-flash` |
-| Anthropic Endpoint | Claude Code pass-through URL (optional) | `https://api.deepseek.com/anthropic` |
-| Responses API Endpoint | Codex Responses API pass-through URL (optional). If set, requests are proxied directly; if empty, protocol conversion is used | `https://api.openai.com` |
-| Extra Headers | Custom HTTP headers (JSON) | `{"User-Agent":"KimiCLI/1.40.0"}` |
+**Model Mapping** is at the bottom of Advanced for a reason: usually not needed. Unknown model names fall back to `default_model` automatically. Only set mapping if you want different client model names to route to different upstream models within the same provider.
 
 **Provider configuration examples:**
 
@@ -382,8 +380,8 @@ Launch AgentGate → **Providers** → **Add Provider**
 
 **After saving:**
 
-- Click **Fetch Models** to auto-load the available model list
-- Click **Test Connection** to verify the config and auto-detect Vision capability
+- Fetch + capability detection runs automatically in the background — no manual action needed
+- Click **Test Connection** to verify the config — it opens a single dialog with 3 live steps: **Connectivity & auth** → **Capability autofill** → **Prompt cache detection** (auto-skipped for non-Anthropic providers)
 
 ### 2. Start the Gateway
 
@@ -416,7 +414,19 @@ Click **Switch to Official** to restore the original settings.json.
 
 AgentGate writes to `~/.config/opencode/opencode.json`, configuring an OpenAI-compatible provider pointing to the local gateway.
 
-### 6. Direct API Calls
+### 6. Configure Gemini CLI
+
+**Clients** → **Gemini CLI** → **Apply Config**
+
+AgentGate writes Gemini CLI's config to point at the local gateway's `/v1beta/...` route (Gemini-compatible). One-click toggle back to official.
+
+### 7. Configure AtomCode
+
+**Clients** → **AtomCode** → **Apply Config**
+
+AtomCode integration writes its config to use AgentGate as the upstream — same toggle pattern as the others.
+
+### 8. Direct API Calls
 
 All endpoints (except `/health`) require a local access token.
 
@@ -470,7 +480,7 @@ curl http://127.0.0.1:9090/v1/models -H "Authorization: Bearer $TOKEN"
 curl http://127.0.0.1:9090/health
 ```
 
-### 7. Multi-Provider & Failover
+### 9. Multi-Provider & Failover
 
 Configure Route Profiles on the **Routes** page:
 
@@ -479,36 +489,42 @@ Configure Route Profiles on the **Routes** page:
 3. Switch mode: manual / failover
 4. In failover mode, 429/402/5xx/timeout errors automatically try the next provider
 
-### 8. Vision-Aware Routing (Multimodal Image Support)
+### 10. Capability-Aware Routing (Multimodal & Reasoning)
 
-AgentGate auto-detects each provider's vision (image recognition) capability when a provider is saved or tested, and uses this information for routing decisions.
+AgentGate tracks **per-model** capabilities across 8 dimensions and uses them for routing — when your request contains images / audio / tools, the gateway picks a model that actually supports it.
+
+**Capability matrix per model:**
+
+`text` · `vision` · `audio_in` · `tts` · `video_in` · `reasoning` · `tools` · `web_search`
 
 **Setup:**
 
-1. Add multiple providers (e.g., DeepSeek + KimiCoding), ensuring at least one supports images
-2. On the **Providers** page, click **Test Connection** — AgentGate sends a probe request to detect vision capability
-3. After detection, provider cards display a **Vision** or **No Vision** badge
+1. Add a provider — model list, capabilities, and best default/reasoning model are detected automatically right after creation
+2. On the **Providers** page, the card shows capability icons + native pass-through chips (`Native Chat`, `Native Anthropic`, …)
+3. To re-detect manually: open Edit → click **Fetch & detect capabilities**
 4. On the **Routes** page, switch mode to **failover**
 
 **How it works:**
 
-- Creating or updating a provider automatically triggers vision detection (can also be triggered manually via "Test Connection")
-- Detection method: sends a request with a 1x1 pixel image (`max_tokens: 1`) — virtually zero token cost
-- When a request contains images, failover automatically skips providers with `supports_vision = false`
-- Undetected providers (`supports_vision = null`) are not skipped, ensuring backward compatibility
-- Providers that don't support images (e.g., DeepSeek) strip image content at the provider transform layer, with no impact on text-only requests
+- After provider creation: gateway calls upstream `/models`, runs name-pattern seeding for capabilities, picks newest non-mini model as default and newest reasoning-style model as reasoning_model
+- When a request includes images, the gateway:
+  - First tries to swap to a sibling model on the same provider that supports vision (e.g., `mimo-v2.5-pro` → `mimo-v2.5` for images)
+  - If no sibling on the current provider, failover to next provider in the chain whose matrix declares a vision-capable model
+- Capability matrix also gates tool emission — unchecking `web_search` for a model stops the gateway from sending the `web_search` builtin to that model
+- Promotion picker prefers the candidate that preserves the most of the original model's other capabilities; `supported_models` order is the tiebreak
+- Providers without any vision-capable model strip image content at the provider transform layer, avoiding upstream 400/404 on text-only fallback
 
 **Example scenario:**
 
 ```
 Codex sends a request with images
-  → AgentGate detects the request contains images
-  → Skips DeepSeek (supports_vision = false)
-  → Routes directly to KimiCoding (supports_vision = true)
-  → KimiCoding receives the full image + text request
+  → Gateway sees request has images
+  → MiMo's matrix: mimo-v2.5-pro = text, mimo-v2.5 = text + vision
+  → Promote mimo-v2.5-pro → mimo-v2.5 (same provider, capability match)
+  → Request goes through, full image + text preserved
 ```
 
-### 9. Diagnostics
+### 11. Diagnostics
 
 On the **Diagnostics** page:
 
@@ -517,16 +533,36 @@ On the **Diagnostics** page:
 
 ## Supported Providers
 
-| Provider | Type | Conversion | Provider-Specific Handling | Vision (per-model) |
-|---|---|---|---|---|
-| Xiaomi MiMo | `mimo` | Chat Completions / Anthropic passthrough | Multi-turn `reasoning_content` round-trip, `tp-*` host auto-routing, temperature strip in thinking mode (v2.5-pro/v2.5), tool_choice non-auto strip, omni web_search strip, `[1m]` suffix injection on CC path, web_search builtin translation gated by matrix, friendly Web Search Plugin error hint | `mimo-v2.5` / `mimo-v2-omni` ✓; others ✗ |
-| DeepSeek | `deepseek` | Chat Completions | Image stripping, reasoning injection, schema cleaning, message reordering, `[1m]` suffix on CC path for v4-pro | Model-dependent |
-| OpenAI | `openai` | Pass-through or Chat Completions | None | ✓ |
-| Anthropic | `anthropic` | Claude Messages native | `tool_use`/`tool_result`, `input_schema`, thinking budget | ✓ |
-| OpenRouter | `openrouter` | Chat Completions | None | Model-dependent |
-| Kimi / Moonshot | `kimi` | Chat Completions | `web_search` → `builtin_function`/`$web_search`, thinking control | `kimi-for-coding` ✓; others model-dependent |
-| MiniMax | `minimax` | Chat Completions | Strip reasoning_effort/response_format, `<think>` extraction | ✓ |
-| Custom | `custom_openai_compatible` | Chat Completions | None | Auto-detected |
+Providers marked **Provider-specific handling** have dedicated transform code in `src-tauri/src/transform/providers/`. The rest go through the generic Chat Completions / Anthropic pass-through path and work out-of-the-box.
+
+| Provider | Type | Native Protocols | Provider-Specific Handling |
+|---|---|---|---|
+| Xiaomi MiMo | `mimo` | Chat + Anthropic | Multi-turn `reasoning_content` round-trip, `tp-*` host auto-routing, temperature strip in thinking mode, tool_choice non-auto strip, omni web_search strip, `[1m]` suffix on CC path, web_search builtin gated by matrix, friendly Web Search Plugin error hint |
+| DeepSeek | `deepseek` | Chat + Anthropic | Image stripping (text-only models), reasoning injection, schema cleaning, message reordering, `[1m]` suffix on CC path for v4-pro |
+| Anthropic (Claude) | `anthropic` | Anthropic Messages (native) | `tool_use`/`tool_result`, `input_schema`, thinking budget, native cache_control |
+| OpenAI | `openai` | Chat + Responses | None (Responses passthrough or Chat conversion) |
+| Google Gemini | `google_gemini` | Chat (compat endpoint) | None |
+| Kimi / Moonshot | `kimi` | Chat | `web_search` → `builtin_function`/`$web_search`, thinking control |
+| MiniMax | `minimax` | Chat | Strip reasoning_effort / response_format, `<think>` extraction |
+| GLM (Zhipu) | `glm` | Chat + Anthropic | Generic |
+| DashScope (Qwen) | `dashscope` | Chat + Anthropic | Generic |
+| SiliconFlow | `siliconflow` | Chat | Generic |
+| Volcengine (Doubao) | `volcengine` | Chat | Generic |
+| Baichuan | `baichuan` | Chat | Generic |
+| StepFun | `stepfun` | Chat | Generic |
+| Yi (01.AI) | `yi` | Chat | Generic |
+| xAI (Grok) | `xai` | Chat | Generic |
+| Mistral | `mistral` | Chat | Generic |
+| Groq | `groq` | Chat | Generic |
+| Together | `together` | Chat | Generic |
+| Fireworks | `fireworks` | Chat | Generic |
+| Cerebras | `cerebras` | Chat | Generic |
+| Perplexity | `perplexity` | Chat | Generic |
+| Cohere | `cohere` | Chat (compat endpoint) | Generic |
+| OpenRouter | `openrouter` | Chat | None |
+| Custom | `custom_openai_compatible` | Chat | None (set Base URL yourself) |
+
+> Vision / reasoning / tools / web_search capability is tracked **per-model** in the capability matrix, not at the provider level. See *Capability-Aware Routing* below.
 
 ## Data Flow
 
@@ -568,8 +604,9 @@ When the client protocol differs from the downstream provider, AgentGate convert
 │     Responses API → Chat Completions (input_image → image_url)          │
 │     Messages API  → Chat Completions (image → image_url)                │
 │                         ▼                                               │
-│  ④ Vision-Aware Routing (failover mode)                                 │
-│     Has images → skip providers with supports_vision=false              │
+│  ④ Capability-Aware Routing (failover mode)                             │
+│     Has images → promote to vision sibling on same provider, or         │
+│                  failover to next provider with a vision-capable model  │
 │     No images  → select by priority as normal                           │
 │                         ▼                                               │
 │  ⑤ Provider-Specific Transform                                          │
