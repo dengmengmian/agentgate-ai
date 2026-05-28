@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2026-05-28
+
+围绕"新手第一次配 Provider 不知道填啥"这条主线做了一轮大改。
+
+### 新增
+
+- **Provider 表单 3 段重构** —— 新手填表卡点：旧表单一上来 8+ 字段平铺加能力矩阵默认展开，跟用户脑里的"选个 Provider 粘 Key 就完事"模型不匹配。新结构：
+  - Section A 基础：只露 type / name / api key（custom 类型才显式露 base_url）
+  - Section B 模型与能力：合并"拉取模型"+"自动识别能力"为一个按钮，能力矩阵默认折叠
+  - Section C 高级（默认折叠，标"通常无需修改"）：协议 + 各协议对应 URL 合并成一个 list，一眼看清"这家上游同时支持哪些原生入口"；Model Mapping 挪到最底部加"通常无需配置"提示
+- **新建 Provider 后自动挑最新模型** —— 创建完后台跑：拉上游 `/models` → seed 能力矩阵 → 按 pickModels heuristic（`src/lib/modelHeuristics.ts`）挑出最新非 mini 作 default、最新 reasoning 系作 reasoning_model。用户填完 name + key 点创建什么都不用动，UI 自动刷出最新模型。heuristic 不 hardcode 模型名，靠 tierRank（主力/mini/preview）+ 版本号（过滤 8 位日期）+ reasoning pattern，扛模型迭代
+- **ProviderCard 直连协议 chip** —— 卡片上加"直连 Chat" / "直连 Anthropic" 绿色 chip，直接告诉用户哪些客户端跟这个 Provider 走直连不需要协议转换
+- **激进 applyPreset** —— 选 type 后总是覆盖 name 和 auto_cache_control（anthropic 系自动 ON、其他自动 OFF），创建场景隐藏 enabled / timeout 字段（用合理默认）
+
+### 修复
+
+- **测试连接 "缓存支持检测" 卡死** —— 两个独立 bug 叠加：
+  1. 后端 `detect_provider_cache` 用 `provider.timeout_seconds`（默认 120s+）作 HTTP timeout，跑两次请求。OpenAI 系 provider 误配 `anthropic_base_url` 时要等满 240s+ 才失败。改用 `min(provider.timeout_seconds, 15)` 硬上限
+  2. 前端 `TestConnectionDialog` 的 `useEffect` 依赖了 `onClose` / `onSuccess` 闭包，父组件 `usePolling` 每 10s 重渲染产生新引用 → useEffect cleanup 重启 → 测试从头跑一遍。改用 `useRef` 持有最新回调，useEffect 只依赖 `provider?.id`
+- **Codex Config Check 适配 1.1.0 劫持 OpenAI 设计** —— 自检有两条规则没跟上 1.1.0 Codex 集成重做：
+  - `model_provider` 检查只认 `"agentgate"`，但新设计写的是 `"OpenAI"`（+ `requires_openai_auth = true` 劫持 OpenAI provider，让 IDE 插件 / Browser / Mobile / 配额查询都能用）。改成双模式都 OK。顺手干掉 `{:?}` debug 格式泄漏（UI 之前显示 `Some("OpenAI")` 而不是 `OpenAI`）
+  - `auth.json` 检查盯着已废弃的 `has_agentgate_auth` 信号——新设计保留 ChatGPT OAuth tokens 不动，AgentGate token 改放 `config.toml` 的 `experimental_bearer_token`。改成判 `openai_key_polluted`（同时有 `ag_local_` 和 OAuth tokens 的脏状态才该 warn），干净态/不存在态都算 OK
+
+### 重命名
+
+- **服务商 → 供应商** —— 对齐 CC-Switch（72k stars）通用语，迁来用户零学习成本。Sidebar 注释 / CommandPalette / ErrorExplanationCard / tray.rs / i18n 全文 50+ 处替换；CommandPalette 关键词同时保留"服务商"作搜索别名兼容老用户。数据库字段、API 契约、变量名（`Provider*`）一概没动
+
+### 文档
+
+- **README + README_ZH 全面同步** —— 按"新手第一性原理"视角全面审计：
+  - tagline: "23+ provider" → "24"，"vision-aware" → "capability-aware"
+  - Multi-Provider Management 段：7 个 provider 列表 → 24 个 preset 按"国内 / 海外 / 聚合 / 自定义"分组
+  - Vision-Aware Routing 整节重写为 Capability-Aware Routing（旧版还在讲二值 `supports_vision`，跟落地的 per-model 8 维矩阵脱节）
+  - Add a Provider 段：旧的 8 字段平铺表 → 新的"快速通道 + 三段式手动模式"，跟前端表单重构对齐
+  - Supported Providers 表：8 条 → 24 条全列；删 Vision 列（已是 per-model 不该列在 provider 层）
+  - 加 Configure Gemini CLI / AtomCode 步骤
+- **10 张截图刷新到最新 UI**（dashboard / providers / tools / gateway / routes / logs / diagnostics / settings / pet-settings / quick-setup），含三段式表单、供应商命名、直连 chip
+
+---
+
 ## [1.1.2] - 2026-05-28
 
 ### 新增
