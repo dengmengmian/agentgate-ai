@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { RecentRequests } from "@/components/dashboard/RecentRequests";
 import { RuntimeFooter } from "@/components/common/RuntimeFooter";
+import { StatusBadge } from "@/components/common/StatusBadge";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { formatLatency } from "@/lib/utils";
@@ -39,6 +40,29 @@ function StripMetric({ label, value, tone }: { label: string; value: string; ton
       <span className={`text-base font-semibold ${valueColor} tabular-nums`}>{value}</span>
     </div>
   );
+}
+
+/// 命中率 = cache_read / (cache_read + cache_write + 非缓存输入)。
+/// 三项分母对 Anthropic 三段式（read / write / non-cached input 各自独立）天然正确；
+/// OpenAI 把 cached_tokens 计入 input_tokens 会让分母略偏大，但永远落在 [0, 100]，
+/// 不会出现 >100% 这种用户看了懵的情况。颜色阈值参照"系统提示稳定时的健康面"：
+/// ≥70% 绿，30-70% 黄（可能在切换 prompt / 上游 TTL 到期），<30% 红。
+function CacheHitBadge({
+  cacheRead,
+  cacheWrite,
+  inputTokens,
+}: {
+  cacheRead: number;
+  cacheWrite: number;
+  inputTokens: number;
+}) {
+  const denom = cacheRead + cacheWrite + inputTokens;
+  if (denom <= 0) {
+    return <StatusBadge variant="muted">—</StatusBadge>;
+  }
+  const rate = (cacheRead / denom) * 100;
+  const variant = rate >= 70 ? "success" : rate >= 30 ? "warning" : "error";
+  return <StatusBadge variant={variant}>{rate.toFixed(1)}%</StatusBadge>;
 }
 
 type RangeDays = 1 | 7 | 14 | 30;
@@ -169,15 +193,13 @@ export function Dashboard() {
               <span>
                 输入合计 <span className="font-mono text-text-primary">{formatTokens(stats.today_input_tokens)}</span>
               </span>
-              <span className="ml-auto">
-                命中率{" "}
-                <span className="font-mono text-text-primary">
-                  {(() => {
-                    const inp = stats.today_input_tokens;
-                    const r = stats.today_cache_read_tokens;
-                    return inp > 0 ? `${((r / inp) * 100).toFixed(1)}%` : "—";
-                  })()}
-                </span>
+              <span className="ml-auto flex items-center gap-1.5">
+                命中率
+                <CacheHitBadge
+                  cacheRead={stats.today_cache_read_tokens}
+                  cacheWrite={stats.today_cache_write_tokens}
+                  inputTokens={stats.today_input_tokens}
+                />
               </span>
             </div>
           )}
