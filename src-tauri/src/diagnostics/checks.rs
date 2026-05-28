@@ -206,24 +206,34 @@ pub fn codex_config_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
     checks.push(CheckItem::ok("config_exists", "Config file", "Exists"));
     checks.push(CheckItem::ok("agentgate_provider", "AgentGate provider", "Configured"));
 
-    if status.current_provider.as_deref() == Some("agentgate") {
-        checks.push(CheckItem::ok("model_provider", "model_provider", "Set to agentgate"));
-    } else {
-        checks.push(CheckItem::warning("model_provider", "model_provider", &format!("Set to {:?}", status.current_provider)));
+    // Codex 1.1.0+ 改成"劫持 OpenAI provider + requires_openai_auth = true"：
+    //   model_provider = "OpenAI"        ← 让 IDE 插件 / 配额查询都把它当官方 OpenAI
+    //   [model_providers.OpenAI]         ← base_url 指向本地网关
+    //   requires_openai_auth = true
+    // 旧设计是 model_provider = "agentgate"，两种都算正确，都不该 warn。
+    match status.current_provider.as_deref() {
+        Some("OpenAI") => checks.push(CheckItem::ok("model_provider", "model_provider", "Set to OpenAI (hijack mode — IDE plugins compatible)")),
+        Some("agentgate") => checks.push(CheckItem::ok("model_provider", "model_provider", "Set to agentgate (legacy mode)")),
+        Some(other) => checks.push(CheckItem::warning("model_provider", "model_provider", &format!("Unexpected value: {other}"))
+            .with_suggestion("Re-apply Codex config from Tools page")),
+        None => checks.push(CheckItem::warning("model_provider", "model_provider", "Not set")
+            .with_suggestion("Re-apply Codex config from Tools page")),
     }
 
-    // Check auth.json
-    if status.auth_json_exists {
-        checks.push(CheckItem::ok("auth_json", "auth.json", "Exists"));
-        if status.has_agentgate_auth {
-            checks.push(CheckItem::ok("auth_token", "Auth token", "AgentGate token set"));
-        } else {
-            checks.push(CheckItem::warning("auth_token", "Auth token", "auth.json doesn't contain AgentGate token")
-                .with_suggestion("Re-apply Codex config from Tools page"));
-        }
+    // auth.json 三种正常状态：
+    //   1) 不存在——Codex 还没登过 ChatGPT，纯 key 模式跑也 OK，AgentGate token 走 config.toml
+    //   2) 存在且未污染——ChatGPT OAuth tokens 保留（新设计），或 ag_local_ 单独占位（legacy），都 OK
+    //   3) 污染态——auth.json 里同时有 ag_local_ 和 ChatGPT tokens，旧版本写坏了
+    // 真"AgentGate 已激活"的标志是 `is_agentgate_active`（config.toml 里有 ag_local_ bearer 或 legacy
+    // model_provider = "agentgate"），跟 auth.json 是两码事。
+    if !status.auth_json_exists {
+        // auth.json 不存在不算问题——Codex 没登 ChatGPT 也能跑
+        checks.push(CheckItem::ok("auth_json", "auth.json", "Not present (Codex not signed in to ChatGPT — fine, AgentGate token lives in config.toml)"));
+    } else if status.openai_key_polluted {
+        checks.push(CheckItem::warning("auth_json", "auth.json", "Polluted: contains both AgentGate token and ChatGPT tokens (legacy bug)")
+            .with_suggestion("Re-apply Codex config from Tools page — AgentGate will restore from saved backup"));
     } else {
-        checks.push(CheckItem::warning("auth_json", "auth.json", "Not found")
-            .with_suggestion("Apply config from Tools page"));
+        checks.push(CheckItem::ok("auth_json", "auth.json", "Clean (ChatGPT login state preserved, AgentGate token in config.toml)"));
     }
 
     // Base URL check
