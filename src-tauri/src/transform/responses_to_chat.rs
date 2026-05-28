@@ -250,11 +250,11 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                     }
                 }
 
-                let call_id = item
+                let raw_call_id = item
                     .get("call_id")
                     .and_then(|c| c.as_str())
-                    .unwrap_or("call_unknown")
-                    .to_string();
+                    .unwrap_or("call_unknown");
+                let call_id = crate::transform::tool_calls::sanitize_call_id(raw_call_id).into_owned();
                 let name = item
                     .get("name")
                     .and_then(|n| n.as_str())
@@ -297,12 +297,13 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                 }).unwrap_or_default();
                 let output = Value::String(raw_output);
 
+                let sanitized_id = crate::transform::tool_calls::sanitize_call_id(call_id.unwrap()).into_owned();
                 messages.push(ChatMessage {
                     role: "tool".to_string(),
                     content: Some(output),
                     reasoning_content: None,
                     tool_calls: None,
-                    tool_call_id: Some(call_id.unwrap().to_string()),
+                    tool_call_id: Some(sanitized_id),
                     name: None,
                 });
             }

@@ -1,8 +1,46 @@
+use std::borrow::Cow;
+
 use serde_json::{json, Value};
 
 use crate::errors::AppError;
 use crate::protocol::chat_completions::ChatMessage;
 use crate::transform::schema_cleaner::clean_schema_for_deepseek;
+
+/// Tool call id 上限。OpenAI Responses API 规范长度上限 64；其它上游通常更宽松。
+pub const MAX_CALL_ID_LEN: usize = 64;
+
+/// 规范化 tool call id：白名单 `[a-zA-Z0-9_-]`，超过 [`MAX_CALL_ID_LEN`] 截断。
+///
+/// 设计原则：**对称纯函数**。在请求侧（Responses → Chat / Anthropic）和响应侧
+/// （Chat / Anthropic SSE → Responses）都调用同一个函数，client 回传 tool_result
+/// 携带的 id 与上游所见 id 自动一致，**不需要任何会话级映射表**。
+///
+/// 触发原因：Codex.app 偶尔产出含 `:` `/` `.` 等字符的 call_id，MiMo/DeepSeek
+/// 这类严格的 chat-completions 上游会 400。OpenAI 自身较宽松，但严格白名单
+/// 是最小公分母。
+///
+/// 仅当输入合法且长度未超时返回 [`Cow::Borrowed`]——绝大多数请求零分配。
+pub fn sanitize_call_id(id: &str) -> Cow<'_, str> {
+    let needs_truncate = id.len() > MAX_CALL_ID_LEN;
+    let has_invalid = id
+        .bytes()
+        .any(|b| !(b.is_ascii_alphanumeric() || b == b'_' || b == b'-'));
+    if !needs_truncate && !has_invalid && !id.is_empty() {
+        return Cow::Borrowed(id);
+    }
+    let mut out = String::with_capacity(id.len().min(MAX_CALL_ID_LEN));
+    for ch in id.chars().take(MAX_CALL_ID_LEN) {
+        if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
+            out.push(ch);
+        } else {
+            out.push('_');
+        }
+    }
+    if out.is_empty() {
+        out.push_str("call_unknown");
+    }
+    Cow::Owned(out)
+}
 
 /// Convert Responses API tools to Chat Completions tools format.
 /// Handles structure A (flat), structure B (nested function), namespace tools, and custom tools.
@@ -343,6 +381,48 @@ mod tests {
     use super::*;
     use serde_json::json;
     use crate::protocol::chat_completions::{ChatMessage, ToolCall, ToolCallFunction};
+
+    #[test]
+    fn sanitize_call_id_passes_through_clean() {
+        assert!(matches!(sanitize_call_id("call_abc123"), Cow::Borrowed(_)));
+        assert!(matches!(sanitize_call_id("toolu_01A-9zZ"), Cow::Borrowed(_)));
+        assert_eq!(sanitize_call_id("call_abc123").as_ref(), "call_abc123");
+    }
+
+    #[test]
+    fn sanitize_call_id_replaces_invalid_characters() {
+        assert_eq!(sanitize_call_id("call:abc/def.1").as_ref(), "call_abc_def_1");
+        assert_eq!(sanitize_call_id("a b c").as_ref(), "a_b_c");
+        assert_eq!(sanitize_call_id("call#7").as_ref(), "call_7");
+    }
+
+    #[test]
+    fn sanitize_call_id_truncates_to_64() {
+        let long = "a".repeat(200);
+        let out = sanitize_call_id(&long);
+        assert_eq!(out.len(), MAX_CALL_ID_LEN);
+        assert!(out.chars().all(|c| c == 'a'));
+    }
+
+    #[test]
+    fn sanitize_call_id_empty_becomes_placeholder() {
+        assert_eq!(sanitize_call_id("").as_ref(), "call_unknown");
+    }
+
+    #[test]
+    fn sanitize_call_id_is_idempotent() {
+        // Applying twice yields the same result — the symmetric-application
+        // property the request/response paths rely on.
+        let once = sanitize_call_id("weird:id/x").into_owned();
+        let twice = sanitize_call_id(&once).into_owned();
+        assert_eq!(once, twice);
+    }
+
+    #[test]
+    fn sanitize_call_id_unicode_collapses_to_underscores() {
+        // Each non-ASCII char counts as one position, replaced by one '_'.
+        assert_eq!(sanitize_call_id("调用1").as_ref(), "__1");
+    }
 
     #[test]
     fn test_convert_function_tool_structure_b() {

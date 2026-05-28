@@ -35,10 +35,12 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
                         let content = msg.content.as_ref()
                             .and_then(|c| c.as_str())
                             .unwrap_or("");
-                        let tool_use_id = msg.tool_call_id.as_deref().unwrap_or("");
+                        let tool_use_id = crate::transform::tool_calls::sanitize_call_id(
+                            msg.tool_call_id.as_deref().unwrap_or(""),
+                        );
                         history_messages.push(json!({
                             "role": "user",
-                            "content": [{"type": "tool_result", "tool_use_id": tool_use_id, "content": content}]
+                            "content": [{"type": "tool_result", "tool_use_id": tool_use_id.as_ref(), "content": content}]
                         }));
                         continue;
                     }
@@ -61,9 +63,10 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
                     for tc in tcs {
                         let input: Value = serde_json::from_str(&tc.function.arguments)
                             .unwrap_or(json!({}));
+                        let tu_id = crate::transform::tool_calls::sanitize_call_id(&tc.id);
                         content_blocks.push(json!({
                             "type": "tool_use",
-                            "id": tc.id,
+                            "id": tu_id.as_ref(),
                             "name": tc.function.name,
                             "input": input
                         }));
@@ -244,7 +247,8 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                         if let Some(Value::Array(parts)) = item.get("content") {
                             for part in parts {
                                 if part.get("type").and_then(|t| t.as_str()) == Some("tool_call") {
-                                    let id = part.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string();
+                                    let raw_id = part.get("id").and_then(|i| i.as_str()).unwrap_or("");
+                                    let id = crate::transform::tool_calls::sanitize_call_id(raw_id);
                                     let name = part.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
                                     let args = part.get("arguments").map(|a| {
                                         if a.is_string() { a.as_str().unwrap().to_string() }
@@ -252,7 +256,7 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                                     }).unwrap_or_default();
                                     let input: Value = serde_json::from_str(&args).unwrap_or(json!({}));
                                     content_blocks.push(json!({
-                                        "type": "tool_use", "id": id, "name": name, "input": input
+                                        "type": "tool_use", "id": id.as_ref(), "name": name, "input": input
                                     }));
                                 }
                             }
@@ -272,7 +276,8 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                 }
             }
             "function_call" => {
-                let call_id = item.get("call_id").and_then(|c| c.as_str()).unwrap_or("call_unknown");
+                let raw_call_id = item.get("call_id").and_then(|c| c.as_str()).unwrap_or("call_unknown");
+                let call_id = crate::transform::tool_calls::sanitize_call_id(raw_call_id);
                 let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
                 let arguments = item.get("arguments").map(|a| {
                     if a.is_string() { a.as_str().unwrap().to_string() }
@@ -282,7 +287,7 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
 
                 pending_tool_uses.push(json!({
                     "type": "tool_use",
-                    "id": call_id,
+                    "id": call_id.as_ref(),
                     "name": name,
                     "input": input
                 }));
@@ -309,9 +314,10 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                     }
                 }).unwrap_or_default();
 
+                let sanitized = crate::transform::tool_calls::sanitize_call_id(call_id.unwrap());
                 messages.push(json!({
                     "role": "user",
-                    "content": [{"type": "tool_result", "tool_use_id": call_id.unwrap(), "content": output}]
+                    "content": [{"type": "tool_result", "tool_use_id": sanitized.as_ref(), "content": output}]
                 }));
             }
             "reasoning" => {
