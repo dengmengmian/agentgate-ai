@@ -308,6 +308,9 @@ pub fn run() {
             commands::get_pet_memory,
             commands::save_pet_memory,
             commands::pet_chat,
+            // Config Import / Export
+            commands::export_config_json,
+            commands::import_config_json,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

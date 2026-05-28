@@ -500,3 +500,20 @@ export async function savePetMemory(memory: string): Promise<boolean> {
 export async function petChat(messages: Array<{ role: string; content: string }>): Promise<string> {
   return cmd("pet_chat", { messages });
 }
+
+// ── Config Import / Export ─────────────────────────────────────
+
+export interface ConfigImportSummary {
+  providers_imported: number;
+  route_profiles_imported: number;
+  members_imported: number;
+  secrets_applied: boolean;
+}
+
+export async function exportConfigJson(includeSecrets: boolean): Promise<string> {
+  return cmd("export_config_json", { includeSecrets });
+}
+
+export async function importConfigJson(json: string): Promise<ConfigImportSummary> {
+  return cmd("import_config_json", { json });
+}

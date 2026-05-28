@@ -261,6 +261,9 @@ export function Settings() {
               </div>
             </section>
 
+            <ConfigBackupSection />
+
+
             <section className="rounded-xl border border-border bg-card p-5">
               <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <DollarSign className="h-4 w-4 text-accent" />{t("settings.model_pricing")}
@@ -385,6 +388,120 @@ const PET_PREVIEWS: Record<PetType, React.ComponentType<{ state: "idle" }>> = {
   soldier: SuperSoldierPet,
   coder: CoderPet,
 };
+
+/// 配置导入/导出 section。语义是 replace（导入 = 覆盖），所以导入前用
+/// ConfirmDialog 弹窗确认。API key 默认**不导出**——把含密钥的 JSON 文件
+/// 随手发到群里/截图/丢仓库是常见泄密路径，所以默认安全；用户明确勾选
+/// "含密钥"才会写入，仅用于本机迁移。
+function ConfigBackupSection() {
+  const { t: _t } = useI18n();
+  const [includeSecrets, setIncludeSecrets] = useState(false);
+  const [pendingImportJson, setPendingImportJson] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      const json = await api.exportConfigJson(includeSecrets);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `agentgate-config-${ts}${includeSecrets ? "-with-secrets" : ""}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast("success", includeSecrets ? "已导出（含密钥）" : "已导出（不含密钥）");
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
+
+  const handleFilePicked = async (file: File) => {
+    try {
+      const text = await file.text();
+      // 触发确认弹窗前先校验是 AgentGate 格式，避免误导入随机 JSON。
+      JSON.parse(text);
+      setPendingImportJson(text);
+    } catch {
+      toast("error", "文件不是合法 JSON");
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!pendingImportJson) return;
+    setImporting(true);
+    try {
+      const summary = await api.importConfigJson(pendingImportJson);
+      toast(
+        "success",
+        `已导入 ${summary.providers_imported} 个 provider、${summary.route_profiles_imported} 个 route profile${
+          summary.secrets_applied ? "（含密钥）" : "（密钥需重新填写）"
+        }`
+      );
+      setPendingImportJson(null);
+      // 让上层数据刷新——最稳的是 reload 一次。
+      window.location.reload();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-5">
+      <h3 className="mb-1 text-sm font-semibold text-text-primary">配置导入导出</h3>
+      <p className="mb-4 text-xs text-text-muted">
+        导出 providers + route profiles 为 JSON 文件，方便迁移机器或备份后再恢复。导入会
+        <span className="text-warning">替换</span>
+        当前所有配置（请求日志、定价等历史数据不受影响）。
+      </p>
+
+      <div className="space-y-3">
+        <label className="flex items-center gap-2 text-xs text-text-secondary">
+          <input
+            type="checkbox"
+            checked={includeSecrets}
+            onChange={(e) => setIncludeSecrets(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-border bg-card-secondary accent-accent"
+          />
+          导出时包含 API key（仅用于本机迁移；导出文件请勿分享）
+        </label>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={handleExport} className="btn-primary inline-flex items-center gap-1.5 text-xs">
+            <Download className="h-3.5 w-3.5" />
+            导出配置
+          </button>
+          <label className="btn-secondary inline-flex cursor-pointer items-center gap-1.5 text-xs">
+            <FolderOpen className="h-3.5 w-3.5" />
+            选择文件导入
+            <input
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleFilePicked(f);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={!!pendingImportJson}
+        variant="danger"
+        title="确认导入配置？"
+        message="导入会清空当前所有 providers 和 route profiles，并从文件还原。操作不可撤销——建议先导出当前配置作为备份。"
+        confirmLabel={importing ? "导入中..." : "确认导入"}
+        onConfirm={handleConfirmImport}
+        onCancel={() => setPendingImportJson(null)}
+      />
+    </section>
+  );
+}
 
 function PetTypeCard({ type, selected, name, desc, onClick }: {
   type: PetType; selected: boolean; name: string; desc: string; onClick: () => void;
