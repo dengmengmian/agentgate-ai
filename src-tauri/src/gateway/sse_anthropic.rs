@@ -159,10 +159,20 @@ pub async fn process_anthropic_stream(
                             acc.model = m.to_string();
                         }
                         if let Some(u) = msg.get("usage") {
-                            acc.usage = Some(json!({
+                            // message_start 携带完整初始 usage，包括 cache 字段。
+                            // 这些值在流过程中不再变（cache_creation/read 是请求级
+                            // 概念），message_delta 只补 output_tokens 增量。
+                            let mut usage = json!({
                                 "input_tokens": u.get("input_tokens").and_then(|v| v.as_i64()).unwrap_or(0),
                                 "output_tokens": 0
-                            }));
+                            });
+                            if let Some(cc) = u.get("cache_creation_input_tokens").and_then(|v| v.as_i64()) {
+                                usage["cache_creation_input_tokens"] = json!(cc);
+                            }
+                            if let Some(cr) = u.get("cache_read_input_tokens").and_then(|v| v.as_i64()) {
+                                usage["cache_read_input_tokens"] = json!(cr);
+                            }
+                            acc.usage = Some(usage);
                         }
                     }
                     // Emit response.created + in_progress

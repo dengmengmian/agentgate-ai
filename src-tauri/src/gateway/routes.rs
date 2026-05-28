@@ -1411,6 +1411,7 @@ pub async fn handle_messages(
     };
 
     let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
+    let want_stream = msg_req.stream.unwrap_or(false);
     let result = adapter::send_non_stream(&state.http_client, &config, &chat_req).await;
 
     match result {
@@ -1421,11 +1422,32 @@ pub async fn handle_messages(
             let (cache_w, cache_r) = upstream_json.get("usage")
                 .map(crate::storage::request_logs::extract_cache_tokens)
                 .unwrap_or((None, None));
-            let trace = json!({"mode": "transform", "protocol": "anthropic_messages"}).to_string();
+            let trace = json!({"mode": "transform", "protocol": "anthropic_messages", "stream": want_stream}).to_string();
             log_request_success(&state.db, &client_type, "/v1/messages", &request_id, &raw, &converted_json,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&response).unwrap_or_default(),
                 None, &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok, cache_w, cache_r);
+
+            if want_stream {
+                // Client 期望 SSE。我们没有真正的"chat-stream → anthropic-stream"
+                // 转换器（要做的话相当于反向写 sse_anthropic.rs），先用合成事件
+                // 兜底——非流式上游 + 合成 SSE 序列发给 client。语义上"首字延迟
+                // 等于上游完整耗时"，但 client SDK 能正确解析，比返 JSON 给
+                // 期待 SSE 的 client 强得多。
+                let events = crate::protocol::anthropic_messages::synthesize_sse_events(&response);
+                let stream = tokio_stream::StreamExt::map(
+                    tokio_stream::iter(events),
+                    |s| Ok::<_, std::convert::Infallible>(s),
+                );
+                let body = axum::body::Body::from_stream(stream);
+                return Ok(axum::response::Response::builder()
+                    .status(axum::http::StatusCode::OK)
+                    .header(axum::http::header::CONTENT_TYPE, "text/event-stream")
+                    .header(axum::http::header::CACHE_CONTROL, "no-cache")
+                    .body(body)
+                    .unwrap());
+            }
+
             Ok(Json(response).into_response())
         }
         Err(err) => {
