@@ -436,6 +436,16 @@ pub fn flatten_tool_output(output: &Value) -> String {
             }
         }
         if dropped_images > 0 {
+            // Chat Completions 协议本身不支持 tool 角色消息含图——这是协议限制
+            // 不是 AgentGate 的 bug。但应用层应该知道：tool 返回的截图/图表
+            // 等视觉信息丢了，模型只能看到"image omitted"占位符。warn 一行
+            // 留给排查"为什么模型没看到我的图"。
+            tracing::warn!(
+                dropped_count = dropped_images,
+                "Tool output contained image attachments that were dropped during \
+                 Responses → Chat Completions conversion (Chat protocol does not \
+                 support images in tool messages)."
+            );
             let suffix = if dropped_images > 1 { "s" } else { "" };
             chunks.push(format!(
                 "[{dropped_images} image attachment{suffix} omitted from tool output]"
@@ -486,15 +496,20 @@ fn extract_content(content: Option<&Value>) -> Value {
                     "input_image" => {
                         // Convert Responses API input_image to Chat Completions image_url format
                         has_image = true;
-                        if let Some(url) = part.get("image_url").and_then(|u| u.as_str()) {
+                        // Responses 协议 detail 字段在 input_image 顶层（"auto"/"low"/"high"）；
+                        // Chat 协议把它塞在 image_url 对象里。两种位置都收，保留进出参一致。
+                        let detail = part.get("detail").and_then(|d| d.as_str())
+                            .or_else(|| part.get("image_url").and_then(|u| u.get("detail")).and_then(|d| d.as_str()));
+                        let url = part.get("image_url").and_then(|u| u.as_str())
+                            .or_else(|| part.get("image_url").and_then(|u| u.get("url")).and_then(|u| u.as_str()));
+                        if let Some(url) = url {
+                            let mut image_url = serde_json::json!({"url": url});
+                            if let Some(d) = detail {
+                                image_url["detail"] = serde_json::json!(d);
+                            }
                             parts_out.push(serde_json::json!({
                                 "type": "image_url",
-                                "image_url": {"url": url}
-                            }));
-                        } else if let Some(b64) = part.get("image_url").and_then(|u| u.get("url")).and_then(|u| u.as_str()) {
-                            parts_out.push(serde_json::json!({
-                                "type": "image_url",
-                                "image_url": {"url": b64}
+                                "image_url": image_url,
                             }));
                         }
                     }
@@ -1249,6 +1264,41 @@ mod tests {
         assert!(result.is_array());
         let arr = result.as_array().unwrap();
         assert_eq!(arr[0]["image_url"]["url"], "data:image/jpeg;base64,abc");
+    }
+
+    #[test]
+    fn test_extract_content_input_image_detail_top_level_preserved() {
+        // Responses 协议规范：detail 在 input_image 顶层
+        let content = json!([
+            {"type": "input_image", "image_url": "https://x/y.png", "detail": "high"}
+        ]);
+        let result = extract_content(Some(&content));
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr[0]["type"], "image_url");
+        assert_eq!(arr[0]["image_url"]["url"], "https://x/y.png");
+        assert_eq!(arr[0]["image_url"]["detail"], "high");
+    }
+
+    #[test]
+    fn test_extract_content_input_image_detail_nested_preserved() {
+        // 部分 client（Codex 等）把 detail 嵌进 image_url 对象里——也要保留
+        let content = json!([
+            {"type": "input_image", "image_url": {"url": "https://x/y.png", "detail": "low"}}
+        ]);
+        let result = extract_content(Some(&content));
+        let arr = result.as_array().unwrap();
+        assert_eq!(arr[0]["image_url"]["detail"], "low");
+    }
+
+    #[test]
+    fn test_extract_content_input_image_no_detail_no_field() {
+        // 不指定 detail 时不要往 image_url 对象里塞 detail: null
+        let content = json!([
+            {"type": "input_image", "image_url": "https://x/y.png"}
+        ]);
+        let result = extract_content(Some(&content));
+        let arr = result.as_array().unwrap();
+        assert!(arr[0]["image_url"].get("detail").is_none());
     }
 
     #[test]
