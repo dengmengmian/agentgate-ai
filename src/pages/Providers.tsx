@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
+import { pickModels } from "@/lib/modelHeuristics";
 import * as api from "@/lib/api";
 import type {
   ProviderView,
@@ -76,6 +77,25 @@ export function Providers() {
         toast("success", t("providers.created"));
       }
       loadProviders();
+
+      // 自动跑"拉取模型 + 识别能力 + 挑选最新 default/reasoning"——新建用户
+      // 不该被要求保存后再手动来一次。失败静默（用户可在编辑里手动拉）。
+      const providerType = (input as CreateProviderInput).provider_type;
+      (async () => {
+        try {
+          const models = await api.fetchProviderModels(created.id);
+          if (!models.length) return;
+          const seeded = await api.seedModelCapabilities(providerType, models).catch(() => null);
+          const picked = pickModels(models);
+          await api.updateProvider(created.id, {
+            default_model: picked.default,
+            reasoning_model: picked.reasoning,
+            ...(seeded ? { model_capabilities: JSON.stringify(seeded) } : {}),
+          });
+          loadProviders();
+          toast("success", `${models.length} ${t("providers.toast_auto_setup")}`);
+        } catch { /* silent: 用户可去编辑页手动拉 */ }
+      })();
     } catch (err) {
       toast("error", (err as api.AppError).message);
     }

@@ -43,15 +43,26 @@ export function ProviderCard({
     : t("providers.status_not_tested");
 
   // ── parsed protocol labels ──
+  const protocolList: string[] = (() => {
+    try { return JSON.parse(provider.protocol); } catch { return [provider.protocol]; }
+  })();
   const protocolLabels: string[] = (() => {
-    let protocols: string[] = [];
-    try { protocols = JSON.parse(provider.protocol); } catch { protocols = [provider.protocol]; }
     const labels: Record<string, string> = {
       openai_chat_completions: "Chat Completions",
       openai_responses: "Responses",
       anthropic_messages: "Anthropic Messages",
     };
-    return protocols.map((p) => labels[p] || p);
+    return protocolList.map((p) => labels[p] || p);
+  })();
+  // 直连 chips：每个 protocol 表示上游原生支持的入口（=直连路径）。
+  // 客户端若用 list 里没有的协议，网关会做协议转换。
+  const passThroughChips: { key: string; label: string }[] = (() => {
+    const shortLabel: Record<string, string> = {
+      openai_chat_completions: "Chat",
+      openai_responses: "Responses",
+      anthropic_messages: "Anthropic",
+    };
+    return protocolList.map((p) => ({ key: p, label: shortLabel[p] || p }));
   })();
 
   // ── cache capability inference (anthropic-style only) ──
@@ -94,7 +105,7 @@ export function ProviderCard({
         </div>
       </div>
 
-      {/* ── Essentials: model · key · timeout ── */}
+      {/* ── Essentials: model · key · timeout · 直连 chips ── */}
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         <span className="font-mono text-text-primary">{provider.default_model}</span>
         {provider.masked_api_key && (
@@ -105,6 +116,20 @@ export function ProviderCard({
         )}
         <span className="text-text-muted">{provider.timeout_seconds}s</span>
       </div>
+      {/* 上游原生支持的协议入口——勾掉的客户端协议靠网关协议转换 */}
+      {passThroughChips.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-1">
+          {passThroughChips.map((c) => (
+            <span
+              key={c.key}
+              className="rounded bg-success/10 px-1.5 py-0.5 text-[10px] font-medium text-success"
+              title={t("providers.pass_through_tooltip")}
+            >
+              {t("providers.pass_through_prefix")} {c.label}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* ── Health Stats — compact inline ── */}
       {health && health.h24_total > 0 && (

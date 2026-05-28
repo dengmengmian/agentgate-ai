@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { X, RefreshCcw, Loader2, Sparkles } from "lucide-react";
+import { X, Loader2, Sparkles } from "lucide-react";
 import { PROVIDER_TYPES, PROTOCOLS, ALL_CAPABILITIES, CAPABILITY_LABELS } from "@/types/provider";
 import { PROVIDER_PRESETS } from "@/data/providerPresets";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/common/Toast";
 import * as api from "@/lib/api";
 import { detectProviderType } from "@/lib/keyDetection";
+import { pickModels } from "@/lib/modelHeuristics";
 import type {
   ProviderView,
   CreateProviderInput,
@@ -49,6 +50,7 @@ export function ProviderFormDialog({
   const [fetchingModels, setFetchingModels] = useState(false);
   const [newMappingClient, setNewMappingClient] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showCapMatrix, setShowCapMatrix] = useState(false);
   const [quickMode, setQuickMode] = useState(true);
   const [quickKey, setQuickKey] = useState("");
   const [detectedType, setDetectedType] = useState<string | null>(null);
@@ -76,9 +78,12 @@ export function ProviderFormDialog({
     setAnthropicBaseUrl(preset.anthropicBaseUrl ?? "");
     setResponsesBaseUrl(preset.responsesBaseUrl ?? "");
     setExtraHeaders(preset.extraHeaders ?? "");
-    // Auto-fill name if empty
+    // 创建场景下永远覆盖 name——用户每选一次 type 都视作"我想要这个 provider 的默认名"
     const typeLabel = PROVIDER_TYPES.find(t => t.value === type)?.label;
-    if (!name && typeLabel) setName(typeLabel);
+    if (typeLabel) setName(typeLabel);
+    // auto_cache_control：anthropic 类型或带 anthropic 端点自动 ON，其他默认 OFF
+    // 用户基本不需要关心这个，藏到高级里只显示状态
+    setAutoCacheControl(type === "anthropic" || type === "claude" || !!preset.anthropicBaseUrl);
   };
 
   // MiMo-specific: when user enters a tp-* key after picking MiMo from the
@@ -281,23 +286,27 @@ export function ProviderFormDialog({
         )}
 
         <form onSubmit={handleSubmit} className={`space-y-4 p-6 ${quickMode && !isEdit ? "hidden" : ""}`}>
-          {/* Provider type — auto-fills everything below */}
-          <Field label={t("providers.type")}>
-            <select value={providerType} onChange={(e) => { setProviderType(e.target.value); applyPreset(e.target.value); }} className="form-input">
-              {PROVIDER_TYPES.map((tp) => (
-                <option key={tp.value} value={tp.value}>{tp.label}</option>
-              ))}
-            </select>
-          </Field>
-
+          {/* ────── Section A · 基础 ──────
+              Type 选完自动套全部 preset（URL/协议/cache 都不让用户操心）。
+              Base URL 只在 custom 类型时显式露出，其他类型藏到高级里。 */}
           <div className="grid grid-cols-2 gap-4">
+            <Field label={t("providers.type")}>
+              <select value={providerType} onChange={(e) => { setProviderType(e.target.value); applyPreset(e.target.value); }} className="form-input">
+                {PROVIDER_TYPES.map((tp) => (
+                  <option key={tp.value} value={tp.value}>{tp.label}</option>
+                ))}
+              </select>
+            </Field>
             <Field label={t("providers.name")} error={errors.name}>
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="My Provider" className="form-input" />
             </Field>
-            <Field label={t("providers.base_url")} error={errors.baseUrl}>
+          </div>
+
+          {providerType === "custom" && (
+            <Field label={t("providers.base_url")} error={errors.baseUrl} hint={t("providers.base_url_custom_hint")}>
               <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.example.com" className="form-input" />
             </Field>
-          </div>
+          )}
 
           <div>
             <label className="mb-1 block text-xs font-medium text-text-secondary">
@@ -323,15 +332,17 @@ export function ProviderFormDialog({
             <button type="button" onClick={() => setApiKeys([...apiKeys, ""])} className="mt-1.5 text-[11px] text-accent hover:text-accent/80">+ {t("providers.add_key")}</button>
           </div>
 
-          {/* Supported Models — fetch from provider */}
+          {/* ────── Section B · 模型与能力 ──────
+              一个按钮把"拉取上游模型列表"和"按模型名识别能力"两步合一，
+              新手不用懂"模型矩阵"这个概念。能力矩阵默认折叠，需要时再展开微调。 */}
           <div>
             <div className="mb-1 flex items-center justify-between">
-              <label className="text-xs font-medium text-text-secondary">{t("providers.supported_models")}</label>
+              <label className="text-xs font-medium text-text-secondary">{t("providers.models_and_caps")}</label>
               {isEdit && provider && (
-                <button type="button" disabled={fetchingModels} onClick={async () => {
+                <button type="button" disabled={fetchingModels || seedingCaps} onClick={async () => {
                   setFetchingModels(true);
                   try {
-                    // Auto-save API key / base_url before fetching so backend has latest values
+                    // 先把当前 form 里的 API key / base_url 保存到后端，否则 fetchProviderModels 用的是旧值
                     const saveInput: UpdateProviderInput = {};
                     const vk = apiKeys.filter(k => k.trim());
                     if (vk.length === 1) saveInput.api_key = vk[0];
@@ -342,12 +353,25 @@ export function ProviderFormDialog({
                     }
                     const models = await api.fetchProviderModels(provider.id);
                     setSupportedModels(JSON.stringify(models));
-                    toast("success", `${models.length} models`);
+                    // 拉完接着自动按模型名识别能力——一步到位
+                    setSeedingCaps(true);
+                    try {
+                      const seeded = await api.seedModelCapabilities(providerType, models);
+                      setModelCapabilities(seeded);
+                      toast("success", `${models.length} ${t("providers.toast_models_and_caps")}`);
+                    } catch {
+                      toast("success", `${models.length} models`);
+                    } finally { setSeedingCaps(false); }
+                    // 当前 default/reasoning 不在新拉到的列表里时，按 heuristic 自动选最新——避免
+                    // preset 写死的 default（如 mimo-v2.5-pro）在上游上线新版本后还指向老版本
+                    const picked = pickModels(models);
+                    if (!defaultModel || !models.includes(defaultModel)) setDefaultModel(picked.default);
+                    if (!reasoningModel || !models.includes(reasoningModel)) setReasoningModel(picked.reasoning);
                   } catch (err) { toast("error", (err as api.AppError).message); }
                   finally { setFetchingModels(false); }
-                }} className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80">
-                  {fetchingModels ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCcw className="h-3 w-3" />}
-                  {t("providers.fetch_models")}
+                }} className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 disabled:opacity-50">
+                  {(fetchingModels || seedingCaps) ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                  {t("providers.fetch_and_detect")}
                 </button>
               )}
             </div>
@@ -372,14 +396,10 @@ export function ProviderFormDialog({
             })()}
           </div>
 
-          {/* Model Capability Matrix — per-model capability flags for routing AND for card icons */}
+          {/* 能力矩阵——默认折叠，只在用户主动展开时才显示完整 checkbox 表 */}
           {(() => {
             let models: string[] = [];
             try { models = supportedModels ? JSON.parse(supportedModels) : []; } catch { /* */ }
-            // Merge in default_model / reasoning_model so single-model providers
-            // still get a row to configure (e.g. Kimi Code with only kimi-for-coding).
-            // Without the matrix, capability icons fall back to the legacy probe
-            // which is unreliable for non-OpenAI-style providers.
             const merged = new Set(models);
             if (defaultModel) merged.add(defaultModel);
             if (reasoningModel) merged.add(reasoningModel);
@@ -387,74 +407,64 @@ export function ProviderFormDialog({
             if (models.length < 1) return null;
             return (
               <div>
-                <div className="mb-1 flex items-center justify-between">
-                  <label className="text-xs font-medium text-text-secondary">能力矩阵</label>
-                  <button
-                    type="button"
-                    disabled={seedingCaps}
-                    onClick={async () => {
-                      setSeedingCaps(true);
-                      try {
-                        const seeded = await api.seedModelCapabilities(providerType, models);
-                        setModelCapabilities(seeded);
-                        toast("success", "已根据模型名自动识别能力");
-                      } catch (err) {
-                        toast("error", (err as api.AppError).message);
-                      } finally {
-                        setSeedingCaps(false);
-                      }
-                    }}
-                    className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 disabled:opacity-50"
-                  >
-                    {seedingCaps ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
-                    自动识别
-                  </button>
-                </div>
-                <p className="mb-2 text-[11px] text-text-muted">
-                  勾选每个模型支持的能力。请求带图片时网关会自动路由到支持 vision 的模型。
-                </p>
-                <div className="overflow-x-auto rounded-md border border-border bg-card-secondary">
-                  <table className="w-full text-[11px]">
-                    <thead>
-                      <tr className="border-b border-border bg-bg/50">
-                        <th className="sticky left-0 z-10 bg-bg/50 px-2 py-1.5 text-left font-mono text-text-secondary">model</th>
-                        {ALL_CAPABILITIES.map((cap) => (
-                          <th key={cap} className="px-2 py-1.5 text-center font-medium text-text-secondary" title={cap}>
-                            {CAPABILITY_LABELS[cap]}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {models.map((m) => {
-                        const caps = modelCapabilities[m] ?? [];
-                        return (
-                          <tr key={m} className="border-b border-border last:border-0">
-                            <td className="sticky left-0 z-10 bg-card-secondary px-2 py-1.5 font-mono text-text-primary">{m}</td>
+                <button
+                  type="button"
+                  onClick={() => setShowCapMatrix(!showCapMatrix)}
+                  className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80"
+                >
+                  <span className={`transition-transform ${showCapMatrix ? "rotate-90" : ""}`}>&#9654;</span>
+                  {t("providers.cap_matrix_toggle")}
+                  <span className="text-text-muted">({models.length})</span>
+                </button>
+                {showCapMatrix && (
+                  <div className="mt-2">
+                    <p className="mb-2 text-[11px] text-text-muted">
+                      {t("providers.cap_matrix_hint")}
+                    </p>
+                    <div className="overflow-x-auto rounded-md border border-border bg-card-secondary">
+                      <table className="w-full text-[11px]">
+                        <thead>
+                          <tr className="border-b border-border bg-bg/50">
+                            <th className="sticky left-0 z-10 bg-bg/50 px-2 py-1.5 text-left font-mono text-text-secondary">model</th>
                             {ALL_CAPABILITIES.map((cap) => (
-                              <td key={cap} className="px-2 py-1.5 text-center">
-                                <input
-                                  type="checkbox"
-                                  checked={caps.includes(cap)}
-                                  onChange={(e) => {
-                                    setModelCapabilities((prev) => {
-                                      const next = { ...prev };
-                                      const cur = new Set(next[m] ?? []);
-                                      if (e.target.checked) cur.add(cap); else cur.delete(cap);
-                                      next[m] = Array.from(cur).sort();
-                                      return next;
-                                    });
-                                  }}
-                                  className="h-3.5 w-3.5 cursor-pointer accent-accent"
-                                />
-                              </td>
+                              <th key={cap} className="px-2 py-1.5 text-center font-medium text-text-secondary" title={cap}>
+                                {CAPABILITY_LABELS[cap]}
+                              </th>
                             ))}
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                        </thead>
+                        <tbody>
+                          {models.map((m) => {
+                            const caps = modelCapabilities[m] ?? [];
+                            return (
+                              <tr key={m} className="border-b border-border last:border-0">
+                                <td className="sticky left-0 z-10 bg-card-secondary px-2 py-1.5 font-mono text-text-primary">{m}</td>
+                                {ALL_CAPABILITIES.map((cap) => (
+                                  <td key={cap} className="px-2 py-1.5 text-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={caps.includes(cap)}
+                                      onChange={(e) => {
+                                        setModelCapabilities((prev) => {
+                                          const next = { ...prev };
+                                          const cur = new Set(next[m] ?? []);
+                                          if (e.target.checked) cur.add(cap); else cur.delete(cap);
+                                          next[m] = Array.from(cur).sort();
+                                          return next;
+                                        });
+                                      }}
+                                      className="h-3.5 w-3.5 cursor-pointer accent-accent"
+                                    />
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -491,103 +501,77 @@ export function ProviderFormDialog({
             </Field>
           </div>
 
-          {/* Model Mapping */}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-text-secondary">{t("providers.model_mapping")}</label>
-            <p className="mb-2 text-[11px] text-text-muted">{t("providers.model_mapping_hint")}</p>
-            <div className="space-y-1.5">
-              {Object.entries(modelMapping).map(([clientModel, providerModel]) => (
-                <div key={clientModel} className="flex items-center gap-2">
-                  <input value={clientModel} onChange={(e) => {
-                    const newKey = e.target.value;
-                    if (newKey && newKey !== clientModel) {
-                      const next: Record<string, string> = {};
-                      for (const [k, v] of Object.entries(modelMapping)) {
-                        next[k === clientModel ? newKey : k] = v;
-                      }
-                      setModelMapping(next);
-                    }
-                  }} className="form-input flex-1" />
-                  <span className="text-text-muted">→</span>
-                  <ModelCombo
-                    value={providerModel}
-                    onChange={(v) => setModelMapping({ ...modelMapping, [clientModel]: v })}
-                    models={(() => { try { return supportedModels ? JSON.parse(supportedModels) : []; } catch { return []; } })()}
-                  />
-                  <button type="button" onClick={() => { const next = { ...modelMapping }; delete next[clientModel]; setModelMapping(next); }} className="text-text-muted hover:text-error text-xs">✕</button>
-                </div>
-              ))}
-            </div>
-            <div className="mt-2 flex gap-2">
-              <ModelCombo
-                value={newMappingClient}
-                onChange={(v) => setNewMappingClient(v)}
-                models={["gpt-5.5","gpt-5.4","gpt-5.4-mini","gpt-5.3-codex","gpt-5.2","claude-sonnet-4-6","claude-opus-4-6","claude-haiku-4-5-20251001","o3","o4-mini","gemini-2.5-flash","gemini-2.5-pro","gemini-3-pro-preview"].filter(m => !(m in modelMapping))}
-                placeholder={t("providers.select_client_model")}
-              />
-              <button type="button" onClick={() => {
-                if (newMappingClient.trim() && !(newMappingClient.trim() in modelMapping)) {
-                  let models: string[] = [];
-                  try { models = supportedModels ? JSON.parse(supportedModels) : []; } catch { /* */ }
-                  setModelMapping({ ...modelMapping, [newMappingClient.trim()]: models[0] || defaultModel || "" });
-                  setNewMappingClient("");
-                }
-              }} className="btn-secondary">{t("routes.add")}</button>
-            </div>
-          </div>
-
-          {/* Advanced settings — collapsible */}
+          {/* ────── Section C · 高级（默认折叠） ──────
+              99% 用户不需要打开。打开后:
+              1) 协议 + 各协议对应 URL 合并成一个 list，一眼看清"这家上游同时支持哪些原生入口"
+              2) base_url 在这里露（custom 类型在 Section A 已经露过则此处隐藏）
+              3) timeout / enabled / auto_cache 都有合理默认，仅 isEdit 显示给"懂的用户"
+              4) Model mapping 在最底部 + 文案"通常无需配置" */}
           <div>
             <button type="button" onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80">
               <span className={`transition-transform ${showAdvanced ? "rotate-90" : ""}`}>&#9654;</span>
               {t("providers.advanced_settings")}
+              <span className="text-text-muted">· {t("providers.advanced_hint")}</span>
             </button>
             {showAdvanced && (
               <div className="mt-3 space-y-4 rounded-md border border-border/50 bg-card-secondary p-4">
-                <Field label={t("providers.protocol")} hint={t("providers.protocol_hint")}>
+                {/* 协议 + URL 合并视图：勾选+对应入口一行一行展示，传达"哪些协议网关能原生送给上游" */}
+                <Field label={t("providers.endpoints")} hint={t("providers.endpoints_hint")}>
                   <div className="space-y-2">
-                    {PROTOCOLS.map((p) => (
-                      <label key={p.value} className="flex cursor-pointer items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={protocols.includes(p.value)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setProtocols([...protocols, p.value]);
-                            } else {
-                              const next = protocols.filter(x => x !== p.value);
-                              if (next.length > 0) setProtocols(next);
-                            }
-                          }}
-                          className="accent-accent"
-                        />
-                        <span className="text-xs text-text-secondary">{p.label}</span>
-                      </label>
-                    ))}
+                    {PROTOCOLS.map((p) => {
+                      const checked = protocols.includes(p.value);
+                      // 每个协议对应的 URL 字段：chat → base_url, anthropic → anthropic_base_url, responses → responses_base_url
+                      const urlValue = p.value === "anthropic_messages" ? anthropicBaseUrl
+                        : p.value === "openai_responses" ? responsesBaseUrl
+                        : baseUrl;
+                      const setUrl = p.value === "anthropic_messages" ? setAnthropicBaseUrl
+                        : p.value === "openai_responses" ? setResponsesBaseUrl
+                        : setBaseUrl;
+                      const placeholder = p.value === "anthropic_messages" ? "https://api.deepseek.com/anthropic"
+                        : p.value === "openai_responses" ? "https://api.openai.com"
+                        : "https://api.example.com";
+                      return (
+                        <div key={p.value} className="rounded-md border border-border bg-bg/40 p-2.5">
+                          <label className="flex cursor-pointer items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) => {
+                                if (e.target.checked) setProtocols([...protocols, p.value]);
+                                else {
+                                  const next = protocols.filter(x => x !== p.value);
+                                  if (next.length > 0) setProtocols(next);
+                                }
+                              }}
+                              className="accent-accent"
+                            />
+                            <span className="text-xs font-medium text-text-secondary">{p.label}</span>
+                          </label>
+                          {checked && (
+                            <input
+                              value={urlValue}
+                              onChange={(e) => setUrl(e.target.value)}
+                              placeholder={placeholder}
+                              className="form-input mt-1.5 text-[11px]"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                </Field>
-
-                <Field label={t("providers.anthropic_url")} hint={t("providers.anthropic_url_hint")}>
-                  <input value={anthropicBaseUrl} onChange={(e) => setAnthropicBaseUrl(e.target.value)} placeholder="https://api.deepseek.com/anthropic" className="form-input" />
-                </Field>
-
-                <Field label={t("providers.responses_url")} hint={t("providers.responses_url_hint")}>
-                  <input value={responsesBaseUrl} onChange={(e) => setResponsesBaseUrl(e.target.value)} placeholder="https://api.openai.com" className="form-input" />
                 </Field>
 
                 <Field label={t("providers.extra_headers")} hint={t("providers.extra_headers_hint")}>
                   <input value={extraHeaders} onChange={(e) => setExtraHeaders(e.target.value)} placeholder='{"User-Agent":"KimiCLI/1.40.0"}' className="form-input" />
                 </Field>
 
-                {/* Cache control toggle — show for Anthropic or providers with anthropic_base_url */}
-                {(providerType === "anthropic" || anthropicBaseUrl) && (
-                  <Field label={t("providers.auto_cache")} hint={providerType === "anthropic" ? t("providers.auto_cache_hint_native") : t("providers.auto_cache_hint_compat")}>
+                {/* auto_cache_control：只在 anthropic-capable 时露，且默认按 type 设好——一般人不动 */}
+                {(providerType === "anthropic" || providerType === "claude" || anthropicBaseUrl) && (
+                  <Field label={t("providers.auto_cache")} hint={providerType === "anthropic" || providerType === "claude" ? t("providers.auto_cache_hint_native") : t("providers.auto_cache_hint_compat")}>
                     <label className="mt-1 flex cursor-pointer items-center gap-2">
                       <input type="checkbox" checked={autoCacheControl} onChange={(e) => setAutoCacheControl(e.target.checked)} className="accent-accent" />
                       <span className="text-xs text-text-secondary">
                         {autoCacheControl ? t("providers.enabled") : t("providers.disabled")}
-                        {providerType === "anthropic" && <span className="ml-1 text-[10px] text-green-400">[{t("providers.recommended")}]</span>}
-                        {providerType !== "anthropic" && anthropicBaseUrl && <span className="ml-1 text-[10px] text-yellow-400">[{t("providers.experimental")}]</span>}
                       </span>
                     </label>
                   </Field>
@@ -597,14 +581,61 @@ export function ProviderFormDialog({
                   <Field label={t("providers.timeout")} error={errors.timeoutSeconds}>
                     <input type="number" value={timeoutSeconds} onChange={(e) => setTimeoutSeconds(e.target.value)} min={1} className="form-input" />
                   </Field>
-                  <Field label={t("providers.enabled")}>
-                    <label className="mt-1.5 flex cursor-pointer items-center gap-2">
-                      <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-accent" />
-                      <span className="text-xs text-text-secondary">
-                        {enabled ? t("providers.enabled") : t("providers.disabled")}
-                      </span>
-                    </label>
-                  </Field>
+                  {isEdit && (
+                    <Field label={t("providers.enabled")}>
+                      <label className="mt-1.5 flex cursor-pointer items-center gap-2">
+                        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} className="accent-accent" />
+                        <span className="text-xs text-text-secondary">
+                          {enabled ? t("providers.enabled") : t("providers.disabled")}
+                        </span>
+                      </label>
+                    </Field>
+                  )}
+                </div>
+
+                {/* Model Mapping——最底部，加"通常无需配置"文案 */}
+                <div className="border-t border-border/50 pt-4">
+                  <label className="mb-1 block text-xs font-medium text-text-secondary">{t("providers.model_mapping")}</label>
+                  <p className="mb-2 text-[11px] text-text-muted">{t("providers.model_mapping_hint_v2")}</p>
+                  <div className="space-y-1.5">
+                    {Object.entries(modelMapping).map(([clientModel, providerModel]) => (
+                      <div key={clientModel} className="flex items-center gap-2">
+                        <input value={clientModel} onChange={(e) => {
+                          const newKey = e.target.value;
+                          if (newKey && newKey !== clientModel) {
+                            const next: Record<string, string> = {};
+                            for (const [k, v] of Object.entries(modelMapping)) {
+                              next[k === clientModel ? newKey : k] = v;
+                            }
+                            setModelMapping(next);
+                          }
+                        }} className="form-input flex-1" />
+                        <span className="text-text-muted">→</span>
+                        <ModelCombo
+                          value={providerModel}
+                          onChange={(v) => setModelMapping({ ...modelMapping, [clientModel]: v })}
+                          models={(() => { try { return supportedModels ? JSON.parse(supportedModels) : []; } catch { return []; } })()}
+                        />
+                        <button type="button" onClick={() => { const next = { ...modelMapping }; delete next[clientModel]; setModelMapping(next); }} className="text-text-muted hover:text-error text-xs">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex gap-2">
+                    <ModelCombo
+                      value={newMappingClient}
+                      onChange={(v) => setNewMappingClient(v)}
+                      models={["gpt-5.5","gpt-5.4","gpt-5.4-mini","gpt-5.3-codex","gpt-5.2","claude-sonnet-4-6","claude-opus-4-6","claude-haiku-4-5-20251001","o3","o4-mini","gemini-2.5-flash","gemini-2.5-pro","gemini-3-pro-preview"].filter(m => !(m in modelMapping))}
+                      placeholder={t("providers.select_client_model")}
+                    />
+                    <button type="button" onClick={() => {
+                      if (newMappingClient.trim() && !(newMappingClient.trim() in modelMapping)) {
+                        let models: string[] = [];
+                        try { models = supportedModels ? JSON.parse(supportedModels) : []; } catch { /* */ }
+                        setModelMapping({ ...modelMapping, [newMappingClient.trim()]: models[0] || defaultModel || "" });
+                        setNewMappingClient("");
+                      }
+                    }} className="btn-secondary">{t("routes.add")}</button>
+                  </div>
                 </div>
               </div>
             )}
