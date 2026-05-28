@@ -10,6 +10,7 @@ describe("MiMo provider endpoints", () => {
     const preset = resolveProviderPresetForKey("mimo", "tp-xxxxx");
     expect(preset?.baseUrl).toBe("https://token-plan-cn.xiaomimimo.com/v1");
     expect(preset?.anthropicBaseUrl).toBe("https://token-plan-cn.xiaomimimo.com/anthropic");
+    expect(preset?.protocols).toContain("anthropic_messages");
   });
 
   it("uses regular hosts for MiMo sk keys", () => {
@@ -25,5 +26,10 @@ describe("MiMo provider endpoints", () => {
   it("does not change non-MiMo presets", () => {
     const preset = resolveProviderPresetForKey("deepseek", "tp-xxxxx");
     expect(preset?.baseUrl).toBe("https://api.deepseek.com");
+  });
+
+  it("enables Claude Code native protocol for DeepSeek", () => {
+    const preset = resolveProviderPresetForKey("deepseek", "deepseek-xxxxx");
+    expect(preset?.protocols).toContain("anthropic_messages");
   });
 });

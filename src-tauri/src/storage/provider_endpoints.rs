@@ -23,6 +23,7 @@ pub fn apply_to_create_input(input: &mut CreateProviderInput) {
         {
             input.anthropic_base_url = Some(urls.anthropic_base_url.to_string());
         }
+        input.protocol = ensure_protocol(&input.protocol, "anthropic_messages");
     }
 }
 
@@ -31,6 +32,7 @@ pub fn apply_to_update_input(
     effective_api_key: Option<&str>,
     current_base_url: &str,
     current_anthropic_base_url: Option<&str>,
+    current_protocol: &str,
     input: &mut UpdateProviderInput,
 ) {
     if let Some(urls) = endpoints_for_provider_key(provider_type, effective_api_key) {
@@ -45,6 +47,8 @@ pub fn apply_to_update_input(
         if anthropic_candidate.map_or(true, should_replace_mimo_url) {
             input.anthropic_base_url = Some(urls.anthropic_base_url.to_string());
         }
+        let protocol = input.protocol.as_deref().unwrap_or(current_protocol);
+        input.protocol = Some(ensure_protocol(protocol, "anthropic_messages"));
     }
 }
 
@@ -98,6 +102,15 @@ fn first_api_key(raw: &str) -> Option<String> {
     Some(value.to_string())
 }
 
+fn ensure_protocol(protocol: &str, wanted: &str) -> String {
+    let mut protocols = serde_json::from_str::<Vec<String>>(protocol)
+        .unwrap_or_else(|_| vec![protocol.to_string()]);
+    if !protocols.iter().any(|p| p == wanted) {
+        protocols.push(wanted.to_string());
+    }
+    serde_json::to_string(&protocols).unwrap_or_else(|_| protocol.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,6 +145,7 @@ mod tests {
             input.anthropic_base_url.as_deref(),
             Some(MIMO_TOKEN_PLAN_ANTHROPIC_URL)
         );
+        assert!(input.protocol.contains("anthropic_messages"));
     }
 
     #[test]
@@ -192,9 +206,48 @@ mod tests {
             Some("tp-xxxxx"),
             "https://proxy.example.com/v1",
             Some("https://proxy.example.com/anthropic"),
+            r#"["openai_chat_completions"]"#,
             &mut input,
         );
         assert_eq!(input.base_url, None);
         assert_eq!(input.anthropic_base_url, None);
+        assert_eq!(
+            input.protocol.as_deref(),
+            Some(r#"["openai_chat_completions","anthropic_messages"]"#)
+        );
+    }
+
+    #[test]
+    fn update_preserves_existing_anthropic_protocol() {
+        let mut input = UpdateProviderInput {
+            name: Some("Renamed".into()),
+            provider_type: None,
+            base_url: None,
+            api_key: None,
+            default_model: None,
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
+            auto_cache_control: None,
+            model_capabilities: None,
+            protocol: Some(r#"["openai_chat_completions","anthropic_messages"]"#.into()),
+            timeout_seconds: None,
+            enabled: None,
+        };
+        apply_to_update_input(
+            "mimo",
+            Some("tp-xxxxx"),
+            MIMO_PAYG_BASE_URL,
+            Some(MIMO_PAYG_ANTHROPIC_URL),
+            r#"["openai_chat_completions"]"#,
+            &mut input,
+        );
+        assert_eq!(
+            input.protocol.as_deref(),
+            Some(r#"["openai_chat_completions","anthropic_messages"]"#)
+        );
     }
 }

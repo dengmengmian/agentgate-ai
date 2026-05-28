@@ -141,6 +141,7 @@ pub fn update(conn: &Connection, id: &str, mut input: UpdateProviderInput) -> Re
         effective_api_key.as_deref(),
         &existing.base_url,
         existing.anthropic_base_url.as_deref(),
+        &existing.protocol,
         &mut input,
     );
 

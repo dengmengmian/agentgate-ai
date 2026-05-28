@@ -99,7 +99,7 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
   },
   deepseek: {
     baseUrl: "https://api.deepseek.com",
-    protocols: ["openai_chat_completions"],
+    protocols: ["openai_chat_completions", "anthropic_messages"],
     defaultModel: "deepseek-v4-flash",
     reasoningModel: "deepseek-v4-pro",
     anthropicBaseUrl: "https://api.deepseek.com/anthropic",
@@ -159,7 +159,7 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
   // China providers
   mimo: {
     baseUrl: MIMO_PAYG_ENDPOINTS.baseUrl,
-    protocols: ["openai_chat_completions"],
+    protocols: ["openai_chat_completions", "anthropic_messages"],
     defaultModel: "mimo-v2.5-pro",
     reasoningModel: "mimo-v2.5-pro",
     anthropicBaseUrl: MIMO_PAYG_ENDPOINTS.anthropicBaseUrl,
