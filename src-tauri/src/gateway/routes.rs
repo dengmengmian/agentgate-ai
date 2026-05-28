@@ -1366,12 +1366,24 @@ pub async fn handle_messages(
         GatewayError(e)
     })?;
 
+    let requested_model = serde_json::from_str::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(str::to_string));
+
     // Select provider — try anthropic_messages protocol first, then openai_responses as fallback
     let selection = crate::gateway::provider_selector::select_for_failover(
-        &state.db, "anthropic_messages", None, None,
-    ).or_else(|_| crate::gateway::provider_selector::select_for_failover(
-        &state.db, "openai_responses", None, None,
-    )).map_err(|e| {
+        &state.db,
+        "anthropic_messages",
+        requested_model.as_deref(),
+        None,
+    ).or_else(|_| {
+        crate::gateway::provider_selector::select_for_failover(
+            &state.db,
+            "openai_responses",
+            requested_model.as_deref(),
+            None,
+        )
+    }).map_err(|e| {
         log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
     })?;
@@ -1387,8 +1399,18 @@ pub async fn handle_messages(
     if config.has_anthropic_url() {
         {
             let target = config.anthropic_messages_url();
+            let resolved_model = selection.model.clone();
             return crate::gateway::pass_through::handle_anthropic(
-                &state.http_client, &state.db, &config, &target, &body, &request_id, start, &client_type, Some(&headers),
+                &state.http_client,
+                &state.db,
+                &config,
+                &target,
+                &body,
+                Some(&resolved_model),
+                &request_id,
+                start,
+                &client_type,
+                Some(&headers),
             ).await.map_err(|e| {
                 log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &raw, None, &e, start.elapsed().as_millis() as i64);
                 GatewayError(e)

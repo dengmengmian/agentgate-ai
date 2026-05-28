@@ -382,6 +382,7 @@ pub async fn handle_anthropic(
     config: &ProviderConfig,
     target_url: &str,
     raw_body: &str,
+    resolved_model: Option<&str>,
     request_id: &str,
     start: Instant,
     client_type: &str,
@@ -396,15 +397,13 @@ pub async fn handle_anthropic(
     let mut body_json: serde_json::Value = serde_json::from_str(raw_body)
         .unwrap_or(serde_json::json!({}));
     if let Some(_requested) = body_json.get("model").and_then(|v| v.as_str()) {
-        // Use model_mapping/supported_models/default_model resolution
-        // We need the full Provider for resolve_model, but we only have ProviderConfig
-        // Just use default_model as fallback since ProviderConfig doesn't have resolve_model
-        let base_model = config.default_model.clone();
+        let base_model = resolved_model.unwrap_or(&config.default_model);
         // Apply CC-only model suffix rewrites (e.g. DeepSeek's [1m] for 1M context).
         // Only fires on the Anthropic passthrough path; the OpenAI/Codex path
         // is untouched, where these suffixes would be invalid.
         let model = crate::gateway::anthropic_model_suffix::for_anthropic(
-            &config.provider_type, &base_model,
+            &config.provider_type,
+            base_model,
         );
         body_json["model"] = serde_json::json!(model);
     }
