@@ -12,10 +12,11 @@
 //! we keep the user-facing model name suffix-free and inject the suffix only
 //! when the request is heading to the Anthropic passthrough handler.
 //!
-//! MiMo's Token Plan Anthropic endpoint documents the same qualifier, but live
-//! requests to `token-plan-cn.xiaomimimo.com/anthropic` currently reject
-//! `mimo-v2.5-pro[1m]` and `mimo-v2.5[1m]`. MiMo models therefore pass through
-//! unchanged unless the user explicitly configured a suffixed model.
+//! MiMo's Claude Code documentation also supports `[1m]` on eligible models.
+//! AgentGate does not force that suffix for MiMo because users may prefer the
+//! base context window, and some keys or plans can reject the suffixed model.
+//! If the user explicitly configures `mimo-v2.5-pro[1m]` through the provider
+//! model or model mapping, the value passes through unchanged.
 
 /// Models that accept `[1m]` on DeepSeek's Anthropic endpoint. Per DeepSeek's
 /// Claude Code doc only V4 Pro supports 1M; V4 Flash is the recommended

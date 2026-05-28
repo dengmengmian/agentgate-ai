@@ -175,7 +175,7 @@ pub fn detect_context_overflow(status: u16, body_snippet: &str) -> Option<String
             "请求超出模型上下文窗口。\n\
              • 如果你在 Codex / Claude Code 中，输入 /compact 压缩历史后重试。\n\
              • 或开启新会话，避免过长的对话历史。\n\
-             • 也可改用支持 1M 上下文的模型（如 deepseek-v4-pro[1m]，仅 Claude Code 路径有效；MiMo 是否支持以后端账号实际返回为准）。"
+             • 也可改用支持 1M 上下文的模型（如 deepseek-v4-pro[1m]；MiMo 可在 Claude Code 模型映射中显式配置 mimo-v2.5-pro[1m]）。"
                 .to_string(),
         )
     } else {
