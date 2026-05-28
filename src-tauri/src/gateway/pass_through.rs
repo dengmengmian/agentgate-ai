@@ -400,7 +400,7 @@ pub async fn handle_anthropic(
         // We need the full Provider for resolve_model, but we only have ProviderConfig
         // Just use default_model as fallback since ProviderConfig doesn't have resolve_model
         let base_model = config.default_model.clone();
-        // Apply CC-only model suffix rewrites (e.g. MiMo's [1m] for 1M context).
+        // Apply CC-only model suffix rewrites (e.g. DeepSeek's [1m] for 1M context).
         // Only fires on the Anthropic passthrough path; the OpenAI/Codex path
         // is untouched, where these suffixes would be invalid.
         let model = crate::gateway::anthropic_model_suffix::for_anthropic(

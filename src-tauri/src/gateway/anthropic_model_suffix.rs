@@ -2,21 +2,20 @@
 //!
 //! Some providers expose a CC-only ("Claude Code") syntax on their Anthropic-
 //! compat endpoint that doesn't exist on their OpenAI endpoint. The canonical
-//! example is the `[1m]` suffix used by both MiMo and DeepSeek to opt the
-//! request into a 1M-token context window:
+//! example is the `[1m]` suffix used by DeepSeek to opt the request into a
+//! 1M-token context window:
 //!
-//!   * MiMo:    "mimo-v2.5-pro[1m]"     (only on /anthropic/v1/messages)
 //!   * DeepSeek: "deepseek-v4-pro[1m]"  (only on /anthropic/v1/messages)
 //!
-//! Both providers' OpenAI endpoints reject the same suffix as an unknown
-//! model. Because Codex uses the OpenAI path and Claude Code uses the
-//! Anthropic path, we can keep the user-facing model name suffix-free and
-//! inject the suffix only when the request is heading to the Anthropic
-//! passthrough handler.
-
-/// Models that accept `[1m]` on MiMo's Anthropic endpoint. Flash (256K) and
-/// Omni (256K) would 400 on the suffix.
-const MIMO_1M_CAPABLE: &[&str] = &["mimo-v2.5-pro", "mimo-v2-pro", "mimo-v2.5"];
+//! DeepSeek's OpenAI endpoint rejects the same suffix as an unknown model.
+//! Because Codex uses the OpenAI path and Claude Code uses the Anthropic path,
+//! we keep the user-facing model name suffix-free and inject the suffix only
+//! when the request is heading to the Anthropic passthrough handler.
+//!
+//! MiMo's Token Plan Anthropic endpoint documents the same qualifier, but live
+//! requests to `token-plan-cn.xiaomimimo.com/anthropic` currently reject
+//! `mimo-v2.5-pro[1m]` and `mimo-v2.5[1m]`. MiMo models therefore pass through
+//! unchanged unless the user explicitly configured a suffixed model.
 
 /// Models that accept `[1m]` on DeepSeek's Anthropic endpoint. Per DeepSeek's
 /// Claude Code doc only V4 Pro supports 1M; V4 Flash is the recommended
@@ -27,7 +26,7 @@ const DEEPSEEK_1M_CAPABLE: &[&str] = &["deepseek-v4-pro"];
 /// the provider has no CC-only rewrite rule, returns the model unchanged.
 pub fn for_anthropic(provider_type: &str, model: &str) -> String {
     if is_mimo(provider_type) {
-        return with_1m_suffix(model, MIMO_1M_CAPABLE);
+        return model.to_string();
     }
     if is_deepseek(provider_type) {
         return with_1m_suffix(model, DEEPSEEK_1M_CAPABLE);
@@ -77,23 +76,22 @@ mod tests {
     // ── MiMo ──
 
     #[test]
-    fn mimo_v25_pro_gets_1m_suffix() {
-        assert_eq!(for_anthropic("mimo", "mimo-v2.5-pro"), "mimo-v2.5-pro[1m]");
+    fn mimo_v25_pro_passes_through() {
+        assert_eq!(for_anthropic("mimo", "mimo-v2.5-pro"), "mimo-v2.5-pro");
     }
 
     #[test]
-    fn mimo_v2_pro_gets_1m_suffix() {
-        assert_eq!(for_anthropic("mimo", "mimo-v2-pro"), "mimo-v2-pro[1m]");
+    fn mimo_v2_pro_passes_through() {
+        assert_eq!(for_anthropic("mimo", "mimo-v2-pro"), "mimo-v2-pro");
     }
 
     #[test]
-    fn mimo_v25_gets_1m_suffix() {
-        assert_eq!(for_anthropic("mimo", "mimo-v2.5"), "mimo-v2.5[1m]");
+    fn mimo_v25_passes_through() {
+        assert_eq!(for_anthropic("mimo", "mimo-v2.5"), "mimo-v2.5");
     }
 
     #[test]
     fn mimo_flash_does_not_get_suffix() {
-        // Flash tops at 256K — appending [1m] would 400 upstream.
         assert_eq!(for_anthropic("mimo", "mimo-v2-flash"), "mimo-v2-flash");
     }
 
@@ -105,51 +103,72 @@ mod tests {
 
     #[test]
     fn mimo_already_suffixed_passes_through() {
-        assert_eq!(for_anthropic("mimo", "mimo-v2.5-pro[1m]"), "mimo-v2.5-pro[1m]");
+        assert_eq!(
+            for_anthropic("mimo", "mimo-v2.5-pro[1m]"),
+            "mimo-v2.5-pro[1m]"
+        );
     }
 
     #[test]
     fn mimo_other_qualifier_respected() {
         // If user explicitly wrote [128k] or anything else, don't touch.
-        assert_eq!(for_anthropic("mimo", "mimo-v2.5-pro[128k]"), "mimo-v2.5-pro[128k]");
+        assert_eq!(
+            for_anthropic("mimo", "mimo-v2.5-pro[128k]"),
+            "mimo-v2.5-pro[128k]"
+        );
     }
 
     #[test]
     fn xiaomi_alias_recognized() {
-        assert_eq!(for_anthropic("xiaomi", "mimo-v2.5-pro"), "mimo-v2.5-pro[1m]");
+        assert_eq!(for_anthropic("xiaomi", "mimo-v2.5-pro"), "mimo-v2.5-pro");
     }
 
     // ── DeepSeek ──
 
     #[test]
     fn deepseek_v4_pro_gets_1m_suffix() {
-        assert_eq!(for_anthropic("deepseek", "deepseek-v4-pro"), "deepseek-v4-pro[1m]");
+        assert_eq!(
+            for_anthropic("deepseek", "deepseek-v4-pro"),
+            "deepseek-v4-pro[1m]"
+        );
     }
 
     #[test]
     fn deepseek_v4_flash_does_not_get_suffix() {
         // Per DeepSeek's CC doc, Flash is the recommended HAIKU model and
         // doesn't support [1m].
-        assert_eq!(for_anthropic("deepseek", "deepseek-v4-flash"), "deepseek-v4-flash");
+        assert_eq!(
+            for_anthropic("deepseek", "deepseek-v4-flash"),
+            "deepseek-v4-flash"
+        );
     }
 
     #[test]
     fn deepseek_legacy_chat_passes_through() {
         // Legacy models (deepseek-chat / deepseek-reasoner) don't support [1m].
         assert_eq!(for_anthropic("deepseek", "deepseek-chat"), "deepseek-chat");
-        assert_eq!(for_anthropic("deepseek", "deepseek-reasoner"), "deepseek-reasoner");
+        assert_eq!(
+            for_anthropic("deepseek", "deepseek-reasoner"),
+            "deepseek-reasoner"
+        );
     }
 
     #[test]
     fn deepseek_already_suffixed_passes_through() {
-        assert_eq!(for_anthropic("deepseek", "deepseek-v4-pro[1m]"), "deepseek-v4-pro[1m]");
+        assert_eq!(
+            for_anthropic("deepseek", "deepseek-v4-pro[1m]"),
+            "deepseek-v4-pro[1m]"
+        );
     }
 
     // ── Other providers ──
 
     #[test]
     fn anthropic_native_unaffected() {
-        assert_eq!(for_anthropic("anthropic", "claude-sonnet-4-6"), "claude-sonnet-4-6");
+        assert_eq!(
+            for_anthropic("anthropic", "claude-sonnet-4-6"),
+            "claude-sonnet-4-6"
+        );
     }
 
     #[test]
@@ -159,6 +178,9 @@ mod tests {
 
     #[test]
     fn unknown_provider_unaffected() {
-        assert_eq!(for_anthropic("custom_openai_compatible", "anything"), "anything");
+        assert_eq!(
+            for_anthropic("custom_openai_compatible", "anything"),
+            "anything"
+        );
     }
 }

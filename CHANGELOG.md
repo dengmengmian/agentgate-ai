@@ -141,10 +141,10 @@ don't 500 on us.
   - Provider 表单加能力矩阵编辑器，"自动识别"按钮按 model 名规则种子填充（MiMo / DeepSeek / Kimi / Moonshot / 通用 fallback）
   - 测试按钮升级：连通性 + 自动识别合并填充缺失行（保留用户手动编辑）
   - Provider 卡片 / Routes 页改用图标行（👁🎤🔊🎞🧠🌐）替代单一 `supports_vision` 徽章
-- **`[1m]` suffix auto-injection / 长上下文后缀自动注入**
-  - Claude Code 透传路径上对 MiMo 和 DeepSeek 的 1M-context 模型自动追加 `[1m]`
-  - Codex（OpenAI）路径完全不动 —— 用户配置 `mimo-v2.5-pro`，CC 端拿到 1M 上下文，Codex 端正常 128K
-  - 已写 `[1m]` 的用户配置 / 不支持 1M 的模型（Flash / Omni）原样保留
+- **`[1m]` suffix handling / 长上下文后缀处理**
+  - Claude Code 透传路径上对 DeepSeek 的 1M-context 模型自动追加 `[1m]`
+  - MiMo Token Plan 模型默认原样发送；当前 Token Plan Anthropic 接口在部分账号下会拒绝 `mimo-v2.5-pro[1m]` / `mimo-v2.5[1m]`
+  - Codex（OpenAI）路径完全不动；已写 `[1m]` 的用户配置原样保留
 - **Codex `web_search_preview` → MiMo `web_search` 翻译**
   - Codex 用户的联网搜索能力穿透到 MiMo 上游
   - 受 `model_capabilities` 矩阵控制：模型行未勾 web_search 则不翻译，避免上游 400
