@@ -358,20 +358,13 @@ async fn process_choices(
             for tc_delta in tcs {
                 let idx = tc_delta.index.unwrap_or(0) as usize;
 
-                if !acc.tool_calls.contains_key(&idx) {
-                    acc.tool_calls.insert(
-                        idx,
-                        AccumulatedToolCall {
-                            id: String::new(),
-                            name: String::new(),
-                            arguments: String::new(),
-                            emitted_added: false,
-                            last_args_len: 0,
-                        },
-                    );
-                }
-
-                let tc = acc.tool_calls.get_mut(&idx).unwrap();
+                let tc = acc.tool_calls.entry(idx).or_insert_with(|| AccumulatedToolCall {
+                    id: String::new(),
+                    name: String::new(),
+                    arguments: String::new(),
+                    emitted_added: false,
+                    last_args_len: 0,
+                });
 
                 if let Some(ref id) = tc_delta.id {
                     if tc.id.is_empty() {

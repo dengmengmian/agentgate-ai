@@ -319,8 +319,7 @@ pub fn fix_tool_message_order(messages: Vec<ChatMessage>) -> Result<Vec<ChatMess
     while i < len {
         let msg = &messages[i];
 
-        if msg.role == "assistant" && msg.tool_calls.is_some() {
-            let tcs = msg.tool_calls.as_ref().unwrap();
+        if let Some(tcs) = msg.tool_calls.as_ref().filter(|_| msg.role == "assistant") {
             let mut expected_ids: Vec<String> = tcs.iter().map(|tc| tc.id.clone()).collect();
             let mut tool_msgs: Vec<ChatMessage> = Vec::new();
             let mut non_tool_msgs: Vec<ChatMessage> = Vec::new();
