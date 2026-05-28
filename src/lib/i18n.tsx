@@ -372,6 +372,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "update.check_failed": { en: "Failed to check for updates", zh: "检查更新失败" },
   "update.install_failed": { en: "Failed to install update", zh: "安装更新失败" },
   "update.restart_hint": { en: "Update installed, restart to apply", zh: "更新已安装，重启生效" },
+  "update.relaunching": { en: "Installed. Relaunching...", zh: "安装完成，正在重启..." },
 
   // ── Settings tabs ──
   "settings.tab.general": { en: "General", zh: "通用" },

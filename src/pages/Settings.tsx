@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2, Settings2, Database, Info, PawPrint, Server } from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "@/components/common/Toast";
@@ -465,10 +466,12 @@ function CheckUpdateButton({ t }: { t: (key: string) => string }) {
       const update = await check();
       if (!update) { setInstalling(false); return; }
       await update.downloadAndInstall();
-      setStatus("latest");
+      // Auto-relaunch into the freshly installed version.
+      toast("success", t("update.relaunching"));
+      await new Promise((r) => setTimeout(r, 800));
+      await relaunch();
     } catch {
       toast("error", t("update.install_failed"));
-    } finally {
       setInstalling(false);
     }
   };

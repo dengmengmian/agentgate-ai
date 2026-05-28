@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.1.2] - 2026-05-28
+
+### 新增
+
+- **更新安装完成后自动重启** —— `tauri-plugin-process` 接入，`downloadAndInstall` 成功后等 800ms（让 "安装完成，正在重启..." 文案渲染一帧）然后调用 `relaunch()`，用户不再需要手动 quit + 重开。覆盖两个入口：右下角 UpdateChecker 浮窗、Settings 页手动检查更新。
+
+---
+
 ## [1.1.1] - 2026-05-27
 
 ### 新增

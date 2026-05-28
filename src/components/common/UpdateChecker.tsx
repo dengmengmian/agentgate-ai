@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { useI18n } from "@/lib/i18n";
 
 export function UpdateChecker() {
@@ -45,9 +46,15 @@ export function UpdateChecker() {
             `${t("update.downloading")} (${(event.data.contentLength / 1024 / 1024).toFixed(1)} MB)`
           );
         } else if (event.event === "Finished") {
-          setProgress(t("update.restart_hint"));
+          setProgress(t("update.installing"));
         }
       });
+      // Install done — relaunch so the user lands on the new version without
+      // manually quitting. Brief delay lets the "Installed. Relaunching..."
+      // message render before the process disappears.
+      setProgress(t("update.relaunching"));
+      await new Promise((r) => setTimeout(r, 800));
+      await relaunch();
     } catch {
       setInstalling(false);
       setProgress("");
