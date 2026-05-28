@@ -398,9 +398,9 @@ pub async fn handle_anthropic(
         .unwrap_or(serde_json::json!({}));
     if let Some(_requested) = body_json.get("model").and_then(|v| v.as_str()) {
         let base_model = resolved_model.unwrap_or(&config.default_model);
-        // Apply CC-only model suffix rewrites (e.g. DeepSeek's [1m] for 1M context).
-        // Only fires on the Anthropic passthrough path; the OpenAI/Codex path
-        // is untouched, where these suffixes would be invalid.
+        // Preserve explicit Anthropic-only model qualifiers (for example [1m])
+        // only on the Anthropic passthrough path. OpenAI/Codex paths use their
+        // own resolved model value before reaching this handler.
         let model = crate::gateway::anthropic_model_suffix::for_anthropic(
             &config.provider_type,
             base_model,

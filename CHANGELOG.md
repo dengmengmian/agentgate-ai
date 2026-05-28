@@ -142,8 +142,7 @@ don't 500 on us.
   - 测试按钮升级：连通性 + 自动识别合并填充缺失行（保留用户手动编辑）
   - Provider 卡片 / Routes 页改用图标行（👁🎤🔊🎞🧠🌐）替代单一 `supports_vision` 徽章
 - **`[1m]` suffix handling / 长上下文后缀处理**
-  - Claude Code 透传路径上对 DeepSeek 的 1M-context 模型自动追加 `[1m]`
-  - MiMo 官方 Claude Code 路径支持 `mimo-v2.5-pro[1m]` 等显式模型 ID；AgentGate 默认原样发送，已写 `[1m]` 的用户配置 / model_mapping 原样保留
+  - MiMo / DeepSeek 官方 Claude Code 路径支持 `mimo-v2.5-pro[1m]` / `deepseek-v4-pro[1m]` 等显式模型 ID；AgentGate 默认原样发送，已写 `[1m]` 的用户配置 / model_mapping 原样保留
   - Codex（OpenAI）路径完全不动
 - **Codex `web_search_preview` → MiMo `web_search` 翻译**
   - Codex 用户的联网搜索能力穿透到 MiMo 上游
