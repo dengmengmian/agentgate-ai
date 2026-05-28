@@ -7,8 +7,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "nav.overview": { en: "Overview", zh: "概览" },
   "nav.clients": { en: "Clients", zh: "客户端" },
   "nav.providers": { en: "Providers", zh: "服务商" },
-  "nav.routes": { en: "Routes", zh: "路由" },
-  "nav.gateway": { en: "Gateway", zh: "网关" },
+  "nav.routes": { en: "Routing", zh: "路由策略" },
+  "nav.gateway": { en: "Service", zh: "服务" },
   "nav.logs": { en: "Logs", zh: "日志" },
   "nav.diagnostics": { en: "Diagnostics", zh: "诊断" },
   "nav.quick_setup": { en: "Quick Setup", zh: "快速配置" },
@@ -18,6 +18,12 @@ const translations: Record<string, Record<Locale, string>> = {
   "topbar.stopped": { en: "Stopped", zh: "已停止" },
 
   // ── Dashboard ──
+  "dashboard.empty_title": { en: "Get started in 60 seconds", zh: "60 秒上手 AgentGate" },
+  "dashboard.empty_desc": {
+    en: "Paste any AI provider API key — AgentGate auto-detects the provider, configures your AI coding agents (Codex, Claude Code, Gemini CLI…), and you're ready to go.",
+    zh: "粘贴任意 AI 服务商的 API key——AgentGate 自动识别厂商、配置 Codex / Claude Code / Gemini CLI 等编码 agent，开箱即用。",
+  },
+  "dashboard.empty_cta": { en: "Start with Quick Setup", zh: "用快速配置开始" },
   "dashboard.gateway": { en: "Gateway", zh: "网关" },
   "dashboard.provider": { en: "Provider", zh: "服务商" },
   "dashboard.input": { en: "Input", zh: "输入" },
@@ -68,6 +74,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.reasoning_model": { en: "Reasoning Model", zh: "推理模型" },
   "providers.timeout": { en: "Timeout", zh: "超时" },
   "providers.created": { en: "Provider created", zh: "服务商已创建" },
+  "providers.hint_setup_failover": { en: "Set up failover chain?", zh: "顺手配下失败转移？" },
+  "providers.go_routing": { en: "Routing →", zh: "去配置 →" },
   "providers.updated": { en: "Provider updated", zh: "服务商已更新" },
   "providers.deleted": { en: "deleted", zh: "已删除" },
   "providers.now_active": { en: "is now active", zh: "已设为活跃" },

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2, Settings2, Database, Info, PawPrint, Server } from "lucide-react";
+import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2, Settings2, Database, Info, PawPrint } from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
@@ -21,12 +21,14 @@ import { OxPet } from "@/pet/pets/OxPet";
 import { SuperSoldierPet } from "@/pet/pets/SuperSoldierPet";
 import { CoderPet } from "@/pet/pets/CoderPet";
 
-type Tab = "general" | "security" | "gateway" | "data" | "pet" | "about";
+type Tab = "general" | "security" | "data" | "pet" | "about";
 
+// Gateway 标签曾经在这里，但与顶级"服务"页面（src/pages/Gateway.tsx）
+// 语义重叠（都是 host/port/protocol 配置），且这里是只读、那边可改——
+// 用户混淆。删掉这里的 tab，统一去顶级"服务"页编辑。
 const TABS: { id: Tab; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "general", icon: Settings2 },
   { id: "security", icon: Shield },
-  { id: "gateway", icon: Server },
   { id: "data", icon: Database },
   { id: "pet", icon: PawPrint },
   { id: "about", icon: Info },
@@ -227,18 +229,6 @@ export function Settings() {
               <button onClick={handleCopyToken} className="btn-secondary"><Copy className="h-3 w-3" />{t("settings.copy_token")}</button>
               <button onClick={() => setConfirmRegen(true)} className="btn-secondary"><RefreshCcw className="h-3 w-3" />{t("settings.regenerate_token")}</button>
               <button onClick={() => api.openTokenFolder()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("settings.open_token_folder")}</button>
-            </div>
-          </section>
-        )}
-
-        {tab === "gateway" && (
-          <section className="rounded-xl border border-border bg-card p-5">
-            <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.gateway")}</h3>
-            <div className="space-y-4">
-              <SettingsRow label={t("gateway.listen_address")} value={settings.host} />
-              <SettingsRow label={t("gateway.port")} value={String(settings.port)} />
-              <SettingsRow label={t("gateway.input_protocol")} value={settings.input_protocol} />
-              <SettingsRow label={t("gateway.output_protocol")} value={settings.output_protocol} />
             </div>
           </section>
         )}
@@ -543,14 +533,6 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (val:
   );
 }
 
-function SettingsRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm text-text-primary">{label}</span>
-      <span className="font-mono text-xs text-text-secondary">{value}</span>
-    </div>
-  );
-}
 
 function CheckUpdateButton({ t }: { t: (key: string) => string }) {
   const [checking, setChecking] = useState(false);

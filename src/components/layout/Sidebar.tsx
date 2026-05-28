@@ -15,12 +15,15 @@ import { getVersion } from "@tauri-apps/api/app";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
+// 顺序按新用户配置任务流：
+// 看运行情况（概览） → 配上游（服务商） → 接客户端（客户端） →
+// 启停服务（服务） → 高级失败转移（路由策略） → 用了之后看日志和诊断 → 设置
 const navItems = [
   { to: "/", labelKey: "nav.overview", icon: LayoutDashboard },
   { to: "/providers", labelKey: "nav.providers", icon: Cloud },
-  { to: "/routes", labelKey: "nav.routes", icon: GitBranch },
-  { to: "/gateway", labelKey: "nav.gateway", icon: Radio },
   { to: "/tools", labelKey: "nav.clients", icon: Monitor },
+  { to: "/gateway", labelKey: "nav.gateway", icon: Radio },
+  { to: "/routes", labelKey: "nav.routes", icon: GitBranch },
   { to: "/logs", labelKey: "nav.logs", icon: ScrollText },
   { to: "/diagnostics", labelKey: "nav.diagnostics", icon: Stethoscope },
   { to: "/settings", labelKey: "nav.settings", icon: Settings },
