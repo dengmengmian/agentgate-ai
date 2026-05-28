@@ -276,10 +276,16 @@ pub async fn handle_responses(
                 return Ok(response);
             }
             Err(GatewayError(err)) => {
+                // 从 err.message 提取 "Provider returned HTTP {status}" 里的状态码。
+                // 之前是从 err.detail（上游 body）扫"HTTP "字串——但 detail 是上游
+                // 原始响应（可能是 HTML / SSE 帧 / JSON），不保证含 "HTTP "。adapter.rs
+                // 里 message 才是 canonical 的 "Provider returned HTTP 500 ..."，从这里
+                // 提取永远靠谱。修这个 bug 后，HTML 错误页等"detail 里没 HTTP 串"的
+                // 场景能正确识别状态码，进而触发 5xx failover。
                 let status_code = match err.code.as_str() {
                     "UPSTREAM_NON_STREAM_ERROR" | "UPSTREAM_STREAM_ERROR" => {
-                        err.detail.as_ref().and_then(|d| {
-                            d.find("HTTP ").and_then(|i| d[i+5..].split_whitespace().next()?.parse::<u16>().ok())
+                        err.message.find("HTTP ").and_then(|i| {
+                            err.message[i + 5..].split_whitespace().next()?.parse::<u16>().ok()
                         })
                     }
                     "PROVIDER_REQUEST_FAILED" => Some(502),

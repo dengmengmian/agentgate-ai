@@ -221,12 +221,55 @@ fn build_upstream_error(
     status_code: u16,
     body_snippet: &str,
 ) -> AppError {
-    let mut err = AppError::new(code, message).with_detail(truncate(body_snippet, 2000));
+    // 上游网关有时直接返回 HTML 错误页（openresty / nginx / cloudflare 等
+    // 反代，到 origin 的连接挂了时返回 502/503/504 HTML），如果原样塞进 detail
+    // 用户看到的是"Provider returned HTTP 500 Internal Server Error: <html>...
+    // <h1>502 Bad Gateway</h1>...</html>"——又长又懵。检测到这类页面就压缩成
+    // 一句中文描述，把 HTML 留给 raw_response（log row）做完整取证。
+    let detail = match summarize_html_gateway_error(body_snippet) {
+        Some(s) => s,
+        None => truncate(body_snippet, 2000),
+    };
+    let mut err = AppError::new(code, message).with_detail(detail);
     let transform = crate::transform::providers::for_config(config);
     if let Some(suggestion) = transform.enhance_error(status_code, body_snippet) {
         err = err.with_suggestion(suggestion);
     }
     err
+}
+
+/// 识别上游网关 HTML 错误页（openresty / nginx / cloudflare 等），抽出
+/// 关键状态码 + 网关守护进程名，返回一句中文摘要。
+///
+/// 触发条件：body 含 `<html` 且能从中提取 5xx 状态码或经典 marker。
+/// 否则返回 None，调用方维持原 body truncated 行为。
+fn summarize_html_gateway_error(body: &str) -> Option<String> {
+    let lower = body.to_ascii_lowercase();
+    if !lower.contains("<html") {
+        return None;
+    }
+    // 上游网关 5xx 的典型 marker。顺序按出现频率排：openresty 是 MiMo / Kimi /
+    // 大量国产 OpenAI 兼容上游的默认反代。
+    let upstream_kind = if lower.contains("openresty") {
+        "openresty"
+    } else if lower.contains("cloudflare") {
+        "cloudflare"
+    } else if lower.contains("nginx") {
+        "nginx"
+    } else {
+        "上游网关"
+    };
+    // 从 HTML 里取 502/503/504/500 这几个常见状态码（按优先级，502 最常见）。
+    let upstream_status = ["502 Bad Gateway", "504 Gateway Time-out", "504 Gateway Timeout", "503 Service Unavailable", "500 Internal Server Error"]
+        .iter()
+        .find(|s| body.contains(*s))
+        .copied()
+        .unwrap_or("5xx 错误");
+    Some(format!(
+        "{upstream_kind} 返回 HTML 错误页：{upstream_status}。\
+         通常是上游网关到其后端 origin 的连接出问题（origin 抖动/重启/超时），\
+         不是请求本身的问题。建议立刻重试，或切到 route profile 里下一个 provider。"
+    ))
 }
 
 /// Send a non-streaming chat completions request with automatic retry.
@@ -681,6 +724,39 @@ fn truncate(s: &str, max: usize) -> String {
 mod tests {
     use super::*;
     use crate::models::provider::Provider;
+
+    #[test]
+    fn summarize_openresty_502() {
+        let body = "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>";
+        let s = summarize_html_gateway_error(body).expect("should match");
+        assert!(s.contains("openresty"));
+        assert!(s.contains("502 Bad Gateway"));
+        assert!(s.contains("立刻重试"));
+    }
+
+    #[test]
+    fn summarize_cloudflare_503() {
+        let body = "<html><body><h1>503 Service Unavailable</h1>Cloudflare</body></html>";
+        let s = summarize_html_gateway_error(body).expect("should match");
+        assert!(s.contains("cloudflare"));
+        assert!(s.contains("503 Service Unavailable"));
+    }
+
+    #[test]
+    fn summarize_returns_none_for_json_error() {
+        // 普通 OpenAI 风格 JSON 错误体不应被压缩——detail 留全文给 provider 排查。
+        let body = r#"{"error":{"code":"insufficient_quota","message":"You exceeded your quota"}}"#;
+        assert!(summarize_html_gateway_error(body).is_none());
+    }
+
+    #[test]
+    fn summarize_handles_mimo_sse_html_wrapper() {
+        // MiMo 网关把 HTML 包成 SSE data 帧的真实形态。
+        let body = r#"data: {"error":{"code":"500","message":"<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>openresty</center>\r\n</body>\r\n</html>\r\n","type":"Internal Server Error"}}"#;
+        let s = summarize_html_gateway_error(body).expect("should match");
+        assert!(s.contains("openresty"));
+        assert!(s.contains("502 Bad Gateway"));
+    }
 
     fn test_provider() -> Provider {
         Provider {
