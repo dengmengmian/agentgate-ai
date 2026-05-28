@@ -56,6 +56,7 @@ pub async fn handle(
     config: &ProviderConfig,
     target_url: &str,
     raw_body: &str,
+    resolved_model: Option<&str>,
     request_id: &str,
     start: Instant,
     client_type: &str,
@@ -66,14 +67,15 @@ pub async fn handle(
 
     let is_stream = body_json.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
 
-    // Keep the model if it's in provider's supported list, otherwise use default.
+    // Prefer the route selector's resolved model. It has access to model_mapping
+    // and supported_models, while this lightweight ProviderConfig only carries
+    // default/reasoning models.
     let requested = body_json.get("model").and_then(|v| v.as_str()).unwrap_or("");
     let is_known = requested == config.default_model
         || config.reasoning_model.as_deref() == Some(requested);
-    // Note: pass_through doesn't have access to supported_models list from ProviderConfig,
-    // but default_model + reasoning_model cover the main cases. For full list matching,
-    // the provider_selector already resolved the correct model before pass_through is called.
-    let model = if is_known { requested.to_string() } else { config.default_model.clone() };
+    let model = resolved_model
+        .map(str::to_string)
+        .unwrap_or_else(|| if is_known { requested.to_string() } else { config.default_model.clone() });
     body_json["model"] = serde_json::json!(&model);
     let rewritten_body = body_json.to_string();
 
