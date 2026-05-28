@@ -550,19 +550,19 @@ Codex 发送含图片的请求
 
 ## 数据链路
 
-AgentGate 有两种工作模式：**协议转换**和**透明代理**。
+AgentGate 把“协议是否转换”和“模型名是否改写”分开看。常见有三种请求模式：
 
-> **如何区分？** 看客户端协议和下游 Provider 是否一致。不一致就需要协议转换，一致就走透明代理。
+> **如何区分？** 先看客户端协议是否匹配上游原生入口。匹配就不做协议转换；模型名是另一层规则：命中 Model Mapping 时仍然会改写 `model`。
 
 | 客户端 | 发送协议 | 下游 Provider | AgentGate 模式 | 触发条件 |
 |---|---|---|---|---|
 | Codex | Responses API | Chat Completions | 协议转换 | 默认（无特殊 URL） |
 | Codex | Responses API | Claude Messages API | 协议转换 | `provider_type` 为 `anthropic` |
-| Codex | Responses API | Responses API | 透明代理 | 配置了 `responses_base_url` |
+| Codex | Responses API | Responses API | 原生直连 | 配置了 `responses_base_url` |
 | Claude Code | Messages API | Chat Completions | 协议转换 | 无 `anthropic_base_url` |
-| Claude Code | Messages API | Anthropic 兼容端点 | 透明代理 | 配置了 `anthropic_base_url` |
-| OpenCode | Chat Completions | Chat Completions | 透明代理 | 同协议直通 |
-| curl / New API 等 | Chat Completions | Chat Completions | 透明代理 | 同协议直通 |
+| Claude Code | Messages API | Anthropic 兼容端点 | 原生直连 + 模型映射 | 配置了 `anthropic_base_url`，且 `claude-*` 映射到上游模型 |
+| OpenCode | Chat Completions | Chat Completions | 原生直连 | 同协议且模型名就是上游模型名 |
+| curl / New API 等 | Chat Completions | Chat Completions | 原生直连 | 同协议且模型名就是上游模型名 |
 
 ### 协议转换
 
@@ -612,9 +612,9 @@ AgentGate 有两种工作模式：**协议转换**和**透明代理**。
    └──────────────┘               └──────────────┘
 ```
 
-### 透明代理
+### 原生直连
 
-客户端协议和下游 Provider 一致时，AgentGate 不做格式转换，只替换地址、凭证和模型名。请求体和响应流完整透传。
+客户端协议和下游 Provider 一致时，AgentGate 不做格式转换，只替换目标地址和凭证。模型名遵循一条规则：Model Mapping 命中就改写；未命中就保留客户端请求里的 `model`；客户端没传 `model` 时才使用 provider 默认模型。
 
 ```
 ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
@@ -632,10 +632,10 @@ AgentGate 有两种工作模式：**协议转换**和**透明代理**。
 │     /v1/messages          → Claude Code Default                         │
 │     /v1/chat/completions  → OpenCode Default                            │
 │                         ▼                                               │
-│  ③ 透明代理                                                             │
+│  ③ 原生直连                                                             │
 │     替换目标 URL（base_url 或 anthropic_base_url）                      │
 │     注入 Provider API Key                                               │
-│     映射 model 名称（如 gpt-5.5 → deepseek-v4-flash）                  │
+│     可选模型映射（claude-* → mimo/deepseek 模型）                      │
 │     请求体原样转发 ──→ 响应流原样回传                                   │
 │                         ▼                                               │
 │  ④ 日志记录 → SQLite                                                   │
@@ -648,8 +648,8 @@ AgentGate 有两种工作模式：**协议转换**和**透明代理**。
   └──────────────┘ └──────────────┘   └──────────────┘
 
 触发条件：
-  • /v1/messages    + Provider 配置了 anthropic_base_url → Messages API 透明代理
-  • /v1/chat/completions → Chat Completions 透明代理（所有 Provider 都支持）
+  • /v1/messages    + Provider 配置了 anthropic_base_url → Messages API 原生直连
+  • /v1/chat/completions → Chat Completions 原生直连（所有 Provider 都支持）
 ```
 
 ### 链路示例
@@ -669,27 +669,28 @@ Codex 发送 input_image
   → ⑧ 转回 Responses API 格式 → 返回给 Codex
 ```
 
-**Claude Code → DeepSeek（透明代理）：**
+**Claude Code → DeepSeek（原生直连 + 模型映射）：**
 
 ```
 Claude Code 发送 Messages API 请求
   → /v1/messages
   → ① 认证通过
   → ② 匹配 Claude Code Default Route Profile
-  → ③ DeepSeek 配有 anthropic_base_url → 透明代理
+  → ③ DeepSeek 配有 anthropic_base_url → 原生直连
+  → 模型映射：claude-sonnet-4-6 → deepseek-v4-pro[1m]（可选）
   → 替换 URL 为 api.deepseek.com/anthropic + 注入 API Key
   → 请求体原样透传 → SSE 响应流原样回传
   → ④ 记录日志
 ```
 
-**OpenCode / curl / New API 客户端（透明代理）：**
+**OpenCode / curl / New API 客户端（原生直连）：**
 
 ```
 客户端发送 Chat Completions 请求
   → /v1/chat/completions
   → ① 认证通过
   → ② 匹配 Route Profile
-  → ③ 透明代理：替换 URL + API Key + model 映射
+  → ③ 原生直连：替换 URL + API Key；model 未命中映射时保持原样
   → 请求体原样转发 → SSE 响应流原样回传
   → ④ 记录日志
 ```

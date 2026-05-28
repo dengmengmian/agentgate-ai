@@ -1399,14 +1399,14 @@ pub async fn handle_messages(
     if config.has_anthropic_url() {
         {
             let target = config.anthropic_messages_url();
-            let resolved_model = selection.model.clone();
+            let model_override = explicit_model_mapping(&selection.provider, requested_model.as_deref());
             return crate::gateway::pass_through::handle_anthropic(
                 &state.http_client,
                 &state.db,
                 &config,
                 &target,
                 &body,
-                Some(&resolved_model),
+                model_override.as_deref(),
                 &request_id,
                 start,
                 &client_type,

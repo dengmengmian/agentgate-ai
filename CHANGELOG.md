@@ -18,6 +18,7 @@ All notable changes to this project will be documented in this file.
 
 ### 修复
 
+- **原生直连模型解析规则收敛** —— 原生直连路径不再把“未命中映射”自动 fallback 到 `default_model`：Model Mapping 命中才改写模型名，未命中保持客户端 `model` 原样；只有协议转换路径继续使用 `default_model` 兜底。请求日志 trace 也区分 `native_pass_through` 和 `native_pass_through_model_mapping`，避免把“原生直连”和“协议转换”混在一起。
 - **测试连接 "缓存支持检测" 卡死** —— 两个独立 bug 叠加：
   1. 后端 `detect_provider_cache` 用 `provider.timeout_seconds`（默认 120s+）作 HTTP timeout，跑两次请求。OpenAI 系 provider 误配 `anthropic_base_url` 时要等满 240s+ 才失败。改用 `min(provider.timeout_seconds, 15)` 硬上限
   2. 前端 `TestConnectionDialog` 的 `useEffect` 依赖了 `onClose` / `onSuccess` 闭包，父组件 `usePolling` 每 10s 重渲染产生新引用 → useEffect cleanup 重启 → 测试从头跑一遍。改用 `useRef` 持有最新回调，useEffect 只依赖 `provider?.id`

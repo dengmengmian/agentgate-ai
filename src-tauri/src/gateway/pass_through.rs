@@ -73,16 +73,33 @@ pub async fn handle(
     // Only rewrite when the caller supplies an explicit override (for example,
     // model_mapping). If the client omitted model entirely, fall back to default.
     let requested = body_json.get("model").and_then(|v| v.as_str()).unwrap_or("");
-    let model = model_override
-        .map(str::to_string)
-        .unwrap_or_else(|| if requested.is_empty() { config.default_model.clone() } else { requested.to_string() });
+    let (model, model_resolution) = resolve_native_model(requested, model_override, &config.default_model);
+    let trace_mode = native_trace_mode(model_override);
     body_json["model"] = serde_json::json!(&model);
     let rewritten_body = body_json.to_string();
 
     if is_stream {
-        handle_stream(http_client, db, config, target_url, route, client_protocol, &rewritten_body, request_id, &model, start, client_type, client_headers).await
+        handle_stream(http_client, db, config, target_url, route, client_protocol, &rewritten_body, request_id, &model, trace_mode, model_resolution, start, client_type, client_headers).await
     } else {
-        handle_non_stream(http_client, db, config, target_url, route, client_protocol, &rewritten_body, request_id, &model, start, client_type, client_headers).await
+        handle_non_stream(http_client, db, config, target_url, route, client_protocol, &rewritten_body, request_id, &model, trace_mode, model_resolution, start, client_type, client_headers).await
+    }
+}
+
+fn resolve_native_model(requested: &str, model_override: Option<&str>, default_model: &str) -> (String, &'static str) {
+    if let Some(mapped) = model_override {
+        return (mapped.to_string(), "model_mapping");
+    }
+    if requested.is_empty() {
+        return (default_model.to_string(), "default_model");
+    }
+    (requested.to_string(), "request_model")
+}
+
+fn native_trace_mode(model_override: Option<&str>) -> &'static str {
+    if model_override.is_some() {
+        "native_pass_through_model_mapping"
+    } else {
+        "native_pass_through"
     }
 }
 
@@ -96,6 +113,8 @@ async fn handle_non_stream(
     raw_body: &str,
     request_id: &str,
     model: &str,
+    trace_mode: &str,
+    model_resolution: &str,
     start: Instant,
     client_type: &str,
     client_headers: Option<&HeaderMap>,
@@ -117,9 +136,10 @@ async fn handle_non_stream(
     let latency = start.elapsed().as_millis() as i64;
 
     let trace = json!({
-        "mode": "pass_through",
+        "mode": trace_mode,
         "client_protocol": client_protocol,
         "provider_protocol": client_protocol,
+        "model_resolution": model_resolution,
         "route": route,
         "target_url": target_url,
         "upstream_status": upstream_status.as_u16(),
@@ -161,6 +181,8 @@ async fn handle_stream(
     raw_body: &str,
     request_id: &str,
     model: &str,
+    trace_mode: &str,
+    model_resolution: &str,
     start: Instant,
     client_type: &str,
     client_headers: Option<&HeaderMap>,
@@ -184,9 +206,10 @@ async fn handle_stream(
         let latency = start.elapsed().as_millis() as i64;
 
         let trace = json!({
-            "mode": "pass_through",
+            "mode": trace_mode,
             "client_protocol": client_protocol,
             "provider_protocol": client_protocol,
+            "model_resolution": model_resolution,
             "route": route,
             "target_url": target_url,
             "upstream_status": upstream_status.as_u16(),
@@ -225,6 +248,8 @@ async fn handle_stream(
     let target = target_url.to_string();
     let route_owned = route.to_string();
     let client_protocol_owned = client_protocol.to_string();
+    let trace_mode_owned = trace_mode.to_string();
+    let model_resolution_owned = model_resolution.to_string();
     let api_key = config.api_key().to_string();
     let client_type_owned = client_type.to_string();
 
@@ -278,9 +303,10 @@ async fn handle_stream(
 
         let latency = start.elapsed().as_millis() as i64;
         let trace = serde_json::json!({
-            "mode": "pass_through",
+            "mode": &trace_mode_owned,
             "client_protocol": &client_protocol_owned,
             "provider_protocol": &client_protocol_owned,
+            "model_resolution": &model_resolution_owned,
             "route": &route_owned,
             "target_url": &target,
             "stream": true,
@@ -382,7 +408,7 @@ pub async fn handle_anthropic(
     config: &ProviderConfig,
     target_url: &str,
     raw_body: &str,
-    resolved_model: Option<&str>,
+    model_override: Option<&str>,
     request_id: &str,
     start: Instant,
     client_type: &str,
@@ -393,20 +419,19 @@ pub async fn handle_anthropic(
         .and_then(|v| v.get("stream")?.as_bool())
         .unwrap_or(false);
 
-    // Rewrite model using provider's resolve_model
     let mut body_json: serde_json::Value = serde_json::from_str(raw_body)
         .unwrap_or(serde_json::json!({}));
-    if let Some(_requested) = body_json.get("model").and_then(|v| v.as_str()) {
-        let base_model = resolved_model.unwrap_or(&config.default_model);
-        // Preserve explicit Anthropic-only model qualifiers (for example [1m])
-        // only on the Anthropic passthrough path. OpenAI/Codex paths use their
-        // own resolved model value before reaching this handler.
-        let model = crate::gateway::anthropic_model_suffix::for_anthropic(
-            &config.provider_type,
-            base_model,
-        );
-        body_json["model"] = serde_json::json!(model);
-    }
+    let requested = body_json.get("model").and_then(|v| v.as_str()).unwrap_or("");
+    let (base_model, model_resolution) = resolve_native_model(requested, model_override, &config.default_model);
+    let trace_mode = native_trace_mode(model_override);
+    // Preserve explicit Anthropic-only model qualifiers (for example [1m])
+    // only on the Anthropic passthrough path. OpenAI/Codex paths use their
+    // own resolved model value before reaching this handler.
+    let model = crate::gateway::anthropic_model_suffix::for_anthropic(
+        &config.provider_type,
+        &base_model,
+    );
+    body_json["model"] = serde_json::json!(&model);
     let rewritten_body = body_json.to_string();
 
     // Anthropic uses x-api-key header instead of Bearer.
@@ -442,9 +467,9 @@ pub async fn handle_anthropic(
             let body_text = resp.text().await.unwrap_or_default();
             let sanitized = sanitize(&body_text, config.api_key());
             let latency = start.elapsed().as_millis() as i64;
-            log_to_db(db, client_type, "/v1/messages", request_id, &config.name, &config.default_model,
+            log_to_db(db, client_type, "/v1/messages", request_id, &config.name, &model,
                 &sanitize(raw_body, config.api_key()), "", Some(&truncate(&sanitized, 2000)),
-                &json!({"mode":"anthropic_pass_through","target":target_url}).to_string(),
+                &json!({"mode":trace_mode,"target":target_url,"model_resolution":model_resolution}).to_string(),
                 status.as_u16() as i64, latency);
             let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
             return Ok(Response::builder().status(axum_status)
@@ -456,12 +481,14 @@ pub async fn handle_anthropic(
         let (tx, rx) = mpsc::channel::<String>(512);
         let db_clone = db.clone();
         let provider_name = config.name.clone();
-        let model = config.default_model.clone();
+        let model = model.clone();
         let req_id = request_id.to_string();
         let raw_req = sanitize(raw_body, config.api_key());
         let target = target_url.to_string();
         let api_key = config.api_key().to_string();
         let client_type_owned = client_type.to_string();
+        let trace_mode_owned = trace_mode.to_string();
+        let model_resolution_owned = model_resolution.to_string();
 
         tokio::spawn(async move {
             let mut stream = resp.bytes_stream();
@@ -489,7 +516,7 @@ pub async fn handle_anthropic(
                 }
             }
             let latency = start.elapsed().as_millis() as i64;
-            let trace = json!({"mode":"anthropic_pass_through","target":&target,"stream":true}).to_string();
+            let trace = json!({"mode":&trace_mode_owned,"target":&target,"model_resolution":&model_resolution_owned,"stream":true}).to_string();
             let sanitized_sse = sanitize(&sse_log, &api_key);
             if let Some(conn) = lock_db(&db_clone) {
                 let _ = crate::storage::request_logs::insert(
@@ -518,9 +545,9 @@ pub async fn handle_anthropic(
         let body_text = resp.text().await.unwrap_or_default();
         let sanitized = sanitize(&body_text, config.api_key());
         let latency = start.elapsed().as_millis() as i64;
-        let trace = json!({"mode":"anthropic_pass_through","target":target_url}).to_string();
+        let trace = json!({"mode":trace_mode,"target":target_url,"model_resolution":model_resolution}).to_string();
         let err_msg = if status.is_success() { None } else { Some(truncate(&sanitized, 2000)) };
-        log_to_db(db, client_type, "/v1/messages", request_id, &config.name, &config.default_model,
+        log_to_db(db, client_type, "/v1/messages", request_id, &config.name, &model,
             &sanitize(raw_body, config.api_key()), &sanitized,
             err_msg.as_deref(),
             &trace, status.as_u16() as i64, latency);
@@ -534,6 +561,30 @@ pub async fn handle_anthropic(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_model_mapping_wins() {
+        assert_eq!(
+            resolve_native_model("claude-sonnet-4-6", Some("mimo-v2.5-pro[1m]"), "mimo-v2.5-pro"),
+            ("mimo-v2.5-pro[1m]".to_string(), "model_mapping")
+        );
+    }
+
+    #[test]
+    fn native_model_preserves_request_when_unmapped() {
+        assert_eq!(
+            resolve_native_model("mimo-v2.5-pro", None, "mimo-v2.5"),
+            ("mimo-v2.5-pro".to_string(), "request_model")
+        );
+    }
+
+    #[test]
+    fn native_model_uses_default_only_when_missing() {
+        assert_eq!(
+            resolve_native_model("", None, "mimo-v2.5-pro"),
+            ("mimo-v2.5-pro".to_string(), "default_model")
+        );
+    }
 
     #[test]
     fn test_sanitize_replaces_api_key() {

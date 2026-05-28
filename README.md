@@ -566,19 +566,19 @@ Providers marked **Provider-specific handling** have dedicated transform code in
 
 ## Data Flow
 
-AgentGate operates in two modes: **protocol conversion** and **transparent proxy**.
+AgentGate separates protocol handling from model naming. There are three common request modes:
 
-> **How to tell?** If the client protocol matches the downstream provider protocol, it's a transparent proxy. Otherwise, protocol conversion is needed.
+> **How to tell?** First check whether the client protocol matches a native provider endpoint. If it matches, the request is forwarded without protocol conversion. Model names are a separate concern: a matching Model Mapping can still rename `model`.
 
 | Client | Sends | Downstream Provider | AgentGate Mode | Trigger |
 |---|---|---|---|---|
 | Codex | Responses API | Chat Completions | Protocol Conversion | Default (no special URL) |
 | Codex | Responses API | Claude Messages API | Protocol Conversion | `provider_type` is `anthropic` |
-| Codex | Responses API | Responses API | Transparent Proxy | `responses_base_url` is configured |
+| Codex | Responses API | Responses API | Native Passthrough | `responses_base_url` is configured |
 | Claude Code | Messages API | Chat Completions | Protocol Conversion | No `anthropic_base_url` |
-| Claude Code | Messages API | Anthropic-compatible endpoint | Transparent Proxy | `anthropic_base_url` is configured |
-| OpenCode | Chat Completions | Chat Completions | Transparent Proxy | Same protocol |
-| curl / New API etc. | Chat Completions | Chat Completions | Transparent Proxy | Same protocol |
+| Claude Code | Messages API | Anthropic-compatible endpoint | Native Passthrough + Model Mapping | `anthropic_base_url` is configured and `claude-*` maps to provider model |
+| OpenCode | Chat Completions | Chat Completions | Native Passthrough | Same protocol and upstream model name |
+| curl / New API etc. | Chat Completions | Chat Completions | Native Passthrough | Same protocol and upstream model name |
 
 ### Protocol Conversion
 
@@ -629,9 +629,9 @@ When the client protocol differs from the downstream provider, AgentGate convert
    └──────────────┘               └──────────────┘
 ```
 
-### Transparent Proxy
+### Native Passthrough
 
-When the client protocol matches the downstream provider, AgentGate does not convert the format. It only replaces the URL, credentials, and model name. Request body and response stream are fully proxied.
+When the client protocol matches the downstream provider, AgentGate does not convert the request format. It replaces the URL and credentials. Model handling follows one rule: Model Mapping wins; otherwise the request model is preserved. If the client omits `model`, AgentGate uses the provider default.
 
 ```
 ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
@@ -649,10 +649,10 @@ When the client protocol matches the downstream provider, AgentGate does not con
 │     /v1/messages          → Claude Code Default                         │
 │     /v1/chat/completions  → OpenCode Default                            │
 │                         ▼                                               │
-│  ③ Transparent Proxy                                                    │
+│  ③ Native Passthrough                                                   │
 │     Replace target URL (base_url or anthropic_base_url)                 │
 │     Inject provider API key                                             │
-│     Map model name (e.g. gpt-5.5 → deepseek-v4-flash)                  │
+│     Optional model mapping (claude-* → mimo/deepseek model)             │
 │     Forward request body as-is ──→ Proxy response stream as-is         │
 │                         ▼                                               │
 │  ④ Logging → SQLite                                                    │
@@ -665,8 +665,8 @@ When the client protocol matches the downstream provider, AgentGate does not con
   └──────────────┘ └──────────────┘   └──────────────┘
 
 Trigger conditions:
-  • /v1/messages    + Provider has anthropic_base_url → Messages API transparent proxy
-  • /v1/chat/completions → Chat Completions transparent proxy (all providers)
+  • /v1/messages    + Provider has anthropic_base_url → Messages API native passthrough
+  • /v1/chat/completions → Chat Completions native passthrough (all providers)
 ```
 
 ### Flow Examples
@@ -686,27 +686,28 @@ Codex sends input_image
   → ⑧ Reverse-convert to Responses API format → return to Codex
 ```
 
-**Claude Code → DeepSeek (transparent proxy):**
+**Claude Code → DeepSeek (native passthrough + model mapping):**
 
 ```
 Claude Code sends Messages API request
   → /v1/messages
   → ① Auth passes
   → ② Matches Claude Code Default Route Profile
-  → ③ DeepSeek has anthropic_base_url → transparent proxy
+  → ③ DeepSeek has anthropic_base_url → native passthrough
+  → Model Mapping: claude-sonnet-4-6 → deepseek-v4-pro[1m] (optional)
   → Replace URL with api.deepseek.com/anthropic + inject API key
   → Request body proxied as-is → SSE response stream proxied as-is
   → ④ Log request
 ```
 
-**OpenCode / curl / New API (transparent proxy):**
+**OpenCode / curl / New API (native passthrough):**
 
 ```
 Client sends Chat Completions request
   → /v1/chat/completions
   → ① Auth passes
   → ② Matches Route Profile
-  → ③ Transparent proxy: replace URL + API key + model mapping
+  → ③ Native passthrough: replace URL + API key; model unchanged unless mapping matches
   → Request body forwarded as-is → SSE response stream proxied as-is
   → ④ Log request
 ```
