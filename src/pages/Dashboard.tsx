@@ -97,6 +97,17 @@ export function Dashboard() {
           api.listProviders(),
         ]);
         if (!cancelled) {
+          // 首次请求 celebration：lifetime total 从 0 翻到 ≥1 时 toast 一次。
+          // 用 localStorage 标记"已庆祝过"——避免清日志后再次触发。
+          const lifetimeTotal = st.total;
+          if (
+            lifetimeTotal >= 1
+            && localStorage.getItem("agentgate_first_req_seen") !== "1"
+          ) {
+            localStorage.setItem("agentgate_first_req_seen", "1");
+            toast("success", t("dashboard.first_request_seen"));
+          }
+
           setStatus(s);
           setTools(tl);
           setProviderCount(ps.length);
@@ -110,7 +121,7 @@ export function Dashboard() {
     load();
     const timer = setInterval(load, 5000);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [rangeDays]);
+  }, [rangeDays, t]);
 
   const handleStart = async () => { try { setStatus(await api.startGateway()); toast("success", t("gateway.started")); } catch (err) { toast("error", (err as api.AppError).message); } };
   const handleStop = async () => { try { setStatus(await api.stopGateway()); toast("success", t("gateway.stopped")); } catch (err) { toast("error", (err as api.AppError).message); } };

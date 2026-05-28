@@ -15,6 +15,8 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
@@ -37,6 +39,13 @@ export function Tools() {
   const [openCodeStatus, setOpenCodeStatus] = useState<OpenCodeConfigStatus | null>(null);
   const [geminiStatus, setGeminiStatus] = useState<GeminiCliConfigStatus | null>(null);
   const [atomCodeStatus, setAtomCodeStatus] = useState<AtomCodeConfigStatus | null>(null);
+
+  // 未检测到的 client 默认折叠——5 个全展开屏幕太长，用户只用 1-2 个。
+  // 检测到的 client 默认展开。用户可以手动点 chevron 切换任一 client 状态。
+  const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({});
+  const toggleExpanded = (id: string) => setExpandedClients(s => ({ ...s, [id]: !(s[id] ?? false) }));
+  const isExpanded = (id: string, detected: boolean) =>
+    expandedClients[id] !== undefined ? expandedClients[id] : detected;
   const [confirmApplyCodex, setConfirmApplyCodex] = useState(false);
   const [confirmApplyClaude, setConfirmApplyClaude] = useState(false);
   const [confirmApplyOpenCode, setConfirmApplyOpenCode] = useState(false);
@@ -230,7 +239,11 @@ export function Tools() {
 
       {/* Codex Card */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <div className="mb-4 flex items-start justify-between">
+        <button
+          type="button"
+          onClick={() => toggleExpanded("codex")}
+          className="mb-4 flex w-full items-start justify-between text-left"
+        >
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
               <Code className="h-5 w-5 text-accent" />
@@ -240,11 +253,15 @@ export function Tools() {
               <p className="text-xs text-text-muted">{t("tools.codex_desc")}</p>
             </div>
           </div>
-          <StatusBadge variant={codexStatus?.has_agentgate ? "success" : codexStatus?.exists ? "warning" : "muted"}>
-            {codexStatus?.has_agentgate ? t("tools.agentgate_configured") : codexStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
-          </StatusBadge>
-        </div>
+          <div className="flex items-center gap-2">
+            <StatusBadge variant={codexStatus?.has_agentgate ? "success" : codexStatus?.exists ? "warning" : "muted"}>
+              {codexStatus?.has_agentgate ? t("tools.agentgate_configured") : codexStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
+            </StatusBadge>
+            {isExpanded("codex", !!codexStatus?.exists) ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
+          </div>
+        </button>
 
+        {isExpanded("codex", !!codexStatus?.exists) && <>
         {codexStatus && (
           <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
             <div><span className="text-text-muted">config.toml</span><p className="font-mono text-text-secondary text-[11px]">{codexStatus.config_path}</p></div>
@@ -310,11 +327,16 @@ export function Tools() {
           )}
           <CopyButton text={codexConfig} />
         </div>
+        </>}
       </div>
 
       {/* Claude Code Card */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <div className="mb-4 flex items-start justify-between">
+        <button
+          type="button"
+          onClick={() => toggleExpanded("claude_code")}
+          className="mb-4 flex w-full items-start justify-between text-left"
+        >
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
               <Terminal className="h-5 w-5 text-accent" />
@@ -324,11 +346,15 @@ export function Tools() {
               <p className="text-xs text-text-muted">{t("tools.claude_code_desc")}</p>
             </div>
           </div>
-          <StatusBadge variant={claudeEnv?.has_agentgate ? "success" : claudeEnv?.has_api_key || claudeEnv?.has_auth_token ? "warning" : "muted"}>
-            {claudeEnv?.has_agentgate ? t("tools.agentgate_configured") : claudeEnv?.has_api_key || claudeEnv?.has_auth_token ? t("tools.direct_credentials") : t("tools.no_credentials")}
-          </StatusBadge>
-        </div>
+          <div className="flex items-center gap-2">
+            <StatusBadge variant={claudeEnv?.has_agentgate ? "success" : claudeEnv?.has_api_key || claudeEnv?.has_auth_token ? "warning" : "muted"}>
+              {claudeEnv?.has_agentgate ? t("tools.agentgate_configured") : claudeEnv?.has_api_key || claudeEnv?.has_auth_token ? t("tools.direct_credentials") : t("tools.no_credentials")}
+            </StatusBadge>
+            {isExpanded("claude_code", !!claudeEnv?.settings_exists) ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
+          </div>
+        </button>
 
+        {isExpanded("claude_code", !!claudeEnv?.settings_exists) && <>
         {claudeEnv && (
           <>
             <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
@@ -368,11 +394,16 @@ export function Tools() {
         </div>
 
         {claudeSnippet && <JsonCodeBlock title="Claude Code Environment" content={claudeSnippet} language="bash" />}
+        </>}
       </div>
 
       {/* OpenCode Card */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <div className="mb-4 flex items-start justify-between">
+        <button
+          type="button"
+          onClick={() => toggleExpanded("opencode")}
+          className="mb-4 flex w-full items-start justify-between text-left"
+        >
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
               <Braces className="h-5 w-5 text-accent" />
@@ -382,11 +413,15 @@ export function Tools() {
               <p className="text-xs text-text-muted">{t("tools.opencode_desc")}</p>
             </div>
           </div>
+          <div className="flex items-center gap-2">
           <StatusBadge variant={openCodeStatus?.has_agentgate ? "success" : openCodeStatus?.exists ? "warning" : "muted"}>
             {openCodeStatus?.has_agentgate ? t("tools.agentgate_configured") : openCodeStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
           </StatusBadge>
-        </div>
+          {isExpanded("opencode", !!openCodeStatus?.exists) ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
+          </div>
+        </button>
 
+        {isExpanded("opencode", !!openCodeStatus?.exists) && <>
         {openCodeStatus && (
           <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
             <div><span className="text-text-muted">opencode.json</span><p className="font-mono text-text-secondary text-[11px]">{openCodeStatus.config_path}</p></div>
@@ -402,11 +437,16 @@ export function Tools() {
             <button onClick={() => api.openOpenCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
           )}
         </div>
+        </>}
       </div>
 
       {/* Gemini CLI Card */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <div className="mb-4 flex items-start justify-between">
+        <button
+          type="button"
+          onClick={() => toggleExpanded("gemini_cli")}
+          className="mb-4 flex w-full items-start justify-between text-left"
+        >
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
               <Sparkles className="h-5 w-5 text-accent" />
@@ -416,11 +456,15 @@ export function Tools() {
               <p className="text-xs text-text-muted">{t("tools.gemini_cli_desc")}</p>
             </div>
           </div>
-          <StatusBadge variant={geminiStatus?.has_agentgate ? "success" : geminiStatus?.exists ? "warning" : "muted"}>
-            {geminiStatus?.has_agentgate ? t("tools.agentgate_configured") : geminiStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
-          </StatusBadge>
-        </div>
+          <div className="flex items-center gap-2">
+            <StatusBadge variant={geminiStatus?.has_agentgate ? "success" : geminiStatus?.exists ? "warning" : "muted"}>
+              {geminiStatus?.has_agentgate ? t("tools.agentgate_configured") : geminiStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
+            </StatusBadge>
+            {isExpanded("gemini_cli", !!geminiStatus?.exists) ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
+          </div>
+        </button>
 
+        {isExpanded("gemini_cli", !!geminiStatus?.exists) && <>
         {geminiStatus && (
           <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
             <div><span className="text-text-muted">settings.json</span><p className="font-mono text-text-secondary text-[11px]">{geminiStatus.config_path}</p></div>
@@ -440,11 +484,16 @@ export function Tools() {
             <button onClick={() => api.openGeminiConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
           )}
         </div>
+        </>}
       </div>
 
       {/* AtomCode Card */}
       <div className="rounded-xl border border-border bg-card p-5">
-        <div className="mb-4 flex items-start justify-between">
+        <button
+          type="button"
+          onClick={() => toggleExpanded("atomcode")}
+          className="mb-4 flex w-full items-start justify-between text-left"
+        >
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
               <Atom className="h-5 w-5 text-accent" />
@@ -454,11 +503,15 @@ export function Tools() {
               <p className="text-xs text-text-muted">{t("tools.atomcode_desc")}</p>
             </div>
           </div>
-          <StatusBadge variant={atomCodeStatus?.has_agentgate ? "success" : atomCodeStatus?.exists ? "warning" : "muted"}>
-            {atomCodeStatus?.has_agentgate ? t("tools.agentgate_configured") : atomCodeStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
-          </StatusBadge>
-        </div>
+          <div className="flex items-center gap-2">
+            <StatusBadge variant={atomCodeStatus?.has_agentgate ? "success" : atomCodeStatus?.exists ? "warning" : "muted"}>
+              {atomCodeStatus?.has_agentgate ? t("tools.agentgate_configured") : atomCodeStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
+            </StatusBadge>
+            {isExpanded("atomcode", !!atomCodeStatus?.exists) ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
+          </div>
+        </button>
 
+        {isExpanded("atomcode", !!atomCodeStatus?.exists) && <>
         {atomCodeStatus && (
           <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
             <div><span className="text-text-muted">config.toml</span><p className="font-mono text-text-secondary text-[11px]">{atomCodeStatus.config_path}</p></div>
@@ -478,6 +531,7 @@ export function Tools() {
             <button onClick={() => api.openAtomCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
           )}
         </div>
+        </>}
       </div>
 
       <ConfirmDialog open={confirmApplyCodex} title={t("tools.apply_codex_title")} message={t("tools.apply_codex_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyCodex} onCancel={() => setConfirmApplyCodex(false)} />

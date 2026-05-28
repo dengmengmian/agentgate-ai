@@ -210,10 +210,32 @@ export function QuickSetup() {
           </div>
 
           {step === "done" && (
-            <div className="flex justify-end">
-              <button onClick={() => navigate("/")} className="btn-primary">
-                {allOk ? t("onboarding.done") : t("common.close")}
-              </button>
+            <div className="space-y-3">
+              {/* 完成后告诉用户"下一步"——配好了不等于能用，要去终端真跑命令。
+                  跳 /tools 让用户看到客户端配置卡片 + 复制命令。 */}
+              {allOk && (
+                <div className="rounded-lg border border-accent/20 bg-accent-soft/40 p-4">
+                  <p className="text-sm font-medium text-text-primary">
+                    {t("onboarding.next_step_title")}
+                  </p>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {t("onboarding.next_step_desc")}
+                  </p>
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                {allOk && (
+                  <button onClick={() => navigate("/")} className="btn-secondary">
+                    {t("onboarding.back_to_overview")}
+                  </button>
+                )}
+                <button
+                  onClick={() => navigate(allOk ? "/tools" : "/")}
+                  className="btn-primary"
+                >
+                  {allOk ? t("onboarding.go_to_clients") : t("common.close")}
+                </button>
+              </div>
             </div>
           )}
         </div>
