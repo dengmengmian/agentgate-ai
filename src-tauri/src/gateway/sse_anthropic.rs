@@ -384,8 +384,11 @@ async fn finalize(acc: &mut AnthropicSseAccumulator, tx: &mpsc::Sender<String>) 
     }
 
     // response.completed —— 顺手把 Anthropic stop_reason 映射进 status。
+    // output 暂传空数组（Anthropic 路径暂未累积 output_items；与 sse.rs 同步
+    // 改造是独立工作）。
     send(tx, &ev::response_completed_with_stop_reason(
         &acc.response_id, &acc.model, acc.usage.as_ref(), acc.stop_reason.as_deref(),
+        &[],
     )).await;
 }
 

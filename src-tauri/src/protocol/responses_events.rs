@@ -258,7 +258,7 @@ pub fn function_call_done(item_id: &str, output_index: usize, call_id: &str, nam
 }
 
 pub fn response_completed(response_id: &str, model: &str, usage: Option<&Value>) -> String {
-    response_completed_with_stop_reason(response_id, model, usage, None)
+    response_completed_with_stop_reason(response_id, model, usage, None, &[])
 }
 
 /// 与 [`response_completed`] 相同，但根据上游 stop_reason / finish_reason 映射
@@ -270,11 +270,15 @@ pub fn response_completed(response_id: &str, model: &str, usage: Option<&Value>)
 ///
 /// 未识别的 stop_reason 退化为 `status: completed`、`incomplete_details: null`，
 /// 与不传任何 stop_reason 时的行为一致——稳妥兜底。
+/// `output` 是 streaming 期间累积的 finalized output items（reasoning / message /
+/// function_call 各自 done 时的 final JSON）。Codex 客户端会比对 envelope.output
+/// 与之前收到的 incremental 事件——传 `&[]` 协议上不致命但契约不完整。
 pub fn response_completed_with_stop_reason(
     response_id: &str,
     model: &str,
     usage: Option<&Value>,
     stop_reason: Option<&str>,
+    output: &[Value],
 ) -> String {
     let default_usage = json!({
         "input_tokens": 0, "output_tokens": 0, "total_tokens": 0,
@@ -286,6 +290,7 @@ pub fn response_completed_with_stop_reason(
     let mut envelope = build_envelope(response_id, model, status);
     envelope["usage"] = u.clone();
     envelope["incomplete_details"] = incomplete_details;
+    envelope["output"] = json!(output);
     sse("response.completed", json!({"type": "response.completed", "response": envelope}))
 }
 
@@ -393,7 +398,7 @@ mod tests {
     #[test]
     fn response_completed_with_max_tokens_status() {
         reset_sequence();
-        let s = response_completed_with_stop_reason("r1", "claude", None, Some("max_tokens"));
+        let s = response_completed_with_stop_reason("r1", "claude", None, Some("max_tokens"), &[]);
         assert!(s.contains("\"status\":\"incomplete\""));
         assert!(s.contains("\"reason\":\"max_output_tokens\""));
     }

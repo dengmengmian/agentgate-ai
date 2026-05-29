@@ -623,6 +623,118 @@ pub fn split_think_tags(content: &str) -> (String, Option<String>) {
     }
 }
 
+/// 流式 `<think>...</think>` 切分器（有状态）。
+///
+/// 用于：上游用 inline `<think>` 模式（MiMo / GLM-air / Skywork / 部分 Qwen）
+/// 流式输出 content 时，chunk 边界可能落在标签中间（`<thi` / `</th`），无状态
+/// 的 [`split_think_tags`] 会把半截标签当文本——下个 chunk 来时也认不出剩余。
+///
+/// 解法：跨 chunk **carry 半截标签**，凑齐才识别。`process_chunk` 返回当前能确
+/// 定的 `(visible, reasoning)`，stream 结束时调一次 [`ThinkSplitter::flush`] 把
+/// carry 残留按当前状态（in_think? 是 reasoning : 是 visible）emit 出去。
+///
+/// 对没有 inline `<think>` 的上游（独立 reasoning_content 字段或没 reasoning）
+/// 完全透明：所有 content 当 visible 原样输出。
+#[derive(Debug, Default)]
+pub struct ThinkSplitter {
+    /// 上一个 chunk 末尾残留的"可能是半截开始/结束标签"的字节。
+    carry: String,
+    /// 当前是否在 `<think>...</think>` 内部。
+    in_think: bool,
+}
+
+impl ThinkSplitter {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// 消费一段 chunk content，返回当前能确定的 `(visible_text, reasoning_extracted)`。
+    /// 半截标签会 carry 到下一次 `process_chunk`，不会泄露到 visible。
+    pub fn process_chunk(&mut self, chunk: &str) -> (String, Option<String>) {
+        if chunk.is_empty() {
+            return (String::new(), None);
+        }
+
+        // carry + chunk 拼接为本次工作 buffer
+        let mut buffer = std::mem::take(&mut self.carry);
+        buffer.push_str(chunk);
+
+        let mut visible = String::new();
+        let mut reasoning = String::new();
+        let mut i: usize = 0;
+
+        while i < buffer.len() {
+            if !self.in_think {
+                // 状态：在普通文本里，找 `<think>` 开始标签
+                if let Some(rel_start) = buffer[i..].find("<think>") {
+                    visible.push_str(&buffer[i..i + rel_start]);
+                    i = i + rel_start + 7; // 跳过 "<think>"
+                    self.in_think = true;
+                    continue;
+                }
+                // 没找到完整开始标签。检查末尾是不是半截 `<think>` 前缀
+                if let Some(carry_offset) = trailing_partial(&buffer[i..], "<think>") {
+                    visible.push_str(&buffer[i..i + carry_offset]);
+                    self.carry = buffer[i + carry_offset..].to_string();
+                } else {
+                    visible.push_str(&buffer[i..]);
+                }
+                break;
+            } else {
+                // 状态：在 think 内，找 `</think>` 结束标签
+                if let Some(rel_end) = buffer[i..].find("</think>") {
+                    reasoning.push_str(&buffer[i..i + rel_end]);
+                    i = i + rel_end + 8; // 跳过 "</think>"
+                    self.in_think = false;
+                    continue;
+                }
+                if let Some(carry_offset) = trailing_partial(&buffer[i..], "</think>") {
+                    reasoning.push_str(&buffer[i..i + carry_offset]);
+                    self.carry = buffer[i + carry_offset..].to_string();
+                } else {
+                    reasoning.push_str(&buffer[i..]);
+                }
+                break;
+            }
+        }
+
+        let reasoning_opt = if reasoning.is_empty() { None } else { Some(reasoning) };
+        (visible, reasoning_opt)
+    }
+
+    /// 流结束时调一次。carry 残留按当前状态 emit：in_think → reasoning，否则 visible。
+    /// 半截标签按字面文本处理（不再当标签 carry）。
+    pub fn flush(&mut self) -> (String, Option<String>) {
+        let carry = std::mem::take(&mut self.carry);
+        if carry.is_empty() {
+            return (String::new(), None);
+        }
+        if self.in_think {
+            (String::new(), Some(carry))
+        } else {
+            (carry, None)
+        }
+    }
+}
+
+/// 检测 `s` 的末尾是否是 `target` 的非空前缀。返回 carry 起点（即末尾匹配前缀的起始 byte）。
+/// 仅对 ASCII target 有效（`<think>` / `</think>` 都是 ASCII）。
+fn trailing_partial(s: &str, target: &str) -> Option<usize> {
+    let s_bytes = s.as_bytes();
+    let t_bytes = target.as_bytes();
+    // target 前缀长度从最长往最短试，找第一个匹配。
+    // 最长 = min(target.len()-1, s.len())——完整匹配已在 .find() 阶段处理。
+    let max_k = (t_bytes.len() - 1).min(s_bytes.len());
+    for k in (1..=max_k).rev() {
+        let tail = &s_bytes[s_bytes.len() - k..];
+        let head = &t_bytes[..k];
+        if tail == head {
+            return Some(s_bytes.len() - k);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1363,5 +1475,108 @@ mod tests {
         ];
         let msgs = convert_input_array(&items).unwrap();
         assert_eq!(msgs[0].reasoning_content.as_deref(), Some("full trace"));
+    }
+
+    // ── ThinkSplitter（带状态，跨 chunk 边界） ────────────────────
+
+    #[test]
+    fn think_splitter_single_chunk_full_tags() {
+        let mut sp = ThinkSplitter::new();
+        let (vis, rs) = sp.process_chunk("hello <think>thinking</think> world");
+        assert_eq!(vis, "hello  world");
+        assert_eq!(rs.as_deref(), Some("thinking"));
+        let (vis2, rs2) = sp.flush();
+        assert!(vis2.is_empty() && rs2.is_none());
+    }
+
+    #[test]
+    fn think_splitter_split_open_tag_across_chunks() {
+        // chunk1 末尾是半截 `<thi`，chunk2 接上 `nk>...</think>`
+        let mut sp = ThinkSplitter::new();
+        let (v1, r1) = sp.process_chunk("hello <thi");
+        assert_eq!(v1, "hello ");
+        assert!(r1.is_none());
+        let (v2, r2) = sp.process_chunk("nk>secret</think> world");
+        assert_eq!(v2, " world");
+        assert_eq!(r2.as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn think_splitter_split_close_tag_across_chunks() {
+        let mut sp = ThinkSplitter::new();
+        let (_, _) = sp.process_chunk("a<think>think");
+        let (v2, r2) = sp.process_chunk("ing</th");
+        assert_eq!(v2, "");
+        assert_eq!(r2.as_deref(), Some("ing"));
+        let (v3, r3) = sp.process_chunk("ink>tail");
+        assert_eq!(v3, "tail");
+        assert!(r3.is_none());
+    }
+
+    #[test]
+    fn think_splitter_no_think_tag_passes_through() {
+        let mut sp = ThinkSplitter::new();
+        let (v1, r1) = sp.process_chunk("just plain text");
+        assert_eq!(v1, "just plain text");
+        assert!(r1.is_none());
+    }
+
+    #[test]
+    fn think_splitter_flush_with_unclosed_think() {
+        // 上游 chunk 里 `<think>` 开了头但 chunk 末尾正好是个半截 `</thi`——carry 留着。
+        // stream 结束时 flush，in_think 状态下 carry 当 reasoning emit 出去。
+        let mut sp = ThinkSplitter::new();
+        let (v1, r1) = sp.process_chunk("text<think>reasoning</thi");
+        assert_eq!(v1, "text");
+        // chunk 内已确定的 reasoning 部分先返回（"reasoning"），半截 `</thi` 进 carry
+        assert_eq!(r1.as_deref(), Some("reasoning"));
+        let (v, r) = sp.flush();
+        // flush 时仍 in_think，carry `</thi` 当 reasoning 字面文本输出
+        assert!(v.is_empty());
+        assert_eq!(r.as_deref(), Some("</thi"));
+    }
+
+    #[test]
+    fn think_splitter_flush_with_unclosed_partial_open() {
+        // carry 是 `<thi` 这种半截开始标签，stream 结束时按字面文本输出。
+        let mut sp = ThinkSplitter::new();
+        let (v1, _) = sp.process_chunk("hello <thi");
+        assert_eq!(v1, "hello ");
+        let (v2, r2) = sp.flush();
+        assert_eq!(v2, "<thi");
+        assert!(r2.is_none());
+    }
+
+    #[test]
+    fn think_splitter_multiple_think_blocks() {
+        let mut sp = ThinkSplitter::new();
+        let (v1, r1) = sp.process_chunk("a<think>X</think>b<think>Y</think>c");
+        assert_eq!(v1, "abc");
+        // 两段 reasoning 分别返回（拼接到一起，因为同一 chunk 内）
+        assert_eq!(r1.as_deref(), Some("XY"));
+    }
+
+    #[test]
+    fn think_splitter_tiny_chunks_byte_by_byte() {
+        // 极端 case：上游逐字节流出 "<think>"，确保 carry 累积正确
+        let mut sp = ThinkSplitter::new();
+        for ch in "<think>r</think>".chars() {
+            let _ = sp.process_chunk(&ch.to_string());
+        }
+        let (v, r) = sp.flush();
+        assert_eq!(v, "");
+        assert!(r.is_none());
+    }
+
+    #[test]
+    fn trailing_partial_finds_longest_prefix() {
+        // 末尾 `<thi` 是 `<think>` 的前 4 字节
+        assert_eq!(trailing_partial("hello <thi", "<think>"), Some(6));
+        // 末尾 `<t` 是 `<think>` 的前 2 字节
+        assert_eq!(trailing_partial("hi<t", "<think>"), Some(2));
+        // 末尾不是任何前缀
+        assert_eq!(trailing_partial("hello", "<think>"), None);
+        // 整个字符串是 target 前缀（不含完整 target）
+        assert_eq!(trailing_partial("<thi", "<think>"), Some(0));
     }
 }

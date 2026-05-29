@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
 use futures::StreamExt;
+use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use crate::protocol::chat_completions::ChatCompletionChunk;
 use crate::transform::reasoning_store;
+use crate::transform::responses_to_chat::ThinkSplitter;
 use crate::protocol::responses_events as ev;
 
 const MAX_EVENTS_LOG_SIZE: usize = 1_000_000; // 1MB
@@ -17,6 +19,11 @@ pub struct AccumulatedToolCall {
     emitted_added: bool,
     /// Track the last arguments length so we can compute per-delta output.
     last_args_len: usize,
+    /// Responses 协议 output_index——added 时分配（用 `acc.next_output_index`），
+    /// delta / done 一律复用这个值。**绝不能再用 `idx + 1` 算**：当流里先有
+    /// reasoning（占了 next_output_index）再来 tool_call 时，两种算法值不同——
+    /// Codex 看到 added 与 delta/done 的 output_index 对不上，直接判流断开。
+    output_index: usize,
 }
 
 /// State accumulated during SSE stream processing.
@@ -47,6 +54,13 @@ pub struct SseAccumulator {
     /// terminal chunk arrives (Chat Completions emits finish_reason only on
     /// the last choice). Drives Responses `status`/`incomplete_details` mapping.
     pub finish_reason: Option<String>,
+    /// Inline `<think>` 切分器（跨 chunk carry 半截标签）。
+    /// 无 inline-think 上游也可安全用——content 透明透传。
+    think_splitter: ThinkSplitter,
+    /// Streaming 期间累积的 finalized output items（reasoning / message /
+    /// function_call 各自 done 时的 final JSON）。最后塞进
+    /// `response.completed` envelope.output 字段。
+    pub output_items: Vec<Value>,
 }
 
 impl SseAccumulator {
@@ -69,6 +83,8 @@ impl SseAccumulator {
             reasoning_output_index: None,
             reasoning_item_id,
             finish_reason: None,
+            think_splitter: ThinkSplitter::new(),
+            output_items: Vec::new(),
         }
     }
 
@@ -146,15 +162,12 @@ pub async fn process_upstream_stream(
                 return Err(msg);
             }
             None => {
-                if has_text || has_tool_calls {
-                    return finalize(tx, acc, has_text, has_tool_calls).await;
-                }
-                send(
-                    &tx,
-                    &ev::response_failed(&acc.response_id, &acc.model, "Stream ended unexpectedly"),
-                )
-                .await;
-                return Err("Stream ended without [DONE]".to_string());
+                // 流自然结束（上游关连接、未发 [DONE]）。一律走 finalize
+                // → response.completed。注意 `has_text || has_tool_calls` 守卫
+                // 已经移除：纯 reasoning 响应（o1 / DeepSeek-R1 / MiMo 在某些
+                // prompt 下 final content 为空、全部内容在 reasoning_content）
+                // 之前被错判 failed，触发 Codex"流没处理完就断开"。
+                return finalize(tx, acc, has_text, has_tool_calls).await;
             }
         };
 
@@ -234,14 +247,23 @@ async fn process_choices(
         }
         let Some(delta) = &choice.delta else { continue };
 
-        // ── Text content (with <think> tag splitting) ──
+        // ── Text content (with stateful <think> tag splitting) ──
+        // ThinkSplitter 跨 chunk carry 半截标签（旧的无状态 split_think_tags
+        // 在 chunk 边界恰好切到 `<thi` 或 `</th` 时会把残留泄进 visible 文本）。
         if let Some(ref content) = delta.content {
             if !content.is_empty() {
-                // Split <think> tags — MiniMax embeds thinking in content
-                let (text, thinking) =
-                    crate::transform::responses_to_chat::split_think_tags(content);
+                let (text, thinking) = acc.think_splitter.process_chunk(content);
                 if let Some(ref tk) = thinking {
+                    if !*message_item_emitted {
+                        send(tx, &ev::output_item_added_message(&acc.msg_item_id, 0)).await;
+                        *message_item_emitted = true;
+                    }
+                    // 与 reasoning_content 字段同路：先 push 到 buffer，再 stream delta
+                    if acc.reasoning_content.is_empty() {
+                        acc.reasoning_content.push_str("**Thinking**\n\n");
+                    }
                     acc.reasoning_content.push_str(tk);
+                    stream_reasoning_delta(tx, acc, tk).await;
                 }
                 if !text.is_empty() {
                     if !*message_item_emitted {
@@ -249,6 +271,11 @@ async fn process_choices(
                         send(tx, &ev::content_part_added(&acc.msg_item_id, 0, 0)).await;
                         acc.text_content_started = true;
                         *message_item_emitted = true;
+                    } else if !acc.text_content_started {
+                        // message item 之前可能因 reasoning_content 提前 emit 过 added，
+                        // 但还没发 content_part.added——补一发。
+                        send(tx, &ev::content_part_added(&acc.msg_item_id, 0, 0)).await;
+                        acc.text_content_started = true;
                     }
                     *has_text = true;
                     acc.full_text.push_str(&text);
@@ -325,6 +352,7 @@ async fn process_choices(
                         arguments: String::new(),
                         emitted_added: false,
                         last_args_len: 0,
+                        output_index: 0,
                     },
                 );
             }
@@ -337,7 +365,10 @@ async fn process_choices(
             }
             if !tc.emitted_added && !tc.name.is_empty() {
                 let item_id = format!("fc_{}", tc.id);
-                send(tx, &ev::function_call_added(&item_id, 1, &tc.id, &tc.name)).await;
+                let oi = acc.next_output_index;
+                acc.next_output_index += 1;
+                tc.output_index = oi;
+                send(tx, &ev::function_call_added(&item_id, oi, &tc.id, &tc.name)).await;
                 tc.emitted_added = true;
             }
             if tc.emitted_added && tc.arguments.len() > tc.last_args_len {
@@ -345,7 +376,7 @@ async fn process_choices(
                 let item_id = format!("fc_{}", tc.id);
                 send(
                     tx,
-                    &ev::function_call_arguments_delta(&item_id, 1, delta_args),
+                    &ev::function_call_arguments_delta(&item_id, tc.output_index, delta_args),
                 )
                 .await;
                 tc.last_args_len = tc.arguments.len();
@@ -364,6 +395,7 @@ async fn process_choices(
                     arguments: String::new(),
                     emitted_added: false,
                     last_args_len: 0,
+                    output_index: 0,
                 });
 
                 if let Some(ref id) = tc_delta.id {
@@ -389,6 +421,7 @@ async fn process_choices(
                     let item_id = format!("fc_{}", tc.id);
                     let oi = acc.next_output_index;
                     acc.next_output_index += 1;
+                    tc.output_index = oi;
                     send(tx, &ev::function_call_added(&item_id, oi, &tc.id, &tc.name)).await;
                     tc.emitted_added = true;
                 }
@@ -398,7 +431,7 @@ async fn process_choices(
                     let item_id = format!("fc_{}", tc.id);
                     send(
                         tx,
-                        &ev::function_call_arguments_delta(&item_id, idx + 1, delta_args),
+                        &ev::function_call_arguments_delta(&item_id, tc.output_index, delta_args),
                     )
                     .await;
                     tc.last_args_len = tc.arguments.len();
@@ -410,10 +443,29 @@ async fn process_choices(
 
 async fn finalize(
     tx: mpsc::Sender<String>,
-    acc: &SseAccumulator,
+    acc: &mut SseAccumulator,
     has_text: bool,
     has_tool_calls: bool,
 ) -> Result<(), String> {
+    // Flush ThinkSplitter carry：上游 stream 末尾如果残留半截 `<thi` 这类标签，
+    // 按当前 in_think 状态 emit 出去（in_think → reasoning，否则按字面文本进 message）。
+    let (flush_text, flush_reasoning) = acc.think_splitter.flush();
+    if let Some(tk) = flush_reasoning {
+        if acc.reasoning_content.is_empty() {
+            acc.reasoning_content.push_str("**Thinking**\n\n");
+        }
+        acc.reasoning_content.push_str(&tk);
+        stream_reasoning_delta(&tx, acc, &tk).await;
+    }
+    // flush_text 极少数情况（chunk 末尾的 `<thi` 等假阳性 carry），按 text 流出去
+    let extra_text = if !flush_text.is_empty() {
+        acc.full_text.push_str(&flush_text);
+        Some(flush_text)
+    } else {
+        None
+    };
+    let had_flush_text = extra_text.is_some();
+
     let rc = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.as_str()) };
 
     // Store reasoning for future requests (in-memory LRU, process-local —
@@ -438,31 +490,67 @@ async fn finalize(
             send(&tx, &ev::reasoning_summary_text_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content)).await;
         }
         send(&tx, &ev::output_item_done_reasoning(&acc.reasoning_item_id, oi, &acc.reasoning_content)).await;
+        // 累积进 envelope.output（Bug #4）
+        acc.output_items.push(json!({
+            "id": acc.reasoning_item_id,
+            "type": "reasoning",
+            "status": "completed",
+            "summary": [{"type": "summary_text", "text": &acc.reasoning_content}],
+            "encrypted_content": &acc.reasoning_content,
+        }));
     }
 
     // Close text content if any
-    if has_text {
+    if has_text || had_flush_text {
+        // 如果只是 flush_text（无之前的 text delta）需要补 added 事件，但 has_text=true
+        // 时之前已经发过 output_item.added + content_part.added。flush_text 单独场景
+        // 极罕见（splitter 末尾误判半截标签）——优先保持流可以正常 complete，宁可
+        // text 略冗余，不重发 added。
+        if let Some(extra) = extra_text {
+            send(&tx, &ev::output_text_delta(&acc.msg_item_id, 0, 0, &extra)).await;
+        }
         send(&tx, &ev::output_text_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
         send(&tx, &ev::content_part_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
         send(&tx, &ev::output_item_done_message_with_annotations(
             &acc.msg_item_id, 0, &acc.full_text, rc, &acc.annotations,
         )).await;
+        // 累积 message item 进 envelope.output（Bug #4）
+        let mut msg_item = json!({
+            "id": acc.msg_item_id,
+            "type": "message",
+            "status": "completed",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": &acc.full_text, "annotations": &acc.annotations}],
+        });
+        if let Some(r) = rc { msg_item["reasoning_content"] = json!(r); }
+        acc.output_items.push(msg_item);
     }
     // Tool-call-only: no message item was emitted, no need to close it
 
-    // Close tool calls
+    // Close tool calls (Bug #1: 用 tc.output_index，不是 idx + 1)
     if has_tool_calls {
-        for (idx, tc) in &acc.tool_calls {
+        for (_, tc) in &acc.tool_calls {
             let item_id = format!("fc_{}", tc.id);
-            let oi = idx + 1;
+            let oi = tc.output_index;
             send(&tx, &ev::function_call_arguments_done(&item_id, oi, &tc.arguments)).await;
             send(&tx, &ev::function_call_done(&item_id, oi, &tc.id, &tc.name, &tc.arguments, rc)).await;
+            // 累积 function_call item 进 envelope.output（Bug #4）
+            acc.output_items.push(json!({
+                "id": item_id,
+                "type": "function_call",
+                "status": "completed",
+                "call_id": tc.id,
+                "name": tc.name,
+                "arguments": tc.arguments,
+            }));
         }
     }
 
     // response.completed with usage + finish_reason → Responses status/incomplete_details 映射
+    // 同时把累积的 output_items 塞进 envelope.output（Bug #4 协议契约完整性）
     send(&tx, &ev::response_completed_with_stop_reason(
         &acc.response_id, &acc.model, acc.usage.as_ref(), acc.finish_reason.as_deref(),
+        &acc.output_items,
     )).await;
     Ok(())
 }
@@ -615,6 +703,7 @@ mod tests {
             arguments: "{\"q\":\"hi\"}".to_string(),
             emitted_added: false,
             last_args_len: 0,
+            output_index: 0,
         };
         assert_eq!(tc.id, "call_1");
         assert_eq!(tc.name, "search");
