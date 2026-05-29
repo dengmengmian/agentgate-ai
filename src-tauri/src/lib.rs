@@ -165,12 +165,33 @@ pub fn run() {
                 .title("AgentGate Pet")
                 .inner_size(PET_WIDTH, PET_HEIGHT)
                 .decorations(false)
-                .transparent(true)
-                .background_color(tauri::window::Color(0, 0, 0, 0))
                 .always_on_top(true)
                 .skip_taskbar(true)
                 .resizable(false)
                 .visible(pet_visible);
+
+                // 平台差异：mac/linux 走 transparent，Windows 给 dark 底色 widget。
+                //
+                // 原因：Windows 上 `transparent(true)` 依赖 3 个用户环境因素同时满足
+                //   ① WebView2 Runtime ≥ 1.0.1466（否则 wry 的 SetDefaultBackgroundColor cast 失败）
+                //   ② Windows 系统设置"透明效果"打开
+                //   ③ DWM compositing 正常
+                // 任一失败 WebView2 控件就画不透明白底（v1.2.2 真实用户反馈）。
+                //
+                // Windows 上改成显式 dark card 颜色（var(--color-card) = #1C1A18），
+                // 视觉上是一个 widget 风格浮卡，行为 100% 可预期。pet.css 里
+                // body 仍 transparent，所以透到窗口底色，dark / mac 透明两套
+                // CSS 不用分流。
+                #[cfg(not(target_os = "windows"))]
+                {
+                    builder = builder.transparent(true);
+                }
+                #[cfg(target_os = "windows")]
+                {
+                    builder = builder.background_color(
+                        tauri::window::Color(0x1C, 0x1A, 0x18, 0xFF),
+                    );
+                }
 
                 // Restore saved position
                 builder = builder.position(pos_x, pos_y);

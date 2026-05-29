@@ -475,6 +475,17 @@ const translations: Record<string, Record<Locale, string>> = {
   "settings.pet.ox": { en: "KuiKui", zh: "奎奎" },
   "settings.pet.ox_desc": { en: "A hardworking ox that never stops", zh: "一头永不停歇的牛马打工人" },
 
+  // ── Pet FAQ ──
+  "settings.pet.faq.title": { en: "FAQ", zh: "常见问题" },
+  "settings.pet.faq.q_windows_bg": {
+    en: "Why does the pet show a dark card background on Windows but is transparent on macOS?",
+    zh: "为什么 Windows 上宠物有深色卡片背景，而 macOS 上是透明的？",
+  },
+  "settings.pet.faq.a_windows_bg": {
+    en: "Tauri's transparent window on Windows depends on three user-environment factors: (1) WebView2 Runtime ≥ 1.0.1466, (2) Windows Settings → Personalization → Transparency effects ON, (3) DWM compositing. If any fails, the WebView2 control paints an opaque white background. From v1.2.3, Windows uses an explicit dark card color (#1C1A18) so behavior is deterministic — it looks like a widget card, not a broken transparent window. To get true transparency on Windows: update WebView2 Runtime and enable transparency effects.",
+    zh: "Tauri 在 Windows 上的透明窗口依赖 3 个用户环境因素：① WebView2 Runtime ≥ 1.0.1466；② Windows 设置 → 个性化 → 透明效果 开启；③ DWM 合成正常。三者任一失败 WebView2 控件就画不透明白底。v1.2.3 起 Windows 改成显式 dark card 色（#1C1A18），行为可预期，视觉上是个 widget 卡片，不会出现「白底 bug」。想在 Windows 上获得真正的透明：升级 WebView2 Runtime + 开启系统「透明效果」。",
+  },
+
   // ── Onboarding ──
   "onboarding.welcome": { en: "Welcome to AgentGate", zh: "欢迎使用 AgentGate" },
   "onboarding.welcome_desc": { en: "Paste your API key to get started", zh: "粘贴 API Key 开始配置" },

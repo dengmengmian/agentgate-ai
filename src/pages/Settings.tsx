@@ -336,6 +336,19 @@ export function Settings() {
                 ))}
               </div>
             </div>
+
+            {/* FAQ */}
+            <div className="mt-8 border-t border-border pt-5">
+              <p className="mb-3 text-sm font-semibold text-text-primary">{t("settings.pet.faq.title")}</p>
+              <details className="rounded-lg border border-border bg-card-secondary p-3">
+                <summary className="cursor-pointer text-xs text-text-primary">
+                  {t("settings.pet.faq.q_windows_bg")}
+                </summary>
+                <p className="mt-2 text-xs leading-relaxed text-text-secondary">
+                  {t("settings.pet.faq.a_windows_bg")}
+                </p>
+              </details>
+            </div>
           </section>
         )}
 
