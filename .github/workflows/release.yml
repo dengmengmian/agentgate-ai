@@ -48,7 +48,7 @@ jobs:
           - platform: ubuntu-22.04
             args: ''
             rust_target: ''
-          - platform: windows-latest
+          - platform: windows-2022
             args: ''
             rust_target: ''
 
@@ -170,7 +170,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
             archive: agentgate-serve-x86_64-unknown-linux-gnu.tar.gz
             bin: agentgate-serve
-          - platform: windows-latest
+          - platform: windows-2022
             target: x86_64-pc-windows-msvc
             archive: agentgate-serve-x86_64-pc-windows-msvc.zip
             bin: agentgate-serve.exe
