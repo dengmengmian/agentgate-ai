@@ -118,7 +118,6 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
-          uploadUpdaterJson: false
           args: ${{ matrix.args }}
 
   updater-json:
