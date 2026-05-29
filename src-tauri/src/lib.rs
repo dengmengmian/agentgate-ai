@@ -166,6 +166,7 @@ pub fn run() {
                 .inner_size(PET_WIDTH, PET_HEIGHT)
                 .decorations(false)
                 .transparent(true)
+                .background_color(tauri::window::Color(0, 0, 0, 0))
                 .always_on_top(true)
                 .skip_taskbar(true)
                 .resizable(false)

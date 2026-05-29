@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.2] - 2026-05-29
+
+### 修复
+
+- **Windows 桌面宠物白色背景** —— Tauri 的 WebView2 控件在 Windows 上默认底色为白色，即使设置了 `transparent(true)` + CSS `background: transparent !important` 也无法让控件本身透明，导致宠物窗口在 Windows 上显示为一个白色卡片。给 pet 窗口 builder 加上 `.background_color(Color(0, 0, 0, 0))`，让 WebView2 底色也走透明通道。macOS 行为不变。
+
 ## [1.2.1] - 2026-05-29
 
 ### 修复
