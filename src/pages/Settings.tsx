@@ -37,7 +37,7 @@ const TABS: { id: Tab; icon: React.ComponentType<{ className?: string }> }[] = [
 export function Settings() {
   const { t, locale, setLocale } = useI18n();
   const [tab, setTab] = useState<Tab>("general");
-  const [theme, setThemeState] = useState(() => localStorage.getItem("agentgate_theme") || "dark");
+  const [theme, setThemeState] = useState(() => localStorage.getItem("agentgate_theme") || "light");
   const [settings, setSettings] = useState<GatewaySettingsType | null>(null);
   const [auth, setAuth] = useState<GatewayAuthSettings | null>(null);
   const [confirmRegen, setConfirmRegen] = useState(false);
@@ -116,13 +116,8 @@ export function Settings() {
 
   const setTheme = (t: string) => {
     setThemeState(t);
-    if (t === "dark") {
-      document.documentElement.removeAttribute("data-theme");
-      localStorage.removeItem("agentgate_theme");
-    } else {
-      document.documentElement.setAttribute("data-theme", t);
-      localStorage.setItem("agentgate_theme", t);
-    }
+    document.documentElement.setAttribute("data-theme", t);
+    localStorage.setItem("agentgate_theme", t);
   };
 
   if (!settings) return (
