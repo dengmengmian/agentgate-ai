@@ -40,27 +40,30 @@ impl super::ProviderTransform for MimoProvider {
     ) -> Result<Vec<ChatMessage>, AppError> {
         let mut messages = tool_calls::fix_tool_message_order(messages)?;
 
-        // MiMo thinking-mode multi-turn invariant: every assistant message
-        // carrying tool_calls MUST also carry reasoning_content. Without this,
-        // the model 400s ("The reasoning_content in the thinking mode must be
-        // passed back") or silently degrades into narration without tool use.
+        // MiMo thinking-mode multi-turn invariant: 历史里**所有** assistant 消息
+        // 都必须带 reasoning_content。原代码只兜底带 tool_calls 的 assistant，
+        // 纯文本 assistant 缺 reasoning 时仍会被 400。
+        //
+        // 触发场景：用户中途切换 thinking 模式（之前 disabled，现在 enabled），
+        // 历史里旧的 assistant 文本回复都没有 reasoning_content，MiMo 思考模式
+        // 下严格 enforce → 400 "The reasoning_content in the thinking mode must
+        // be passed back"。
+        //
+        // 与 mimo2codex 对齐：所有缺 reasoning_content 的历史 assistant 注入
+        // 占位（lookup_store 命中优先，否则用 "(this turn ran without thinking
+        // mode)" 显式占位——比 " " 单空格更可读，也告诉模型这条历史是非
+        // thinking 模式产出，不要据此推 reasoning 链）。
         for msg in &mut messages {
-            if msg.role == "assistant"
-                && msg.tool_calls.is_some()
-                && msg.reasoning_content.is_none()
-            {
-                let text = msg
-                    .content
-                    .as_ref()
-                    .and_then(|c| c.as_str())
-                    .unwrap_or("");
+            if msg.role == "assistant" && msg.reasoning_content.is_none() {
+                let text = msg.content.as_ref().and_then(|c| c.as_str()).unwrap_or("");
                 let stored = reasoning_store::lookup_by_content(text).or_else(|| {
                     msg.tool_calls.as_ref().and_then(|tcs| {
                         tcs.iter()
                             .find_map(|tc| reasoning_store::lookup_by_tool_call_id(&tc.id))
                     })
                 });
-                msg.reasoning_content = stored.or_else(|| Some(" ".to_string()));
+                msg.reasoning_content = stored
+                    .or_else(|| Some("(this turn ran without thinking mode)".to_string()));
             }
         }
 
@@ -76,24 +79,45 @@ impl super::ProviderTransform for MimoProvider {
         // Codex replays full conversation history including prior images; if
         // promotion couldn't swap to a vision model (e.g. user enabled only
         // mimo-v2.5-pro), MiMo's router 404s the moment it sees `image_url`.
-        // Dropping image parts loses visual context but keeps the chat alive.
+        //
+        // #6: 旧版本直接丢弃 image_url，user/agent 无感知。改进：在剥离时记
+        // 数，并在该消息的 text 部分追加显式提示——让 agent 知道有图片被丢
+        // 弃、为什么、怎么补救（切换 vision-capable 模型）。比静默丢失友好。
         if !MIMO_VISION_MODELS.contains(&model) {
             for msg in &mut req.messages {
                 if let Some(Value::Array(parts)) = &msg.content {
-                    let has_image = parts.iter().any(|p| {
+                    let stripped_count = parts.iter().filter(|p| {
                         p.get("type").and_then(|t| t.as_str()) == Some("image_url")
+                    }).count();
+                    if stripped_count == 0 { continue; }
+
+                    let mut text_only: Vec<Value> = parts.iter()
+                        .filter(|p| p.get("type").and_then(|t| t.as_str()) != Some("image_url"))
+                        .cloned()
+                        .collect();
+
+                    // 在最后一个 text 块追加提示；没有 text 块则新建一个。
+                    let notice = format!(
+                        "\n\n[Note: {stripped_count} image{plural} stripped — the current MiMo model \
+                         ({model}) does not support image input. To analyze images, switch to a vision \
+                         model (mimo-v2.5 or mimo-v2-omni) and re-send the request.]",
+                        plural = if stripped_count == 1 { "" } else { "s" },
+                    );
+                    let last_text_pos = text_only.iter().rposition(|p| {
+                        p.get("type").and_then(|t| t.as_str()) == Some("text")
                     });
-                    if has_image {
-                        let text_only: Vec<Value> = parts.iter()
-                            .filter(|p| p.get("type").and_then(|t| t.as_str()) != Some("image_url"))
-                            .cloned()
-                            .collect();
-                        msg.content = if text_only.is_empty() {
-                            Some(Value::String(String::new()))
-                        } else {
-                            Some(Value::Array(text_only))
-                        };
+                    if let Some(pos) = last_text_pos {
+                        if let Some(existing) = text_only[pos].get("text").and_then(|t| t.as_str()) {
+                            let combined = format!("{existing}{notice}");
+                            text_only[pos]["text"] = Value::String(combined);
+                        }
+                    } else {
+                        text_only.push(serde_json::json!({
+                            "type": "text",
+                            "text": notice.trim_start_matches('\n'),
+                        }));
                     }
+                    msg.content = Some(Value::Array(text_only));
                 }
             }
         }
@@ -176,7 +200,7 @@ impl super::ProviderTransform for MimoProvider {
             );
         }
         // Fall back to shared context-overflow detection.
-        p::detect_context_overflow(status, body)
+        p::detect_common_400(status, body)
     }
 }
 
@@ -426,7 +450,9 @@ mod tests {
     }
 
     #[test]
-    fn image_only_content_becomes_empty_string_for_non_vision_model() {
+    fn image_only_content_emits_stripped_notice_for_non_vision_model() {
+        // #6 修复后行为：图片被剥离时追加可读 notice（让 agent 知道发生了
+        // 什么 + 如何补救），不再静默变成空字符串。
         let mut r = req("mimo-v2-pro");
         r.messages = vec![ChatMessage {
             role: "user".into(),
@@ -439,7 +465,13 @@ mod tests {
             name: None,
         }];
         MimoProvider.finalize_request(&mut r, &None);
-        assert_eq!(r.messages[0].content.as_ref().unwrap().as_str(), Some(""));
+        let parts = r.messages[0].content.as_ref().unwrap().as_array().unwrap();
+        assert_eq!(parts.len(), 1, "image stripped, text notice synthesized");
+        assert_eq!(parts[0]["type"], "text");
+        let text = parts[0]["text"].as_str().unwrap();
+        assert!(text.contains("image stripped"), "notice should mention stripping");
+        assert!(text.contains("mimo-v2.5") || text.contains("mimo-v2-omni"),
+            "notice should suggest vision-capable models");
     }
 
     #[test]

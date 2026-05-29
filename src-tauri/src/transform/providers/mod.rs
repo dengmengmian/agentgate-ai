@@ -63,8 +63,16 @@ pub trait ProviderTransform: Send + Sync {
     /// to handle other errors should call `detect_context_overflow(...)` as
     /// a fallback when their own match fails.
     fn enhance_error(&self, status: u16, body_snippet: &str) -> Option<String> {
-        detect_context_overflow(status, body_snippet)
+        detect_common_400(status, body_snippet)
     }
+}
+
+/// 公共 400 模式检测：context_overflow → malformed_json_field 串联。
+/// 各 provider 的 enhance_error fallback 应调本函数，确保新加的诊断
+/// 全 provider 自动生效，而不是改 5 处 `or_else` 链。
+pub fn detect_common_400(status: u16, body_snippet: &str) -> Option<String> {
+    detect_context_overflow(status, body_snippet)
+        .or_else(|| detect_malformed_json_field(status, body_snippet))
 }
 
 /// Shared detection for "insufficient balance / quota / credit" 4xx errors.
@@ -180,6 +188,47 @@ pub fn detect_context_overflow(status: u16, body_snippet: &str) -> Option<String
     } else {
         None
     }
+}
+
+/// #8 修复：识别"上一轮 tool_call.arguments 被截断进了 history，这一轮请求重提
+/// 时上游 reparse 失败"的 400 错误，给中英双语友好提示引导用户开新会话。
+///
+/// 典型上游响应：
+/// > 400 BadRequest: unexpected end of data: line 1 column 46 (char 45)
+///
+/// 偏早的字符位置（不是整 body 截断）很说明问题——肯定是某个 JSON-as-string
+/// 字段里塞了半截 JSON。AgentGate 现在入站 / 出站两侧都加了 salvage，但**老的**
+/// Codex session 历史里仍可能带病；这条检测让用户看懂为什么挂。
+pub fn detect_malformed_json_field(status: u16, body_snippet: &str) -> Option<String> {
+    if status != 400 {
+        return None;
+    }
+    let lower = body_snippet.to_ascii_lowercase();
+    const MARKERS: &[&str] = &[
+        "unexpected end of data: line",
+        "unexpected end of json",
+        "expected value at line",
+        "json parse error",
+    ];
+    if !MARKERS.iter().any(|m| lower.contains(m)) {
+        return None;
+    }
+    Some(
+        "上游拒绝了请求里的一个畸形 JSON 字段（最大概率是被截断的 tool_call.arguments）。\n\
+         Upstream rejected a malformed JSON field (most likely a truncated tool_call.arguments).\n\
+         \n\
+         可能原因 / Possible cause:\n\
+         • 上一轮某个工具调用被截断（输出 length limit / 网络 / cancel），\n\
+           会话历史里留下了不完整的 JSON。本轮请求把它原样回传，上游再解析时就 400。\n\
+         • A previous tool call was truncated mid-stream; the half-JSON got persisted\n\
+           in client-side history and the strict upstream rejects it on re-parse.\n\
+         \n\
+         建议 / Suggestions:\n\
+         • AgentGate v1.2.3+ 已加入站 + 出站 salvage，新对话不会再触发。\n\
+         • 当前会话已损坏，最简单办法是开新会话（Codex /new、Claude Code /clear）。\n\
+         • Start a new chat session — the salvage layers in v1.2.3+ prevent recurrence."
+            .to_string(),
+    )
 }
 
 #[cfg(test)]

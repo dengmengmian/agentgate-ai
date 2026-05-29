@@ -360,7 +360,14 @@ async fn process_choices(
                 let oi = acc.next_output_index;
                 acc.next_output_index += 1;
                 tc.output_index = oi;
-                send(tx, &ev::function_call_added(&item_id, oi, &tc.id, &tc.name)).await;
+                // #1 namespace 还原
+                let (added_name, added_ns) =
+                    crate::transform::tool_calls::split_namespace_tool_name(&tc.name)
+                        .map(|(ns, name)| (name, Some(ns)))
+                        .unwrap_or_else(|| (tc.name.clone(), None));
+                send(tx, &ev::function_call_added_with_namespace(
+                    &item_id, oi, &tc.id, &added_name, added_ns.as_deref(),
+                )).await;
                 tc.emitted_added = true;
             }
             if tc.emitted_added && tc.arguments.len() > tc.last_args_len {
@@ -419,7 +426,14 @@ async fn process_choices(
                     let oi = acc.next_output_index;
                     acc.next_output_index += 1;
                     tc.output_index = oi;
-                    send(tx, &ev::function_call_added(&item_id, oi, &tc.id, &tc.name)).await;
+                    // #1 namespace 还原（name 为空时 split 必返 None，安全）
+                    let (added_name, added_ns) =
+                        crate::transform::tool_calls::split_namespace_tool_name(&tc.name)
+                            .map(|(ns, name)| (name, Some(ns)))
+                            .unwrap_or_else(|| (tc.name.clone(), None));
+                    send(tx, &ev::function_call_added_with_namespace(
+                        &item_id, oi, &tc.id, &added_name, added_ns.as_deref(),
+                    )).await;
                     tc.emitted_added = true;
                 }
 
@@ -535,26 +549,37 @@ async fn finalize(
     }
     // Tool-call-only: no message item was emitted, no need to close it
 
-    // Close tool calls (Bug #1: 用 tc.output_index，不是 idx + 1)
-    // Bug #7: arguments 校验 JSON 合法性，截断/cancel 时 salvage 成 "{}"。
-    // 不 salvage 的话半截 JSON 进 client history，下轮严格 provider 400。
+    // Close tool calls. 用 tc.output_index（不是 idx + 1）+ JSON salvage + namespace 还原。
     if has_tool_calls {
         let finish = acc.finish_reason.as_deref();
         for (_, tc) in &acc.tool_calls {
-            let safe_args = salvage_tool_arguments(&tc.arguments, &tc.name, &tc.id, finish);
+            let safe_args = crate::transform::tool_calls::salvage_tool_arguments(
+                &tc.arguments, &tc.name, &tc.id, finish,
+            );
+            // #1 修复：split `ns__tool_name` 还原 namespace。tool 名本身含 `__`
+            // 的边缘 case 会被误判，但 OpenAI/Anthropic 标准 snake_case 命名
+            // 很少这样——实际触发率极低。
+            let (display_name, namespace) =
+                crate::transform::tool_calls::split_namespace_tool_name(&tc.name)
+                    .map(|(ns, name)| (name, Some(ns)))
+                    .unwrap_or_else(|| (tc.name.clone(), None));
             let item_id = format!("fc_{}", tc.id);
             let oi = tc.output_index;
             send(&tx, &ev::function_call_arguments_done(&item_id, oi, &safe_args)).await;
-            send(&tx, &ev::function_call_done(&item_id, oi, &tc.id, &tc.name, &safe_args, rc)).await;
-            // 累积 function_call item 进 envelope.output（Bug #4）
-            acc.output_items.push(json!({
+            send(&tx, &ev::function_call_done_with_namespace(
+                &item_id, oi, &tc.id, &display_name, &safe_args, rc, namespace.as_deref(),
+            )).await;
+            // 累积 function_call item 进 envelope.output（含 namespace 字段）
+            let mut item = json!({
                 "id": item_id,
                 "type": "function_call",
                 "status": "completed",
                 "call_id": tc.id,
-                "name": tc.name,
+                "name": display_name,
                 "arguments": safe_args,
-            }));
+            });
+            if let Some(ref ns) = namespace { item["namespace"] = json!(ns); }
+            acc.output_items.push(item);
         }
     }
 
@@ -571,45 +596,8 @@ async fn send(tx: &mpsc::Sender<String>, event: &str) {
     let _ = tx.send(event.to_string()).await;
 }
 
-/// Bug #7 修复：tool_call arguments 必须是合法 JSON。上游 finish_reason=length /
-/// 客户端 cancel / 网络断 都可能截断 arguments 留半截 JSON。原样塞回客户端 →
-/// 下轮 history 带病 → 严格 provider（OpenAI 等）400 "unexpected end of data"。
-/// salvage 成 "{}" 至少保证下轮不挂；空字符串透传（部分 tool 无参数）。
-fn salvage_tool_arguments(
-    raw: &str,
-    tool_name: &str,
-    call_id: &str,
-    finish_reason: Option<&str>,
-) -> String {
-    if raw.is_empty() {
-        return String::new();
-    }
-    if serde_json::from_str::<serde_json::Value>(raw).is_ok() {
-        return raw.to_string();
-    }
-    let reason = match finish_reason {
-        Some("length") => "stream truncated by length limit",
-        Some(fr) => return salvage_log_with_reason(raw, tool_name, call_id, fr),
-        None => "stream ended before arguments completed",
-    };
-    tracing::warn!(
-        tool = tool_name, call_id = call_id, len = raw.len(),
-        cause = reason,
-        preview = %raw.chars().take(80).collect::<String>(),
-        "tool_call arguments not valid JSON; salvaged to {{}}"
-    );
-    "{}".to_string()
-}
-
-fn salvage_log_with_reason(raw: &str, tool_name: &str, call_id: &str, finish_reason: &str) -> String {
-    tracing::warn!(
-        tool = tool_name, call_id = call_id, len = raw.len(),
-        cause = format!("finish_reason={finish_reason} before arguments completed"),
-        preview = %raw.chars().take(80).collect::<String>(),
-        "tool_call arguments not valid JSON; salvaged to {{}}"
-    );
-    "{}".to_string()
-}
+// salvage_tool_arguments 已提到 transform/tool_calls.rs 公共模块，
+// 流式 / 非流式 / 入站 history 三处共用同一份逻辑。
 
 /// 发送一段 reasoning 增量。首次调用会顺手把 reasoning 的 output_item
 /// 占位事件先打出去（output_item.added），后续仅发 delta。output_index

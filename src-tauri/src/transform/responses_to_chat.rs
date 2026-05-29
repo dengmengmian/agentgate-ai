@@ -261,7 +261,7 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                     .and_then(|n| n.as_str())
                     .unwrap_or("")
                     .to_string();
-                let arguments = item
+                let raw_arguments = item
                     .get("arguments")
                     .map(|a| {
                         if a.is_string() {
@@ -271,6 +271,13 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                         }
                     })
                     .unwrap_or_default();
+                // #4 修复：入站 history function_call.arguments 校验 JSON 合法性。
+                // 客户端历史里可能带上一轮被截断的半截 args，原样发上游 → 严格
+                // provider 400 "unexpected end of data"。salvage 成 {} 让对话能继续。
+                // 与 sse.rs 出站方向对称。
+                let arguments = crate::transform::tool_calls::salvage_tool_arguments(
+                    &raw_arguments, &name, &call_id, None,
+                );
 
                 pending_tool_calls.push(ToolCall {
                     id: call_id,

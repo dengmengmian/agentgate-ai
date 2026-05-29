@@ -230,9 +230,29 @@ pub fn output_text_annotation_added(
 }
 
 pub fn function_call_added(item_id: &str, output_index: usize, call_id: &str, name: &str) -> String {
+    function_call_added_with_namespace(item_id, output_index, call_id, name, None)
+}
+
+/// #1 修复：namespace tool 还原。`namespace` 为 `Some(ns)` 时 emit 出来的 item
+/// 含 `namespace` 字段且 `name` 是去掉前缀后的真实工具名——Codex Desktop 多
+/// agent 场景下客户端按 namespace 路由工具调用必需。
+pub fn function_call_added_with_namespace(
+    item_id: &str,
+    output_index: usize,
+    call_id: &str,
+    name: &str,
+    namespace: Option<&str>,
+) -> String {
+    let mut item = json!({
+        "id": item_id, "type": "function_call", "status": "in_progress",
+        "call_id": call_id, "name": name, "arguments": ""
+    });
+    if let Some(ns) = namespace {
+        item["namespace"] = json!(ns);
+    }
     sse("response.output_item.added", json!({
         "type": "response.output_item.added", "output_index": output_index,
-        "item": { "id": item_id, "type": "function_call", "status": "in_progress", "call_id": call_id, "name": name, "arguments": "" }
+        "item": item,
     }))
 }
 
@@ -249,11 +269,24 @@ pub fn function_call_arguments_done(item_id: &str, output_index: usize, argument
 }
 
 pub fn function_call_done(item_id: &str, output_index: usize, call_id: &str, name: &str, arguments: &str, reasoning_content: Option<&str>) -> String {
+    function_call_done_with_namespace(item_id, output_index, call_id, name, arguments, reasoning_content, None)
+}
+
+pub fn function_call_done_with_namespace(
+    item_id: &str,
+    output_index: usize,
+    call_id: &str,
+    name: &str,
+    arguments: &str,
+    reasoning_content: Option<&str>,
+    namespace: Option<&str>,
+) -> String {
     let mut item = json!({
         "id": item_id, "type": "function_call", "status": "completed",
         "call_id": call_id, "name": name, "arguments": arguments
     });
     if let Some(rc) = reasoning_content { item["reasoning_content"] = json!(rc); }
+    if let Some(ns) = namespace { item["namespace"] = json!(ns); }
     sse("response.output_item.done", json!({ "type": "response.output_item.done", "output_index": output_index, "item": item }))
 }
 

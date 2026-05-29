@@ -109,7 +109,7 @@ impl super::ProviderTransform for DeepSeekProvider {
             );
         }
         // Fall back to shared context-overflow detection.
-        p::detect_context_overflow(status, body)
+        p::detect_common_400(status, body)
     }
 }
 

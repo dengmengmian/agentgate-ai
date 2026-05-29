@@ -35,7 +35,7 @@ impl super::ProviderTransform for AnthropicProvider {
                     .to_string(),
             );
         }
-        p::detect_context_overflow(status, body)
+        p::detect_common_400(status, body)
     }
 }
 

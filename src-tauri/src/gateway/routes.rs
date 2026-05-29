@@ -497,15 +497,29 @@ async fn handle_non_stream_response(
 
                         // Tool calls
                         if let Some(ref tcs) = msg.tool_calls {
+                            // #5 修复：非流式响应路径也对 arguments 做 JSON 合法性
+                            // salvage（与 sse.rs 流式路径对称）。上游偶尔在非流式
+                            // 模式下回半截 JSON args（finish_reason="length" 或自身
+                            // 截断），原样塞给客户端 → 下轮 history 带病。
+                            let finish = choice.finish_reason.as_deref();
                             for tc in tcs {
+                                let safe_args = crate::transform::tool_calls::salvage_tool_arguments(
+                                    &tc.function.arguments, &tc.function.name, &tc.id, finish,
+                                );
+                                // #1 namespace 还原（split 后无 prefix 时透传原名）
+                                let (display_name, namespace) =
+                                    crate::transform::tool_calls::split_namespace_tool_name(&tc.function.name)
+                                        .map(|(ns, name)| (name, Some(ns)))
+                                        .unwrap_or_else(|| (tc.function.name.clone(), None));
                                 let mut item = json!({
                                     "id": format!("fc_{}", tc.id),
                                     "type": "function_call",
                                     "status": "completed",
                                     "call_id": tc.id,
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments
+                                    "name": display_name,
+                                    "arguments": safe_args,
                                 });
+                                if let Some(ns) = namespace { item["namespace"] = json!(ns); }
                                 if let Some(ref rc) = msg.reasoning_content {
                                     if !rc.is_empty() {
                                         item["reasoning_content"] = json!(rc);

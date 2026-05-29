@@ -12,6 +12,41 @@ pub const MAX_CALL_ID_LEN: usize = 64;
 /// Tool **name** 上限。Anthropic / OpenAI 都是 `^[a-zA-Z0-9_-]{1,128}$`。
 pub const MAX_TOOL_NAME_LEN: usize = 128;
 
+/// tool_call arguments 必须是合法 JSON。上游 finish_reason=length / 客户端
+/// cancel / 网络断 都可能截断 arguments 留半截 JSON。原样塞回客户端 →
+/// 下轮 history 带病 → 严格 provider 400 "unexpected end of data"。
+/// salvage 成 "{}" 至少保证下轮不挂；空字符串透传（部分 tool 无参数）。
+///
+/// 三个调用点都用同一份逻辑：
+/// - 流式响应 finalize（gateway/sse.rs）
+/// - 非流式响应（gateway/routes.rs::handle_non_stream_response）
+/// - 入站 client history（transform/responses_to_chat.rs）
+pub fn salvage_tool_arguments(
+    raw: &str,
+    tool_name: &str,
+    call_id: &str,
+    finish_reason: Option<&str>,
+) -> String {
+    if raw.is_empty() {
+        return String::new();
+    }
+    if serde_json::from_str::<Value>(raw).is_ok() {
+        return raw.to_string();
+    }
+    let cause = match finish_reason {
+        Some("length") => "stream truncated by length limit".to_string(),
+        Some(fr) => format!("finish_reason={fr} before arguments completed"),
+        None => "history-resurrected: arguments not valid JSON (likely truncated last turn)".to_string(),
+    };
+    tracing::warn!(
+        tool = tool_name, call_id = call_id, len = raw.len(),
+        cause = %cause,
+        preview = %raw.chars().take(80).collect::<String>(),
+        "tool_call arguments not valid JSON; salvaged to {{}}"
+    );
+    "{}".to_string()
+}
+
 /// 规范化 tool call id / tool name 这类**标识符**：白名单 `[a-zA-Z0-9_-]`、
 /// 超长截断、空值占位。两个语义共用一个实现，区别只在最大长度和兜底占位符。
 ///
@@ -198,7 +233,71 @@ pub fn convert_tools_with_matrix(
             }
         }
     }
-    result
+    dedupe_tools_by_name(result)
+}
+
+/// #1 修复：响应侧 namespace 工具还原。
+///
+/// 入站 `convert_tools_with_matrix` 把 namespace tool `{ns_name, function: foo}`
+/// 拍平成 `function: ns_name__foo` 发上游（L116-122）。上游响应里 function_call.name
+/// 也是 `ns_name__foo`——如果不还原，Codex Desktop 多 agent / namespace 工具
+/// **找不到对应工具**。
+///
+/// 算法：split 第一个 `__`，前半作 namespace，后半作 tool name。返回 `None`
+/// 表示不是 namespace tool（普通 function tool），原样发回。
+///
+/// 边缘 case：tool 名**本身**含 `__`（例如 `my__tool`），会被误判为
+/// namespace tool。OpenAI / Anthropic 标准命名很少这样（标准约定 snake_case
+/// 单 underscore），实际触发率极低。未来若需消除歧义，应升级为传递
+/// NamespaceMap 的方案（请求侧记 map，响应侧查表）。
+pub fn split_namespace_tool_name(name: &str) -> Option<(String, String)> {
+    let pos = name.find("__")?;
+    if pos == 0 || pos + 2 == name.len() {
+        // `__foo` 或 `foo__` 都不是合法 namespace 拼接（namespace 和 tool 都不能空）
+        return None;
+    }
+    let ns = &name[..pos];
+    let tool = &name[pos + 2..];
+    Some((ns.to_string(), tool.to_string()))
+}
+
+/// #7 修复：工具名去重。Codex CLI/Desktop 偶发 bug 把同名工具发两次，
+/// 上游可能不接受重复（OpenAI strict mode / DeepSeek 都会 400）。
+/// function tool 用 function.name 做 key，builtin 用 type 做 key。
+fn dedupe_tools_by_name(tools: Vec<Value>) -> Vec<Value> {
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut out: Vec<Value> = Vec::with_capacity(tools.len());
+    for t in tools {
+        let key = match t.get("type").and_then(|x| x.as_str()) {
+            Some("function") => t.get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+                .map(|n| format!("fn:{n}")),
+            Some("builtin_function") => t.get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+                .map(|n| format!("builtin_fn:{n}")),
+            Some(other) => Some(format!("builtin:{other}")),
+            None => None,
+        };
+        match key {
+            Some(k) if seen.contains(&k) => {
+                tracing::warn!(
+                    key = %k,
+                    "dropping duplicate tool — client sent it more than once (defensive dedupe)"
+                );
+            }
+            Some(k) => {
+                seen.insert(k);
+                out.push(t);
+            }
+            None => {
+                // 无法识别 key，保留
+                out.push(t);
+            }
+        }
+    }
+    out
 }
 
 /// Check if converted tools contain Kimi's $web_search builtin.
@@ -311,7 +410,59 @@ pub fn synthesize_orphan_tool_outputs(messages: Vec<ChatMessage>) -> Vec<ChatMes
     out
 }
 
+/// 删孤儿 tool 消息——前面没对应 assistant.tool_calls.id 在窗口内（直到下一个
+/// non-tool 消息为止）。Codex undo / interrupt / redo 后偶发：assistant 被
+/// 撤回但 tool message 留着，原样发上游 → DeepSeek/MiMo 严格 enforce
+/// invariant，400 "tool messages must be a response to a preceding assistant
+/// message with tool_calls"。
+///
+/// 与 mimo2codex `removeOrphanToolMessages` 对齐。
+pub fn remove_orphan_tool_messages(mut messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
+    let mut valid_ids: Option<std::collections::HashSet<String>> = None;
+    let mut i = 0;
+    while i < messages.len() {
+        let role = messages[i].role.as_str();
+        if role == "assistant" {
+            valid_ids = messages[i].tool_calls.as_ref().map(|tcs| {
+                tcs.iter().map(|tc| tc.id.clone()).collect()
+            });
+            i += 1;
+        } else if role == "tool" {
+            let keep = match (&valid_ids, &messages[i].tool_call_id) {
+                (Some(ids), Some(tcid)) => ids.contains(tcid),
+                _ => false,
+            };
+            if keep {
+                i += 1;
+            } else {
+                let tcid = messages[i].tool_call_id.clone().unwrap_or_default();
+                tracing::warn!(
+                    tool_call_id = %tcid,
+                    "dropped orphan tool message (no preceding assistant.tool_calls in scope)"
+                );
+                messages.remove(i);
+                // 不 i += 1：splice 后下一个元素已经填到 i
+            }
+        } else if role == "system" || role == "developer" {
+            // system/developer 注入消息不重置 tool-receiving 窗口——Codex 会在
+            // assistant(tool_calls) 和 tool(result) 之间插入 approval 通知等 system
+            // 消息（fix_tool_message_order 也会把这些 system 移到 assistant 前），
+            // 不能因此让后面合法的 tool message 被误判为孤儿删掉。
+            i += 1;
+        } else {
+            // user / 其他——重置 tool-receiving 窗口
+            valid_ids = None;
+            i += 1;
+        }
+    }
+    messages
+}
+
 pub fn fix_tool_message_order(messages: Vec<ChatMessage>) -> Result<Vec<ChatMessage>, AppError> {
+    // 先删孤儿 tool 消息（前面没对应 assistant.tool_calls），再做重排 + 补缺失。
+    // 删除 + 补缺失互补：删处理"应该没的"，补处理"应该有的"。
+    let messages = remove_orphan_tool_messages(messages);
+
     let mut reordered: Vec<ChatMessage> = Vec::new();
     let len = messages.len();
     let mut i = 0;
@@ -851,7 +1002,9 @@ mod tests {
     }
 
     #[test]
-    fn test_fix_tool_message_order_unmatched_at_end() {
+    fn test_fix_tool_message_order_orphan_tool_removed() {
+        // #2 修复后行为：[user, tool(orphan)] → 孤儿 tool 被删，只剩 user。
+        // 不删的话上游严格 enforce invariant 会 400。
         let messages = vec![
             ChatMessage {
                 role: "user".to_string(),
@@ -871,8 +1024,8 @@ mod tests {
             },
         ];
         let result = fix_tool_message_order(messages).unwrap();
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[1].role, "tool");
+        assert_eq!(result.len(), 1, "orphan tool message should be dropped");
+        assert_eq!(result[0].role, "user");
     }
 
     #[test]
