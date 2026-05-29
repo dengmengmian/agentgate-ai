@@ -1427,21 +1427,32 @@ pub async fn handle_messages(
 
     let model = selection.model.clone();
     let messages = crate::protocol::anthropic_messages::to_chat_messages(&msg_req);
+    // Anthropic 工具形态 {name, description, input_schema} —— 没有顶层 type，
+    // 必须走 anthropic_messages::tools_to_chat，否则 transform::tool_calls::convert_tools
+    // 会把整组工具丢弃。
     let tools: Option<Vec<serde_json::Value>> = msg_req.tools.as_ref().map(|t| {
-        crate::transform::tool_calls::convert_tools(t, config.is_deepseek())
+        crate::protocol::anthropic_messages::tools_to_chat(t, config.is_deepseek())
     }).filter(|t| !t.is_empty());
+    // tool_choice 也得翻译：Anthropic {type:"tool",name:"X"} 与 Chat
+    // {type:"function",function:{name:"X"}} 不通用；{type:"any"} → "required"。
+    let tool_choice = msg_req.tool_choice.as_ref()
+        .map(crate::protocol::anthropic_messages::tool_choice_to_chat);
+    // thinking.budget_tokens → reasoning_effort 字符串。Chat 没有真正的 budget 字段，
+    // 桶化映射是最接近的等价表达（与 Responses→Anthropic 方向对称）。
+    let reasoning_effort = msg_req.thinking.as_ref()
+        .and_then(crate::protocol::anthropic_messages::thinking_to_reasoning_effort);
     let want_stream = msg_req.stream.unwrap_or(false);
 
     let chat_req = crate::protocol::chat_completions::ChatCompletionsRequest {
         model: model.clone(), messages, tools,
-        tool_choice: msg_req.tool_choice.clone(),
+        tool_choice,
         stream: want_stream,
         temperature: msg_req.temperature, top_p: msg_req.top_p,
         max_tokens: msg_req.max_tokens, thinking: None,
         // include_usage 必加：默认 Chat stream 不带 usage，client 看 token 都是 0；
         // 加上后终块带完整 usage，message_delta 能正确报 output_tokens。
         stream_options: if want_stream { Some(json!({"include_usage": true})) } else { None },
-        response_format: None, reasoning_effort: None,
+        response_format: None, reasoning_effort,
         seed: None, stop: None, frequency_penalty: None, presence_penalty: None,
         parallel_tool_calls: None,
     };

@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 
 /// Anthropic Messages API request (loosely typed for compatibility).
 #[derive(Debug, Clone, Deserialize)]
@@ -14,6 +14,7 @@ pub struct MessagesRequest {
     pub top_p: Option<f64>,
     pub tools: Option<Vec<Value>>,
     pub tool_choice: Option<Value>,
+    pub thinking: Option<Value>,
     #[serde(flatten)]
     pub extra: std::collections::HashMap<String, Value>,
 }
@@ -365,6 +366,95 @@ fn map_finish_reason_to_stop_reason(fr: &Option<String>, content: &[Value]) -> &
     }
 }
 
+/// Anthropic tools (`{name, description, input_schema}`) → Chat Completions
+/// tools (`{type:"function", function:{name, description, parameters}}`).
+///
+/// Anthropic 的工具没有顶层 `type` 字段，直接喂给 `transform::tool_calls::convert_tools`
+/// 会落到 `_` 分支被整组丢弃——必须走这条独立的转换路径。
+pub fn tools_to_chat(tools: &[Value], clean_for_deepseek: bool) -> Vec<Value> {
+    let mut out = Vec::with_capacity(tools.len());
+    for tool in tools {
+        let name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("");
+        if name.is_empty() {
+            continue;
+        }
+        let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or("");
+        // Anthropic 用 input_schema；Chat 用 parameters。两者都是 JSON Schema object。
+        let mut params = tool.get("input_schema").cloned().unwrap_or(json!({"type":"object"}));
+        if clean_for_deepseek {
+            crate::transform::schema_cleaner::clean_schema_for_deepseek(&mut params);
+        }
+        out.push(json!({
+            "type": "function",
+            "function": { "name": name, "description": desc, "parameters": params }
+        }));
+    }
+    out
+}
+
+/// Anthropic tool_choice → Chat Completions tool_choice。
+///
+/// 映射：
+/// - `{type:"auto"}`           → `"auto"`
+/// - `{type:"any"}`            → `"required"`
+/// - `{type:"tool", name:"X"}` → `{type:"function", function:{name:"X"}}`
+/// - `{type:"none"}`           → `"none"`
+/// - 已经是 Chat 形态的字符串/对象 → 原样返回
+pub fn tool_choice_to_chat(tc: &Value) -> Value {
+    if let Some(s) = tc.as_str() {
+        return Value::String(s.to_string());
+    }
+    let Some(obj) = tc.as_object() else {
+        return tc.clone();
+    };
+    let kind = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
+    match kind {
+        "auto" => Value::String("auto".into()),
+        "any" => Value::String("required".into()),
+        "none" => Value::String("none".into()),
+        "tool" => {
+            let name = obj.get("name").and_then(|n| n.as_str()).unwrap_or("");
+            json!({"type": "function", "function": {"name": name}})
+        }
+        // 已经是 Chat 形态（含 function 字段）或未知类型——原样返回，
+        // 让上游自己处理 / 报错，比静默猜测更安全。
+        _ => tc.clone(),
+    }
+}
+
+/// Anthropic `thinking.budget_tokens` → Chat `reasoning_effort` 字符串。
+///
+/// 与 `transform::responses_to_anthropic::convert_thinking` 的正向映射对称：
+/// - low/minimal → 4096
+/// - medium      → 8192
+/// - high        → 16384
+/// - xhigh/max   → 32768
+///
+/// 反向时按区间桶化（边界靠下取上一档）：
+/// - < 8192      → "low"
+/// - < 16384     → "medium"
+/// - >= 16384    → "high"
+///
+/// `type: "disabled"` 或无 budget_tokens 返回 None。
+pub fn thinking_to_reasoning_effort(thinking: &Value) -> Option<String> {
+    let kind = thinking.get("type").and_then(|t| t.as_str()).unwrap_or("");
+    if kind == "disabled" {
+        return None;
+    }
+    let budget = thinking.get("budget_tokens").and_then(|b| b.as_i64())?;
+    if budget <= 0 {
+        return None;
+    }
+    let effort = if budget < 8192 {
+        "low"
+    } else if budget < 16384 {
+        "medium"
+    } else {
+        "high"
+    };
+    Some(effort.to_string())
+}
+
 /// Chat Completions usage → Anthropic usage 字段重命名。
 /// Anthropic client（Claude Code）期望 `input_tokens` / `output_tokens` /
 /// `cache_creation_input_tokens` / `cache_read_input_tokens`——原样塞
@@ -408,6 +498,7 @@ mod tests {
             top_p: None,
             tools: None,
             tool_choice: None,
+            thinking: None,
             extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
@@ -431,6 +522,7 @@ mod tests {
             top_p: None,
             tools: None,
             tool_choice: None,
+            thinking: None,
             extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
@@ -452,6 +544,7 @@ mod tests {
             top_p: None,
             tools: None,
             tool_choice: None,
+            thinking: None,
             extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
@@ -478,6 +571,7 @@ mod tests {
             top_p: None,
             tools: None,
             tool_choice: None,
+            thinking: None,
             extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
@@ -507,6 +601,7 @@ mod tests {
             top_p: None,
             tools: None,
             tool_choice: None,
+            thinking: None,
             extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
@@ -534,6 +629,7 @@ mod tests {
             top_p: None,
             tools: None,
             tool_choice: None,
+            thinking: None,
             extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
@@ -601,7 +697,7 @@ mod tests {
                 ]),
             }],
             system: None, max_tokens: None, stream: None, temperature: None, top_p: None,
-            tools: None, tool_choice: None, extra: std::collections::HashMap::new(),
+            tools: None, tool_choice: None, thinking: None, extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
         assert_eq!(messages.len(), 3);
@@ -625,7 +721,7 @@ mod tests {
                 ]),
             }],
             system: None, max_tokens: None, stream: None, temperature: None, top_p: None,
-            tools: None, tool_choice: None, extra: std::collections::HashMap::new(),
+            tools: None, tool_choice: None, thinking: None, extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
         assert_eq!(messages.len(), 1);
@@ -644,7 +740,7 @@ mod tests {
                 ]),
             }],
             system: None, max_tokens: None, stream: None, temperature: None, top_p: None,
-            tools: None, tool_choice: None, extra: std::collections::HashMap::new(),
+            tools: None, tool_choice: None, thinking: None, extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
         assert_eq!(messages.len(), 1);
@@ -708,5 +804,96 @@ mod tests {
         assert_eq!(content[0]["type"], "thinking");
         assert_eq!(content[0]["thinking"], "Let me think step by step...");
         assert_eq!(content[1]["type"], "text");
+    }
+
+    // ── Anthropic → Chat 翻译 helper 测试（修复 fallback 路径的 3 个 bug） ──
+
+    #[test]
+    fn tools_to_chat_converts_anthropic_shape_to_function() {
+        let tools = vec![json!({
+            "name": "search",
+            "description": "Search the web",
+            "input_schema": {
+                "type": "object",
+                "properties": { "q": { "type": "string" } },
+                "required": ["q"]
+            }
+        })];
+        let out = tools_to_chat(&tools, false);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["type"], "function");
+        assert_eq!(out[0]["function"]["name"], "search");
+        assert_eq!(out[0]["function"]["description"], "Search the web");
+        assert_eq!(out[0]["function"]["parameters"]["properties"]["q"]["type"], "string");
+    }
+
+    #[test]
+    fn tools_to_chat_drops_unnamed_tool() {
+        let tools = vec![json!({"description": "no name"})];
+        assert!(tools_to_chat(&tools, false).is_empty());
+    }
+
+    #[test]
+    fn tools_to_chat_synthesizes_empty_schema_when_missing() {
+        let tools = vec![json!({"name": "ping"})];
+        let out = tools_to_chat(&tools, false);
+        assert_eq!(out[0]["function"]["parameters"]["type"], "object");
+    }
+
+    #[test]
+    fn tool_choice_to_chat_maps_all_anthropic_variants() {
+        assert_eq!(tool_choice_to_chat(&json!({"type":"auto"})), json!("auto"));
+        assert_eq!(tool_choice_to_chat(&json!({"type":"any"})), json!("required"));
+        assert_eq!(tool_choice_to_chat(&json!({"type":"none"})), json!("none"));
+        assert_eq!(
+            tool_choice_to_chat(&json!({"type":"tool","name":"search"})),
+            json!({"type":"function","function":{"name":"search"}})
+        );
+    }
+
+    #[test]
+    fn tool_choice_to_chat_passes_through_strings() {
+        assert_eq!(tool_choice_to_chat(&json!("auto")), json!("auto"));
+        assert_eq!(tool_choice_to_chat(&json!("required")), json!("required"));
+    }
+
+    #[test]
+    fn thinking_to_reasoning_effort_buckets_budget() {
+        assert_eq!(
+            thinking_to_reasoning_effort(&json!({"type":"enabled","budget_tokens":4096})),
+            Some("low".to_string())
+        );
+        assert_eq!(
+            thinking_to_reasoning_effort(&json!({"type":"enabled","budget_tokens":8192})),
+            Some("medium".to_string())
+        );
+        assert_eq!(
+            thinking_to_reasoning_effort(&json!({"type":"enabled","budget_tokens":16384})),
+            Some("high".to_string())
+        );
+        assert_eq!(
+            thinking_to_reasoning_effort(&json!({"type":"enabled","budget_tokens":32768})),
+            Some("high".to_string())
+        );
+    }
+
+    #[test]
+    fn thinking_to_reasoning_effort_returns_none_when_disabled_or_missing() {
+        assert!(thinking_to_reasoning_effort(&json!({"type":"disabled"})).is_none());
+        assert!(thinking_to_reasoning_effort(&json!({})).is_none());
+        assert!(thinking_to_reasoning_effort(&json!({"type":"enabled","budget_tokens":0})).is_none());
+    }
+
+    #[test]
+    fn messages_request_parses_thinking_field() {
+        let raw = r#"{
+            "model":"claude-3",
+            "messages":[],
+            "thinking":{"type":"enabled","budget_tokens":12000}
+        }"#;
+        let req: MessagesRequest = serde_json::from_str(raw).unwrap();
+        assert!(req.thinking.is_some());
+        let eff = thinking_to_reasoning_effort(req.thinking.as_ref().unwrap()).unwrap();
+        assert_eq!(eff, "medium");
     }
 }
