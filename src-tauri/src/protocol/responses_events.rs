@@ -129,6 +129,20 @@ pub fn output_item_added_reasoning(item_id: &str, output_index: usize) -> String
     }))
 }
 
+pub fn reasoning_summary_part_added(
+    item_id: &str,
+    output_index: usize,
+    summary_index: usize,
+) -> String {
+    sse("response.reasoning_summary_part.added", json!({
+        "type": "response.reasoning_summary_part.added",
+        "item_id": item_id,
+        "output_index": output_index,
+        "summary_index": summary_index,
+        "part": { "type": "summary_text", "text": "" },
+    }))
+}
+
 /// Incremental reasoning text chunk. Emitted as the upstream's thinking-mode
 /// tokens arrive so the UI can render "thinking..." live instead of waiting
 /// for the entire trace at finalize.
@@ -162,6 +176,21 @@ pub fn reasoning_summary_text_done(
         "output_index": output_index,
         "summary_index": summary_index,
         "text": text,
+    }))
+}
+
+pub fn reasoning_summary_part_done(
+    item_id: &str,
+    output_index: usize,
+    summary_index: usize,
+    text: &str,
+) -> String {
+    sse("response.reasoning_summary_part.done", json!({
+        "type": "response.reasoning_summary_part.done",
+        "item_id": item_id,
+        "output_index": output_index,
+        "summary_index": summary_index,
+        "part": { "type": "summary_text", "text": text },
     }))
 }
 

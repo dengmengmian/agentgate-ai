@@ -42,6 +42,7 @@ pub struct SseAccumulator {
     pub events_log: String,
     events_size: usize,
     next_output_index: usize,
+    msg_output_index: Option<usize>,
     text_content_started: bool,
     /// Output index reserved for the reasoning item when the first reasoning
     /// chunk arrives. `None` if no reasoning has streamed yet — set lazily so
@@ -78,7 +79,8 @@ impl SseAccumulator {
             annotations: Vec::new(),
             events_log: String::new(),
             events_size: 0,
-            next_output_index: 1, // 0 is reserved for the message item
+            next_output_index: 0,
+            msg_output_index: None,
             text_content_started: false,
             reasoning_output_index: None,
             reasoning_item_id,
@@ -123,6 +125,7 @@ impl SseAccumulator {
         self.reasoning_content.clear();
         self.annotations.clear();
         self.reasoning_output_index = None;
+        self.msg_output_index = None;
         self.text_content_started = false;
         self.finish_reason = None;
     }
@@ -309,14 +312,13 @@ async fn process_choices(
                 }
                 if !text.is_empty() {
                     if !*message_item_emitted {
-                        send(tx, &ev::output_item_added_message(&acc.msg_item_id, 0)).await;
-                        send(tx, &ev::content_part_added(&acc.msg_item_id, 0, 0)).await;
-                        acc.text_content_started = true;
+                        start_message_item(tx, acc).await;
                         *message_item_emitted = true;
                     }
                     *has_text = true;
                     acc.full_text.push_str(&text);
-                    send(tx, &ev::output_text_delta(&acc.msg_item_id, 0, 0, &text)).await;
+                    let oi = acc.msg_output_index.unwrap_or(0);
+                    send(tx, &ev::output_text_delta(&acc.msg_item_id, oi, 0, &text)).await;
                 }
             }
         }
@@ -358,13 +360,18 @@ async fn process_choices(
         // surface citations in real time, and accumulate them for the
         // final output_item.done message.
         if let Some(ref anns) = delta.annotations {
+            if !anns.is_empty() && !*message_item_emitted {
+                start_message_item(tx, acc).await;
+                *message_item_emitted = true;
+            }
             for ann in anns {
                 let annotation_index = acc.annotations.len();
+                let oi = acc.msg_output_index.unwrap_or(0);
                 send(
                     tx,
                     &ev::output_text_annotation_added(
                         &acc.msg_item_id,
-                        0,
+                        oi,
                         0,
                         annotation_index,
                         ann,
@@ -522,7 +529,12 @@ async fn finalize(
     };
     let had_flush_text = extra_text.is_some();
 
-    let rc = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.as_str()) };
+    let rc_owned = if acc.reasoning_content.is_empty() {
+        None
+    } else {
+        Some(acc.reasoning_content.clone())
+    };
+    let rc = rc_owned.as_deref();
 
     // Store reasoning for future requests (in-memory LRU, process-local —
     // survives within the same process for the same conversation thread).
@@ -555,6 +567,7 @@ async fn finalize(
         if acc.reasoning_output_index.is_some() {
             // Streamed: close out the summary text before the item.done.
             send(&tx, &ev::reasoning_summary_text_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content)).await;
+            send(&tx, &ev::reasoning_summary_part_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content)).await;
         }
         send(&tx, &ev::output_item_done_reasoning(&acc.reasoning_item_id, oi, &acc.reasoning_content)).await;
         // 累积进 envelope.output（Bug #4）
@@ -568,18 +581,19 @@ async fn finalize(
     }
 
     // Close text content if any
-    if has_text || had_flush_text {
+    if acc.msg_output_index.is_some() || has_text || had_flush_text {
         // 如果只是 flush_text（无之前的 text delta）需要补 added 事件，但 has_text=true
         // 时之前已经发过 output_item.added + content_part.added。flush_text 单独场景
         // 极罕见（splitter 末尾误判半截标签）——优先保持流可以正常 complete，宁可
         // text 略冗余，不重发 added。
+        let oi = start_message_item(&tx, acc).await;
         if let Some(extra) = extra_text {
-            send(&tx, &ev::output_text_delta(&acc.msg_item_id, 0, 0, &extra)).await;
+            send(&tx, &ev::output_text_delta(&acc.msg_item_id, oi, 0, &extra)).await;
         }
-        send(&tx, &ev::output_text_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
-        send(&tx, &ev::content_part_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
+        send(&tx, &ev::output_text_done(&acc.msg_item_id, oi, 0, &acc.full_text)).await;
+        send(&tx, &ev::content_part_done(&acc.msg_item_id, oi, 0, &acc.full_text)).await;
         send(&tx, &ev::output_item_done_message_with_annotations(
-            &acc.msg_item_id, 0, &acc.full_text, rc, &acc.annotations,
+            &acc.msg_item_id, oi, &acc.full_text, rc, &acc.annotations,
         )).await;
         // 累积 message item 进 envelope.output（Bug #4）
         let mut msg_item = json!({
@@ -646,6 +660,19 @@ async fn send(tx: &mpsc::Sender<String>, event: &str) {
     let _ = tx.send(event.to_string()).await;
 }
 
+async fn start_message_item(tx: &mpsc::Sender<String>, acc: &mut SseAccumulator) -> usize {
+    if let Some(oi) = acc.msg_output_index {
+        return oi;
+    }
+    let oi = acc.next_output_index;
+    acc.next_output_index += 1;
+    acc.msg_output_index = Some(oi);
+    send(tx, &ev::output_item_added_message(&acc.msg_item_id, oi)).await;
+    send(tx, &ev::content_part_added(&acc.msg_item_id, oi, 0)).await;
+    acc.text_content_started = true;
+    oi
+}
+
 /// 手动发一个 `response.completed` 帧（用于 MiMo 自动续写的兜底路径：第一轮跑了
 /// `emit_completed=false`，如果没触发续写就需要外层补发一次 completed 收尾流；
 /// 续写失败时也走这里收尾，避免 Codex 死等）。
@@ -680,6 +707,7 @@ async fn stream_reasoning_delta(tx: &mpsc::Sender<String>, acc: &mut SseAccumula
             acc.next_output_index += 1;
             acc.reasoning_output_index = Some(oi);
             send(tx, &ev::output_item_added_reasoning(&acc.reasoning_item_id, oi)).await;
+            send(tx, &ev::reasoning_summary_part_added(&acc.reasoning_item_id, oi, 0)).await;
             oi
         }
     };
@@ -824,16 +852,20 @@ mod tests {
         drop(tx);
 
         let first = rx.recv().await.expect("expected added event");
-        let second = rx.recv().await.expect("expected delta event");
+        let second = rx.recv().await.expect("expected part added event");
+        let third = rx.recv().await.expect("expected delta event");
         assert!(first.contains("response.output_item.added"), "got: {first}");
         assert!(first.contains("\"type\":\"reasoning\""), "got: {first}");
+        assert!(first.contains("\"output_index\":0"), "got: {first}");
         assert!(first.contains("rs_xyz"), "got: {first}");
-        assert!(second.contains("response.reasoning_summary_text.delta"), "got: {second}");
-        assert!(second.contains("\"delta\":\"Hello\""), "got: {second}");
-        assert!(rx.recv().await.is_none(), "only added + delta on first chunk");
-        assert_eq!(acc.reasoning_output_index, Some(1));
+        assert!(second.contains("response.reasoning_summary_part.added"), "got: {second}");
+        assert!(second.contains("\"output_index\":0"), "got: {second}");
+        assert!(third.contains("response.reasoning_summary_text.delta"), "got: {third}");
+        assert!(third.contains("\"delta\":\"Hello\""), "got: {third}");
+        assert!(rx.recv().await.is_none(), "only added + part + delta on first chunk");
+        assert_eq!(acc.reasoning_output_index, Some(0));
         // next_output_index advanced so tool calls won't reuse the reasoning slot.
-        assert_eq!(acc.next_output_index, 2);
+        assert_eq!(acc.next_output_index, 1);
     }
 
     #[tokio::test]
@@ -841,7 +873,8 @@ mod tests {
         let mut acc = SseAccumulator::new("resp_xyz".to_string(), "deepseek".to_string());
         let (tx, mut rx) = mpsc::channel::<String>(8);
         stream_reasoning_delta(&tx, &mut acc, "A").await;
-        // Drain the first two events (added + delta).
+        // Drain the first three events (added + summary part + delta).
+        let _ = rx.recv().await;
         let _ = rx.recv().await;
         let _ = rx.recv().await;
         stream_reasoning_delta(&tx, &mut acc, "B").await;
@@ -851,7 +884,7 @@ mod tests {
         assert!(second_delta.contains("response.reasoning_summary_text.delta"));
         assert!(second_delta.contains("\"delta\":\"B\""));
         assert!(rx.recv().await.is_none(), "no second added event");
-        assert_eq!(acc.next_output_index, 2, "index reserved only once");
+        assert_eq!(acc.next_output_index, 1, "index reserved only once");
     }
 
     #[tokio::test]
@@ -863,5 +896,82 @@ mod tests {
 
         assert!(rx.recv().await.is_none(), "empty delta must not emit events");
         assert!(acc.reasoning_output_index.is_none());
+    }
+
+    fn bootstrap_from_prefix(prefix: &str) -> crate::gateway::sse_bootstrap::Bootstrap {
+        use bytes::Bytes;
+        use futures::{stream, StreamExt as _};
+
+        crate::gateway::sse_bootstrap::Bootstrap {
+            prefix: prefix.as_bytes().to_vec(),
+            stream: stream::empty::<Result<Bytes, reqwest::Error>>().boxed(),
+        }
+    }
+
+    async fn collect_stream_events(prefix: &str) -> (Vec<String>, SseAccumulator) {
+        let boot = bootstrap_from_prefix(prefix);
+        let (tx, mut rx) = mpsc::channel::<String>(64);
+        let mut acc = SseAccumulator::new("resp_test".to_string(), "mimo-v2.5-pro".to_string());
+
+        process_upstream_stream_inner(boot, tx, &mut acc, true, true)
+            .await
+            .expect("stream processing should succeed");
+
+        let mut events = Vec::new();
+        while let Some(event) = rx.recv().await {
+            events.push(event);
+        }
+        (events, acc)
+    }
+
+    fn position(events: &[String], needle: &str) -> usize {
+        events
+            .iter()
+            .position(|event| event.contains(needle))
+            .unwrap_or_else(|| panic!("missing event containing {needle}; events: {events:#?}"))
+    }
+
+    #[tokio::test]
+    async fn annotations_open_message_before_annotation_event() {
+        let prefix = concat!(
+            "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mimo-v2.5-pro\",\"choices\":[{\"index\":0,\"delta\":{\"annotations\":[{\"type\":\"url_citation\",\"url\":\"https://a.com\",\"title\":\"A\"}]},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mimo-v2.5-pro\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"answer\"},\"finish_reason\":null}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+
+        let (events, acc) = collect_stream_events(prefix).await;
+        let msg_added = position(&events, "\"type\":\"message\"");
+        let content_added = position(&events, "response.content_part.added");
+        let annotation_added = position(&events, "response.output_text.annotation.added");
+        let msg_done = position(&events, "response.output_item.done");
+        assert!(msg_added < annotation_added, "message item must open first");
+        assert!(content_added < annotation_added, "content part must open first");
+        assert!(annotation_added < msg_done, "message item must close after annotation");
+        assert!(events[annotation_added].contains("\"output_index\":0"));
+        assert_eq!(acc.msg_output_index, Some(0));
+    }
+
+    #[tokio::test]
+    async fn reasoning_then_text_allocates_output_indexes_in_stream_order() {
+        let prefix = concat!(
+            "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mimo-v2.5-pro\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"thinking\"},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mimo-v2.5-pro\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"answer\"},\"finish_reason\":null}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+
+        let (events, acc) = collect_stream_events(prefix).await;
+        let reasoning_added = events
+            .iter()
+            .find(|event| event.contains("response.output_item.added") && event.contains("\"type\":\"reasoning\""))
+            .expect("reasoning added event");
+        let message_added = events
+            .iter()
+            .find(|event| event.contains("response.output_item.added") && event.contains("\"type\":\"message\""))
+            .expect("message added event");
+        assert!(reasoning_added.contains("\"output_index\":0"), "got: {reasoning_added}");
+        assert!(message_added.contains("\"output_index\":1"), "got: {message_added}");
+        assert_eq!(acc.reasoning_output_index, Some(0));
+        assert_eq!(acc.msg_output_index, Some(1));
+        assert_eq!(acc.next_output_index, 2);
     }
 }
