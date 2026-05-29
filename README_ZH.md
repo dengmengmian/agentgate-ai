@@ -514,6 +514,7 @@ Codex 发送含图片的请求
 
 - **运行自检** — 检查 Gateway、Provider、配置、数据库状态
 - **导出诊断包** — 生成脱敏诊断信息用于排查问题
+- 请求日志的 `trace_json` 会记录 `degradation_events`：当 AgentGate 剥离不受支持的图片、原生 web_search、MCP connector、tool output 图片时，可用于后续 UI 展示和问题排查。
 
 ## 支持的 Provider
 

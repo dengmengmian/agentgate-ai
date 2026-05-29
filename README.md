@@ -530,6 +530,7 @@ On the **Diagnostics** page:
 
 - **Run Self-Check** — checks gateway, provider, config, and database status
 - **Export Diagnostic Bundle** — generates a redacted diagnostic report for troubleshooting
+- Request log `trace_json` includes `degradation_events` when AgentGate strips unsupported capabilities such as images, native web search, MCP connectors, or tool-output images.
 
 ## Supported Providers
 

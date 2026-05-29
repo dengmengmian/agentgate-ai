@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.2.3] - 2026-05-29
+## [1.2.3] - 2026-05-30
 
 ### 修复
 
@@ -10,10 +10,11 @@ All notable changes to this project will be documented in this file.
 - **MiMo Token Plan 区域域名保持一致** —— `sk-*` 按量付费 key 使用开放 API 域名；`tp-*` Token Plan key 使用 `token-plan-{cn|sgp|ams}.xiaomimimo.com`，并在 Chat / Anthropic 端点间保持同一区域，避免 key 与 host 不匹配。
 - **MiMo `web_search` 自动降级** —— Token Plan 预先剥离 MiMo 原生 `web_search` builtin；按量付费 key 遇到 Web Search Plugin 未开通错误时剥离并重试一次，避免新手未购买插件时请求直接失败。
 - **Claude Code 直连模型不再写 `[1m]`** —— MiMo / DeepSeek 的推荐映射继续使用普通模型 ID，历史 `[1m]` 后缀在 Anthropic 直连发送前会被剥离。
+- **能力降级可诊断** —— MiMo / DeepSeek 图片剥离、MiMo `web_search` 自动降级、MCP advisory、tool output 图片省略会统一记录为 `degradation_events`，写入请求日志 trace，便于后续 UI 展示和排查。
 
 ### 文档
 
-- README / README_ZH 同步说明 MiMo 开放 API 与 Token Plan 域名差异、Token Plan 区域保持、以及 `web_search` 自动降级行为。
+- README / README_ZH 同步说明 MiMo 开放 API 与 Token Plan 域名差异、Token Plan 区域保持、`web_search` 自动降级行为，以及请求日志中的能力降级诊断事件。
 
 ## [1.2.2] - 2026-05-29
 
