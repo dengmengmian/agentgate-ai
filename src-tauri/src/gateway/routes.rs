@@ -2556,10 +2556,10 @@ mod tests {
     }
 
     #[test]
-    fn request_contains_images_picks_up_historic_image() {
-        // Image is in an EARLIER user turn; the most recent user turn is text-only.
-        // Prior to the fix this returned false and MiMo got `image_url` in the
-        // converted body without promotion → 404 from upstream.
+    fn request_contains_images_ignores_historic_image_when_current_turn_text_only() {
+        // 反转旧测试：history 有图但当前 turn 是纯文本 → false。
+        // 历史 image 由 mimo.rs::finalize_request strip 兜底，不需要 promote。
+        // 避免一次发图导致整个会话被强制路由到 vision 模型（128K context）。
         let req = responses_req_with_input(json!([
             {"type": "message", "role": "user", "content": [
                 {"type": "input_image", "image_url": {"url": "https://example.com/x.png"}}
@@ -2569,7 +2569,25 @@ mod tests {
                 {"type": "input_text", "text": "what color is it?"}
             ]}
         ]));
-        assert!(request_contains_images(&req), "history image must trigger has_images=true");
+        assert!(!request_contains_images(&req),
+            "history image must NOT force promotion when current turn is text-only");
+    }
+
+    #[test]
+    fn request_contains_images_true_when_current_turn_has_image() {
+        // 当前 turn 真发图 → 必须 promote 到 vision 模型（图还没被 strip）
+        let req = responses_req_with_input(json!([
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "earlier message"}
+            ]},
+            {"type": "message", "role": "assistant", "content": "ok"},
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "look at this"},
+                {"type": "input_image", "image_url": {"url": "https://example.com/x.png"}}
+            ]}
+        ]));
+        assert!(request_contains_images(&req),
+            "current user turn with image must trigger promotion");
     }
 
     #[test]
@@ -2593,6 +2611,20 @@ mod tests {
             ]}
         ]));
         assert!(!request_contains_images(&req), "assistant turns are not user input");
+    }
+
+    #[test]
+    fn request_contains_images_ignores_tool_outputs_after_user_image() {
+        // 当前 turn user 有图，但后面跟了 tool/function_call_output（rev 遍历
+        // 跳过非 user message，正确找到最后一条 user）
+        let req = responses_req_with_input(json!([
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_image", "image_url": {"url": "x"}}
+            ]},
+            {"type": "function_call_output", "call_id": "c1", "output": "stuff"}
+        ]));
+        assert!(request_contains_images(&req),
+            "rev iter must skip tool items and find last user message");
     }
 }
 
@@ -2645,22 +2677,32 @@ fn request_contains_images(req: &ResponsesRequest) -> bool {
         }
     }
 
+    // 只看**最后一条** user message 是否含 image。历史 image 不算。
+    //
+    // 旧实现扫整个 history（"any historic image → promote"），为了避免 MiMo 上游
+    // 看到 history image_url 后 404。但我们后来给 mimo.rs::finalize_request
+    // 加了 image_url 自动剥离 + 注 OCR notice（#6 修复）兜底，404 不再发生。
+    // 这条保护过时了，反而成了**副作用源**：
+    //   - 用户某轮发过图 → 整个会话剩余请求被强制 promote 到 vision 模型
+    //   - mimo-v2.5-pro (1M ctx) → mimo-v2.5 (128K ctx) 降级
+    //   - 大会话进入 95%+ window 紧张区间 → 模型短回复 stop
+    //
+    // 第一性原理：vision 需求 = 模型现在需要看到一张图 = 当前 turn 有图。
+    // 历史 image 已经被 strip 兜底，不需要为它牺牲 context window。
     match &req.input {
         Value::Array(items) => {
-            // Scan ALL user messages in history, not just the last one. Codex
-            // replays the full conversation on every turn — if an early turn
-            // had an image, the converted body still carries `image_url` parts.
-            // MiMo upstream routes that body to its vision endpoint and 404s
-            // ("No endpoints found that support image input") when the resolved
-            // model can't accept images. Treating any historic image as
-            // has_images=true lets `promote_for_capabilities` swap to a vision
-            // model (e.g. mimo-v2.5) for the rest of the conversation.
-            items.iter().any(|item| {
-                let t = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                let role = item.get("role").and_then(|r| r.as_str()).unwrap_or("");
-                if t != "message" || role != "user" { return false; }
-                item.get("content").map(content_has_images).unwrap_or(false)
-            })
+            // 找最后一条 user message（不是最后一条 message——尾部可能是
+            // tool 结果或 function_call 等）
+            items
+                .iter()
+                .rev()
+                .find(|item| {
+                    item.get("type").and_then(|t| t.as_str()) == Some("message")
+                        && item.get("role").and_then(|r| r.as_str()) == Some("user")
+                })
+                .and_then(|item| item.get("content"))
+                .map(content_has_images)
+                .unwrap_or(false)
         }
         _ => false,
     }
