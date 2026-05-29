@@ -103,32 +103,6 @@ impl SseAccumulator {
     pub fn tool_calls_list(&self) -> Vec<AccumulatedToolCall> {
         self.tool_calls.values().cloned().collect()
     }
-
-    /// MiMo 自动续写专用：把"上一轮已经收尾"的状态字段重置，让第二轮上游回包能在
-    /// 同一个 acc 上当成新一段 output 接着流。
-    ///
-    /// **保留**：response_id（同一个流）、next_output_index（继续递增避免冲突）、
-    /// output_items（envelope 累积）、tool_calls（触发续写时应为空）、usage（第二轮
-    /// 会覆盖）、think_splitter（第一轮 finalize 已 flush，残留为空）。
-    ///
-    /// **重置**：item id（reasoning/message 各生成新的，避免 Codex 看到重复 id 报错）、
-    /// full_text/reasoning_content/annotations（避免第二轮 message item 把第一轮的开
-    /// 场白也算进去重复显示）、finish_reason（第二轮会带来新的）、
-    /// reasoning_output_index 与 text_content_started（让第二轮 stream_reasoning_delta /
-    /// openMessage 能正常重新分配 oi）。
-    pub fn reset_for_continuation(&mut self) {
-        let suffix = uuid::Uuid::new_v4().simple().to_string();
-        let suffix_short: String = suffix.chars().take(24).collect();
-        self.msg_item_id = format!("msg_{suffix_short}");
-        self.reasoning_item_id = format!("rs_{suffix_short}");
-        self.full_text.clear();
-        self.reasoning_content.clear();
-        self.annotations.clear();
-        self.reasoning_output_index = None;
-        self.msg_output_index = None;
-        self.text_content_started = false;
-        self.finish_reason = None;
-    }
 }
 
 /// Process upstream Chat Completions SSE and emit Responses API SSE events.
@@ -148,10 +122,6 @@ pub async fn process_upstream_stream(
 
 /// 与 [`process_upstream_stream`] 相同，但允许调用方控制是否发 `response.created` /
 /// `response.in_progress` / `response.completed` 这几个**流级别**事件。
-///
-/// 用于 MiMo 自动续写：第二轮调 `emit_open=false`（第一轮已经发过 created/in_progress）
-/// + `emit_completed=true`（这是最后一轮，必须收尾发 completed）。第一轮反过来：
-/// `emit_open=true` + `emit_completed=false`。
 pub async fn process_upstream_stream_inner(
     boot: crate::gateway::sse_bootstrap::Bootstrap,
     tx: mpsc::Sender<String>,
@@ -644,9 +614,6 @@ async fn finalize(
 
     // response.completed with usage + finish_reason → Responses status/incomplete_details 映射
     // 同时把累积的 output_items 塞进 envelope.output（Bug #4 协议契约完整性）
-    //
-    // emit_completed=false 用于 MiMo 自动续写：第一轮上游 stop 后，外层 routes 会再
-    // 起一次上游接着流，此时**不能**发 response.completed，否则 Codex 认为流结束。
     if emit_completed {
         send(&tx, &ev::response_completed_with_stop_reason(
             &acc.response_id, &acc.model, acc.usage.as_ref(), acc.finish_reason.as_deref(),
@@ -671,22 +638,6 @@ async fn start_message_item(tx: &mpsc::Sender<String>, acc: &mut SseAccumulator)
     send(tx, &ev::content_part_added(&acc.msg_item_id, oi, 0)).await;
     acc.text_content_started = true;
     oi
-}
-
-/// 手动发一个 `response.completed` 帧（用于 MiMo 自动续写的兜底路径：第一轮跑了
-/// `emit_completed=false`，如果没触发续写就需要外层补发一次 completed 收尾流；
-/// 续写失败时也走这里收尾，避免 Codex 死等）。
-pub async fn send_response_completed_envelope(
-    tx: &mpsc::Sender<String>,
-    acc: &SseAccumulator,
-) {
-    send(tx, &ev::response_completed_with_stop_reason(
-        &acc.response_id,
-        &acc.model,
-        acc.usage.as_ref(),
-        acc.finish_reason.as_deref(),
-        &acc.output_items,
-    )).await;
 }
 
 // salvage_tool_arguments 已提到 transform/tool_calls.rs 公共模块，
