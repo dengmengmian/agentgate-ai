@@ -16,6 +16,10 @@ pub struct ChatCompletionsRequest {
     pub top_p: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_tokens: Option<i64>,
+    /// OpenAI 2024-09 标准字段（thinking 模型推荐）。MiMo / DeepSeek-thinking /
+    /// GPT-5 等都接受。max_tokens 是 deprecated alias——同时填两个对老/新上游都安全。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_completion_tokens: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -188,6 +192,7 @@ mod tests {
             temperature: None,
             top_p: None,
             max_tokens: None,
+            max_completion_tokens: None,
             thinking: None,
             stream_options: None,
             response_format: None,

@@ -221,6 +221,7 @@ mod tests {
             temperature: None,
             top_p: None,
             max_tokens: None,
+            max_completion_tokens: None,
             thinking: None,
             stream_options: None,
             response_format: None,

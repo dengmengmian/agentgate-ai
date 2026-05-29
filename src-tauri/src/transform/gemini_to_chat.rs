@@ -135,6 +135,7 @@ pub fn convert(gemini_body: &Value, model: &str) -> Result<ChatCompletionsReques
         temperature,
         top_p,
         max_tokens,
+        max_completion_tokens: max_tokens, // 同步透传新字段（C 修复）
         thinking: None,
         stream_options,
         response_format: None,

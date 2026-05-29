@@ -105,6 +105,20 @@ pub fn convert_with_provider_matrix(
             _ => None,
         });
 
+    // A 修复：force_high_effort 兜底。env AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS
+    // 列出 provider_type 白名单（如 "mimo,deepseek,glm"），客户端没传 effort
+    // 时自动注 high。与 mimo2codex 的 forceHighEffort 等价。
+    //
+    // 现象：MiMo / DeepSeek-thinking 这类模型在 effort=medium 下 reasoning 后
+    // 偶发只输出一句"意图声明"就 stop（finish_reason=stop, output_tokens 很短）。
+    // 升 high 后倾向给更完整的 verbose 回复。
+    //
+    // 仅在客户端 None 时生效——客户端显式传 low/medium 是用户意图，不覆盖。
+    let reasoning_effort = match reasoning_effort {
+        Some(e) => Some(e),
+        None => maybe_force_high_effort(provider.provider_type()),
+    };
+
     // Convert text.format → response_format
     let response_format = req.text.as_ref()
         .and_then(|t| t.get("format"))
@@ -126,6 +140,9 @@ pub fn convert_with_provider_matrix(
         temperature: req.temperature,
         top_p: req.top_p,
         max_tokens: req.max_output_tokens,
+        // C 修复：同时填 max_completion_tokens（新标准）。MiMo / DeepSeek-thinking
+        // 等都认这个；老 provider 不识别会被忽略，无副作用。两者同时填覆盖最广。
+        max_completion_tokens: req.max_output_tokens,
         thinking: None,
         stream_options,
         response_format,
@@ -628,6 +645,16 @@ pub fn split_think_tags(content: &str) -> (String, Option<String>) {
     } else {
         (remaining, None)
     }
+}
+
+/// 读 env `AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS`（逗号分隔 provider_type 白名单），
+/// 当前 provider 在列表内则返回 `Some("high")`，否则 None。
+///
+/// 用法示例：`AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS=mimo,deepseek`
+fn maybe_force_high_effort(provider_type: &str) -> Option<String> {
+    let raw = std::env::var("AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS").ok()?;
+    let matches = raw.split(',').any(|s| s.trim().eq_ignore_ascii_case(provider_type));
+    if matches { Some("high".to_string()) } else { None }
 }
 
 /// 流式 `<think>...</think>` 切分器（有状态）。

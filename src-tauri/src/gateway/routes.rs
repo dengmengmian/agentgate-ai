@@ -1974,7 +1974,9 @@ pub async fn handle_messages(
         tool_choice,
         stream: want_stream,
         temperature: msg_req.temperature, top_p: msg_req.top_p,
-        max_tokens: msg_req.max_tokens, thinking: None,
+        max_tokens: msg_req.max_tokens,
+        max_completion_tokens: msg_req.max_tokens, // 同步透传新字段（C 修复）
+        thinking: None,
         // include_usage 必加：默认 Chat stream 不带 usage，client 看 token 都是 0；
         // 加上后终块带完整 usage，message_delta 能正确报 output_tokens。
         stream_options: if want_stream { Some(json!({"include_usage": true})) } else { None },
