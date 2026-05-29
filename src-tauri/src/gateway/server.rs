@@ -139,6 +139,9 @@ pub async fn start(
         .route("/chat/completions", post(routes::handle_chat_completions))
         .route("/v1/messages", post(routes::handle_messages))
         .route("/messages", post(routes::handle_messages))
+        .route("/v1/messages/count_tokens", post(routes::handle_count_tokens))
+        .route("/messages/count_tokens", post(routes::handle_count_tokens))
+        .route("/v1beta/models", get(routes::list_gemini_models))
         .route("/v1beta/models/:model_action", post(routes::handle_gemini_generate))
         .layer(axum::middleware::from_fn(move |req, next: axum::middleware::Next| {
             let counter = counter.clone();
