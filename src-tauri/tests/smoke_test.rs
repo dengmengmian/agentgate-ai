@@ -720,7 +720,7 @@ async fn test_chat_completions(
     let text = resp.text().await.map_err(|e| format!("read body: {e}"))?;
 
     if !status.is_success() {
-        return Err(format!("HTTP {status}: {}", text.chars().take(200).collect::<String>()));
+        return Err(format!("HTTP {status}: {}", snip(&text)));
     }
 
     let json: serde_json::Value = serde_json::from_str(&text)
@@ -764,7 +764,7 @@ async fn test_responses_api(
     let text = resp.text().await.map_err(|e| format!("read body: {e}"))?;
 
     if !status.is_success() {
-        return Err(format!("HTTP {status}: {}", text.chars().take(200).collect::<String>()));
+        return Err(format!("HTTP {status}: {}", snip(&text)));
     }
 
     let json: serde_json::Value = serde_json::from_str(&text)
@@ -811,7 +811,7 @@ async fn test_responses_strict(
     let status = resp.status();
     let text = resp.text().await.map_err(|e| format!("read body: {e}"))?;
     if !status.is_success() {
-        return Err(format!("HTTP {status}: {}", text.chars().take(200).collect::<String>()));
+        return Err(format!("HTTP {status}: {}", snip(&text)));
     }
     let json: serde_json::Value = serde_json::from_str(&text)
         .map_err(|e| format!("parse json: {e}"))?;
@@ -860,7 +860,7 @@ async fn test_anthropic_messages(
     let status = resp.status();
     let text = resp.text().await.map_err(|e| format!("read body: {e}"))?;
     if !status.is_success() {
-        return Err(format!("HTTP {status}: {}", text.chars().take(200).collect::<String>()));
+        return Err(format!("HTTP {status}: {}", snip(&text)));
     }
     let json: serde_json::Value = serde_json::from_str(&text)
         .map_err(|e| format!("parse json: {e}"))?;
@@ -900,7 +900,7 @@ async fn test_responses_multi_turn(
         .map_err(|e| format!("turn1 send: {e}"))?;
     if !r1.status().is_success() {
         let t = r1.text().await.unwrap_or_default();
-        return Err(format!("turn1 HTTP error: {}", t.chars().take(200).collect::<String>()));
+        return Err(format!("turn1 HTTP error: {}", snip(&t)));
     }
 
     // Turn 2 — replays the same opening to maximize prompt-cache hit
@@ -924,7 +924,7 @@ async fn test_responses_multi_turn(
         .map_err(|e| format!("turn2 send: {e}"))?;
     if !r2.status().is_success() {
         let t = r2.text().await.unwrap_or_default();
-        return Err(format!("turn2 HTTP error: {}", t.chars().take(200).collect::<String>()));
+        return Err(format!("turn2 HTTP error: {}", snip(&t)));
     }
     Ok(())
 }
@@ -960,7 +960,7 @@ async fn test_provider_direct(
     let text = resp.text().await.map_err(|e| format!("read body: {e}"))?;
 
     if !status.is_success() {
-        return Err(format!("HTTP {status}: {}", text.chars().take(200).collect::<String>()));
+        return Err(format!("HTTP {status}: {}", snip(&text)));
     }
 
     let json: serde_json::Value = serde_json::from_str(&text)
