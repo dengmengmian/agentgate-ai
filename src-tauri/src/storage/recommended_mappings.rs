@@ -4,6 +4,7 @@ use rusqlite::{params, Connection};
 
 use crate::errors::AppError;
 use crate::models::provider::{CreateProviderInput, Provider};
+use crate::storage::generated_provider_catalog as catalog;
 
 const CODEX_MODELS: &[&str] = &["gpt-5.5", "gpt-5.4", "gpt-5.3-codex", "gpt-5.2"];
 const CODEX_MINI_MODELS: &[&str] = &["gpt-5.4-mini"];
@@ -101,29 +102,15 @@ fn recommended_pairs(
     reasoning_model: Option<&str>,
     profile: MappingProfile,
 ) -> Vec<(String, String)> {
-    let pt = provider_type.trim().to_lowercase();
-    if !(pt == "mimo" || pt == "xiaomi" || pt.contains("mimo") || pt == "deepseek") {
+    let Some(profile_def) = mapping_profile_for_provider(provider_type) else {
         return Vec::new();
-    }
-
-    let primary = reasoning_model
-        .filter(|m| !m.trim().is_empty())
-        .unwrap_or(default_model)
-        .to_string();
-    let small = default_model.to_string();
+    };
 
     let mut pairs = Vec::new();
     if matches!(profile, MappingProfile::All | MappingProfile::Codex) {
-        let codex_primary = if pt == "deepseek" {
-            primary.clone()
-        } else {
-            default_model.to_string()
-        };
-        let codex_small = if pt == "deepseek" {
-            small.clone()
-        } else {
-            default_model.to_string()
-        };
+        let codex_primary =
+            target_model(profile_def.codex_primary_target, default_model, reasoning_model);
+        let codex_small = target_model(profile_def.codex_mini_target, default_model, reasoning_model);
         for model in CODEX_MODELS {
             pairs.push(((*model).to_string(), codex_primary.clone()));
         }
@@ -133,11 +120,15 @@ fn recommended_pairs(
     }
 
     if matches!(profile, MappingProfile::All | MappingProfile::ClaudeCode) {
+        let claude_primary =
+            target_model(profile_def.claude_primary_target, default_model, reasoning_model);
+        let claude_small =
+            target_model(profile_def.claude_small_target, default_model, reasoning_model);
         for model in CLAUDE_PRIMARY_MODELS {
-            pairs.push(((*model).to_string(), primary.clone()));
+            pairs.push(((*model).to_string(), claude_primary.clone()));
         }
         for model in CLAUDE_SMALL_MODELS {
-            pairs.push(((*model).to_string(), small.clone()));
+            pairs.push(((*model).to_string(), claude_small.clone()));
         }
     }
 
@@ -150,24 +141,74 @@ fn repair_legacy_1m_recommendations(
     default_model: &str,
     reasoning_model: Option<&str>,
 ) {
-    let primary = reasoning_model
-        .filter(|m| !m.trim().is_empty())
-        .unwrap_or(default_model)
-        .trim();
-    if primary.is_empty() {
+    let Some(profile_def) = mapping_profile_for_provider(provider_type) else {
+        return;
+    };
+    if !profile_def.repair_legacy_1m {
         return;
     }
-
-    let pt = provider_type.trim().to_lowercase();
-    if !(pt == "mimo" || pt == "xiaomi" || pt.contains("mimo") || pt == "deepseek") {
+    let primary =
+        target_model(profile_def.claude_primary_target, default_model, reasoning_model);
+    if primary.is_empty() {
         return;
     }
 
     let legacy = format!("{primary}[1m]");
     for model in CLAUDE_PRIMARY_MODELS {
         if mapping.get(*model).map(|v| v.as_str()) == Some(legacy.as_str()) {
-            mapping.insert((*model).to_string(), primary.to_string());
+            mapping.insert((*model).to_string(), primary.clone());
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CatalogMappingProfile {
+    codex_primary_target: &'static str,
+    codex_mini_target: &'static str,
+    claude_primary_target: &'static str,
+    claude_small_target: &'static str,
+    repair_legacy_1m: bool,
+}
+
+fn mapping_profile_for_provider(provider_type: &str) -> Option<CatalogMappingProfile> {
+    let catalog_provider = catalog_provider_type(provider_type)?;
+    catalog::RECOMMENDED_MAPPING_PROFILES
+        .iter()
+        .find(|(provider, _, _, _, _, _)| *provider == catalog_provider)
+        .map(
+            |(
+                _,
+                codex_primary_target,
+                codex_mini_target,
+                claude_primary_target,
+                claude_small_target,
+                repair_legacy_1m,
+            )| CatalogMappingProfile {
+                codex_primary_target,
+                codex_mini_target,
+                claude_primary_target,
+                claude_small_target,
+                repair_legacy_1m: *repair_legacy_1m,
+            },
+        )
+}
+
+fn catalog_provider_type(provider_type: &str) -> Option<&'static str> {
+    let pt = provider_type.trim().to_lowercase();
+    match pt.as_str() {
+        p if p == "mimo" || p == "xiaomi" || p.contains("mimo") => Some("mimo"),
+        "deepseek" => Some("deepseek"),
+        _ => None,
+    }
+}
+
+fn target_model(target: &str, default_model: &str, reasoning_model: Option<&str>) -> String {
+    match target {
+        "reasoning" => reasoning_model
+            .filter(|model| !model.trim().is_empty())
+            .unwrap_or(default_model)
+            .to_string(),
+        _ => default_model.to_string(),
     }
 }
 

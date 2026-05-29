@@ -1,0 +1,265 @@
+#!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const catalogDir = path.join(root, "provider-catalog", "providers");
+const tsOut = path.join(root, "src", "data", "generatedProviderCatalog.ts");
+const rustOut = path.join(root, "src-tauri", "src", "storage", "generated_provider_catalog.rs");
+const readmeOut = path.join(root, "README.md");
+const readmeZhOut = path.join(root, "README_ZH.md");
+const check = process.argv.includes("--check");
+
+function readJson(file) {
+  return JSON.parse(fs.readFileSync(file, "utf8"));
+}
+
+function assert(condition, message) {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
+function validateProvider(provider, file) {
+  assert(provider.schemaVersion === 1, `${file}: schemaVersion must be 1`);
+  assert(typeof provider.type === "string" && provider.type, `${file}: type is required`);
+  assert(typeof provider.displayName === "string" && provider.displayName, `${file}: displayName is required`);
+  assert(Array.isArray(provider.protocols) && provider.protocols.length > 0, `${file}: protocols are required`);
+  assert(typeof provider.defaultModel === "string", `${file}: defaultModel is required`);
+  assert(Array.isArray(provider.supportedModels), `${file}: supportedModels must be an array`);
+  assert(Array.isArray(provider.models), `${file}: models must be an array`);
+  const ids = new Set(provider.models.map((model) => model.id));
+  if (provider.defaultModel && provider.models.length > 0 && ids.size > 0 && !ids.has("*")) {
+    assert(
+      ids.has(provider.defaultModel) || provider.supportedModels.includes(provider.defaultModel),
+      `${file}: defaultModel is not listed in models or supportedModels`,
+    );
+  }
+  if (provider.reasoningModel && ids.size > 0 && !ids.has("*")) {
+    assert(ids.has(provider.reasoningModel), `${file}: reasoningModel is not listed in models`);
+  }
+  if (provider.recommendedMapping) {
+    for (const key of ["codexPrimaryTarget", "codexMiniTarget", "claudePrimaryTarget", "claudeSmallTarget"]) {
+      assert(["default", "reasoning"].includes(provider.recommendedMapping[key]), `${file}: recommendedMapping.${key} must be default or reasoning`);
+    }
+    assert(typeof provider.recommendedMapping.repairLegacy1m === "boolean", `${file}: recommendedMapping.repairLegacy1m must be boolean`);
+  }
+  if (provider.sync) {
+    assert(typeof provider.sync.modelsUrl === "string" && provider.sync.modelsUrl, `${file}: sync.modelsUrl is required`);
+    assert(
+      typeof provider.sync.envVar === "string" || Array.isArray(provider.sync.envVar),
+      `${file}: sync.envVar must be a string or array`,
+    );
+    assert(
+      !provider.sync.authHeader || ["bearer", "x-api-key", "query:key", "none"].includes(provider.sync.authHeader) || provider.sync.authHeader.startsWith("header:"),
+      `${file}: sync.authHeader is unsupported`,
+    );
+  }
+  for (const id of provider.supportedModels) {
+    assert(typeof id === "string", `${file}: supported model ids must be strings`);
+  }
+  for (const model of provider.models) {
+    assert(typeof model.id === "string" && model.id, `${file}: model id is required`);
+    if (model.capabilities) {
+      assert(Array.isArray(model.capabilities), `${file}: ${model.id} capabilities must be an array`);
+    }
+    if (model.pricing) {
+      assert(typeof model.pricing.inputPerMillion === "number", `${file}: ${model.id} pricing.inputPerMillion must be a number`);
+      assert(typeof model.pricing.outputPerMillion === "number", `${file}: ${model.id} pricing.outputPerMillion must be a number`);
+    }
+  }
+}
+
+function loadCatalog() {
+  const files = fs.readdirSync(catalogDir).filter((file) => file.endsWith(".json")).sort();
+  return files.map((file) => {
+    const provider = readJson(path.join(catalogDir, file));
+    validateProvider(provider, file);
+    return provider;
+  }).sort((a, b) => (a.order ?? 9999) - (b.order ?? 9999) || a.type.localeCompare(b.type));
+}
+
+function tsString(value) {
+  return JSON.stringify(value, null, 2);
+}
+
+function renderTs(providers) {
+  const byType = Object.fromEntries(providers.map((provider) => [provider.type, provider]));
+  const presets = Object.fromEntries(providers.map((provider) => [
+    provider.type,
+    {
+      baseUrl: defaultBaseUrl(provider),
+      protocols: provider.protocols,
+      defaultModel: provider.defaultModel,
+      ...(provider.reasoningModel ? { reasoningModel: provider.reasoningModel } : {}),
+      ...(defaultAnthropicBaseUrl(provider) ? { anthropicBaseUrl: defaultAnthropicBaseUrl(provider) } : {}),
+      ...(provider.endpoints.responsesBaseUrl ? { responsesBaseUrl: provider.endpoints.responsesBaseUrl } : {}),
+      ...(provider.extraHeaders ? { extraHeaders: provider.extraHeaders } : {}),
+    },
+  ]));
+
+  return `// Generated by scripts/generate-provider-catalog.mjs. Do not edit by hand.
+
+export const GENERATED_PROVIDER_CATALOG = ${tsString(byType)} as const;
+
+export const GENERATED_PROVIDER_PRESETS = ${tsString(presets)} as const;
+
+export const GENERATED_MIMO_ENDPOINTS = ${tsString(byType.mimo.endpoints)} as const;
+
+export const GENERATED_DEEPSEEK_SUPPORTED_MODELS = ${tsString(byType.deepseek.supportedModels)} as const;
+`;
+}
+
+function rustStr(value) {
+  return JSON.stringify(value);
+}
+
+function rustStringArray(values) {
+  return `&[${values.map(rustStr).join(", ")}]`;
+}
+
+function rustFloat(value) {
+  return Number.isInteger(value) ? `${value}.0` : String(value);
+}
+
+function defaultBaseUrl(provider) {
+  return provider.type === "mimo" ? provider.endpoints.payg.baseUrl : provider.endpoints.baseUrl;
+}
+
+function defaultAnthropicBaseUrl(provider) {
+  return provider.type === "mimo" ? provider.endpoints.payg.anthropicBaseUrl : provider.endpoints.anthropicBaseUrl;
+}
+
+function renderRust(providers) {
+  const byType = Object.fromEntries(providers.map((provider) => [provider.type, provider]));
+  const mimoRegions = Object.entries(byType.mimo.endpoints.tokenPlanRegions);
+  const defaultTokenPlan = byType.mimo.endpoints.tokenPlanRegions.cn;
+  const regionNames = mimoRegions.map(([region]) => rustStr(region)).join(", ");
+  const regionTuples = mimoRegions
+    .map(([region, urls]) => `    (${rustStr(region)}, ${rustStr(urls.baseUrl)}, ${rustStr(urls.anthropicBaseUrl)}),`)
+    .join("\n");
+  const capabilityTuples = providers
+    .flatMap((provider) => provider.models
+      .filter((model) => model.capabilities)
+      .map((model) => ({ provider, model })))
+    .map(({ provider, model }) => `    (${rustStr(provider.type)}, ${rustStr(model.id)}, ${rustStringArray(model.capabilities)}),`)
+    .join("\n");
+  const pricingTuples = providers
+    .flatMap((provider) => provider.models
+      .filter((model) => model.pricing)
+      .map((model) => ({ provider, model })))
+    .map(({ provider, model }) => `    (${rustStr(provider.type)}, ${rustStr(model.id)}, ${rustFloat(model.pricing.inputPerMillion)}, ${rustFloat(model.pricing.outputPerMillion)}),`)
+    .join("\n");
+  const deprecatedTuples = providers
+    .flatMap((provider) => (provider.deprecatedModels ?? []).map((model) => ({ provider, model })))
+    .map(({ provider, model }) => `    (${rustStr(provider.type)}, ${rustStr(model)}),`)
+    .join("\n");
+  const mappingTuples = providers
+    .filter((provider) => provider.recommendedMapping)
+    .map((provider) => {
+      const mapping = provider.recommendedMapping;
+      return `    (${rustStr(provider.type)}, ${rustStr(mapping.codexPrimaryTarget)}, ${rustStr(mapping.codexMiniTarget)}, ${rustStr(mapping.claudePrimaryTarget)}, ${rustStr(mapping.claudeSmallTarget)}, ${mapping.repairLegacy1m}),`;
+    })
+    .join("\n");
+
+  return `// Generated by scripts/generate-provider-catalog.mjs. Do not edit by hand.
+
+pub const MIMO_PAYG_BASE_URL: &str = ${rustStr(byType.mimo.endpoints.payg.baseUrl)};
+pub const MIMO_PAYG_ANTHROPIC_URL: &str = ${rustStr(byType.mimo.endpoints.payg.anthropicBaseUrl)};
+pub const MIMO_TOKEN_PLAN_DEFAULT_BASE_URL: &str = ${rustStr(defaultTokenPlan.baseUrl)};
+pub const MIMO_TOKEN_PLAN_DEFAULT_ANTHROPIC_URL: &str = ${rustStr(defaultTokenPlan.anthropicBaseUrl)};
+pub const MIMO_TOKEN_PLAN_REGIONS: &[&str] = &[${regionNames}];
+pub const MIMO_TOKEN_PLAN_ENDPOINTS: &[(&str, &str, &str)] = &[
+${regionTuples}
+];
+
+pub const DEEPSEEK_BASE_URL: &str = ${rustStr(byType.deepseek.endpoints.baseUrl)};
+pub const DEEPSEEK_ANTHROPIC_URL: &str = ${rustStr(byType.deepseek.endpoints.anthropicBaseUrl)};
+pub const DEEPSEEK_REASONING_MODEL: &str = ${rustStr(byType.deepseek.reasoningModel)};
+pub const DEEPSEEK_SUPPORTED_MODELS_JSON: &str = ${rustStr(JSON.stringify(byType.deepseek.supportedModels))};
+
+pub const MODEL_CAPABILITIES: &[(&str, &str, &[&str])] = &[
+${capabilityTuples}
+];
+
+pub const MODEL_PRICING_DEFAULTS: &[(&str, &str, f64, f64)] = &[
+${pricingTuples}
+];
+
+pub const DEPRECATED_MODELS: &[(&str, &str)] = &[
+${deprecatedTuples}
+];
+
+pub const RECOMMENDED_MAPPING_PROFILES: &[(&str, &str, &str, &str, &str, bool)] = &[
+${mappingTuples}
+];
+`;
+}
+
+function protocolLabel(protocols) {
+  const parts = [];
+  if (protocols.includes("openai_chat_completions")) parts.push("Chat");
+  if (protocols.includes("openai_responses")) parts.push("Responses");
+  if (protocols.includes("anthropic_messages")) parts.push("Anthropic");
+  return parts.join(" + ") || protocols.join(" + ");
+}
+
+function renderProviderTable(providers, lang) {
+  const header = lang === "zh"
+    ? "| Provider | 类型 | 原生协议 | 专属处理 |\n|---|---|---|---|"
+    : "| Provider | Type | Native Protocols | Provider-Specific Handling |\n|---|---|---|---|";
+  const rows = providers.map((provider) => {
+    const name = lang === "zh" ? (provider.displayNameZh ?? provider.displayName) : provider.displayName;
+    const handling = provider.docs?.[lang === "zh" ? "handlingZh" : "handlingEn"] ?? (lang === "zh" ? "通用" : "Generic");
+    return `| ${name} | \`${provider.type}\` | ${protocolLabel(provider.protocols)} | ${handling} |`;
+  });
+  return [header, ...rows].join("\n");
+}
+
+function replaceBetweenMarkers(file, startMarker, endMarker, content) {
+  const current = fs.readFileSync(file, "utf8");
+  const start = current.indexOf(startMarker);
+  const end = current.indexOf(endMarker);
+  if (start < 0 || end < 0 || end < start) {
+    throw new Error(`${path.relative(root, file)} is missing provider catalog markers`);
+  }
+  const next = `${current.slice(0, start + startMarker.length)}\n${content}\n${current.slice(end)}`;
+  writeOrCheck(file, next);
+}
+
+function writeOrCheck(file, content) {
+  if (check) {
+    const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+    if (current !== content) {
+      throw new Error(`${path.relative(root, file)} is out of date. Run pnpm provider:catalog:generate.`);
+    }
+    return;
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, content);
+}
+
+const providers = loadCatalog();
+writeOrCheck(tsOut, renderTs(providers));
+writeOrCheck(rustOut, renderRust(providers));
+replaceBetweenMarkers(
+  readmeOut,
+  "<!-- PROVIDER_CATALOG_TABLE:START -->",
+  "<!-- PROVIDER_CATALOG_TABLE:END -->",
+  renderProviderTable(providers, "en"),
+);
+replaceBetweenMarkers(
+  readmeZhOut,
+  "<!-- PROVIDER_CATALOG_TABLE:START -->",
+  "<!-- PROVIDER_CATALOG_TABLE:END -->",
+  renderProviderTable(providers, "zh"),
+);
+
+if (!check) {
+  console.log("Generated provider catalog:");
+  console.log(`  - ${path.relative(root, tsOut)}`);
+  console.log(`  - ${path.relative(root, rustOut)}`);
+  console.log(`  - ${path.relative(root, readmeOut)}`);
+  console.log(`  - ${path.relative(root, readmeZhOut)}`);
+}

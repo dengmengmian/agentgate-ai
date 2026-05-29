@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "order": 240,
+  "type": "custom_openai_compatible",
+  "displayName": "Custom",
+  "displayNameZh": "自定义",
+  "aliases": ["custom_openai_compatible"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": ""
+  },
+  "defaultModel": "",
+  "supportedModels": [],
+  "models": [],
+  "docs": {
+    "handlingEn": "None (set Base URL yourself)",
+    "handlingZh": "无（Base URL 用户自己填）"
+  }
+}

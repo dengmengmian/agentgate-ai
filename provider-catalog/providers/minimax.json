@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "order": 70,
+  "type": "minimax",
+  "displayName": "MiniMax",
+  "displayNameZh": "MiniMax",
+  "aliases": ["minimax"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.minimax.chat"
+  },
+  "defaultModel": "MiniMax-M1",
+  "supportedModels": ["MiniMax-M1"],
+  "models": [
+    { "id": "MiniMax-M1", "pricing": { "inputPerMillion": 1, "outputPerMillion": 8 } }
+  ],
+  "docs": {
+    "handlingEn": "Strip reasoning_effort / response_format, `<think>` extraction",
+    "handlingZh": "去 reasoning_effort / response_format、`<think>` 提取"
+  },
+  "sync": {
+    "envVar": "MINIMAX_API_KEY",
+    "modelsUrl": "https://api.minimax.chat/v1/models",
+    "authHeader": "bearer"
+  }
+}

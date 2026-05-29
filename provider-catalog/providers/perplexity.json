@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 210,
+  "type": "perplexity",
+  "displayName": "Perplexity",
+  "displayNameZh": "Perplexity",
+  "aliases": ["perplexity"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.perplexity.ai"
+  },
+  "defaultModel": "sonar-pro",
+  "supportedModels": ["sonar-pro"],
+  "models": [],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "PERPLEXITY_API_KEY",
+    "modelsUrl": "https://api.perplexity.ai/models",
+    "authHeader": "bearer"
+  }
+}

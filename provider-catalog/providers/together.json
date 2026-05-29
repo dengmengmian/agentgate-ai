@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 180,
+  "type": "together",
+  "displayName": "Together",
+  "displayNameZh": "Together",
+  "aliases": ["together"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.together.xyz"
+  },
+  "defaultModel": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+  "supportedModels": ["meta-llama/Llama-3.3-70B-Instruct-Turbo"],
+  "models": [],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "TOGETHER_API_KEY",
+    "modelsUrl": "https://api.together.xyz/v1/models",
+    "authHeader": "bearer"
+  }
+}

@@ -535,17 +535,18 @@ On the **Diagnostics** page:
 
 Providers marked **Provider-specific handling** have dedicated transform code in `src-tauri/src/transform/providers/`. The rest go through the generic Chat Completions / Anthropic pass-through path and work out-of-the-box.
 
+<!-- PROVIDER_CATALOG_TABLE:START -->
 | Provider | Type | Native Protocols | Provider-Specific Handling |
 |---|---|---|---|
 | Xiaomi MiMo | `mimo` | Chat + Anthropic | Multi-turn `reasoning_content` round-trip, region-aware `tp-*` host auto-routing, temperature strip in thinking mode, tool_choice non-auto strip, omni web_search strip, web_search builtin gated by matrix, Web Search Plugin auto-degrade / retry |
 | DeepSeek | `deepseek` | Chat + Anthropic | Image stripping (text-only models), reasoning injection, schema cleaning, message reordering |
-| Anthropic (Claude) | `anthropic` | Anthropic Messages (native) | `tool_use`/`tool_result`, `input_schema`, thinking budget, native cache_control |
+| Anthropic (Claude) | `anthropic` | Anthropic | `tool_use`/`tool_result`, `input_schema`, thinking budget, native cache_control |
 | OpenAI | `openai` | Chat + Responses | None (Responses passthrough or Chat conversion) |
-| Google Gemini | `google_gemini` | Chat (compat endpoint) | None |
+| Google Gemini | `google_gemini` | Chat | None |
 | Kimi / Moonshot | `kimi` | Chat | `web_search` → `builtin_function`/`$web_search`, thinking control |
 | MiniMax | `minimax` | Chat | Strip reasoning_effort / response_format, `<think>` extraction |
-| GLM (Zhipu) | `glm` | Chat + Anthropic | Generic |
-| DashScope (Qwen) | `dashscope` | Chat + Anthropic | Generic |
+| GLM (Zhipu) | `glm` | Chat | Generic |
+| DashScope (Qwen) | `dashscope` | Chat | Generic |
 | SiliconFlow | `siliconflow` | Chat | Generic |
 | Volcengine (Doubao) | `volcengine` | Chat | Generic |
 | Baichuan | `baichuan` | Chat | Generic |
@@ -558,9 +559,10 @@ Providers marked **Provider-specific handling** have dedicated transform code in
 | Fireworks | `fireworks` | Chat | Generic |
 | Cerebras | `cerebras` | Chat | Generic |
 | Perplexity | `perplexity` | Chat | Generic |
-| Cohere | `cohere` | Chat (compat endpoint) | Generic |
+| Cohere | `cohere` | Chat | Generic |
 | OpenRouter | `openrouter` | Chat | None |
 | Custom | `custom_openai_compatible` | Chat | None (set Base URL yourself) |
+<!-- PROVIDER_CATALOG_TABLE:END -->
 
 > Vision / reasoning / tools / web_search capability is tracked **per-model** in the capability matrix, not at the provider level. See *Capability-Aware Routing* below.
 
@@ -726,6 +728,7 @@ Client sends Chat Completions request
 
 ```
 AgentGate/
+├── provider-catalog/             # Provider/model source of truth for generated defaults
 ├── src/                          # Frontend (React)
 │   ├── app/App.tsx               # App entry point
 │   ├── pages/                    # Pages (Overview/Quick Setup/Providers/Routes/Gateway/Clients/Logs/Diagnostics/Settings)
@@ -746,7 +749,7 @@ AgentGate/
 │       ├── diagnostics/          # Diagnostics & self-checks
 │       ├── app/                  # Tauri commands & app state
 │       └── errors/               # Unified error types
-├── scripts/                      # Test scripts
+├── scripts/                      # Test and generation scripts
 └── package.json
 ```
 
@@ -760,6 +763,28 @@ AgentGate/
 - Token file permissions set to `0600` (Unix)
 
 ## Development
+
+### Provider Catalog
+
+Built-in provider/model data is maintained in `provider-catalog/providers/*.json`.
+Run this after editing catalog files:
+
+```bash
+pnpm provider:catalog:generate
+pnpm provider:catalog:check
+pnpm provider:catalog:sync:check
+```
+
+`provider:catalog:sync:check` calls provider `/models` endpoints when the matching API key environment variable is present, and skips providers without credentials. It fails when a catalog model is no longer returned upstream; pass `--strict` to also fail on newly discovered upstream models. To refresh a provider explicitly, run:
+
+```bash
+pnpm provider:catalog:sync -- --provider deepseek --update
+pnpm provider:catalog:generate
+```
+
+The generated TS/Rust files feed provider presets, endpoint defaults, capability seeds, pricing defaults, supported-model gates, and recommended mapping policy. Provider-specific runtime behavior still lives in code, not in the catalog.
+
+Upstream model sync is intentionally a local maintenance step, not part of the GitHub release workflow. Release CI only checks that generated catalog artifacts are up to date.
 
 ### Test Scripts
 

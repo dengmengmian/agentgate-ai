@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "order": 200,
+  "type": "cerebras",
+  "displayName": "Cerebras",
+  "displayNameZh": "Cerebras",
+  "aliases": ["cerebras"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.cerebras.ai"
+  },
+  "defaultModel": "llama-3.3-70b",
+  "supportedModels": ["llama-3.3-70b"],
+  "models": [
+    { "id": "*", "pricing": { "inputPerMillion": 0, "outputPerMillion": 0 } }
+  ],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "CEREBRAS_API_KEY",
+    "modelsUrl": "https://api.cerebras.ai/v1/models",
+    "authHeader": "bearer"
+  }
+}

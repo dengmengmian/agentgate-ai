@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 190,
+  "type": "fireworks",
+  "displayName": "Fireworks",
+  "displayNameZh": "Fireworks",
+  "aliases": ["fireworks"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.fireworks.ai/inference"
+  },
+  "defaultModel": "accounts/fireworks/models/llama-v3p1-70b-instruct",
+  "supportedModels": ["accounts/fireworks/models/llama-v3p1-70b-instruct"],
+  "models": [],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "FIREWORKS_API_KEY",
+    "modelsUrl": "https://api.fireworks.ai/inference/v1/models",
+    "authHeader": "bearer"
+  }
+}

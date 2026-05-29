@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "order": 30,
+  "type": "anthropic",
+  "displayName": "Anthropic (Claude)",
+  "displayNameZh": "Anthropic（Claude）",
+  "aliases": ["anthropic", "claude"],
+  "protocols": ["anthropic_messages"],
+  "endpoints": {
+    "baseUrl": "https://api.anthropic.com"
+  },
+  "defaultModel": "claude-opus-4-8",
+  "supportedModels": [
+    "claude-sonnet-4-7",
+    "claude-opus-4-8",
+    "claude-haiku-4-5"
+  ],
+  "models": [
+    {
+      "id": "claude-sonnet-4-6",
+      "pricing": { "inputPerMillion": 3, "outputPerMillion": 15 }
+    },
+    {
+      "id": "claude-sonnet-4-7",
+      "pricing": { "inputPerMillion": 3, "outputPerMillion": 15 }
+    },
+    {
+      "id": "claude-opus-4-6",
+      "pricing": { "inputPerMillion": 15, "outputPerMillion": 75 }
+    },
+    {
+      "id": "claude-opus-4-7",
+      "pricing": { "inputPerMillion": 15, "outputPerMillion": 75 }
+    },
+    {
+      "id": "claude-opus-4-8",
+      "pricing": { "inputPerMillion": 15, "outputPerMillion": 75 }
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "pricing": { "inputPerMillion": 0.8, "outputPerMillion": 4 }
+    }
+  ],
+  "docs": {
+    "handlingEn": "`tool_use`/`tool_result`, `input_schema`, thinking budget, native cache_control",
+    "handlingZh": "`tool_use`/`tool_result`、`input_schema`、thinking budget、原生 cache_control"
+  },
+  "sync": {
+    "envVar": "ANTHROPIC_API_KEY",
+    "modelsUrl": "https://api.anthropic.com/v1/models",
+    "authHeader": "x-api-key",
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    }
+  }
+}

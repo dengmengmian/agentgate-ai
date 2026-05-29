@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 130,
+  "type": "stepfun",
+  "displayName": "StepFun",
+  "displayNameZh": "阶跃星辰 StepFun",
+  "aliases": ["stepfun"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.stepfun.com"
+  },
+  "defaultModel": "step-2-16k",
+  "supportedModels": ["step-2-16k"],
+  "models": [],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "STEPFUN_API_KEY",
+    "modelsUrl": "https://api.stepfun.com/v1/models",
+    "authHeader": "bearer"
+  }
+}

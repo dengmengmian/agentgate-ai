@@ -2,6 +2,7 @@ use rusqlite::{params, Connection};
 use serde::Serialize;
 
 use crate::errors::AppError;
+use crate::storage::generated_provider_catalog as catalog;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ModelPricing {
@@ -14,71 +15,29 @@ pub struct ModelPricing {
     pub updated_at: String,
 }
 
-/// Built-in default prices ($/1M tokens). These are inserted on first run
-/// and won't overwrite user customizations.
-const DEFAULTS: &[(&str, &str, f64, f64)] = &[
-    // DeepSeek
-    ("deepseek", "deepseek-v4-pro", 2.00, 8.00),
-    ("deepseek", "deepseek-v4-flash", 0.50, 2.00),
-    // OpenAI
-    ("openai", "gpt-4o", 2.50, 10.00),
-    ("openai", "gpt-4o-mini", 0.15, 0.60),
-    ("openai", "gpt-5.5", 2.50, 10.00),
-    ("openai", "o3", 10.00, 40.00),
-    ("openai", "o4-mini", 1.10, 4.40),
-    // Anthropic
-    ("anthropic", "claude-sonnet-4-6", 3.00, 15.00),
-    ("anthropic", "claude-sonnet-4-7", 3.00, 15.00),
-    ("anthropic", "claude-opus-4-6", 15.00, 75.00),
-    ("anthropic", "claude-opus-4-7", 15.00, 75.00),
-    ("anthropic", "claude-opus-4-8", 15.00, 75.00),
-    ("anthropic", "claude-haiku-4-5", 0.80, 4.00),
-    // Kimi
-    ("kimi", "kimi-k2", 1.00, 4.00),
-    ("kimi", "kimi-for-coding", 1.00, 4.00),
-    // Xiaomi MiMo (海外 USD pricing per platform.xiaomimimo.com).
-    // mimo-v2-pro has a 256K-1M context tier at 2x price; we use the ≤256K
-    // tier here since that's the common case. Users on long-context plans
-    // can override via the Pricing settings UI.
-    // TTS family is free (limited-time), modeled as 0 here.
-    ("mimo", "mimo-v2.5-pro", 0.435, 0.87),
-    ("mimo", "mimo-v2.5", 0.14, 0.28),
-    ("mimo", "mimo-v2-pro", 1.00, 3.00),
-    ("mimo", "mimo-v2-omni", 0.40, 2.00),
-    ("mimo", "mimo-v2-flash", 0.10, 0.30),
-    ("mimo", "mimo-v2.5-tts", 0.00, 0.00),
-    ("mimo", "mimo-v2.5-tts-voiceclone", 0.00, 0.00),
-    ("mimo", "mimo-v2.5-tts-voicedesign", 0.00, 0.00),
-    ("mimo", "mimo-v2-tts", 0.00, 0.00),
-    // MiniMax
-    ("minimax", "MiniMax-M1", 1.00, 8.00),
-    // GLM
-    ("glm", "glm-4-plus", 0.70, 0.70),
-    // DashScope
-    ("dashscope", "qwen-max", 1.60, 6.40),
-    // Free inference providers
-    ("groq", "*", 0.00, 0.00),
-    ("cerebras", "*", 0.00, 0.00),
-    // Google Gemini
-    ("google_gemini", "gemini-2.5-flash", 0.15, 0.60),
-    ("google_gemini", "gemini-2.5-pro", 1.25, 10.00),
-    // xAI
-    ("xai", "grok-3-latest", 3.00, 15.00),
-    // Mistral
-    ("mistral", "mistral-large-latest", 2.00, 6.00),
-];
-
 /// Ensure the model_pricing table has default entries.
 pub fn ensure_defaults(conn: &Connection) -> Result<(), AppError> {
     let now = chrono::Utc::now().to_rfc3339();
-    for (provider, model, input_price, output_price) in DEFAULTS {
-        let id = format!("default_{provider}_{model}");
-        conn.execute(
-            "INSERT OR IGNORE INTO model_pricing (id, provider, model_pattern, input_price, output_price, is_custom, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)",
-            params![&id, provider, model, input_price, output_price, &now],
-        )?;
+    for (provider, model, input_price, output_price) in catalog::MODEL_PRICING_DEFAULTS {
+        insert_default(conn, &now, provider, model, *input_price, *output_price)?;
     }
+    Ok(())
+}
+
+fn insert_default(
+    conn: &Connection,
+    now: &str,
+    provider: &str,
+    model: &str,
+    input_price: f64,
+    output_price: f64,
+) -> Result<(), AppError> {
+    let id = format!("default_{provider}_{model}");
+    conn.execute(
+        "INSERT OR IGNORE INTO model_pricing (id, provider, model_pattern, input_price, output_price, is_custom, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 0, ?6)",
+        params![&id, provider, model, input_price, output_price, now],
+    )?;
     Ok(())
 }
 

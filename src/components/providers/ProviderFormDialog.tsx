@@ -146,20 +146,22 @@ export function ProviderFormDialog({
       setTimeoutSeconds(String(provider.timeout_seconds));
       setEnabled(provider.enabled);
     } else {
-      setName("");
-      setProviderType("deepseek");
-      setBaseUrl("");
+      const defaultType = "deepseek";
+      const preset = PROVIDER_PRESETS[defaultType];
+      setName(PROVIDER_TYPES.find(t => t.value === defaultType)?.label ?? "");
+      setProviderType(defaultType);
+      setBaseUrl(preset?.baseUrl ?? "");
       setApiKeys([""]);
-      setDefaultModel("");
-      setReasoningModel("");
+      setDefaultModel(preset?.defaultModel ?? "");
+      setReasoningModel(preset?.reasoningModel ?? "");
       setSupportedModels("");
       setModelCapabilities({});
       setModelMapping({});
-      setExtraHeaders("");
-      setAnthropicBaseUrl("");
-      setResponsesBaseUrl("");
-      setAutoCacheControl(true);
-      setProtocols(["openai_chat_completions"]);
+      setExtraHeaders(preset?.extraHeaders ?? "");
+      setAnthropicBaseUrl(preset?.anthropicBaseUrl ?? "");
+      setResponsesBaseUrl(preset?.responsesBaseUrl ?? "");
+      setAutoCacheControl(!!preset?.anthropicBaseUrl);
+      setProtocols(preset?.protocols ?? ["openai_chat_completions"]);
       setTimeoutSeconds("120");
       setEnabled(true);
     }
@@ -297,7 +299,7 @@ export function ProviderFormDialog({
             </Field>
           </div>
 
-          {providerType === "custom" && (
+          {providerType === "custom_openai_compatible" && (
             <Field label={t("providers.base_url")} error={errors.baseUrl} hint={t("providers.base_url_custom_hint")}>
               <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.example.com" className="form-input" />
             </Field>

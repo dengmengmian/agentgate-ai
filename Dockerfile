@@ -16,15 +16,6 @@ RUN apt-get update && apt-get install -y \
 # Copy source
 COPY src-tauri/ ./
 
-# The desktop app build keeps Cargo autobins disabled so Tauri does not bundle
-# the headless CLI. Enable the CLI binary only inside the Docker build.
-RUN cat >> Cargo.toml <<'EOF'
-
-[[bin]]
-name = "agentgate-serve"
-path = "src/cli/serve.rs"
-EOF
-
 # Build only the headless binary
 RUN cargo build --release --bin agentgate-serve
 

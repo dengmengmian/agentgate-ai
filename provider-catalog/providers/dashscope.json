@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "order": 90,
+  "type": "dashscope",
+  "displayName": "DashScope (Qwen)",
+  "displayNameZh": "通义千问 DashScope",
+  "aliases": ["dashscope", "qwen"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode",
+    "anthropicBaseUrl": "https://dashscope.aliyuncs.com/apps/anthropic"
+  },
+  "defaultModel": "qwen-max",
+  "supportedModels": ["qwen-max"],
+  "models": [
+    { "id": "qwen-max", "pricing": { "inputPerMillion": 1.6, "outputPerMillion": 6.4 } }
+  ],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "DASHSCOPE_API_KEY",
+    "modelsUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1/models",
+    "authHeader": "bearer"
+  }
+}

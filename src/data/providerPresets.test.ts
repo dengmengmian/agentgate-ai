@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { PROVIDER_TYPES } from "@/types/provider";
 import {
   firstApiKey,
   getMimoEndpointsForKey,
+  PROVIDER_PRESETS,
   resolveKnownProviderEndpoints,
   resolveProviderPresetForKey,
 } from "./providerPresets";
@@ -56,5 +58,17 @@ describe("MiMo provider endpoints", () => {
     expect(preset?.defaultModel).toBe("deepseek-v4-flash");
     expect(preset?.reasoningModel).toBe("deepseek-v4-pro");
     expect(preset?.anthropicBaseUrl).toBe("https://api.deepseek.com/anthropic");
+  });
+
+  it("exposes all catalog providers as quick setup presets", () => {
+    expect(Object.keys(PROVIDER_PRESETS)).toHaveLength(24);
+    expect(PROVIDER_PRESETS.openai.responsesBaseUrl).toBe("https://api.openai.com");
+    expect(PROVIDER_PRESETS.kimi.extraHeaders).toContain("KimiCLI");
+  });
+
+  it("keeps provider type options aligned with catalog presets", () => {
+    const optionTypes = PROVIDER_TYPES.map((type) => type.value).sort();
+    const presetTypes = Object.keys(PROVIDER_PRESETS).sort();
+    expect(optionTypes).toEqual(presetTypes);
   });
 });

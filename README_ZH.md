@@ -519,17 +519,18 @@ Codex 发送含图片的请求
 
 标了 **专属处理** 的 Provider 在 `src-tauri/src/transform/providers/` 下有专门转换代码。其余走通用 Chat Completions / Anthropic 透传路径，开箱即用。
 
+<!-- PROVIDER_CATALOG_TABLE:START -->
 | Provider | 类型 | 原生协议 | 专属处理 |
 |---|---|---|---|
 | 小米 MiMo | `mimo` | Chat + Anthropic | 多轮 `reasoning_content` 回环、`tp-*` host 按区域自动切换、思考态剥 temperature、tool_choice 非 auto 剥除、omni web_search 剥除、web_search builtin 按矩阵翻译、Web Search Plugin 自动降级 / 重试 |
 | DeepSeek | `deepseek` | Chat + Anthropic | 图片剥离（纯文本模型）、reasoning 注入、schema 清洗、消息重排 |
-| Anthropic（Claude） | `anthropic` | Anthropic Messages（原生） | `tool_use`/`tool_result`、`input_schema`、thinking budget、原生 cache_control |
+| Anthropic（Claude） | `anthropic` | Anthropic | `tool_use`/`tool_result`、`input_schema`、thinking budget、原生 cache_control |
 | OpenAI | `openai` | Chat + Responses | 无（Responses 透传或 Chat 转换） |
-| Google Gemini | `google_gemini` | Chat（兼容端点） | 无 |
+| Google Gemini | `google_gemini` | Chat | 无 |
 | Kimi / Moonshot | `kimi` | Chat | `web_search` → `builtin_function`/`$web_search`、thinking 控制 |
 | MiniMax | `minimax` | Chat | 去 reasoning_effort / response_format、`<think>` 提取 |
-| 智谱 GLM | `glm` | Chat + Anthropic | 通用 |
-| 通义千问 DashScope | `dashscope` | Chat + Anthropic | 通用 |
+| 智谱 GLM | `glm` | Chat | 通用 |
+| 通义千问 DashScope | `dashscope` | Chat | 通用 |
 | 硅基流动 SiliconFlow | `siliconflow` | Chat | 通用 |
 | 火山引擎（豆包） | `volcengine` | Chat | 通用 |
 | 百川 | `baichuan` | Chat | 通用 |
@@ -542,9 +543,10 @@ Codex 发送含图片的请求
 | Fireworks | `fireworks` | Chat | 通用 |
 | Cerebras | `cerebras` | Chat | 通用 |
 | Perplexity | `perplexity` | Chat | 通用 |
-| Cohere | `cohere` | Chat（兼容端点） | 通用 |
+| Cohere | `cohere` | Chat | 通用 |
 | OpenRouter | `openrouter` | Chat | 无 |
 | 自定义 | `custom_openai_compatible` | Chat | 无（Base URL 用户自己填） |
+<!-- PROVIDER_CATALOG_TABLE:END -->
 
 > Vision / reasoning / tools / web_search 等能力是**按每个 model**追踪的，不在 provider 层。详见上文 *能力感知路由*。
 
@@ -709,6 +711,7 @@ Claude Code 发送 Messages API 请求
 
 ```
 AgentGate/
+├── provider-catalog/             # Provider / model 默认数据的单一事实源
 ├── src/                          # 前端 React
 │   ├── app/App.tsx               # 应用入口
 │   ├── pages/                    # 页面（概览/快速配置/供应商/路由/网关/客户端/日志/诊断/设置）
@@ -729,7 +732,7 @@ AgentGate/
 │       ├── diagnostics/          # 诊断与自检
 │       ├── app/                  # Tauri commands 与应用状态
 │       └── errors/               # 统一错误类型
-├── scripts/                      # 测试脚本
+├── scripts/                      # 测试与生成脚本
 └── package.json
 ```
 
@@ -743,6 +746,27 @@ AgentGate/
 - 令牌文件权限设置为 `0600`（Unix）
 
 ## 开发
+
+### Provider Catalog
+
+内置 Provider / Model 数据统一维护在 `provider-catalog/providers/*.json`。改完 catalog 后运行：
+
+```bash
+pnpm provider:catalog:generate
+pnpm provider:catalog:check
+pnpm provider:catalog:sync:check
+```
+
+`provider:catalog:sync:check` 会在存在对应 API Key 环境变量时调用供应商 `/models` 接口；没有密钥的供应商会跳过。上游不再返回 catalog 中的模型时会失败；加 `--strict` 时也会因为发现上游新模型而失败。显式刷新某个供应商：
+
+```bash
+pnpm provider:catalog:sync -- --provider deepseek --update
+pnpm provider:catalog:generate
+```
+
+生成的 TS / Rust 文件会驱动 Provider 预设、endpoint 默认值、能力矩阵 seed、价格默认值、支持模型 gate 和推荐映射策略。Provider 特定运行时行为仍然留在代码模块里，不放进 catalog。
+
+上游模型同步刻意设计成本地维护步骤，不放进 GitHub 发版 workflow。Release CI 只检查生成产物是否与 catalog 一致。
 
 ### 测试脚本
 

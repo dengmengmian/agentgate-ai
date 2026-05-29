@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "order": 160,
+  "type": "mistral",
+  "displayName": "Mistral",
+  "displayNameZh": "Mistral",
+  "aliases": ["mistral"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.mistral.ai"
+  },
+  "defaultModel": "mistral-large-latest",
+  "supportedModels": ["mistral-large-latest"],
+  "models": [
+    { "id": "mistral-large-latest", "pricing": { "inputPerMillion": 2, "outputPerMillion": 6 } }
+  ],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "MISTRAL_API_KEY",
+    "modelsUrl": "https://api.mistral.ai/v1/models",
+    "authHeader": "bearer"
+  }
+}

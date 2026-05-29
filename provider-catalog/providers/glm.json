@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "order": 80,
+  "type": "glm",
+  "displayName": "GLM (Zhipu)",
+  "displayNameZh": "智谱 GLM",
+  "aliases": ["glm", "zhipu"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    "anthropicBaseUrl": "https://open.bigmodel.cn/api/anthropic"
+  },
+  "defaultModel": "glm-4-plus",
+  "supportedModels": ["glm-4-plus"],
+  "models": [
+    { "id": "glm-4-plus", "pricing": { "inputPerMillion": 0.7, "outputPerMillion": 0.7 } }
+  ],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "GLM_API_KEY",
+    "modelsUrl": "https://open.bigmodel.cn/api/paas/v4/models",
+    "authHeader": "bearer"
+  }
+}

@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "order": 20,
+  "type": "deepseek",
+  "displayName": "DeepSeek",
+  "displayNameZh": "DeepSeek",
+  "aliases": ["deepseek"],
+  "protocols": ["openai_chat_completions", "anthropic_messages"],
+  "endpoints": {
+    "baseUrl": "https://api.deepseek.com",
+    "anthropicBaseUrl": "https://api.deepseek.com/anthropic"
+  },
+  "defaultModel": "deepseek-v4-flash",
+  "reasoningModel": "deepseek-v4-pro",
+  "recommendedMapping": {
+    "codexPrimaryTarget": "reasoning",
+    "codexMiniTarget": "default",
+    "claudePrimaryTarget": "reasoning",
+    "claudeSmallTarget": "default",
+    "repairLegacy1m": true
+  },
+  "supportedModels": ["deepseek-v4-flash", "deepseek-v4-pro"],
+  "deprecatedModels": ["deepseek-chat", "deepseek-reasoner"],
+  "models": [
+    {
+      "id": "deepseek-v4-flash",
+      "capabilities": ["text", "reasoning", "tools"],
+      "pricing": {
+        "inputPerMillion": 0.5,
+        "outputPerMillion": 2
+      }
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "capabilities": ["text", "reasoning", "tools"],
+      "pricing": {
+        "inputPerMillion": 2,
+        "outputPerMillion": 8
+      }
+    }
+  ],
+  "docs": {
+    "handlingEn": "Image stripping (text-only models), reasoning injection, schema cleaning, message reordering",
+    "handlingZh": "图片剥离（纯文本模型）、reasoning 注入、schema 清洗、消息重排"
+  },
+  "sync": {
+    "envVar": "DEEPSEEK_API_KEY",
+    "modelsUrl": "https://api.deepseek.com/models",
+    "authHeader": "bearer"
+  }
+}

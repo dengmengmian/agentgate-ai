@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 110,
+  "type": "volcengine",
+  "displayName": "Volcengine (Doubao)",
+  "displayNameZh": "火山引擎（豆包）",
+  "aliases": ["volcengine", "doubao"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+  },
+  "defaultModel": "doubao-pro-256k",
+  "supportedModels": ["doubao-pro-256k"],
+  "models": [],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "VOLCENGINE_API_KEY",
+    "modelsUrl": "https://ark.cn-beijing.volces.com/api/v3/models",
+    "authHeader": "bearer"
+  }
+}

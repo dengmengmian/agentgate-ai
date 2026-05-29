@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "order": 60,
+  "type": "kimi",
+  "displayName": "Kimi / Moonshot",
+  "displayNameZh": "Kimi / Moonshot",
+  "aliases": ["kimi", "moonshot"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.moonshot.cn"
+  },
+  "defaultModel": "kimi-k2",
+  "supportedModels": ["kimi-k2", "kimi-for-coding"],
+  "models": [
+    { "id": "kimi-k2", "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 } },
+    { "id": "kimi-for-coding", "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 } }
+  ],
+  "extraHeaders": "{\"User-Agent\":\"KimiCLI/1.40.0\"}",
+  "docs": {
+    "handlingEn": "`web_search` → `builtin_function`/`$web_search`, thinking control",
+    "handlingZh": "`web_search` → `builtin_function`/`$web_search`、thinking 控制"
+  },
+  "sync": {
+    "envVar": "MOONSHOT_API_KEY",
+    "modelsUrl": "https://api.moonshot.cn/v1/models",
+    "authHeader": "bearer"
+  }
+}

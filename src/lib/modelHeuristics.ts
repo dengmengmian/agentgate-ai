@@ -1,10 +1,11 @@
 /// 模型挑选启发式：从上游返回的 model id 列表里挑出"最新/最主力"的 default 和 reasoning。
 /// 不 hardcode 具体模型名（模型名换得太勤），全靠 pattern + 版本数字排序。
+import { GENERATED_DEEPSEEK_SUPPORTED_MODELS } from "../data/generatedProviderCatalog";
 
 const REASONING = /reasoner|reasoning|thinking|deep-?think|^o\d|-r\d|r1\b/i;
 const NON_PROD = /preview|beta|alpha|draft|legacy|deprecated|experimental/i;
 const SMALLER_VARIANT = /\b(mini|nano|light|tiny|small)\b/i;
-const DEEPSEEK_V4_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro"];
+const DEEPSEEK_V4_MODELS = [...GENERATED_DEEPSEEK_SUPPORTED_MODELS];
 
 function isDeepSeekProvider(providerType: string): boolean {
   return providerType.trim().toLowerCase() === "deepseek";

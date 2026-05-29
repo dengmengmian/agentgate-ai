@@ -17,6 +17,8 @@
 //!   - web_search native web search builtin
 //!   - cache      Anthropic-style prompt caching
 
+use crate::storage::generated_provider_catalog as catalog;
+
 pub const CAP_TEXT: &str = "text";
 pub const CAP_VISION: &str = "vision";
 pub const CAP_AUDIO_IN: &str = "audio_in";
@@ -39,14 +41,18 @@ pub fn seed_for_model(provider_type: &str, model_id: &str) -> Vec<String> {
     let pt = provider_type.to_ascii_lowercase();
     let mid = model_id.trim().to_ascii_lowercase();
 
-    if pt == "deepseek" && is_deprecated_deepseek_alias(&mid) {
-        return Vec::new();
+    if let Some(catalog_provider) = catalog_provider_type(&pt) {
+        let base = strip_qualifier(&mid);
+        if is_catalog_deprecated_model(catalog_provider, base) {
+            return Vec::new();
+        }
+        if let Some(caps) = catalog_capabilities(catalog_provider, base) {
+            return caps;
+        }
     }
 
-    // Try provider-specific rules first
+    // Try remaining provider-specific rules first.
     let caps = match pt.as_str() {
-        p if p == "mimo" || p == "xiaomi" || p.contains("mimo") => seed_mimo(&mid),
-        "deepseek" => seed_deepseek(&mid),
         p if p == "kimi" || p == "moonshot" || p.contains("moonshot") => seed_kimi(&mid),
         _ => Vec::new(),
     };
@@ -56,30 +62,6 @@ pub fn seed_for_model(provider_type: &str, model_id: &str) -> Vec<String> {
 
     // Generic fallback: pattern-match the model name
     dedup_sort(seed_generic(&mid))
-}
-
-fn seed_mimo(mid: &str) -> Vec<String> {
-    // MiMo per https://platform.xiaomimimo.com/docs/zh-CN/quick-start/model
-    // Strip any [...] qualifier (e.g. mimo-v2.5-pro[1m]) before matching.
-    let base = strip_qualifier(mid);
-    match base {
-        "mimo-v2.5-pro" | "mimo-v2-pro" => vec![
-            CAP_TEXT.into(), CAP_REASONING.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
-        ],
-        "mimo-v2.5" => vec![
-            CAP_TEXT.into(), CAP_VISION.into(), CAP_AUDIO_IN.into(), CAP_VIDEO_IN.into(),
-            CAP_REASONING.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
-        ],
-        "mimo-v2-omni" => vec![
-            CAP_TEXT.into(), CAP_VISION.into(), CAP_AUDIO_IN.into(), CAP_VIDEO_IN.into(),
-            CAP_TOOLS.into(),
-        ],
-        "mimo-v2-flash" => vec![
-            CAP_TEXT.into(), CAP_REASONING.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
-        ],
-        m if m.contains("-tts") => vec![CAP_TTS.into()],
-        _ => Vec::new(),
-    }
 }
 
 fn seed_kimi(mid: &str) -> Vec<String> {
@@ -107,19 +89,25 @@ fn seed_kimi(mid: &str) -> Vec<String> {
     }
 }
 
-fn seed_deepseek(mid: &str) -> Vec<String> {
-    let base = strip_qualifier(mid);
-    match base {
-        "deepseek-v4-pro" => vec![
-            CAP_TEXT.into(), CAP_REASONING.into(), CAP_TOOLS.into(),
-        ],
-        "deepseek-v4-flash" => vec![CAP_TEXT.into(), CAP_REASONING.into(), CAP_TOOLS.into()],
-        _ => Vec::new(),
+fn catalog_provider_type(provider_type: &str) -> Option<&'static str> {
+    match provider_type {
+        p if p == "mimo" || p == "xiaomi" || p.contains("mimo") => Some("mimo"),
+        "deepseek" => Some("deepseek"),
+        _ => None,
     }
 }
 
-fn is_deprecated_deepseek_alias(mid: &str) -> bool {
-    matches!(strip_qualifier(mid), "deepseek-chat" | "deepseek-reasoner")
+fn catalog_capabilities(provider_type: &str, model_id: &str) -> Option<Vec<String>> {
+    catalog::MODEL_CAPABILITIES
+        .iter()
+        .find(|(provider, model, _)| *provider == provider_type && *model == model_id)
+        .map(|(_, _, caps)| dedup_sort(caps.iter().map(|cap| (*cap).to_string()).collect()))
+}
+
+fn is_catalog_deprecated_model(provider_type: &str, model_id: &str) -> bool {
+    catalog::DEPRECATED_MODELS
+        .iter()
+        .any(|(provider, model)| *provider == provider_type && *model == model_id)
 }
 
 fn seed_generic(mid: &str) -> Vec<String> {

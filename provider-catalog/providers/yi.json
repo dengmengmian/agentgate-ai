@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 140,
+  "type": "yi",
+  "displayName": "Yi (01.AI)",
+  "displayNameZh": "零一万物 Yi",
+  "aliases": ["yi"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.lingyiwanwu.com"
+  },
+  "defaultModel": "yi-large",
+  "supportedModels": ["yi-large"],
+  "models": [],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "YI_API_KEY",
+    "modelsUrl": "https://api.lingyiwanwu.com/v1/models",
+    "authHeader": "bearer"
+  }
+}

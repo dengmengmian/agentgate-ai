@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "order": 50,
+  "type": "google_gemini",
+  "displayName": "Google Gemini",
+  "displayNameZh": "Google Gemini",
+  "aliases": ["google_gemini", "gemini"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+  },
+  "defaultModel": "gemini-2.5-flash",
+  "supportedModels": ["gemini-2.5-flash", "gemini-2.5-pro"],
+  "models": [
+    { "id": "gemini-2.5-flash", "pricing": { "inputPerMillion": 0.15, "outputPerMillion": 0.6 } },
+    { "id": "gemini-2.5-pro", "pricing": { "inputPerMillion": 1.25, "outputPerMillion": 10 } }
+  ],
+  "docs": {
+    "handlingEn": "None",
+    "handlingZh": "无"
+  },
+  "sync": {
+    "envVar": "GEMINI_API_KEY",
+    "modelsUrl": "https://generativelanguage.googleapis.com/v1beta/models",
+    "authHeader": "query:key",
+    "idPrefixToStrip": "models/"
+  }
+}

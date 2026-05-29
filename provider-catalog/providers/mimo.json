@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 1,
+  "order": 10,
+  "type": "mimo",
+  "displayName": "Xiaomi MiMo",
+  "displayNameZh": "小米 MiMo",
+  "aliases": ["mimo", "xiaomi"],
+  "protocols": ["openai_chat_completions", "anthropic_messages"],
+  "endpoints": {
+    "payg": {
+      "baseUrl": "https://api.xiaomimimo.com/v1",
+      "anthropicBaseUrl": "https://api.xiaomimimo.com/anthropic"
+    },
+    "tokenPlanRegions": {
+      "cn": {
+        "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
+        "anthropicBaseUrl": "https://token-plan-cn.xiaomimimo.com/anthropic"
+      },
+      "sgp": {
+        "baseUrl": "https://token-plan-sgp.xiaomimimo.com/v1",
+        "anthropicBaseUrl": "https://token-plan-sgp.xiaomimimo.com/anthropic"
+      },
+      "ams": {
+        "baseUrl": "https://token-plan-ams.xiaomimimo.com/v1",
+        "anthropicBaseUrl": "https://token-plan-ams.xiaomimimo.com/anthropic"
+      }
+    }
+  },
+  "defaultModel": "mimo-v2.5-pro",
+  "reasoningModel": "mimo-v2.5-pro",
+  "recommendedMapping": {
+    "codexPrimaryTarget": "default",
+    "codexMiniTarget": "default",
+    "claudePrimaryTarget": "reasoning",
+    "claudeSmallTarget": "default",
+    "repairLegacy1m": true
+  },
+  "supportedModels": [
+    "mimo-v2.5-pro",
+    "mimo-v2-pro",
+    "mimo-v2.5",
+    "mimo-v2-omni",
+    "mimo-v2-flash"
+  ],
+  "models": [
+    {
+      "id": "mimo-v2.5-pro",
+      "capabilities": ["text", "reasoning", "tools", "web_search"],
+      "pricing": {
+        "inputPerMillion": 0.435,
+        "outputPerMillion": 0.87
+      }
+    },
+    {
+      "id": "mimo-v2-pro",
+      "capabilities": ["text", "reasoning", "tools", "web_search"],
+      "pricing": {
+        "inputPerMillion": 1,
+        "outputPerMillion": 3
+      }
+    },
+    {
+      "id": "mimo-v2.5",
+      "capabilities": ["text", "vision", "audio_in", "video_in", "reasoning", "tools", "web_search"],
+      "pricing": {
+        "inputPerMillion": 0.14,
+        "outputPerMillion": 0.28
+      }
+    },
+    {
+      "id": "mimo-v2-omni",
+      "capabilities": ["text", "vision", "audio_in", "video_in", "tools"],
+      "pricing": {
+        "inputPerMillion": 0.4,
+        "outputPerMillion": 2
+      }
+    },
+    {
+      "id": "mimo-v2-flash",
+      "capabilities": ["text", "reasoning", "tools", "web_search"],
+      "pricing": {
+        "inputPerMillion": 0.1,
+        "outputPerMillion": 0.3
+      }
+    },
+    {
+      "id": "mimo-v2.5-tts",
+      "capabilities": ["tts"],
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      }
+    },
+    {
+      "id": "mimo-v2.5-tts-voiceclone",
+      "capabilities": ["tts"],
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      }
+    },
+    {
+      "id": "mimo-v2.5-tts-voicedesign",
+      "capabilities": ["tts"],
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      }
+    },
+    {
+      "id": "mimo-v2-tts",
+      "capabilities": ["tts"],
+      "pricing": {
+        "inputPerMillion": 0,
+        "outputPerMillion": 0
+      }
+    }
+  ],
+  "docs": {
+    "handlingEn": "Multi-turn `reasoning_content` round-trip, region-aware `tp-*` host auto-routing, temperature strip in thinking mode, tool_choice non-auto strip, omni web_search strip, web_search builtin gated by matrix, Web Search Plugin auto-degrade / retry",
+    "handlingZh": "多轮 `reasoning_content` 回环、`tp-*` host 按区域自动切换、思考态剥 temperature、tool_choice 非 auto 剥除、omni web_search 剥除、web_search builtin 按矩阵翻译、Web Search Plugin 自动降级 / 重试"
+  },
+  "sync": {
+    "envVar": "MIMO_API_KEY",
+    "modelsUrl": "https://api.xiaomimimo.com/v1/models",
+    "authHeader": "bearer",
+    "excludeRegex": ["tts"]
+  }
+}

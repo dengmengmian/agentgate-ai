@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "pnpm provider:catalog:check && tsc && vite build",
     "preview": "vite preview",
+    "provider:catalog:generate": "node scripts/generate-provider-catalog.mjs",
+    "provider:catalog:check": "node scripts/generate-provider-catalog.mjs --check",
+    "provider:catalog:sync": "node scripts/sync-provider-catalog.mjs",
+    "provider:catalog:sync:check": "node scripts/sync-provider-catalog.mjs --check",
     "release:preflight": "bash scripts/release-preflight.sh",
     "tauri": "tauri"
   },

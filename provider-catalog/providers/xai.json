@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "order": 150,
+  "type": "xai",
+  "displayName": "xAI (Grok)",
+  "displayNameZh": "xAI（Grok）",
+  "aliases": ["xai", "grok"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.x.ai"
+  },
+  "defaultModel": "grok-3-latest",
+  "supportedModels": ["grok-3-latest"],
+  "models": [
+    { "id": "grok-3-latest", "pricing": { "inputPerMillion": 3, "outputPerMillion": 15 } }
+  ],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "XAI_API_KEY",
+    "modelsUrl": "https://api.x.ai/v1/models",
+    "authHeader": "bearer"
+  }
+}

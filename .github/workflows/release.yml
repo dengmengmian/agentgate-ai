@@ -14,6 +14,22 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Provider catalog drift check
+        run: pnpm provider:catalog:check
+
       - name: Docker preflight
         run: bash scripts/release-preflight.sh
 
@@ -181,16 +197,6 @@ jobs:
         with:
           workspaces: src-tauri
           key: cli-${{ matrix.target }}
-
-      - name: Enable CLI target
-        shell: bash
-        run: |
-          cat >> src-tauri/Cargo.toml <<'EOF'
-
-          [[bin]]
-          name = "agentgate-serve"
-          path = "src/cli/serve.rs"
-          EOF
 
       - name: Build CLI
         run: cargo build --manifest-path src-tauri/Cargo.toml --release --target ${{ matrix.target }} --bin agentgate-serve

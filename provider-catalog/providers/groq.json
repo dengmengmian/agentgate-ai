@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "order": 170,
+  "type": "groq",
+  "displayName": "Groq",
+  "displayNameZh": "Groq",
+  "aliases": ["groq"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.groq.com/openai"
+  },
+  "defaultModel": "llama-3.3-70b-versatile",
+  "supportedModels": ["llama-3.3-70b-versatile"],
+  "models": [
+    { "id": "*", "pricing": { "inputPerMillion": 0, "outputPerMillion": 0 } }
+  ],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "GROQ_API_KEY",
+    "modelsUrl": "https://api.groq.com/openai/v1/models",
+    "authHeader": "bearer"
+  }
+}

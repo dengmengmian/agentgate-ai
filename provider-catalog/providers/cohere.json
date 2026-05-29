@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 220,
+  "type": "cohere",
+  "displayName": "Cohere",
+  "displayNameZh": "Cohere",
+  "aliases": ["cohere"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.cohere.com/compatibility"
+  },
+  "defaultModel": "command-r-plus",
+  "supportedModels": ["command-r-plus"],
+  "models": [],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "COHERE_API_KEY",
+    "modelsUrl": "https://api.cohere.com/compatibility/v1/models",
+    "authHeader": "bearer"
+  }
+}

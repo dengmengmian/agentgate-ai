@@ -1,14 +1,16 @@
 use crate::models::provider::{CreateProviderInput, UpdateProviderInput};
+use crate::storage::generated_provider_catalog as catalog;
 
-const MIMO_PAYG_BASE_URL: &str = "https://api.xiaomimimo.com/v1";
-const MIMO_PAYG_ANTHROPIC_URL: &str = "https://api.xiaomimimo.com/anthropic";
-const MIMO_TOKEN_PLAN_BASE_URL: &str = "https://token-plan-cn.xiaomimimo.com/v1";
-const MIMO_TOKEN_PLAN_ANTHROPIC_URL: &str = "https://token-plan-cn.xiaomimimo.com/anthropic";
-const MIMO_TOKEN_PLAN_REGIONS: &[&str] = &["cn", "sgp", "ams"];
-const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com";
-const DEEPSEEK_ANTHROPIC_URL: &str = "https://api.deepseek.com/anthropic";
-const DEEPSEEK_SUPPORTED_MODELS: &str = r#"["deepseek-v4-flash","deepseek-v4-pro"]"#;
-const DEEPSEEK_REASONING_MODEL: &str = "deepseek-v4-pro";
+const MIMO_PAYG_BASE_URL: &str = catalog::MIMO_PAYG_BASE_URL;
+const MIMO_PAYG_ANTHROPIC_URL: &str = catalog::MIMO_PAYG_ANTHROPIC_URL;
+#[cfg(test)]
+const MIMO_TOKEN_PLAN_BASE_URL: &str = catalog::MIMO_TOKEN_PLAN_DEFAULT_BASE_URL;
+#[cfg(test)]
+const MIMO_TOKEN_PLAN_ANTHROPIC_URL: &str = catalog::MIMO_TOKEN_PLAN_DEFAULT_ANTHROPIC_URL;
+const DEEPSEEK_BASE_URL: &str = catalog::DEEPSEEK_BASE_URL;
+const DEEPSEEK_ANTHROPIC_URL: &str = catalog::DEEPSEEK_ANTHROPIC_URL;
+const DEEPSEEK_SUPPORTED_MODELS: &str = catalog::DEEPSEEK_SUPPORTED_MODELS_JSON;
+const DEEPSEEK_REASONING_MODEL: &str = catalog::DEEPSEEK_REASONING_MODEL;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct EndpointUrls {
@@ -148,16 +150,16 @@ fn should_replace_mimo_url(url: &str) -> bool {
 }
 
 fn token_plan_urls(region: &str) -> EndpointUrls {
-    if region == "cn" {
+    if let Some((_, base_url, anthropic_base_url)) = catalog::MIMO_TOKEN_PLAN_ENDPOINTS
+        .iter()
+        .find(|(candidate, _, _)| *candidate == region)
+    {
         return EndpointUrls {
-            base_url: MIMO_TOKEN_PLAN_BASE_URL.to_string(),
-            anthropic_base_url: MIMO_TOKEN_PLAN_ANTHROPIC_URL.to_string(),
+            base_url: (*base_url).to_string(),
+            anthropic_base_url: (*anthropic_base_url).to_string(),
         };
     }
-    EndpointUrls {
-        base_url: format!("https://token-plan-{region}.xiaomimimo.com/v1"),
-        anthropic_base_url: format!("https://token-plan-{region}.xiaomimimo.com/anthropic"),
-    }
+    token_plan_urls("cn")
 }
 
 fn preferred_token_plan_region(
@@ -176,10 +178,13 @@ fn preferred_token_plan_region(
 
 fn token_plan_region_from_url(url: &str) -> Option<&'static str> {
     let normalized = url.trim().trim_end_matches('/').to_ascii_lowercase();
-    MIMO_TOKEN_PLAN_REGIONS.iter().copied().find(|region| {
-        normalized == format!("https://token-plan-{region}.xiaomimimo.com/v1")
-            || normalized == format!("https://token-plan-{region}.xiaomimimo.com/anthropic")
-    })
+    catalog::MIMO_TOKEN_PLAN_ENDPOINTS
+        .iter()
+        .find(|(_, base_url, anthropic_base_url)| {
+            normalized == base_url.to_ascii_lowercase()
+                || normalized == anthropic_base_url.to_ascii_lowercase()
+        })
+        .map(|(region, _, _)| *region)
 }
 
 fn should_replace_deepseek_url(url: &str) -> bool {

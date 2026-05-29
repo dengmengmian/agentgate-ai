@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 100,
+  "type": "siliconflow",
+  "displayName": "SiliconFlow",
+  "displayNameZh": "硅基流动 SiliconFlow",
+  "aliases": ["siliconflow"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api.siliconflow.cn"
+  },
+  "defaultModel": "deepseek-ai/DeepSeek-V3",
+  "supportedModels": ["deepseek-ai/DeepSeek-V3"],
+  "models": [],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "SILICONFLOW_API_KEY",
+    "modelsUrl": "https://api.siliconflow.cn/v1/models",
+    "authHeader": "bearer"
+  }
+}

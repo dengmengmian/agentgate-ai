@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 230,
+  "type": "openrouter",
+  "displayName": "OpenRouter",
+  "displayNameZh": "OpenRouter",
+  "aliases": ["openrouter"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://openrouter.ai/api"
+  },
+  "defaultModel": "deepseek/deepseek-v4-flash",
+  "supportedModels": ["deepseek/deepseek-v4-flash"],
+  "models": [],
+  "docs": {
+    "handlingEn": "None",
+    "handlingZh": "无"
+  },
+  "sync": {
+    "envVar": "OPENROUTER_API_KEY",
+    "modelsUrl": "https://openrouter.ai/api/v1/models",
+    "authHeader": "bearer"
+  }
+}
