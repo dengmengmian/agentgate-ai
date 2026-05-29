@@ -651,11 +651,63 @@ async fn handle_stream_response(
             let sa_session = session_id.clone();
             let sa_provider = provider_id.clone();
 
+            // MiMo 自动续写所需的额外 clone（第二轮再起一次上游用）
+            let http_client_continue = state.http_client.clone();
+            let config_continue = config.clone();
+            let chat_req_continue = chat_req.clone();
+            let provider_type_continue = config.provider_type.clone();
+
             // Spawn task to process upstream SSE and send converted events
             tokio::spawn(async move {
                 let mut acc = SseAccumulator::new(resp_id, model_clone.clone());
 
-                let result = crate::gateway::sse::process_upstream_stream(boot, tx, &mut acc).await;
+                // 第一轮：发 created/in_progress，不发 completed（留给续写决策后再决定）
+                let first_result = crate::gateway::sse::process_upstream_stream_inner(
+                    boot, tx.clone(), &mut acc, true, false,
+                ).await;
+
+                // 续写触发条件：上游 stop + visible text 极短 + 0 tool_calls + 有 reasoning
+                // 这是 MiMo `mimo-v2.5-pro` 在长 context 下的稳定行为——reasoning 里规划
+                // 好了下一步，但 visible output 只吐一句开场白就 stop，tool_calls 没发出来。
+                // env AGENTGATE_MIMO_AUTO_CONTINUE=0 可关掉；默认开。
+                let auto_continue_enabled = std::env::var("AGENTGATE_MIMO_AUTO_CONTINUE")
+                    .map(|v| v != "0")
+                    .unwrap_or(true);
+                let is_mimo = provider_type_continue == "mimo"
+                    || provider_type_continue == "xiaomi"
+                    || provider_type_continue.contains("mimo");
+                let should_continue = first_result.is_ok()
+                    && auto_continue_enabled
+                    && is_mimo
+                    && acc.finish_reason.as_deref() == Some("stop")
+                    && acc.full_text.chars().count() < 200
+                    && acc.tool_calls.is_empty()
+                    && !acc.reasoning_content.is_empty();
+
+                let result = if should_continue {
+                    tracing::info!(
+                        response_id = %acc.response_id,
+                        text_len = acc.full_text.chars().count(),
+                        reasoning_len = acc.reasoning_content.chars().count(),
+                        "mimo auto-continue triggered: short stop with reasoning, retrying once"
+                    );
+                    do_mimo_continuation(
+                        &http_client_continue,
+                        &config_continue,
+                        &chat_req_continue,
+                        &mut acc,
+                        tx.clone(),
+                    ).await
+                } else if first_result.is_ok() {
+                    // 第一轮跑完没触发续写：补发 response.completed 收尾流
+                    // （第一轮调的是 emit_completed=false）
+                    crate::gateway::sse::send_response_completed_envelope(&tx, &acc).await;
+                    first_result
+                } else {
+                    // 第一轮失败：process_upstream_stream_inner 内部已经发过
+                    // response.failed，不要再补发 completed（重复收尾会让 Codex 报错）
+                    first_result
+                };
 
                 // Record session affinity when the upstream confirmed a cache
                 // hit (acc.usage was normalized to the Responses-shape during
@@ -769,6 +821,78 @@ async fn handle_stream_response(
             Err(GatewayError(err))
         }
     }
+}
+
+/// MiMo 自动续写：构造续写 request（原 messages + 第一轮 assistant + user "继续"），
+/// 起第二轮上游，在同一个 SSE 流上接着写。第二轮 `emit_completed=true` 会发收尾事件；
+/// 第二轮失败（网络/上游 400）走 fallback 路径手动发 completed，避免 Codex 死等。
+async fn do_mimo_continuation(
+    http_client: &reqwest::Client,
+    config: &ProviderConfig,
+    original_chat_req: &crate::protocol::chat_completions::ChatCompletionsRequest,
+    acc: &mut crate::gateway::sse::SseAccumulator,
+    tx: mpsc::Sender<String>,
+) -> Result<(), String> {
+    type CM = crate::protocol::chat_completions::ChatMessage;
+
+    // 1. 构造续写 request：在原 messages 末尾追加第一轮 assistant（带 reasoning + text）
+    //    + 一条 user "继续"。让 MiMo 把已经规划好的下一步真正吐出来。
+    let mut continued_req = original_chat_req.clone();
+    let first_text = acc.full_text.clone();
+    let first_reasoning = acc.reasoning_content.clone();
+    continued_req.messages.push(CM {
+        role: "assistant".to_string(),
+        content: if first_text.is_empty() {
+            None
+        } else {
+            Some(serde_json::Value::String(first_text))
+        },
+        reasoning_content: if first_reasoning.is_empty() {
+            None
+        } else {
+            Some(first_reasoning)
+        },
+        tool_calls: None,
+        tool_call_id: None,
+        name: None,
+    });
+    continued_req.messages.push(CM {
+        role: "user".to_string(),
+        content: Some(serde_json::Value::String(
+            "继续。直接输出下一步的工具调用，不要再说\"让我...\"这类开场白。".to_string(),
+        )),
+        reasoning_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        name: None,
+    });
+
+    // 2. 重置 acc 的 item id / carry-over 文本（避免第二轮 reasoning/message item
+    //    撞第一轮的 id），但保留 envelope 累积（output_items / next_output_index）。
+    acc.reset_for_continuation();
+
+    // 3. 起第二轮上游 + bootstrap 检测
+    let resp2 = match adapter::send_stream(http_client, config, &continued_req).await {
+        Ok(r) => r,
+        Err(e) => {
+            tracing::warn!(error = %e.message, "mimo continuation send_stream failed; emitting completed envelope from first round");
+            crate::gateway::sse::send_response_completed_envelope(&tx, acc).await;
+            return Err(format!("continuation upstream failed: {}", e.message));
+        }
+    };
+    let boot2 = match crate::gateway::sse_bootstrap::bootstrap_detect(resp2).await {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!(error = %e.message, "mimo continuation bootstrap_detect failed; emitting completed envelope from first round");
+            crate::gateway::sse::send_response_completed_envelope(&tx, acc).await;
+            return Err(format!("continuation bootstrap failed: {}", e.message));
+        }
+    };
+
+    // 4. 第二轮跑流：不发 created/in_progress（同一个 SSE 流），发 completed 收尾
+    crate::gateway::sse::process_upstream_stream_inner(
+        boot2, tx, acc, false, true,
+    ).await
 }
 
 // ── Anthropic (Claude Messages API) handlers ──────────────────
