@@ -7,4 +7,7 @@ pub mod tool_calls;
 pub mod reasoning_store;
 pub mod thinking_blocks;
 pub mod chat_to_anthropic_stream;
+pub mod chat_to_anthropic;
+pub mod anthropic_to_chat;
+pub mod anthropic_to_chat_stream;
 pub mod providers;
