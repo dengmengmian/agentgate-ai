@@ -81,6 +81,116 @@ fn smoke_timeout() -> Duration {
     Duration::from_secs(secs)
 }
 
+/// 读环境变量，空字符串视为未设。
+fn env_opt(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|v| !v.is_empty())
+}
+
+/// Redact 常见 provider key 前缀。**不是安全边界**——真正的防御靠不打印
+/// raw upstream body，本函数只是 200 字符错误片段的二道防线（万一上游错
+/// 误响应回显了 key）。
+fn sanitize_for_log(text: &str) -> String {
+    const PREFIXES: &[&str] = &["sk-", "tp-", "gsk_", "csk-", "ak-"];
+    let bytes = text.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let mut hit: Option<&str> = None;
+        for p in PREFIXES {
+            let pb = p.as_bytes();
+            if i + pb.len() <= bytes.len() && &bytes[i..i + pb.len()] == pb {
+                hit = Some(*p);
+                break;
+            }
+        }
+        if let Some(prefix) = hit {
+            let mut end = i + prefix.len();
+            while end < bytes.len() {
+                let b = bytes[end];
+                let is_delim = matches!(
+                    b,
+                    b' ' | b'\t' | b'\n' | b'\r' | b'"' | b'\''
+                    | b',' | b'}' | b']' | b')' | b'>' | b':'
+                );
+                if is_delim { break; }
+                end += 1;
+            }
+            // 长度 > prefix + 4 才视为 key（避免误删 "sk-" 这种普通文本）
+            if end - i > prefix.len() + 4 {
+                out.extend_from_slice(prefix.as_bytes());
+                out.extend_from_slice(b"***");
+                i = end;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    // 仅插入 ASCII；非 ASCII 字节按原样保留——结果仍是合法 UTF-8。
+    String::from_utf8(out).unwrap_or_else(|_| text.to_string())
+}
+
+/// 截 200 字符 + sanitize，专供 println! 错误日志使用。
+fn snip(text: &str) -> String {
+    let cut: String = text.chars().take(200).collect();
+    sanitize_for_log(&cut)
+}
+
+/// 查给定 route 最近一条 request_logs 的 trace_json。smoke 测试串行跑、
+/// 隔离在 19090 端口，不与用户 app 同台并发——LIMIT 1 ORDER BY id DESC
+/// 拿到的就是当前测试自己的那条。
+fn fetch_recent_trace(
+    db: &Arc<Mutex<rusqlite::Connection>>,
+    route: &str,
+) -> Option<serde_json::Value> {
+    let c = db.lock().ok()?;
+    let tj: Option<String> = c.query_row(
+        "SELECT trace_json FROM request_logs WHERE route = ?1 ORDER BY id DESC LIMIT 1",
+        [route],
+        |row| row.get(0),
+    ).ok()?;
+    serde_json::from_str(&tj?).ok()
+}
+
+/// 把目标 provider 临时设为 active，Drop 时恢复原 active。
+/// 测试用：保证不论 panic / early return / 正常退出，都还原用户的 active 配置。
+struct ActiveProviderGuard {
+    db: Arc<Mutex<rusqlite::Connection>>,
+    original_id: Option<String>,
+}
+
+impl ActiveProviderGuard {
+    fn activate(
+        db: &Arc<Mutex<rusqlite::Connection>>,
+        target_id: &str,
+    ) -> Result<Self, String> {
+        let original = {
+            let c = db.lock().map_err(|_| "db lock".to_string())?;
+            agentgate_lib::storage::providers::list_all(&c)
+                .map_err(|e| format!("list_all: {}", e.message))?
+                .into_iter()
+                .find(|p| p.is_active)
+                .map(|p| p.id)
+        };
+        {
+            let c = db.lock().map_err(|_| "db lock".to_string())?;
+            agentgate_lib::storage::providers::set_active(&c, target_id)
+                .map_err(|e| format!("set_active({target_id}): {}", e.message))?;
+        }
+        Ok(Self { db: db.clone(), original_id: original })
+    }
+}
+
+impl Drop for ActiveProviderGuard {
+    fn drop(&mut self) {
+        if let Some(ref id) = self.original_id {
+            if let Ok(c) = self.db.lock() {
+                let _ = agentgate_lib::storage::providers::set_active(&c, id);
+            }
+        }
+    }
+}
+
 #[tokio::test]
 async fn release_preflight_smoke() {
     if std::env::var("AG_RUN_SMOKE_TESTS").is_err() {
@@ -282,6 +392,285 @@ async fn release_preflight_smoke() {
         // Mark provider direct tests as non-fatal (network issues happen)
         let label = format!("provider_{}", provider.id);
         results.push((label, ok || true, res.err()));
+    }
+
+    // ── 8. 3-主路覆盖测试（按 env 开关，未配置则 skip） ──────────────
+    //
+    // 设计：每条测试用 env 指定 provider_id + model，guard 临时把该 provider
+    // 设为 active，跑完恢复原 active；之后查 request_logs 验 trace 字段。
+    //
+    // env 矩阵：
+    //   主路 ① 协议转换（5 路）：
+    //     AG_SMOKE_ANTHROPIC_PROVIDER_ID + AG_SMOKE_ANTHROPIC_MODEL
+    //       → Responses→Anthropic + Chat→Anthropic 非流 + 流（同 provider 复用）
+    //     AG_SMOKE_GEMINI_PROVIDER_ID + AG_SMOKE_GEMINI_MODEL
+    //       → Responses→Gemini
+    //     AG_SMOKE_CHAT_ONLY_PROVIDER_ID + AG_SMOKE_CHAT_ONLY_MODEL
+    //       → Messages→Chat fallback + Gemini→Chat
+    //   主路 ② model_mapping 命中（3 路）：
+    //     AG_SMOKE_MAPPING_RESPONSES_PROVIDER_ID + _CLIENT_MODEL
+    //     AG_SMOKE_MAPPING_CHAT_PROVIDER_ID + _CLIENT_MODEL
+    //     AG_SMOKE_MAPPING_MESSAGES_PROVIDER_ID + _CLIENT_MODEL
+    println!();
+    println!("   ── 3-主路覆盖测试 ──");
+
+    // 8.1 协议转换：Responses → Anthropic
+    {
+        let label = "transform_responses_to_anthropic".to_string();
+        match (env_opt("AG_SMOKE_ANTHROPIC_PROVIDER_ID"), env_opt("AG_SMOKE_ANTHROPIC_MODEL")) {
+            (Some(pid), Some(model)) => {
+                match ActiveProviderGuard::activate(&db, &pid) {
+                    Ok(_g) => {
+                        let res = test_responses_transform_anthropic(&client, &token, &base, &model, &db).await;
+                        let ok = res.is_ok();
+                        match &res {
+                            Ok(()) => println!("   ✅ Responses → Anthropic"),
+                            Err(e) => println!("   ❌ Responses → Anthropic — {e}"),
+                        }
+                        results.push((label, ok, res.err()));
+                    }
+                    Err(e) => {
+                        println!("   ❌ Responses → Anthropic — activate failed: {e}");
+                        results.push((label, false, Some(e)));
+                    }
+                }
+            }
+            _ => {
+                println!("   ⏭️  Responses → Anthropic — skip (env AG_SMOKE_ANTHROPIC_PROVIDER_ID/MODEL 未设)");
+                results.push((label, true, Some("SKIP".into())));
+            }
+        }
+    }
+
+    // 8.2 协议转换：Responses → Gemini
+    {
+        let label = "transform_responses_to_gemini".to_string();
+        match (env_opt("AG_SMOKE_GEMINI_PROVIDER_ID"), env_opt("AG_SMOKE_GEMINI_MODEL")) {
+            (Some(pid), Some(model)) => {
+                match ActiveProviderGuard::activate(&db, &pid) {
+                    Ok(_g) => {
+                        let res = test_responses_transform_gemini(&client, &token, &base, &model, &db).await;
+                        let ok = res.is_ok();
+                        match &res {
+                            Ok(()) => println!("   ✅ Responses → Gemini"),
+                            Err(e) => println!("   ❌ Responses → Gemini — {e}"),
+                        }
+                        results.push((label, ok, res.err()));
+                    }
+                    Err(e) => {
+                        println!("   ❌ Responses → Gemini — activate failed: {e}");
+                        results.push((label, false, Some(e)));
+                    }
+                }
+            }
+            _ => {
+                println!("   ⏭️  Responses → Gemini — skip");
+                results.push((label, true, Some("SKIP".into())));
+            }
+        }
+    }
+
+    // 8.3 + 8.4 协议转换：Chat → Anthropic 非流 + 流（共用 ANTHROPIC env）
+    {
+        let label_ns = "transform_chat_to_anthropic_non_stream".to_string();
+        let label_st = "transform_chat_to_anthropic_stream".to_string();
+        match (env_opt("AG_SMOKE_ANTHROPIC_PROVIDER_ID"), env_opt("AG_SMOKE_ANTHROPIC_MODEL")) {
+            (Some(pid), Some(model)) => {
+                match ActiveProviderGuard::activate(&db, &pid) {
+                    Ok(_g) => {
+                        // 非流
+                        let res_ns = test_chat_transform_anthropic_non_stream(&client, &token, &base, &model, &db).await;
+                        let ok_ns = res_ns.is_ok();
+                        match &res_ns {
+                            Ok(()) => println!("   ✅ Chat → Anthropic 非流"),
+                            Err(e) => println!("   ❌ Chat → Anthropic 非流 — {e}"),
+                        }
+                        results.push((label_ns, ok_ns, res_ns.err()));
+
+                        // 流
+                        let res_st = test_chat_transform_anthropic_stream(&client, &token, &base, &model, &db).await;
+                        let ok_st = res_st.is_ok();
+                        match &res_st {
+                            Ok(()) => println!("   ✅ Chat → Anthropic 流"),
+                            Err(e) => println!("   ❌ Chat → Anthropic 流 — {e}"),
+                        }
+                        results.push((label_st, ok_st, res_st.err()));
+                    }
+                    Err(e) => {
+                        println!("   ❌ Chat → Anthropic 非流 — activate failed: {e}");
+                        results.push((label_ns, false, Some(e.clone())));
+                        results.push((label_st, false, Some(e)));
+                    }
+                }
+            }
+            _ => {
+                println!("   ⏭️  Chat → Anthropic 非流/流 — skip");
+                results.push((label_ns, true, Some("SKIP".into())));
+                results.push((label_st, true, Some("SKIP".into())));
+            }
+        }
+    }
+
+    // 8.5 协议转换：Messages → Chat fallback
+    {
+        let label = "transform_messages_to_chat".to_string();
+        match (env_opt("AG_SMOKE_CHAT_ONLY_PROVIDER_ID"), env_opt("AG_SMOKE_CHAT_ONLY_MODEL")) {
+            (Some(pid), Some(model)) => {
+                match ActiveProviderGuard::activate(&db, &pid) {
+                    Ok(_g) => {
+                        let res = test_messages_transform_chat_fallback(&client, &token, &base, &model, &db).await;
+                        let ok = res.is_ok();
+                        match &res {
+                            Ok(()) => println!("   ✅ Messages → Chat fallback"),
+                            Err(e) => println!("   ❌ Messages → Chat fallback — {e}"),
+                        }
+                        results.push((label, ok, res.err()));
+                    }
+                    Err(e) => {
+                        println!("   ❌ Messages → Chat fallback — activate failed: {e}");
+                        results.push((label, false, Some(e)));
+                    }
+                }
+            }
+            _ => {
+                println!("   ⏭️  Messages → Chat fallback — skip");
+                results.push((label, true, Some("SKIP".into())));
+            }
+        }
+    }
+
+    // 8.6 协议转换：Gemini → Chat
+    {
+        let label = "transform_gemini_to_chat".to_string();
+        match (env_opt("AG_SMOKE_CHAT_ONLY_PROVIDER_ID"), env_opt("AG_SMOKE_CHAT_ONLY_MODEL")) {
+            (Some(pid), Some(model)) => {
+                match ActiveProviderGuard::activate(&db, &pid) {
+                    Ok(_g) => {
+                        let res = test_gemini_input_transform_chat(&client, &token, &base, &model, &db).await;
+                        let ok = res.is_ok();
+                        match &res {
+                            Ok(()) => println!("   ✅ Gemini → Chat"),
+                            Err(e) => println!("   ❌ Gemini → Chat — {e}"),
+                        }
+                        results.push((label, ok, res.err()));
+                    }
+                    Err(e) => {
+                        println!("   ❌ Gemini → Chat — activate failed: {e}");
+                        results.push((label, false, Some(e)));
+                    }
+                }
+            }
+            _ => {
+                println!("   ⏭️  Gemini → Chat — skip");
+                results.push((label, true, Some("SKIP".into())));
+            }
+        }
+    }
+
+    // 8.7 model_mapping：/v1/responses
+    {
+        let label = "mapping_responses".to_string();
+        match (env_opt("AG_SMOKE_MAPPING_RESPONSES_PROVIDER_ID"), env_opt("AG_SMOKE_MAPPING_RESPONSES_CLIENT_MODEL")) {
+            (Some(pid), Some(model)) => {
+                match ActiveProviderGuard::activate(&db, &pid) {
+                    Ok(_g) => {
+                        let url = format!("{}/v1/responses", base);
+                        let body = serde_json::json!({
+                            "model": model,
+                            "input": "Reply with 'ok'.",
+                            "stream": false,
+                            "max_output_tokens": 16,
+                            "temperature": 0.0,
+                        });
+                        let res = test_passthrough_with_mapping(&client, &token, &url, body, &db, "/v1/responses").await;
+                        let ok = res.is_ok();
+                        match &res {
+                            Ok(()) => println!("   ✅ /v1/responses + model_mapping"),
+                            Err(e) => println!("   ❌ /v1/responses + model_mapping — {e}"),
+                        }
+                        results.push((label, ok, res.err()));
+                    }
+                    Err(e) => {
+                        println!("   ❌ /v1/responses mapping — activate failed: {e}");
+                        results.push((label, false, Some(e)));
+                    }
+                }
+            }
+            _ => {
+                println!("   ⏭️  /v1/responses + model_mapping — skip");
+                results.push((label, true, Some("SKIP".into())));
+            }
+        }
+    }
+
+    // 8.8 model_mapping：/v1/chat/completions
+    {
+        let label = "mapping_chat".to_string();
+        match (env_opt("AG_SMOKE_MAPPING_CHAT_PROVIDER_ID"), env_opt("AG_SMOKE_MAPPING_CHAT_CLIENT_MODEL")) {
+            (Some(pid), Some(model)) => {
+                match ActiveProviderGuard::activate(&db, &pid) {
+                    Ok(_g) => {
+                        let url = format!("{}/v1/chat/completions", base);
+                        let body = serde_json::json!({
+                            "model": model,
+                            "messages": [{"role": "user", "content": "Reply with 'ok'."}],
+                            "stream": false,
+                            "max_tokens": 16,
+                            "temperature": 0.0,
+                        });
+                        let res = test_passthrough_with_mapping(&client, &token, &url, body, &db, "/v1/chat/completions").await;
+                        let ok = res.is_ok();
+                        match &res {
+                            Ok(()) => println!("   ✅ /v1/chat/completions + model_mapping"),
+                            Err(e) => println!("   ❌ /v1/chat/completions + model_mapping — {e}"),
+                        }
+                        results.push((label, ok, res.err()));
+                    }
+                    Err(e) => {
+                        println!("   ❌ /v1/chat/completions mapping — activate failed: {e}");
+                        results.push((label, false, Some(e)));
+                    }
+                }
+            }
+            _ => {
+                println!("   ⏭️  /v1/chat/completions + model_mapping — skip");
+                results.push((label, true, Some("SKIP".into())));
+            }
+        }
+    }
+
+    // 8.9 model_mapping：/v1/messages（Claude Code 打小米典型场景）
+    {
+        let label = "mapping_messages".to_string();
+        match (env_opt("AG_SMOKE_MAPPING_MESSAGES_PROVIDER_ID"), env_opt("AG_SMOKE_MAPPING_MESSAGES_CLIENT_MODEL")) {
+            (Some(pid), Some(model)) => {
+                match ActiveProviderGuard::activate(&db, &pid) {
+                    Ok(_g) => {
+                        let url = format!("{}/v1/messages", base);
+                        let body = serde_json::json!({
+                            "model": model,
+                            "max_tokens": 16,
+                            "messages": [{"role": "user", "content": "Reply with 'ok'."}]
+                        });
+                        let res = test_passthrough_with_mapping(&client, &token, &url, body, &db, "/v1/messages").await;
+                        let ok = res.is_ok();
+                        match &res {
+                            Ok(()) => println!("   ✅ /v1/messages + model_mapping"),
+                            Err(e) => println!("   ❌ /v1/messages + model_mapping — {e}"),
+                        }
+                        results.push((label, ok, res.err()));
+                    }
+                    Err(e) => {
+                        println!("   ❌ /v1/messages mapping — activate failed: {e}");
+                        results.push((label, false, Some(e)));
+                    }
+                }
+            }
+            _ => {
+                println!("   ⏭️  /v1/messages + model_mapping — skip");
+                results.push((label, true, Some("SKIP".into())));
+            }
+        }
     }
 
     // Shutdown gateway
@@ -581,5 +970,252 @@ async fn test_provider_direct(
         return Err("unexpected response shape".into());
     }
 
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────
+// 3-主路覆盖 helpers
+// ─────────────────────────────────────────────────────────────────
+
+/// POST json + 解码响应。错误片段过 sanitize_for_log。
+async fn smoke_post_json(
+    client: &reqwest::Client,
+    token: &str,
+    url: &str,
+    body: serde_json::Value,
+) -> Result<(reqwest::StatusCode, String), String> {
+    let resp = client.post(url).bearer_auth(token).json(&body).send().await
+        .map_err(|e| format!("request failed: {e}"))?;
+    let status = resp.status();
+    let text = resp.text().await.map_err(|e| format!("read body: {e}"))?;
+    Ok((status, text))
+}
+
+/// 主路 ① 协议转换：/v1/responses → Anthropic 上游。
+/// 验 trace.protocol == "anthropic_messages"。
+async fn test_responses_transform_anthropic(
+    client: &reqwest::Client,
+    token: &str,
+    base: &str,
+    model: &str,
+    db: &Arc<Mutex<rusqlite::Connection>>,
+) -> Result<(), String> {
+    let body = serde_json::json!({
+        "model": model,
+        "input": "Reply with 'ok'.",
+        "stream": false,
+        "max_output_tokens": 16,
+        "temperature": 0.0,
+    });
+    let url = format!("{}/v1/responses", base);
+    let (status, text) = smoke_post_json(client, token, &url, body).await?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {}", snip(&text)));
+    }
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("parse json: {e}"))?;
+    if json.get("output").and_then(|v| v.as_array()).is_none() {
+        return Err("missing output array".into());
+    }
+    let trace = fetch_recent_trace(db, "/v1/responses")
+        .ok_or_else(|| "no recent trace".to_string())?;
+    let protocol = trace.get("protocol").and_then(|p| p.as_str()).unwrap_or("");
+    if protocol != "anthropic_messages" {
+        return Err(format!("expected trace.protocol=anthropic_messages, got {protocol}"));
+    }
+    Ok(())
+}
+
+/// 主路 ① 协议转换：/v1/responses → Gemini 上游。
+async fn test_responses_transform_gemini(
+    client: &reqwest::Client,
+    token: &str,
+    base: &str,
+    model: &str,
+    db: &Arc<Mutex<rusqlite::Connection>>,
+) -> Result<(), String> {
+    let body = serde_json::json!({
+        "model": model,
+        "input": "Reply with 'ok'.",
+        "stream": false,
+        "max_output_tokens": 16,
+        "temperature": 0.0,
+    });
+    let url = format!("{}/v1/responses", base);
+    let (status, text) = smoke_post_json(client, token, &url, body).await?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {}", snip(&text)));
+    }
+    let trace = fetch_recent_trace(db, "/v1/responses")
+        .ok_or_else(|| "no recent trace".to_string())?;
+    let protocol = trace.get("protocol").and_then(|p| p.as_str()).unwrap_or("");
+    if protocol != "gemini" {
+        return Err(format!("expected trace.protocol=gemini, got {protocol}"));
+    }
+    Ok(())
+}
+
+/// 主路 ① 协议转换：/v1/chat/completions → Anthropic 上游（非流式）。
+/// 验 trace.mode=transform + protocol=chat_to_anthropic。这是 v1.2.2 新加的路径。
+async fn test_chat_transform_anthropic_non_stream(
+    client: &reqwest::Client,
+    token: &str,
+    base: &str,
+    model: &str,
+    db: &Arc<Mutex<rusqlite::Connection>>,
+) -> Result<(), String> {
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [{"role": "user", "content": "Reply with 'ok'."}],
+        "stream": false,
+        "max_tokens": 16,
+        "temperature": 0.0,
+    });
+    let url = format!("{}/v1/chat/completions", base);
+    let (status, text) = smoke_post_json(client, token, &url, body).await?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {}", snip(&text)));
+    }
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("parse json: {e}"))?;
+    if json.get("choices").and_then(|c| c.as_array()).is_none() {
+        return Err("missing choices array".into());
+    }
+    let trace = fetch_recent_trace(db, "/v1/chat/completions")
+        .ok_or_else(|| "no recent trace".to_string())?;
+    let mode = trace.get("mode").and_then(|m| m.as_str()).unwrap_or("");
+    let protocol = trace.get("protocol").and_then(|p| p.as_str()).unwrap_or("");
+    if mode != "transform" || protocol != "chat_to_anthropic" {
+        return Err(format!("expected transform/chat_to_anthropic, got {mode}/{protocol}"));
+    }
+    Ok(())
+}
+
+/// 主路 ① 协议转换：/v1/chat/completions → Anthropic 上游（流式）。
+/// 校验 SSE 形态完整 + trace.stream=true。
+async fn test_chat_transform_anthropic_stream(
+    client: &reqwest::Client,
+    token: &str,
+    base: &str,
+    model: &str,
+    db: &Arc<Mutex<rusqlite::Connection>>,
+) -> Result<(), String> {
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [{"role": "user", "content": "Reply with 'ok'."}],
+        "stream": true,
+        "max_tokens": 16,
+        "temperature": 0.0,
+    });
+    let url = format!("{}/v1/chat/completions", base);
+    let resp = client.post(&url).bearer_auth(token).json(&body).send().await
+        .map_err(|e| format!("request failed: {e}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let t = resp.text().await.unwrap_or_default();
+        return Err(format!("HTTP {status}: {}", snip(&t)));
+    }
+    let text = resp.text().await.map_err(|e| format!("read sse: {e}"))?;
+    if !text.contains("data: {") {
+        return Err("no data chunk in SSE stream".into());
+    }
+    if !text.contains("data: [DONE]") {
+        return Err("no [DONE] terminator".into());
+    }
+    let trace = fetch_recent_trace(db, "/v1/chat/completions")
+        .ok_or_else(|| "no recent trace".to_string())?;
+    let mode = trace.get("mode").and_then(|m| m.as_str()).unwrap_or("");
+    let protocol = trace.get("protocol").and_then(|p| p.as_str()).unwrap_or("");
+    let stream = trace.get("stream").and_then(|s| s.as_bool()).unwrap_or(false);
+    if mode != "transform" || protocol != "chat_to_anthropic" || !stream {
+        return Err(format!("expected transform/chat_to_anthropic/stream=true, got {mode}/{protocol}/{stream}"));
+    }
+    Ok(())
+}
+
+/// 主路 ① 协议转换：/v1/messages → Chat 上游 fallback。
+async fn test_messages_transform_chat_fallback(
+    client: &reqwest::Client,
+    token: &str,
+    base: &str,
+    model: &str,
+    db: &Arc<Mutex<rusqlite::Connection>>,
+) -> Result<(), String> {
+    let body = serde_json::json!({
+        "model": model,
+        "max_tokens": 16,
+        "messages": [{"role": "user", "content": "Reply with 'ok'."}]
+    });
+    let url = format!("{}/v1/messages", base);
+    let (status, text) = smoke_post_json(client, token, &url, body).await?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {}", snip(&text)));
+    }
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("parse json: {e}"))?;
+    if json.get("content").and_then(|c| c.as_array()).is_none() {
+        return Err("missing content array".into());
+    }
+    let trace = fetch_recent_trace(db, "/v1/messages")
+        .ok_or_else(|| "no recent trace".to_string())?;
+    let mode = trace.get("mode").and_then(|m| m.as_str()).unwrap_or("");
+    let protocol = trace.get("protocol").and_then(|p| p.as_str()).unwrap_or("");
+    if mode != "transform" || protocol != "anthropic_messages" {
+        return Err(format!("expected transform/anthropic_messages, got {mode}/{protocol}"));
+    }
+    Ok(())
+}
+
+/// 主路 ① 协议转换：/v1beta/models/<m>:generateContent → Chat 上游。
+async fn test_gemini_input_transform_chat(
+    client: &reqwest::Client,
+    token: &str,
+    base: &str,
+    model: &str,
+    db: &Arc<Mutex<rusqlite::Connection>>,
+) -> Result<(), String> {
+    let body = serde_json::json!({
+        "contents": [{"role": "user", "parts": [{"text": "Reply with 'ok'."}]}],
+        "generationConfig": {"maxOutputTokens": 16, "temperature": 0.0}
+    });
+    let url = format!("{}/v1beta/models/{}:generateContent", base, model);
+    let (status, text) = smoke_post_json(client, token, &url, body).await?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {}", snip(&text)));
+    }
+    let json: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("parse json: {e}"))?;
+    if json.get("candidates").and_then(|c| c.as_array()).is_none() {
+        return Err("missing candidates array".into());
+    }
+    let trace = fetch_recent_trace(db, "/v1beta/generateContent")
+        .ok_or_else(|| "no recent trace".to_string())?;
+    let protocol = trace.get("protocol").and_then(|p| p.as_str()).unwrap_or("");
+    if protocol != "gemini_input" {
+        return Err(format!("expected trace.protocol=gemini_input, got {protocol}"));
+    }
+    Ok(())
+}
+
+/// 主路 ② CC 转发直连 / model_mapping 命中：验 trace.mode == native_pass_through_model_mapping。
+/// 通用 helper：3 个入口（responses / chat / messages）共用。
+async fn test_passthrough_with_mapping(
+    client: &reqwest::Client,
+    token: &str,
+    url: &str,
+    body: serde_json::Value,
+    db: &Arc<Mutex<rusqlite::Connection>>,
+    route: &str,
+) -> Result<(), String> {
+    let (status, text) = smoke_post_json(client, token, url, body).await?;
+    if !status.is_success() {
+        return Err(format!("HTTP {status}: {}", snip(&text)));
+    }
+    let trace = fetch_recent_trace(db, route)
+        .ok_or_else(|| "no recent trace".to_string())?;
+    let mode = trace.get("mode").and_then(|m| m.as_str()).unwrap_or("");
+    if mode != "native_pass_through_model_mapping" {
+        return Err(format!("expected trace.mode=native_pass_through_model_mapping, got '{mode}'"));
+    }
     Ok(())
 }
