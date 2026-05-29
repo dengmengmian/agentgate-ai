@@ -46,10 +46,10 @@ jobs:
             args: --target x86_64-apple-darwin --bundles app,dmg
             rust_target: x86_64-apple-darwin
           - platform: ubuntu-22.04
-            args: ''
+            args: --bundles appimage,deb
             rust_target: ''
           - platform: windows-2022
-            args: ''
+            args: --bundles nsis,msi
             rust_target: ''
 
     runs-on: ${{ matrix.platform }}
