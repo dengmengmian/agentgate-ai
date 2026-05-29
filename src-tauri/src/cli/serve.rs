@@ -81,6 +81,88 @@ enum Commands {
     TokenRegen,
     /// Show gateway status and config summary
     Status,
+    /// Update an existing provider's fields
+    #[command(name = "provider-update")]
+    ProviderUpdate {
+        /// Provider name to update
+        name: String,
+        /// New API key
+        #[arg(long, short = 'k')]
+        api_key: Option<String>,
+        /// New base URL
+        #[arg(long)]
+        base_url: Option<String>,
+        /// New default model
+        #[arg(long, short)]
+        model: Option<String>,
+        /// New Anthropic Messages endpoint (for providers with native Anthropic support)
+        #[arg(long)]
+        anthropic_url: Option<String>,
+        /// New Responses endpoint (for providers with native Responses support)
+        #[arg(long)]
+        responses_url: Option<String>,
+        /// Enable / disable
+        #[arg(long)]
+        enabled: Option<bool>,
+    },
+    /// Set a provider as the active one
+    #[command(name = "provider-set-active")]
+    ProviderSetActive {
+        /// Provider name
+        name: String,
+    },
+    /// Add a model mapping: client-side model name → upstream model name
+    #[command(name = "mapping-add")]
+    MappingAdd {
+        /// Provider name
+        provider: String,
+        /// Client model name (what your agent sends)
+        #[arg(long)]
+        from: String,
+        /// Upstream model name (what AgentGate forwards)
+        #[arg(long)]
+        to: String,
+    },
+    /// List model mappings
+    #[command(name = "mapping-list")]
+    MappingList {
+        /// Filter by provider name
+        #[arg(long)]
+        provider: Option<String>,
+    },
+    /// Remove a model mapping
+    #[command(name = "mapping-remove")]
+    MappingRemove {
+        /// Provider name
+        provider: String,
+        /// Client model name to unmap
+        #[arg(long)]
+        from: String,
+    },
+    /// Tail recent request logs (most-recent first)
+    Logs {
+        /// Max rows to show
+        #[arg(long, short = 'n', default_value = "20")]
+        limit: i64,
+        /// Filter by client (codex / claude-code / gemini-cli / ...)
+        #[arg(long)]
+        client: Option<String>,
+        /// Filter by provider name
+        #[arg(long)]
+        provider: Option<String>,
+        /// Substring search in request_id / error_message / model / route
+        #[arg(long, short = 'q')]
+        keyword: Option<String>,
+        /// Only show errors (status >= 400 or error_message set)
+        #[arg(long)]
+        errors_only: bool,
+    },
+    /// Show token / cost / success stats over recent days
+    Stats {
+        /// Days of history to roll up (default 7)
+        #[arg(long, short, default_value = "7")]
+        days: i64,
+    },
 }
 
 fn get_db_dir(cli: &Cli) -> PathBuf {
@@ -155,6 +237,18 @@ async fn main() {
         Some(Commands::Token) => cmd_token(),
         Some(Commands::TokenRegen) => cmd_token_regen(),
         Some(Commands::Status) => cmd_status(&cli),
+        Some(Commands::ProviderUpdate { name, api_key, base_url, model, anthropic_url, responses_url, enabled }) => {
+            cmd_provider_update(&cli, name, api_key.as_deref(), base_url.as_deref(), model.as_deref(),
+                anthropic_url.as_deref(), responses_url.as_deref(), *enabled);
+        }
+        Some(Commands::ProviderSetActive { name }) => cmd_provider_set_active(&cli, name),
+        Some(Commands::MappingAdd { provider, from, to }) => cmd_mapping_add(&cli, provider, from, to),
+        Some(Commands::MappingList { provider }) => cmd_mapping_list(&cli, provider.as_deref()),
+        Some(Commands::MappingRemove { provider, from }) => cmd_mapping_remove(&cli, provider, from),
+        Some(Commands::Logs { limit, client, provider, keyword, errors_only }) => {
+            cmd_logs(&cli, *limit, client.as_deref(), provider.as_deref(), keyword.as_deref(), *errors_only);
+        }
+        Some(Commands::Stats { days }) => cmd_stats(&cli, *days),
         None => {
             // Default: serve. env-based TLS（用户不传子命令 + 仅靠 env 配置 TLS）。
             let host = std::env::var("AGENTGATE_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
@@ -433,4 +527,275 @@ fn cmd_status(cli: &Cli) {
         println!("  Active:     {} ({} → {})", a.name, a.provider_type, a.default_model);
     }
     println!("  Token:      {}...{}", &token[..8.min(token.len())], &token[token.len().saturating_sub(4)..]);
+}
+
+fn cmd_provider_update(
+    cli: &Cli,
+    name: &str,
+    api_key: Option<&str>,
+    base_url: Option<&str>,
+    model: Option<&str>,
+    anthropic_url: Option<&str>,
+    responses_url: Option<&str>,
+    enabled: Option<bool>,
+) {
+    let conn = open_db(cli);
+    let target = match find_provider_by_name(&conn, name) {
+        Some(p) => p,
+        None => {
+            eprintln!("No provider named '{name}'");
+            std::process::exit(1);
+        }
+    };
+    let input = agentgate_lib::models::provider::UpdateProviderInput {
+        name: None,
+        provider_type: None,
+        base_url: base_url.map(String::from),
+        api_key: api_key.map(String::from),
+        default_model: model.map(String::from),
+        reasoning_model: None,
+        supported_models: None,
+        model_mapping: None,
+        extra_headers: None,
+        anthropic_base_url: anthropic_url.map(String::from),
+        responses_base_url: responses_url.map(String::from),
+        auto_cache_control: None,
+        model_capabilities: None,
+        protocol: None,
+        timeout_seconds: None,
+        enabled,
+    };
+    match agentgate_lib::storage::providers::update(&conn, &target.id, input) {
+        Ok(_) => println!("Updated provider '{name}'."),
+        Err(e) => {
+            eprintln!("Update failed: {}", e.message);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_provider_set_active(cli: &Cli, name: &str) {
+    let conn = open_db(cli);
+    let target = match find_provider_by_name(&conn, name) {
+        Some(p) => p,
+        None => {
+            eprintln!("No provider named '{name}'");
+            std::process::exit(1);
+        }
+    };
+    match agentgate_lib::storage::providers::set_active(&conn, &target.id) {
+        Ok(_) => println!("Activated provider '{name}'."),
+        Err(e) => {
+            eprintln!("Activate failed: {}", e.message);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_mapping_add(cli: &Cli, provider_name: &str, from: &str, to: &str) {
+    let conn = open_db(cli);
+    let target = match find_provider_by_name(&conn, provider_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("No provider named '{provider_name}'");
+            std::process::exit(1);
+        }
+    };
+    let mut map = parse_mapping(target.model_mapping.as_deref());
+    map.insert(from.to_string(), to.to_string());
+    let new_json = serde_json::to_string(&map).unwrap_or_else(|_| "{}".into());
+    let input = update_with_mapping(new_json);
+    match agentgate_lib::storage::providers::update(&conn, &target.id, input) {
+        Ok(_) => println!("Mapped {from} → {to} on '{provider_name}'."),
+        Err(e) => {
+            eprintln!("Mapping update failed: {}", e.message);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn cmd_mapping_list(cli: &Cli, provider_filter: Option<&str>) {
+    let conn = open_db(cli);
+    let providers = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
+    let mut printed = 0usize;
+    for p in &providers {
+        if let Some(f) = provider_filter {
+            if p.name != f { continue; }
+        }
+        let map = parse_mapping(p.model_mapping.as_deref());
+        if map.is_empty() { continue; }
+        println!("[{}]", p.name);
+        // 排序输出，确定性
+        let mut entries: Vec<_> = map.iter().collect();
+        entries.sort_by(|a, b| a.0.cmp(b.0));
+        for (from, to) in entries {
+            println!("  {from} → {to}");
+        }
+        printed += 1;
+    }
+    if printed == 0 {
+        println!("(no mappings)");
+    }
+}
+
+fn cmd_mapping_remove(cli: &Cli, provider_name: &str, from: &str) {
+    let conn = open_db(cli);
+    let target = match find_provider_by_name(&conn, provider_name) {
+        Some(p) => p,
+        None => {
+            eprintln!("No provider named '{provider_name}'");
+            std::process::exit(1);
+        }
+    };
+    let mut map = parse_mapping(target.model_mapping.as_deref());
+    if map.remove(from).is_none() {
+        eprintln!("No mapping for '{from}' on '{provider_name}'");
+        std::process::exit(1);
+    }
+    let new_json = serde_json::to_string(&map).unwrap_or_else(|_| "{}".into());
+    let input = update_with_mapping(new_json);
+    match agentgate_lib::storage::providers::update(&conn, &target.id, input) {
+        Ok(_) => println!("Removed mapping '{from}' from '{provider_name}'."),
+        Err(e) => {
+            eprintln!("Mapping update failed: {}", e.message);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn find_provider_by_name(
+    conn: &rusqlite::Connection,
+    name: &str,
+) -> Option<agentgate_lib::models::provider::Provider> {
+    agentgate_lib::storage::providers::list_all(conn)
+        .ok()?
+        .into_iter()
+        .find(|p| p.name == name)
+}
+
+fn parse_mapping(json: Option<&str>) -> std::collections::BTreeMap<String, String> {
+    json.and_then(|s| serde_json::from_str(s).ok())
+        .unwrap_or_default()
+}
+
+fn update_with_mapping(json: String) -> agentgate_lib::models::provider::UpdateProviderInput {
+    agentgate_lib::models::provider::UpdateProviderInput {
+        name: None, provider_type: None, base_url: None, api_key: None,
+        default_model: None, reasoning_model: None, supported_models: None,
+        model_mapping: Some(json),
+        extra_headers: None, anthropic_base_url: None, responses_base_url: None,
+        auto_cache_control: None, model_capabilities: None,
+        protocol: None, timeout_seconds: None, enabled: None,
+    }
+}
+
+fn cmd_logs(
+    cli: &Cli,
+    limit: i64,
+    client: Option<&str>,
+    provider: Option<&str>,
+    keyword: Option<&str>,
+    errors_only: bool,
+) {
+    let conn = open_db(cli);
+    let filter = agentgate_lib::models::request_log::RequestLogFilter {
+        client: client.map(String::from),
+        provider: provider.map(String::from),
+        status: if errors_only { Some("error".into()) } else { None },
+        keyword: keyword.map(String::from),
+        limit: Some(limit),
+        offset: None,
+    };
+    let logs = match agentgate_lib::storage::request_logs::list(&conn, filter) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("Failed to list logs: {}", e.message);
+            std::process::exit(1);
+        }
+    };
+
+    if logs.is_empty() {
+        println!("(no logs match)");
+        return;
+    }
+
+    // 列：time / client / provider / model / route / status / latency
+    println!("{:<25} {:<14} {:<14} {:<22} {:<25} {:<7} {:>8}",
+        "TIMESTAMP", "CLIENT", "PROVIDER", "MODEL", "ROUTE", "STATUS", "LATENCY");
+    for log in &logs {
+        let ts = log.timestamp.chars().take(19).collect::<String>();
+        let client = log.client.as_deref().unwrap_or("-");
+        let provider = log.provider.as_deref().unwrap_or("-");
+        let model = log.model.as_deref().unwrap_or("-");
+        let route = log.route.as_deref().unwrap_or("-");
+        let status = log.status_code.map(|c| c.to_string()).unwrap_or_else(|| "-".into());
+        let latency = log.latency_ms.map(|l| format!("{l}ms")).unwrap_or_else(|| "-".into());
+        println!("{:<25} {:<14} {:<14} {:<22} {:<25} {:<7} {:>8}",
+            truncate(&ts, 25), truncate(client, 14), truncate(provider, 14),
+            truncate(model, 22), truncate(route, 25), status, latency);
+        if let Some(ref err) = log.error_message {
+            println!("  ⚠️  {}", truncate(err, 100));
+        }
+    }
+    println!("\n({} rows)", logs.len());
+}
+
+fn cmd_stats(cli: &Cli, days: i64) {
+    let conn = open_db(cli);
+    let stats = match agentgate_lib::storage::request_logs::get_stats_for_range(&conn, days) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Failed to compute stats: {}", e.message);
+            std::process::exit(1);
+        }
+    };
+
+    println!("AgentGate Stats (last {days} day{}, plus all-time)\n",
+        if days == 1 { "" } else { "s" });
+
+    println!("All-time:");
+    println!("  Requests:        {}", stats.total);
+    println!("  Success:         {} ({:.1}%)", stats.success, stats.success_rate * 100.0);
+    println!("  Errors:          {}", stats.errors);
+    println!("  Avg latency:     {}ms", stats.avg_latency_ms);
+    println!("  Input tokens:    {}", stats.total_input_tokens);
+    println!("  Output tokens:   {}", stats.total_output_tokens);
+    println!("  Cache R/W tokens:{} / {}", stats.total_cache_read_tokens, stats.total_cache_write_tokens);
+    println!("  Cost:            ${:.4}", stats.total_cost);
+
+    println!("\nToday:");
+    println!("  Requests:        {}", stats.today_total);
+    println!("  Errors:          {}", stats.today_errors);
+    println!("  Input tokens:    {}", stats.today_input_tokens);
+    println!("  Output tokens:   {}", stats.today_output_tokens);
+    println!("  Cost:            ${:.4}", stats.today_cost);
+
+    if !stats.daily.is_empty() {
+        println!("\nDaily breakdown:");
+        println!("  {:<12} {:>8} {:>8} {:>10} {:>10} {:>10}",
+            "DATE", "TOTAL", "ERRORS", "IN_TOK", "OUT_TOK", "COST");
+        for d in &stats.daily {
+            println!("  {:<12} {:>8} {:>8} {:>10} {:>10} ${:>9.4}",
+                d.date, d.total, d.errors, d.input_tokens, d.output_tokens, d.cost);
+        }
+    }
+
+    if !stats.providers.is_empty() {
+        println!("\nBy provider:");
+        for p in &stats.providers {
+            println!("  {:<25} {:>8}", truncate(&p.name, 25), p.count);
+        }
+    }
+}
+
+/// 字符串截断到 max（按字符，不按字节），尾部补 …
+fn truncate(s: &str, max: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= max {
+        s.to_string()
+    } else {
+        let mut out: String = chars[..max.saturating_sub(1)].iter().collect();
+        out.push('…');
+        out
+    }
 }
