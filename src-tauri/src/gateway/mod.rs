@@ -11,3 +11,4 @@ pub mod provider_selector;
 pub mod session_store;
 pub mod session_affinity;
 pub mod anthropic_model_suffix;
+pub mod metrics;

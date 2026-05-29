@@ -115,9 +115,23 @@ pub async fn start(
         active_requests: active_requests.clone(),
     };
 
+    // metrics recorder 幂等初始化（重复调 init 直接返回 false 不报错）。
+    crate::gateway::metrics::init();
+
     let counter = active_requests.clone();
     let app = Router::new()
         .route("/health", get(routes::health))
+        .route("/metrics", get({
+            // 渲染前同步当前 active_requests gauge —— gauge 平时由 SSE 流入流出
+            // 的 CountingBody 增减，但 metrics 系统不直接访问 AtomicU64，渲染前
+            // 镜像一次。
+            let counter = active_requests.clone();
+            move || {
+                let n = counter.load(Ordering::Relaxed);
+                crate::gateway::metrics::set_active_requests(n);
+                crate::gateway::metrics::render()
+            }
+        }))
         .route("/v1/models", get(routes::list_models))
         .route("/v1/responses", post(routes::handle_responses))
         .route("/responses", post(routes::handle_responses))

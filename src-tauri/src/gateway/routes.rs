@@ -2545,6 +2545,22 @@ fn log_request_success(
             cache_write_tokens, cache_read_tokens,
         );
     }
+    // Prometheus 指标
+    crate::gateway::metrics::record_request(
+        route, client_type, provider, status_code as u16, latency_ms as f64 / 1000.0,
+    );
+    if let Some(t) = input_tokens {
+        crate::gateway::metrics::record_tokens(provider, model, "input", t);
+    }
+    if let Some(t) = output_tokens {
+        crate::gateway::metrics::record_tokens(provider, model, "output", t);
+    }
+    if let Some(t) = cache_read_tokens {
+        crate::gateway::metrics::record_tokens(provider, model, "cache_read", t);
+    }
+    if let Some(t) = cache_write_tokens {
+        crate::gateway::metrics::record_tokens(provider, model, "cache_write", t);
+    }
 }
 
 fn log_request_error_full(
@@ -2587,6 +2603,12 @@ fn log_request_error_full(
             None, None,       // no cache tokens for errors
         );
     }
+    // Prometheus 指标（错误也算一次请求）
+    crate::gateway::metrics::record_request(
+        route, client_type,
+        if provider.is_empty() { "unknown" } else { provider },
+        status_code as u16, latency_ms as f64 / 1000.0,
+    );
 }
 
 // ── Error type for axum ────────────────────────────────────────
