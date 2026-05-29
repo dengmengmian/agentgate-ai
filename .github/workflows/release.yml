@@ -39,10 +39,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - platform: macos-14
             args: --target aarch64-apple-darwin --bundles app,dmg
             rust_target: aarch64-apple-darwin
-          - platform: macos-latest
+          - platform: macos-14
             args: --target x86_64-apple-darwin --bundles app,dmg
             rust_target: x86_64-apple-darwin
           - platform: ubuntu-22.04
@@ -89,6 +89,9 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
+      - name: Build frontend
+        run: pnpm build
+
       - name: Prepare App Store Connect API key
         if: runner.os == 'macOS'
         shell: bash
@@ -120,6 +123,16 @@ jobs:
           echo "$NOTES" >> "$GITHUB_OUTPUT"
           echo "$EOF" >> "$GITHUB_OUTPUT"
 
+      - name: Check updater signing key
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY secret is required because createUpdaterArtifacts is enabled"
+            exit 1
+          fi
+
       - name: Build Tauri
         uses: tauri-apps/tauri-action@v0
         env:
@@ -138,7 +151,7 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --config src-tauri/tauri.ci.conf.json
 
   updater-json:
     needs: build
