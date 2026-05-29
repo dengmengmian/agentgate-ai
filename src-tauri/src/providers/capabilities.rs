@@ -39,6 +39,10 @@ pub fn seed_for_model(provider_type: &str, model_id: &str) -> Vec<String> {
     let pt = provider_type.to_ascii_lowercase();
     let mid = model_id.trim().to_ascii_lowercase();
 
+    if pt == "deepseek" && is_deprecated_deepseek_alias(&mid) {
+        return Vec::new();
+    }
+
     // Try provider-specific rules first
     let caps = match pt.as_str() {
         p if p == "mimo" || p == "xiaomi" || p.contains("mimo") => seed_mimo(&mid),
@@ -107,13 +111,15 @@ fn seed_deepseek(mid: &str) -> Vec<String> {
     let base = strip_qualifier(mid);
     match base {
         "deepseek-v4-pro" => vec![
-            CAP_TEXT.into(), CAP_REASONING.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+            CAP_TEXT.into(), CAP_REASONING.into(), CAP_TOOLS.into(),
         ],
-        "deepseek-v4-flash" => vec![CAP_TEXT.into(), CAP_TOOLS.into()],
-        "deepseek-chat" => vec![CAP_TEXT.into(), CAP_TOOLS.into()],
-        "deepseek-reasoner" => vec![CAP_TEXT.into(), CAP_REASONING.into()],
+        "deepseek-v4-flash" => vec![CAP_TEXT.into(), CAP_REASONING.into(), CAP_TOOLS.into()],
         _ => Vec::new(),
     }
+}
+
+fn is_deprecated_deepseek_alias(mid: &str) -> bool {
+    matches!(strip_qualifier(mid), "deepseek-chat" | "deepseek-reasoner")
 }
 
 fn seed_generic(mid: &str) -> Vec<String> {
@@ -229,15 +235,17 @@ mod tests {
     fn deepseek_v4_pro_has_reasoning_no_vision() {
         let c = caps_for("deepseek", "deepseek-v4-pro");
         assert!(contains(&c, CAP_REASONING));
+        assert!(!contains(&c, CAP_WEB_SEARCH), "DeepSeek has no native web_search builtin");
         assert!(!contains(&c, CAP_VISION));
     }
 
     #[test]
-    fn deepseek_v4_flash_no_reasoning() {
+    fn deepseek_v4_flash_has_reasoning_no_web_search() {
         let c = caps_for("deepseek", "deepseek-v4-flash");
         assert!(contains(&c, CAP_TEXT));
         assert!(contains(&c, CAP_TOOLS));
-        assert!(!contains(&c, CAP_REASONING), "Flash is the cheap Haiku-tier, no reasoning by default");
+        assert!(contains(&c, CAP_REASONING));
+        assert!(!contains(&c, CAP_WEB_SEARCH), "DeepSeek has no native web_search builtin");
     }
 
     #[test]
@@ -246,8 +254,9 @@ mod tests {
     }
 
     #[test]
-    fn deepseek_reasoner_has_reasoning() {
-        assert!(contains(&caps_for("deepseek", "deepseek-reasoner"), CAP_REASONING));
+    fn deepseek_deprecated_aliases_are_not_seeded() {
+        assert!(caps_for("deepseek", "deepseek-chat").is_empty());
+        assert!(caps_for("deepseek", "deepseek-reasoner").is_empty());
     }
 
     // ── Kimi / Moonshot ──

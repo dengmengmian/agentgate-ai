@@ -99,12 +99,7 @@ pub fn convert_with_provider_matrix(
     let reasoning_effort = req.reasoning.as_ref()
         .and_then(|r| r.get("effort"))
         .and_then(|e| e.as_str())
-        .and_then(|e| match e.trim().to_ascii_lowercase().as_str() {
-            "minimal" | "low" | "medium" | "high" => Some(e.trim().to_ascii_lowercase()),
-            "xhigh" | "max" | "highest" => Some("high".to_string()),
-            "none" | "off" | "auto" | "" => None, // 智能 → let provider decide
-            _ => None,
-        });
+        .and_then(|e| provider.map_reasoning_effort(e));
 
     // A/扩展修复：两层 effort 兜底，按激进程度从弱到强：
     //
@@ -762,6 +757,7 @@ fn effort_rank(effort: &str) -> u8 {
         "minimal" | "low" => 0,
         "medium" => 1,
         "high" => 2,
+        "max" | "xhigh" | "highest" => 3,
         _ => 0,
     }
 }
@@ -881,7 +877,7 @@ fn trailing_partial(s: &str, target: &str) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use super::super::providers::{DefaultProvider, KimiProvider};
+    use super::super::providers::{DeepSeekProvider, DefaultProvider, KimiProvider};
     use serde_json::json;
 
     #[test]
@@ -1240,6 +1236,30 @@ mod tests {
     }
 
     #[test]
+    fn test_deepseek_maps_xhigh_to_max_and_enables_thinking() {
+        let req = ResponsesRequest {
+            model: Some("deepseek-v4-pro".to_string()),
+            input: json!("think hard"),
+            instructions: None,
+            system: None,
+            previous_response_id: None,
+            tools: None,
+            tool_choice: None,
+            stream: None,
+            temperature: Some(0.7),
+            top_p: Some(0.9),
+            max_output_tokens: None,
+            reasoning: Some(json!({"effort": "xhigh"})),
+            ..Default::default()
+        };
+        let result = convert_with_provider(&req, "deepseek-v4-pro", &DeepSeekProvider).unwrap();
+        assert_eq!(result.thinking, Some(json!({"type": "enabled"})));
+        assert_eq!(result.reasoning_effort.as_deref(), Some("max"));
+        assert!(result.temperature.is_none());
+        assert!(result.top_p.is_none());
+    }
+
+    #[test]
     fn test_mcp_tools_inject_advisory_without_chat_tool() {
         let req = ResponsesRequest {
             model: Some("gpt-4".to_string()),
@@ -1294,20 +1314,26 @@ mod tests {
             Some("high".to_string())
         );
 
-        // 4. floor 覆盖 None → high
+        // 4. floor 不把 DeepSeek/OpenAI-style max 降级成 high
+        assert_eq!(
+            apply_effort_overrides("test_provider", Some("max".to_string())),
+            Some("max".to_string())
+        );
+
+        // 5. floor 覆盖 None → high
         assert_eq!(
             apply_effort_overrides("test_provider", None),
             Some("high".to_string())
         );
 
-        // 5. provider 大小写不敏感
+        // 6. provider 大小写不敏感
         std::env::set_var("AGENTGATE_EFFORT_FLOOR_PROVIDERS", "MiMo,DeepSeek");
         assert_eq!(
             apply_effort_overrides("mimo", Some("low".to_string())),
             Some("high".to_string())
         );
 
-        // 6. provider 不在 floor 列表 → 原值透传
+        // 7. provider 不在 floor 列表 → 原值透传
         assert_eq!(
             apply_effort_overrides("not_in_list", Some("low".to_string())),
             Some("low".to_string())
@@ -1315,14 +1341,14 @@ mod tests {
 
         std::env::remove_var("AGENTGATE_EFFORT_FLOOR_PROVIDERS");
 
-        // 7. fill：客户端 None → 补 high
+        // 8. fill：客户端 None → 补 high
         std::env::set_var("AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS", "test_fill");
         assert_eq!(
             apply_effort_overrides("test_fill", None),
             Some("high".to_string())
         );
 
-        // 8. fill：客户端传 low → 不覆盖
+        // 9. fill：客户端传 low → 不覆盖
         assert_eq!(
             apply_effort_overrides("test_fill", Some("low".to_string())),
             Some("low".to_string()),
@@ -1330,7 +1356,7 @@ mod tests {
         );
         std::env::remove_var("AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS");
 
-        // 9. 两 env 都不设：透传
+        // 10. 两 env 都不设：透传
         assert_eq!(
             apply_effort_overrides("anything", Some("low".to_string())),
             Some("low".to_string())

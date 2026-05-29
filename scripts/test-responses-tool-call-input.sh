@@ -4,7 +4,7 @@ echo "=== Tool Call Input (multi-turn) ==="
 curl -sS -X POST http://127.0.0.1:9090/v1/responses \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "deepseek-chat",
+    "model": "gpt-5.5",
     "input": [
       {
         "type": "message",

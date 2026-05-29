@@ -1227,7 +1227,7 @@ pub fn apply_atomcode_config(state: State<'_, AppState>) -> Result<crate::tools:
         let settings = storage::gateway_settings::get(&conn)?;
         let provider_id = settings.active_provider_id.clone().unwrap_or_default();
         let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
-        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "deepseek-chat".to_string());
+        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gpt-5.5".to_string());
         (settings.host, settings.port, model)
     };
     crate::tools::atomcode::apply(&host, port, &model)
@@ -1237,7 +1237,10 @@ pub fn apply_atomcode_config(state: State<'_, AppState>) -> Result<crate::tools:
 pub fn generate_atomcode_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
-    Ok(crate::tools::atomcode::generate_snippet(&settings.host, settings.port, "deepseek-chat"))
+    let provider_id = settings.active_provider_id.clone().unwrap_or_default();
+    let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
+    let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gpt-5.5".to_string());
+    Ok(crate::tools::atomcode::generate_snippet(&settings.host, settings.port, &model))
 }
 
 #[tauri::command]
@@ -1247,7 +1250,7 @@ pub fn toggle_atomcode_provider(state: State<'_, AppState>) -> Result<crate::too
         let settings = storage::gateway_settings::get(&conn)?;
         let provider_id = settings.active_provider_id.clone().unwrap_or_default();
         let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
-        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "deepseek-chat".to_string());
+        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gpt-5.5".to_string());
         (settings.host, settings.port, model)
     };
     crate::tools::atomcode::toggle(&host, port, &model)

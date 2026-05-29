@@ -102,7 +102,7 @@ if [ -n "$TOKEN" ]; then
     status=$(curl -sS -o /tmp/agentgate-test-resp.json -w "%{http_code}" -X POST "$BASE/v1/responses" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{"model":"deepseek-chat","input":"Reply with just the word OK","stream":false}' 2>/dev/null || echo "000")
+        -d '{"model":"gpt-5.5","input":"Reply with just the word OK","stream":false}' 2>/dev/null || echo "000")
 
     if [ "$status" = "200" ]; then
         green "  PASS  POST /v1/responses non-stream → 200"
@@ -141,7 +141,7 @@ if [ -n "$TOKEN" ]; then
     output=$(curl -sS --max-time 30 -X POST "$BASE/v1/responses" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{"model":"deepseek-chat","input":"Reply with just the word OK","stream":true}' 2>/dev/null || echo "")
+        -d '{"model":"gpt-5.5","input":"Reply with just the word OK","stream":true}' 2>/dev/null || echo "")
 
     if echo "$output" | grep -q "response.completed"; then
         green "  PASS  Stream contains response.completed event"
@@ -170,7 +170,7 @@ if [ -n "$TOKEN" ]; then
     status=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$BASE/v1/responses" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{"model":"deepseek-chat","input":"用中文回复：你好","stream":false}' 2>/dev/null || echo "000")
+        -d '{"model":"gpt-5.5","input":"用中文回复：你好","stream":false}' 2>/dev/null || echo "000")
 
     if [ "$status" = "200" ]; then
         green "  PASS  Chinese input/output → 200 (no panic)"
@@ -194,7 +194,7 @@ if [ -n "$TOKEN" ]; then
     body=$(curl -sS -X POST "$BASE/v1/responses" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{"model":"deepseek-chat","input":"hi","stream":false}' 2>/dev/null || echo "{}")
+        -d '{"model":"gpt-5.5","input":"hi","stream":false}' 2>/dev/null || echo "{}")
 
     if echo "$body" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d.get('status')=='completed'" 2>/dev/null; then
         green "  PASS  Request with cost tracking → completed"
@@ -235,7 +235,7 @@ if [ -n "$TOKEN" ]; then
     status=$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$BASE/v1/responses" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{"model":"deepseek-chat","input":"hi","stream":false}' 2>/dev/null || echo "000")
+        -d '{"model":"gpt-5.5","input":"hi","stream":false}' 2>/dev/null || echo "000")
     if [ "$status" = "200" ]; then
         green "  PASS  Chat Completions path unaffected by cache injection"
         PASS=$((PASS + 1))
@@ -270,7 +270,7 @@ if [ -n "$TOKEN" ]; then
     status=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 -X POST "$BASE/v1/responses" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{"model":"deepseek-chat","input":"Reply OK","stream":false}' 2>/dev/null || echo "000")
+        -d '{"model":"gpt-5.5","input":"Reply OK","stream":false}' 2>/dev/null || echo "000")
     end_time=$(date +%s)
     elapsed=$((end_time - start_time))
 
@@ -312,7 +312,7 @@ echo "--- Gemini Input Route ---"
 if [ -n "$TOKEN" ]; then
     # Non-streaming Gemini request
     gemini_status=$(curl -sS -o /tmp/agentgate-gemini-test.json -w "%{http_code}" --max-time 30 \
-        -X POST "$BASE/v1beta/models/deepseek-chat:generateContent" \
+        -X POST "$BASE/v1beta/models/gpt-5.5:generateContent" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d '{"contents":[{"role":"user","parts":[{"text":"Reply with exactly: GEMINI_OK"}]}]}' 2>/dev/null || echo "000")
@@ -347,7 +347,7 @@ if [ -n "$TOKEN" ]; then
 
     # Streaming Gemini request
     gemini_stream=$(curl -sS --max-time 30 \
-        -X POST "$BASE/v1beta/models/deepseek-chat:streamGenerateContent" \
+        -X POST "$BASE/v1beta/models/gpt-5.5:streamGenerateContent" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d '{"contents":[{"role":"user","parts":[{"text":"Reply OK"}]}]}' 2>/dev/null || echo "")
@@ -362,7 +362,7 @@ if [ -n "$TOKEN" ]; then
 
     # Verify systemInstruction conversion
     gemini_sys=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 30 \
-        -X POST "$BASE/v1beta/models/deepseek-chat:generateContent" \
+        -X POST "$BASE/v1beta/models/gpt-5.5:generateContent" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
         -d '{"systemInstruction":{"parts":[{"text":"You are a test bot"}]},"contents":[{"role":"user","parts":[{"text":"OK"}]}]}' 2>/dev/null || echo "000")
@@ -389,7 +389,7 @@ if [ -n "$TOKEN" ] && [ -f "$DB" ]; then
     curl -sS -o /tmp/agentgate-deep-test.json -X POST "$BASE/v1/responses" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d "{\"model\":\"deepseek-chat\",\"input\":\"Reply with exactly: DEEP_TEST_OK\",\"stream\":false}" 2>/dev/null
+        -d "{\"model\":\"gpt-5.5\",\"input\":\"Reply with exactly: DEEP_TEST_OK\",\"stream\":false}" 2>/dev/null
 
     sleep 1  # Wait for log to be written
 
@@ -453,7 +453,7 @@ if [ -n "$TOKEN" ]; then
     sse_output=$(curl -sS --max-time 30 -X POST "$BASE/v1/responses" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{"model":"deepseek-chat","input":"Reply with: SSE_TEST_OK","stream":true}' 2>/dev/null || echo "")
+        -d '{"model":"gpt-5.5","input":"Reply with: SSE_TEST_OK","stream":true}' 2>/dev/null || echo "")
 
     # Verify SSE event sequence: created → in_progress → output_item.added → text.delta → completed
     if echo "$sse_output" | grep -q "response.created"; then
@@ -518,7 +518,7 @@ fi
 echo ""
 echo "--- Deep Verification: Pass-Through ---"
 if [ -n "$TOKEN" ]; then
-    pt_model="deepseek-chat"
+    pt_model="gpt-5.5"
     if [ -f "$DB" ]; then
         db_model=$(sqlite3 "$DB" "SELECT default_model FROM providers WHERE enabled=1 ORDER BY is_active DESC, updated_at DESC LIMIT 1" 2>/dev/null || true)
         if [ -n "$db_model" ]; then

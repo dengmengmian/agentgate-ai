@@ -40,6 +40,21 @@ pub trait ProviderTransform: Send + Sync {
     /// (e.g. thinking, reasoning_effort, response_format).
     fn finalize_request(&self, _req: &mut ChatCompletionsRequest, _tools: &Option<Vec<Value>>) {}
 
+    /// Map Responses `reasoning.effort` into the provider's Chat Completions
+    /// dialect. The default keeps the previous conservative behavior: OpenAI
+    /// style `xhigh/max/highest` is folded down to `high`, which is accepted by
+    /// MiMo and most OpenAI-compatible providers. Providers with a wider or
+    /// narrower effort vocabulary should override this instead of forcing
+    /// special cases into the shared converter.
+    fn map_reasoning_effort(&self, effort: &str) -> Option<String> {
+        match effort.trim().to_ascii_lowercase().as_str() {
+            "minimal" | "low" | "medium" | "high" => Some(effort.trim().to_ascii_lowercase()),
+            "xhigh" | "max" | "highest" => Some("high".to_string()),
+            "none" | "off" | "auto" | "" => None,
+            _ => None,
+        }
+    }
+
     /// Whether to clean JSON schemas (remove `strict`, `additionalProperties`).
     fn clean_schemas(&self) -> bool {
         false

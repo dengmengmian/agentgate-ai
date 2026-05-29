@@ -223,13 +223,13 @@ mod tests {
     fn test_apply_creates_config() {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
-        let result = apply("127.0.0.1", 9090, "deepseek-chat").unwrap();
+        let result = apply("127.0.0.1", 9090, "gpt-5.5").unwrap();
         assert!(result.success);
         assert!(config_path().exists());
         let content = std::fs::read_to_string(config_path()).unwrap();
         assert!(content.contains("ag_local_"));
         assert!(content.contains("127.0.0.1:9090"));
-        assert!(content.contains("deepseek-chat"));
+        assert!(content.contains("gpt-5.5"));
         assert!(content.contains("[providers.agentgate]"));
         cleanup(&temp);
     }
@@ -242,15 +242,15 @@ mod tests {
         std::fs::write(config_path(), r#"[providers.deepseek]
 type = "openai"
 api_key = "sk-real"
-model = "deepseek-chat"
+model = "deepseek-v4-flash"
 "#).unwrap();
         // Toggle to agentgate
-        let result = toggle("127.0.0.1", 9090, "deepseek-chat").unwrap();
+        let result = toggle("127.0.0.1", 9090, "gpt-5.5").unwrap();
         assert_eq!(result.new_provider, "agentgate");
         let content = std::fs::read_to_string(config_path()).unwrap();
         assert!(content.contains("ag_local_"));
         // Toggle back to official
-        let result = toggle("127.0.0.1", 9090, "deepseek-chat").unwrap();
+        let result = toggle("127.0.0.1", 9090, "gpt-5.5").unwrap();
         assert_eq!(result.new_provider, "official");
         let content = std::fs::read_to_string(config_path()).unwrap();
         assert!(content.contains("sk-real"));

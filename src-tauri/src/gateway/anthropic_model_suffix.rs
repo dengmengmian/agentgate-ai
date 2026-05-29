@@ -87,15 +87,6 @@ mod tests {
     }
 
     #[test]
-    fn deepseek_legacy_chat_passes_through() {
-        assert_eq!(for_anthropic("deepseek", "deepseek-chat"), "deepseek-chat");
-        assert_eq!(
-            for_anthropic("deepseek", "deepseek-reasoner"),
-            "deepseek-reasoner"
-        );
-    }
-
-    #[test]
     fn deepseek_legacy_1m_suffix_is_stripped() {
         assert_eq!(
             for_anthropic("deepseek", "deepseek-v4-pro[1m]"),
