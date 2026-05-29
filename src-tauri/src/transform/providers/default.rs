@@ -28,6 +28,7 @@ mod tests {
             frequency_penalty: None,
             presence_penalty: None,
             parallel_tool_calls: None,
+            diagnostic_events: Vec::new(),
         }
     }
 

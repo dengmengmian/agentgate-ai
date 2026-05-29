@@ -40,6 +40,26 @@ pub struct ChatCompletionsRequest {
     /// 上游不识别会无视，识别的（OpenAI / Kimi / 多数 OpenAI-兼容）会照办。
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parallel_tool_calls: Option<bool>,
+    /// Internal-only diagnostics for capability degradations applied while
+    /// converting or adapting a request. Never forwarded upstream.
+    #[serde(skip)]
+    pub diagnostic_events: Vec<CapabilityDegradationEvent>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CapabilityDegradationEvent {
+    pub kind: String,
+    pub capability: String,
+    pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,6 +222,7 @@ mod tests {
             frequency_penalty: None,
             presence_penalty: None,
             parallel_tool_calls: None,
+            diagnostic_events: Vec::new(),
         };
         let json = serde_json::to_string(&req).unwrap();
         assert!(!json.contains("temperature"));

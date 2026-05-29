@@ -539,7 +539,7 @@ Providers marked **Provider-specific handling** have dedicated transform code in
 | Provider | Type | Native Protocols | Provider-Specific Handling |
 |---|---|---|---|
 | Xiaomi MiMo | `mimo` | Chat + Anthropic | Multi-turn `reasoning_content` round-trip, region-aware `tp-*` host auto-routing, temperature strip in thinking mode, tool_choice non-auto strip, omni web_search strip, web_search builtin gated by matrix, Web Search Plugin auto-degrade / retry |
-| DeepSeek | `deepseek` | Chat + Anthropic | Image stripping (text-only models), reasoning injection, schema cleaning, message reordering |
+| DeepSeek | `deepseek` | Chat + Anthropic | Image stripping with explicit notice, DeepSeek V4 thinking history reasoning backfill, schema cleaning, message reordering |
 | Anthropic (Claude) | `anthropic` | Anthropic | `tool_use`/`tool_result`, `input_schema`, thinking budget, native cache_control |
 | OpenAI | `openai` | Chat + Responses | None (Responses passthrough or Chat conversion) |
 | Google Gemini | `google_gemini` | Chat | None |

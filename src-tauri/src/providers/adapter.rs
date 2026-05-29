@@ -8,6 +8,7 @@ use std::sync::{Mutex, OnceLock};
 use crate::errors::AppError;
 use crate::models::provider::Provider;
 use crate::protocol::chat_completions::ChatCompletionsRequest;
+use crate::transform::degradation;
 
 /// Global round-robin counter for API key rotation.
 static KEY_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -285,7 +286,7 @@ fn summarize_html_gateway_error(body: &str) -> Option<String> {
 pub async fn send_non_stream(
     client: &Client,
     config: &ProviderConfig,
-    request: &ChatCompletionsRequest,
+    request: &mut ChatCompletionsRequest,
 ) -> Result<Value, AppError> {
     let url = config.chat_completions_url();
 
@@ -329,6 +330,7 @@ pub async fn send_non_stream(
             if status.is_success() {
                 let body_text = resp.text().await.unwrap_or_default();
                 let sanitized = config.sanitize(&body_text);
+                *request = effective_request;
                 return serde_json::from_str(&sanitized).map_err(|e| {
                     AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse provider response: {e}"))
                         .with_detail(truncate(&sanitized, 500))
@@ -345,6 +347,10 @@ pub async fn send_non_stream(
                 && strip_mimo_web_search_tool(&mut effective_request)
             {
                 remember_mimo_web_search_disabled_key(config, &api_key);
+                record_mimo_web_search_degradation(
+                    &mut effective_request,
+                    "upstream_web_search_disabled",
+                );
                 tracing::warn!(
                     provider = %config.name,
                     "MiMo Web Search Plugin unavailable; stripped web_search and retrying once"
@@ -381,7 +387,7 @@ pub async fn send_non_stream(
 pub async fn send_stream(
     client: &Client,
     config: &ProviderConfig,
-    request: &ChatCompletionsRequest,
+    request: &mut ChatCompletionsRequest,
 ) -> Result<reqwest::Response, AppError> {
     let url = config.chat_completions_url();
 
@@ -423,6 +429,7 @@ pub async fn send_stream(
 
             let status = resp.status();
             if status.is_success() {
+                *request = effective_request;
                 return Ok(resp);
             }
 
@@ -436,6 +443,10 @@ pub async fn send_stream(
                 && strip_mimo_web_search_tool(&mut effective_request)
             {
                 remember_mimo_web_search_disabled_key(config, &api_key);
+                record_mimo_web_search_degradation(
+                    &mut effective_request,
+                    "upstream_web_search_disabled",
+                );
                 tracing::warn!(
                     provider = %config.name,
                     "MiMo Web Search Plugin unavailable; stripped web_search and retrying stream once"
@@ -487,6 +498,15 @@ pub fn strip_mimo_web_search_tool(request: &mut ChatCompletionsRequest) -> bool 
     changed
 }
 
+fn record_mimo_web_search_degradation(request: &mut ChatCompletionsRequest, reason: &str) {
+    let model = request.model.clone();
+    request.diagnostic_events.push(degradation::web_search_degraded_event(
+        "mimo",
+        Some(model.as_str()),
+        reason,
+    ));
+}
+
 pub fn remember_mimo_web_search_disabled(config: &ProviderConfig) {
     for api_key in &config.api_keys {
         remember_mimo_web_search_disabled_key(config, api_key);
@@ -502,7 +522,14 @@ fn maybe_strip_mimo_web_search_for_account(
         return false;
     }
     if is_mimo_token_plan(config, api_key) || is_mimo_web_search_disabled_cached(config, api_key) {
-        return strip_mimo_web_search_tool(request);
+        let stripped = strip_mimo_web_search_tool(request);
+        if stripped {
+            record_mimo_web_search_degradation(
+                request,
+                "token_plan_or_cached_web_search_disabled",
+            );
+        }
+        return stripped;
     }
     false
 }
@@ -955,6 +982,7 @@ mod tests {
             frequency_penalty: None,
             presence_penalty: None,
             parallel_tool_calls: None,
+            diagnostic_events: Vec::new(),
         }
     }
 
@@ -1118,6 +1146,8 @@ mod tests {
 
         assert!(maybe_strip_mimo_web_search_for_account(&config, "tp-plan-key", &mut req));
         assert!(req.tools.is_none());
+        assert_eq!(req.diagnostic_events.len(), 1);
+        assert_eq!(req.diagnostic_events[0].capability, "web_search");
     }
 
     #[test]
@@ -1136,6 +1166,8 @@ mod tests {
             &mut req
         ));
         assert!(req.tools.is_none());
+        assert_eq!(req.diagnostic_events.len(), 1);
+        assert_eq!(req.diagnostic_events[0].reason.as_deref(), Some("token_plan_or_cached_web_search_disabled"));
     }
 
     #[test]

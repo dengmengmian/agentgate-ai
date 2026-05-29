@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use crate::errors::AppError;
-use crate::protocol::chat_completions::{ChatCompletionsRequest, ChatMessage, ToolCall, ToolCallFunction};
+use crate::protocol::chat_completions::{CapabilityDegradationEvent, ChatCompletionsRequest, ChatMessage, ToolCall, ToolCallFunction};
 use crate::protocol::openai_responses::ResponsesRequest;
 use crate::transform::tool_calls;
 use crate::transform::reasoning_store;
@@ -26,6 +26,7 @@ pub fn convert_with_provider_matrix(
     matrix: &std::collections::HashMap<String, Vec<String>>,
 ) -> Result<ChatCompletionsRequest, AppError> {
     let mut messages = Vec::new();
+    let mut diagnostic_events = Vec::new();
 
     // 0. Replay history from previous_response_id (session store)
     if let Some(ref prev_id) = req.previous_response_id {
@@ -52,7 +53,7 @@ pub fn convert_with_provider_matrix(
     }
 
     // 2. Convert input
-    let input_messages = convert_input(&req.input)?;
+    let input_messages = convert_input(&req.input, &mut diagnostic_events)?;
     messages.extend(input_messages);
 
     // 3. Convert tools (provider + matrix aware: Kimi $web_search builtin,
@@ -60,7 +61,7 @@ pub fn convert_with_provider_matrix(
     let converted_tools = req.tools.as_ref().map(|t| {
         tool_calls::convert_tools_with_matrix(t, provider.clean_schemas(), provider.provider_type(), model, matrix)
     }).filter(|t| !t.is_empty());
-    inject_mcp_advisory_if_needed(&mut messages, req.tools.as_deref());
+    inject_mcp_advisory_if_needed(&mut messages, req.tools.as_deref(), &mut diagnostic_events);
 
     // 4. Convert tool_choice
     let tool_choice = req.tool_choice.as_ref().map(tool_calls::convert_tool_choice);
@@ -144,6 +145,7 @@ pub fn convert_with_provider_matrix(
         frequency_penalty: req.frequency_penalty,
         presence_penalty: req.presence_penalty,
         parallel_tool_calls: req.parallel_tool_calls,
+        diagnostic_events,
     };
 
     // 8. Provider-specific finalization (thinking, reasoning_effort, response_format overrides)
@@ -153,12 +155,15 @@ pub fn convert_with_provider_matrix(
     Ok(chat_req)
 }
 
-fn convert_input(input: &Value) -> Result<Vec<ChatMessage>, AppError> {
+fn convert_input(
+    input: &Value,
+    diagnostic_events: &mut Vec<CapabilityDegradationEvent>,
+) -> Result<Vec<ChatMessage>, AppError> {
     match input {
         Value::String(s) => {
             Ok(vec![msg("user", Value::String(s.clone()))])
         }
-        Value::Array(items) => convert_input_array(items),
+        Value::Array(items) => convert_input_array(items, diagnostic_events),
         Value::Object(_) => {
             let content = extract_content(Some(input));
             Ok(vec![msg("user", content)])
@@ -169,7 +174,10 @@ fn convert_input(input: &Value) -> Result<Vec<ChatMessage>, AppError> {
     }
 }
 
-fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
+fn convert_input_array(
+    items: &[Value],
+    diagnostic_events: &mut Vec<CapabilityDegradationEvent>,
+) -> Result<Vec<ChatMessage>, AppError> {
     let mut messages = Vec::new();
     let mut pending_tool_calls: Vec<ToolCall> = Vec::new();
     let mut pending_reasoning: Option<String> = None;
@@ -310,7 +318,7 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<ChatMessage>, AppError> {
                 }
 
                 let raw_output = item.get("output").map(|o| {
-                    flatten_tool_output(o)
+                    flatten_tool_output_with_events(o, diagnostic_events)
                 }).unwrap_or_default();
                 let output = Value::String(raw_output);
 
@@ -424,12 +432,17 @@ fn flush_tool_calls(messages: &mut Vec<ChatMessage>, pending: &mut Vec<ToolCall>
     });
 }
 
-fn inject_mcp_advisory_if_needed(messages: &mut Vec<ChatMessage>, tools: Option<&[Value]>) {
+fn inject_mcp_advisory_if_needed(
+    messages: &mut Vec<ChatMessage>,
+    tools: Option<&[Value]>,
+    diagnostic_events: &mut Vec<CapabilityDegradationEvent>,
+) {
     let Some(tools) = tools else { return; };
     let labels = collect_dropped_mcp_labels(tools);
     if labels.is_empty() {
         return;
     }
+    diagnostic_events.push(crate::transform::degradation::mcp_advisory_event(&labels));
     let note = build_mcp_advisory_note(&labels);
     let insert_at = messages.iter().take_while(|m| m.role == "system").count();
     messages.insert(insert_at, ChatMessage {
@@ -509,6 +522,14 @@ fn connector_cli_hints(labels: &[String]) -> Vec<String> {
 /// may send `output` as a ContentPart array (e.g. when a tool returns images + text).
 /// We extract text parts, drop images with a placeholder notice.
 pub fn flatten_tool_output(output: &Value) -> String {
+    let mut events = Vec::new();
+    flatten_tool_output_with_events(output, &mut events)
+}
+
+fn flatten_tool_output_with_events(
+    output: &Value,
+    diagnostic_events: &mut Vec<CapabilityDegradationEvent>,
+) -> String {
     if let Some(s) = output.as_str() {
         return s.to_string();
     }
@@ -540,9 +561,11 @@ pub fn flatten_tool_output(output: &Value) -> String {
                 "[transform] {dropped_images} image attachment(s) dropped from tool output \
                  (Chat Completions protocol does not support images in tool messages)"
             );
-            let suffix = if dropped_images > 1 { "s" } else { "" };
-            chunks.push(format!(
-                "[{dropped_images} image attachment{suffix} omitted from tool output]"
+            diagnostic_events.push(crate::transform::degradation::tool_output_image_omitted_event(
+                dropped_images as usize,
+            ));
+            chunks.push(crate::transform::degradation::tool_output_image_omitted_notice(
+                dropped_images as usize,
             ));
         }
         if chunks.is_empty() {
@@ -1064,72 +1087,46 @@ mod tests {
     }
 
     #[test]
-    fn test_convert_deepseek_strips_image_url_from_history() {
-        // When content is already an Array (e.g. from history), image_url parts are stripped
-        let mut messages = vec![ChatMessage {
-            role: "user".to_string(),
-            content: Some(json!([
-                {"type": "text", "text": "look"},
-                {"type": "image_url", "image_url": {"url": "http://example.com/img.png"}}
-            ])),
-            reasoning_content: None,
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-        }];
-        // Replicate the DeepSeek image stripping logic
-        for msg in &mut messages {
-            if let Some(Value::Array(parts)) = &msg.content {
-                let has_image = parts.iter().any(|p| p.get("type").and_then(|t| t.as_str()) == Some("image_url"));
-                if has_image {
-                    let text_only: Vec<Value> = parts.iter()
-                        .filter(|p| p.get("type").and_then(|t| t.as_str()) != Some("image_url"))
-                        .cloned().collect();
-                    msg.content = if text_only.is_empty() {
-                        Some(Value::String(String::new()))
-                    } else {
-                        Some(Value::Array(text_only))
-                    };
-                }
-            }
-        }
-        let content = messages[0].content.as_ref().unwrap();
-        if let Value::Array(parts) = content {
-            assert_eq!(parts.len(), 1);
-            assert_eq!(parts[0]["type"], "text");
-        } else {
-            panic!("Expected array content");
-        }
+    fn test_convert_deepseek_strips_image_url_with_notice() {
+        let req = ResponsesRequest {
+            model: Some("gpt-4".to_string()),
+            input: json!([{
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "look"},
+                    {"type": "input_image", "image_url": "http://example.com/img.png"}
+                ]
+            }]),
+            ..Default::default()
+        };
+        let result = convert_with_provider(&req, "deepseek-v4-pro", &DeepSeekProvider).unwrap();
+        let parts = result.messages[0].content.as_ref().unwrap().as_array().unwrap();
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0]["type"], "text");
+        let text = parts[0]["text"].as_str().unwrap();
+        assert!(text.contains("look"));
+        assert!(text.contains("image stripped"));
     }
 
     #[test]
-    fn test_convert_deepseek_image_only_becomes_empty_string_in_history() {
-        let mut messages = vec![ChatMessage {
-            role: "user".to_string(),
-            content: Some(json!([
-                {"type": "image_url", "image_url": {"url": "http://example.com/img.png"}}
-            ])),
-            reasoning_content: None,
-            tool_calls: None,
-            tool_call_id: None,
-            name: None,
-        }];
-        for msg in &mut messages {
-            if let Some(Value::Array(parts)) = &msg.content {
-                let has_image = parts.iter().any(|p| p.get("type").and_then(|t| t.as_str()) == Some("image_url"));
-                if has_image {
-                    let text_only: Vec<Value> = parts.iter()
-                        .filter(|p| p.get("type").and_then(|t| t.as_str()) != Some("image_url"))
-                        .cloned().collect();
-                    msg.content = if text_only.is_empty() {
-                        Some(Value::String(String::new()))
-                    } else {
-                        Some(Value::Array(text_only))
-                    };
-                }
-            }
-        }
-        assert_eq!(messages[0].content, Some(json!("")));
+    fn test_convert_deepseek_image_only_becomes_notice_text() {
+        let req = ResponsesRequest {
+            model: Some("gpt-4".to_string()),
+            input: json!([{
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {"type": "input_image", "image_url": "http://example.com/img.png"}
+                ]
+            }]),
+            ..Default::default()
+        };
+        let result = convert_with_provider(&req, "deepseek-v4-flash", &DeepSeekProvider).unwrap();
+        let parts = result.messages[0].content.as_ref().unwrap().as_array().unwrap();
+        assert_eq!(parts.len(), 1);
+        assert_eq!(parts[0]["type"], "text");
+        assert!(parts[0]["text"].as_str().unwrap().contains("vision-capable"));
     }
 
     #[test]
@@ -1288,6 +1285,8 @@ mod tests {
         assert!(sys.contains("GitHub"));
         assert!(sys.contains("not callable"));
         assert_eq!(result.messages[1].role, "user");
+        assert_eq!(result.diagnostic_events.len(), 1);
+        assert_eq!(result.diagnostic_events[0].capability, "mcp");
     }
 
     // ── apply_effort_overrides（env-driven，串行跑） ──
@@ -1428,16 +1427,20 @@ mod tests {
     #[test]
     fn test_convert_input_object() {
         let input = json!({"text": "hello object"});
-        let result = convert_input(&input).unwrap();
+        let mut events = Vec::new();
+        let result = convert_input(&input, &mut events).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0].content, Some(json!("hello object")));
+        assert!(events.is_empty());
     }
 
     #[test]
     fn test_convert_input_number() {
         let input = json!(42);
-        let result = convert_input(&input).unwrap();
+        let mut events = Vec::new();
+        let result = convert_input(&input, &mut events).unwrap();
         assert_eq!(result[0].content, Some(json!("42")));
+        assert!(events.is_empty());
     }
 
     // ── Tests for fixes ──
@@ -1568,9 +1571,13 @@ mod tests {
             {"type": "output_text", "text": "some text"},
             {"type": "input_image", "image_url": {"url": "data:image/png;base64,abc"}}
         ]);
-        let result = flatten_tool_output(&output);
+        let mut events = Vec::new();
+        let result = flatten_tool_output_with_events(&output, &mut events);
         assert!(result.contains("some text"));
         assert!(result.contains("[1 image attachment omitted from tool output]"));
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].capability, "vision");
+        assert_eq!(events[0].source, "tool_output_transform");
     }
 
     #[test]
@@ -1701,11 +1708,13 @@ mod tests {
             json!({"type": "reasoning", "encrypted_content": "Let me think... 4."}),
             json!({"type": "message", "role": "assistant", "content": "4"}),
         ];
-        let msgs = convert_input_array(&items).unwrap();
+        let mut events = Vec::new();
+        let msgs = convert_input_array(&items, &mut events).unwrap();
         // user, assistant(reasoning=...)
         assert_eq!(msgs.len(), 2);
         assert_eq!(msgs[1].role, "assistant");
         assert_eq!(msgs[1].reasoning_content.as_deref(), Some("Let me think... 4."));
+        assert!(events.is_empty());
     }
 
     #[test]
@@ -1724,11 +1733,13 @@ mod tests {
             }),
             json!({"type": "function_call_output", "call_id": "c1", "output": "found"}),
         ];
-        let msgs = convert_input_array(&items).unwrap();
+        let mut events = Vec::new();
+        let msgs = convert_input_array(&items, &mut events).unwrap();
         // user + assistant(tool_calls, reasoning) + tool
         let assistant = msgs.iter().find(|m| m.role == "assistant").expect("assistant present");
         assert_eq!(assistant.reasoning_content.as_deref(), Some("I should search."));
         assert!(assistant.tool_calls.is_some());
+        assert!(events.is_empty());
     }
 
     #[test]
@@ -1741,8 +1752,10 @@ mod tests {
             }),
             json!({"type": "message", "role": "assistant", "content": "ok"}),
         ];
-        let msgs = convert_input_array(&items).unwrap();
+        let mut events = Vec::new();
+        let msgs = convert_input_array(&items, &mut events).unwrap();
         assert_eq!(msgs[0].reasoning_content.as_deref(), Some("full trace"));
+        assert!(events.is_empty());
     }
 
     // ── ThinkSplitter（带状态，跨 chunk 边界） ────────────────────

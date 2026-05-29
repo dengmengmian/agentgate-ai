@@ -1,6 +1,6 @@
 use crate::errors::AppError;
 use crate::protocol::chat_completions::{ChatCompletionsRequest, ChatMessage};
-use crate::transform::{reasoning_store, tool_calls};
+use crate::transform::{degradation, reasoning_store, tool_calls};
 use serde_json::Value;
 
 pub struct MimoProvider;
@@ -84,42 +84,13 @@ impl super::ProviderTransform for MimoProvider {
         // 数，并在该消息的 text 部分追加显式提示——让 agent 知道有图片被丢
         // 弃、为什么、怎么补救（切换 vision-capable 模型）。比静默丢失友好。
         if !MIMO_VISION_MODELS.contains(&model) {
-            for msg in &mut req.messages {
-                if let Some(Value::Array(parts)) = &msg.content {
-                    let stripped_count = parts.iter().filter(|p| {
-                        p.get("type").and_then(|t| t.as_str()) == Some("image_url")
-                    }).count();
-                    if stripped_count == 0 { continue; }
-
-                    let mut text_only: Vec<Value> = parts.iter()
-                        .filter(|p| p.get("type").and_then(|t| t.as_str()) != Some("image_url"))
-                        .cloned()
-                        .collect();
-
-                    // 在最后一个 text 块追加提示；没有 text 块则新建一个。
-                    let notice = format!(
-                        "\n\n[Note: {stripped_count} image{plural} stripped — the current MiMo model \
-                         ({model}) does not support image input. To analyze images, switch to a vision \
-                         model (mimo-v2.5 or mimo-v2-omni) and re-send the request.]",
-                        plural = if stripped_count == 1 { "" } else { "s" },
-                    );
-                    let last_text_pos = text_only.iter().rposition(|p| {
-                        p.get("type").and_then(|t| t.as_str()) == Some("text")
-                    });
-                    if let Some(pos) = last_text_pos {
-                        if let Some(existing) = text_only[pos].get("text").and_then(|t| t.as_str()) {
-                            let combined = format!("{existing}{notice}");
-                            text_only[pos]["text"] = Value::String(combined);
-                        }
-                    } else {
-                        text_only.push(serde_json::json!({
-                            "type": "text",
-                            "text": notice.trim_start_matches('\n'),
-                        }));
-                    }
-                    msg.content = Some(Value::Array(text_only));
-                }
-            }
+            req.diagnostic_events.extend(degradation::strip_image_parts_with_notice(
+                &mut req.messages,
+                "mimo",
+                "MiMo",
+                model,
+                "To analyze images, switch to a vision model (mimo-v2.5 or mimo-v2-omni) and re-send the request.",
+            ));
         }
 
         // Strip temperature in thinking mode for v2.5-pro / v2.5 — upstream
@@ -231,6 +202,7 @@ mod tests {
             frequency_penalty: None,
             presence_penalty: None,
             parallel_tool_calls: None,
+            diagnostic_events: Vec::new(),
         }
     }
 
@@ -473,6 +445,9 @@ mod tests {
         assert!(text.contains("image stripped"), "notice should mention stripping");
         assert!(text.contains("mimo-v2.5") || text.contains("mimo-v2-omni"),
             "notice should suggest vision-capable models");
+        assert_eq!(r.diagnostic_events.len(), 1);
+        assert_eq!(r.diagnostic_events[0].capability, "vision");
+        assert_eq!(r.diagnostic_events[0].provider.as_deref(), Some("mimo"));
     }
 
     #[test]

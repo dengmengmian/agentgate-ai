@@ -5,6 +5,7 @@ pub mod gemini_to_chat;
 pub mod schema_cleaner;
 pub mod tool_calls;
 pub mod reasoning_store;
+pub mod degradation;
 pub mod thinking_blocks;
 pub mod chat_to_anthropic_stream;
 pub mod chat_to_anthropic;

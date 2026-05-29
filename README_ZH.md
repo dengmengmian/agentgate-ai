@@ -523,7 +523,7 @@ Codex 发送含图片的请求
 | Provider | 类型 | 原生协议 | 专属处理 |
 |---|---|---|---|
 | 小米 MiMo | `mimo` | Chat + Anthropic | 多轮 `reasoning_content` 回环、`tp-*` host 按区域自动切换、思考态剥 temperature、tool_choice 非 auto 剥除、omni web_search 剥除、web_search builtin 按矩阵翻译、Web Search Plugin 自动降级 / 重试 |
-| DeepSeek | `deepseek` | Chat + Anthropic | 图片剥离（纯文本模型）、reasoning 注入、schema 清洗、消息重排 |
+| DeepSeek | `deepseek` | Chat + Anthropic | 图片剥离并注入可解释提示、DeepSeek V4 thinking 历史 reasoning 回填、schema 清洗、消息重排 |
 | Anthropic（Claude） | `anthropic` | Anthropic | `tool_use`/`tool_result`、`input_schema`、thinking budget、原生 cache_control |
 | OpenAI | `openai` | Chat + Responses | 无（Responses 透传或 Chat 转换） |
 | Google Gemini | `google_gemini` | Chat | 无 |

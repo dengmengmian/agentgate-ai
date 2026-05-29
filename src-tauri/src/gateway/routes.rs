@@ -414,20 +414,21 @@ pub async fn handle_responses(
 async fn handle_non_stream_response(
     state: GatewayState,
     config: ProviderConfig,
-    chat_req: crate::protocol::chat_completions::ChatCompletionsRequest,
+    mut chat_req: crate::protocol::chat_completions::ChatCompletionsRequest,
     request_id: String,
     raw_request: String,
-    converted_request: String,
+    mut converted_request: String,
     model: String,
     start: Instant,
     client_type: String,
     session_id: Option<String>,
     provider_id: String,
 ) -> Result<Response, GatewayError> {
-    let result = adapter::send_non_stream(&state.http_client, &config, &chat_req).await;
+    let result = adapter::send_non_stream(&state.http_client, &config, &mut chat_req).await;
 
     match result {
         Ok(upstream_json) => {
+            converted_request = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
             let resp_id = format!("resp_{}", &request_id[4..]);
 
             // Parse upstream response
@@ -585,7 +586,10 @@ async fn handle_non_stream_response(
             }
 
             // Log success
-            let trace = json!({ "response_id": &resp_id, "stream": false }).to_string();
+            let trace = trace_with_degradation_events(
+                json!({ "response_id": &resp_id, "stream": false }),
+                &chat_req.diagnostic_events,
+            );
             log_request_success(
                 &state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
@@ -626,7 +630,7 @@ async fn handle_stream_response(
 ) -> Result<Response, GatewayError> {
     let mut degraded_bootstrap_web_search = false;
     let upstream_resp = loop {
-        let upstream_resp = adapter::send_stream(&state.http_client, &config, &chat_req).await;
+        let upstream_resp = adapter::send_stream(&state.http_client, &config, &mut chat_req).await;
         match upstream_resp {
             Ok(response) => {
                 // Bootstrap-validate the upstream stream: read the leading window
@@ -641,6 +645,14 @@ async fn handle_stream_response(
                             && adapter::strip_mimo_web_search_tool(&mut chat_req) =>
                     {
                         adapter::remember_mimo_web_search_disabled(&config);
+                        let degraded_model = chat_req.model.clone();
+                        chat_req.diagnostic_events.push(
+                            crate::transform::degradation::web_search_degraded_event(
+                                &config.provider_type,
+                                Some(degraded_model.as_str()),
+                                "stream_bootstrap_web_search_disabled",
+                            ),
+                        );
                         converted_request =
                             serde_json::to_string_pretty(&chat_req).unwrap_or_default();
                         degraded_bootstrap_web_search = true;
@@ -659,6 +671,7 @@ async fn handle_stream_response(
 
     match upstream_resp {
         Ok(boot) => {
+            converted_request = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
             let resp_id = format!("resp_{}", &request_id[4..]);
             let (tx, rx) = mpsc::channel::<String>(256);
 
@@ -669,6 +682,7 @@ async fn handle_stream_response(
             let raw_req = raw_request.clone();
             let conv_req = converted_request.clone();
             let sent_messages = chat_req.messages.clone();
+            let diagnostic_events = chat_req.diagnostic_events.clone();
             let sa_session = session_id.clone();
             let sa_provider = provider_id.clone();
 
@@ -734,7 +748,7 @@ async fn handle_stream_response(
                             acc.finish_reason.as_deref(),
                             Some("length") | Some("max_tokens")
                         );
-                        let trace = serde_json::json!({
+                        let trace = trace_with_degradation_events(serde_json::json!({
                             "response_id": &acc.response_id,
                             "stream": true,
                             "text_len": acc.full_text.len(),
@@ -743,7 +757,7 @@ async fn handle_stream_response(
                             "finish_reason": acc.finish_reason.as_deref(),
                             "reasoning_tokens": reasoning_tokens,
                             "truncated": truncated,
-                        }).to_string();
+                        }), &diagnostic_events);
                         // Extract tokens from SSE usage
                         let (in_tok, out_tok) = acc.usage.as_ref().map(|u| {
                             (u.get("input_tokens").and_then(|v| v.as_i64()),
@@ -1373,15 +1387,16 @@ pub async fn handle_gemini_generate(
         chat_req.stream_options = None;
     }
 
-    let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
+    let mut converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
 
     if is_stream {
         // Stream: Chat Completions SSE → convert each chunk to Gemini SSE format
-        let upstream_resp = adapter::send_stream(&state.http_client, &config, &chat_req).await.map_err(|e| {
+        let upstream_resp = adapter::send_stream(&state.http_client, &config, &mut chat_req).await.map_err(|e| {
             let latency = start.elapsed().as_millis() as i64;
             log_request_error_full(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json, &config.name, &resolved_model, &e, 502, latency);
             GatewayError(e)
         })?;
+        converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
 
         // Bootstrap-validate the upstream Chat Completions stream before
         // committing to forwarding the converted Gemini SSE back to the client.
@@ -1398,6 +1413,7 @@ pub async fn handle_gemini_generate(
         let req_id = request_id.clone();
         let raw_req = raw_body.clone();
         let conv_req = converted_json.clone();
+        let diagnostic_events = chat_req.diagnostic_events.clone();
 
         tokio::spawn(async move {
             use futures::StreamExt;
@@ -1455,7 +1471,10 @@ pub async fn handle_gemini_generate(
             }
 
             let latency = start.elapsed().as_millis() as i64;
-            let trace = json!({"response_id": &req_id, "stream": true, "protocol": "gemini_input"}).to_string();
+            let trace = trace_with_degradation_events(
+                json!({"response_id": &req_id, "stream": true, "protocol": "gemini_input"}),
+                &diagnostic_events,
+            );
             log_request_success(&db, &client_type, "/v1beta/generateContent", &req_id, &raw_req, &conv_req, "", &full_text[..full_text.len().min(10000)],
                 None, &provider_name, &model_clone, 200, latency, Some(&trace), None, None, None, None);
         });
@@ -1474,14 +1493,18 @@ pub async fn handle_gemini_generate(
     } else {
         // Non-stream
         chat_req.stream = false;
-        let result = adapter::send_non_stream(&state.http_client, &config, &chat_req).await;
+        let result = adapter::send_non_stream(&state.http_client, &config, &mut chat_req).await;
 
         match result {
             Ok(upstream_json) => {
+                converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
                 let gemini_resp = gemini_to_chat::response_to_gemini(&upstream_json, &resolved_model);
                 let latency = start.elapsed().as_millis() as i64;
                 let (in_tok, out_tok) = extract_usage(&upstream_json);
-                let trace = json!({"protocol": "gemini_input"}).to_string();
+                let trace = trace_with_degradation_events(
+                    json!({"protocol": "gemini_input"}),
+                    &chat_req.diagnostic_events,
+                );
                 log_request_success(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json,
                     &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                     &serde_json::to_string_pretty(&gemini_resp).unwrap_or_default(),
@@ -1992,7 +2015,7 @@ pub async fn handle_messages(
         .and_then(crate::protocol::anthropic_messages::thinking_to_reasoning_effort);
     let want_stream = msg_req.stream.unwrap_or(false);
 
-    let chat_req = crate::protocol::chat_completions::ChatCompletionsRequest {
+    let mut chat_req = crate::protocol::chat_completions::ChatCompletionsRequest {
         model: model.clone(), messages, tools,
         tool_choice,
         stream: want_stream,
@@ -2006,9 +2029,10 @@ pub async fn handle_messages(
         response_format: None, reasoning_effort,
         seed: None, stop: None, frequency_penalty: None, presence_penalty: None,
         parallel_tool_calls: None,
+        diagnostic_events: Vec::new(),
     };
 
-    let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
+    let mut converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
 
     if want_stream {
         // 真流式：边收上游 Chat SSE chunk 边转 Anthropic 事件、立即转发给 client。
@@ -2018,16 +2042,20 @@ pub async fn handle_messages(
         ).await;
     }
 
-    let result = adapter::send_non_stream(&state.http_client, &config, &chat_req).await;
+    let result = adapter::send_non_stream(&state.http_client, &config, &mut chat_req).await;
     match result {
         Ok(upstream_json) => {
+            converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
             let response = crate::protocol::anthropic_messages::from_chat_response(&upstream_json, &model);
             let latency = start.elapsed().as_millis() as i64;
             let (in_tok, out_tok) = extract_usage(&upstream_json);
             let (cache_w, cache_r) = upstream_json.get("usage")
                 .map(crate::storage::request_logs::extract_cache_tokens)
                 .unwrap_or((None, None));
-            let trace = json!({"mode": "transform", "protocol": "anthropic_messages", "stream": false}).to_string();
+            let trace = trace_with_degradation_events(
+                json!({"mode": "transform", "protocol": "anthropic_messages", "stream": false}),
+                &chat_req.diagnostic_events,
+            );
             log_request_success(&state.db, &client_type, "/v1/messages", &request_id, &raw, &converted_json,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&response).unwrap_or_default(),
@@ -2049,23 +2077,24 @@ pub async fn handle_messages(
 async fn handle_anthropic_fallback_stream(
     state: GatewayState,
     config: ProviderConfig,
-    chat_req: crate::protocol::chat_completions::ChatCompletionsRequest,
+    mut chat_req: crate::protocol::chat_completions::ChatCompletionsRequest,
     model: String,
     request_id: String,
     raw_request: String,
-    converted_request: String,
+    mut converted_request: String,
     start: Instant,
     client_type: String,
 ) -> Result<Response, GatewayError> {
     use futures::StreamExt;
 
-    let upstream = adapter::send_stream(&state.http_client, &config, &chat_req).await
+    let upstream = adapter::send_stream(&state.http_client, &config, &mut chat_req).await
         .map_err(|e| {
             let latency = start.elapsed().as_millis() as i64;
             log_request_error_full(&state.db, &client_type, "/v1/messages", &request_id, &raw_request, &converted_request,
                 &config.name, &model, &e, 502, latency);
             GatewayError(e)
         })?;
+    converted_request = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
 
     // 用 sse_bootstrap 检查上游首批字节——HTTP 200 + 错误帧的情况能被识别并
     // 转成正常错误回给 client 的 SDK，而不是糊弄它走假流式。
@@ -2085,6 +2114,7 @@ async fn handle_anthropic_fallback_stream(
     let conv_req = converted_request.clone();
     let model_clone = model.clone();
     let client_type_owned = client_type.clone();
+    let diagnostic_events = chat_req.diagnostic_events.clone();
 
     tokio::spawn(async move {
         use crate::transform::chat_to_anthropic_stream::ChatToAnthropicStream;
@@ -2179,7 +2209,10 @@ async fn handle_anthropic_fallback_stream(
         let (cache_w, cache_r) = final_usage_json.as_ref()
             .map(crate::storage::request_logs::extract_cache_tokens)
             .unwrap_or((None, None));
-        let trace = json!({"mode": "transform", "protocol": "anthropic_messages", "stream": true}).to_string();
+        let trace = trace_with_degradation_events(
+            json!({"mode": "transform", "protocol": "anthropic_messages", "stream": true}),
+            &diagnostic_events,
+        );
         log_request_success(&db, &client_type_owned, "/v1/messages", &req_id, &raw_req, &conv_req,
             &final_usage_json.map(|u| serde_json::to_string_pretty(&u).unwrap_or_default()).unwrap_or_default(),
             &total_text.chars().take(10_000).collect::<String>(),
@@ -2768,6 +2801,16 @@ fn extract_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i64>) {
     let input = usage.and_then(|u| u.get("prompt_tokens").or(u.get("input_tokens"))).and_then(|v| v.as_i64());
     let output = usage.and_then(|u| u.get("completion_tokens").or(u.get("output_tokens"))).and_then(|v| v.as_i64());
     (input, output)
+}
+
+fn trace_with_degradation_events(
+    mut trace: serde_json::Value,
+    events: &[crate::protocol::chat_completions::CapabilityDegradationEvent],
+) -> String {
+    if !events.is_empty() {
+        trace["degradation_events"] = serde_json::json!(events);
+    }
+    trace.to_string()
 }
 
 fn log_request_error(

@@ -236,8 +236,8 @@ export const GENERATED_PROVIDER_CATALOG = {
       }
     ],
     "docs": {
-      "handlingEn": "Image stripping (text-only models), reasoning injection, schema cleaning, message reordering",
-      "handlingZh": "图片剥离（纯文本模型）、reasoning 注入、schema 清洗、消息重排"
+      "handlingEn": "Image stripping with explicit notice, DeepSeek V4 thinking history reasoning backfill, schema cleaning, message reordering",
+      "handlingZh": "图片剥离并注入可解释提示、DeepSeek V4 thinking 历史 reasoning 回填、schema 清洗、消息重排"
     },
     "sync": {
       "envVar": "DEEPSEEK_API_KEY",

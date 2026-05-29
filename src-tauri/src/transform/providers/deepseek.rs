@@ -1,10 +1,11 @@
 use crate::errors::AppError;
 use crate::protocol::chat_completions::{ChatCompletionsRequest, ChatMessage};
-use crate::transform::tool_calls;
-use crate::transform::reasoning_store;
+use crate::transform::{degradation, reasoning_store, tool_calls};
 use serde_json::{json, Value};
 
 pub struct DeepSeekProvider;
+
+const MIXED_MODE_REASONING_PLACEHOLDER: &str = "(this turn ran without thinking mode)";
 
 fn strip_qualifier(model: &str) -> &str {
     if let Some(stripped) = model.strip_suffix(']') {
@@ -16,7 +17,10 @@ fn strip_qualifier(model: &str) -> &str {
 }
 
 fn is_deepseek_v4_family(model: &str) -> bool {
-    matches!(strip_qualifier(model), "deepseek-v4-pro" | "deepseek-v4-flash")
+    matches!(
+        strip_qualifier(model),
+        "deepseek-v4-pro" | "deepseek-v4-flash"
+    )
 }
 
 fn is_thinking_enabled(req: &ChatCompletionsRequest) -> bool {
@@ -33,61 +37,43 @@ fn strip_reasoning_content(messages: &mut [ChatMessage]) {
     }
 }
 
+fn backfill_reasoning_content(messages: &mut [ChatMessage]) {
+    for msg in messages {
+        if msg.role != "assistant" || msg.reasoning_content.is_some() {
+            continue;
+        }
+
+        let text = msg.content.as_ref().and_then(|c| c.as_str()).unwrap_or("");
+        let stored = reasoning_store::lookup_by_content(text).or_else(|| {
+            msg.tool_calls.as_ref().and_then(|tcs| {
+                tcs.iter()
+                    .find_map(|tc| reasoning_store::lookup_by_tool_call_id(&tc.id))
+            })
+        });
+        msg.reasoning_content =
+            stored.or_else(|| Some(MIXED_MODE_REASONING_PLACEHOLDER.to_string()));
+    }
+}
+
 impl super::ProviderTransform for DeepSeekProvider {
-    fn process_messages(
-        &self,
-        messages: Vec<ChatMessage>,
-    ) -> Result<Vec<ChatMessage>, AppError> {
-        let mut messages = tool_calls::fix_tool_message_order(messages)?;
-
-        // Strip image_url content from messages (DeepSeek 400s on image_url)
-        for msg in &mut messages {
-            if let Some(Value::Array(parts)) = &msg.content {
-                let has_image = parts
-                    .iter()
-                    .any(|p| p.get("type").and_then(|t| t.as_str()) == Some("image_url"));
-                if has_image {
-                    let text_only: Vec<Value> = parts
-                        .iter()
-                        .filter(|p| {
-                            p.get("type").and_then(|t| t.as_str()) != Some("image_url")
-                        })
-                        .cloned()
-                        .collect();
-                    msg.content = if text_only.is_empty() {
-                        Some(Value::String(String::new()))
-                    } else {
-                        Some(Value::Array(text_only))
-                    };
-                }
-            }
-        }
-
-        // Ensure reasoning_content on assistant messages with tool_calls
-        // (DeepSeek thinking mode requires this, empty " " as placeholder)
-        for msg in &mut messages {
-            if msg.role == "assistant" && msg.tool_calls.is_some() && msg.reasoning_content.is_none()
-            {
-                let text = msg
-                    .content
-                    .as_ref()
-                    .and_then(|c| c.as_str())
-                    .unwrap_or("");
-                let stored = reasoning_store::lookup_by_content(text).or_else(|| {
-                    msg.tool_calls.as_ref().and_then(|tcs| {
-                        tcs.iter()
-                            .find_map(|tc| reasoning_store::lookup_by_tool_call_id(&tc.id))
-                    })
-                });
-                msg.reasoning_content = stored.or_else(|| Some(" ".to_string()));
-            }
-        }
-
-        Ok(messages)
+    fn process_messages(&self, messages: Vec<ChatMessage>) -> Result<Vec<ChatMessage>, AppError> {
+        tool_calls::fix_tool_message_order(messages)
     }
 
     fn finalize_request(&self, req: &mut ChatCompletionsRequest, _tools: &Option<Vec<Value>>) {
-        let model = strip_qualifier(&req.model);
+        let model = strip_qualifier(&req.model).to_string();
+        let model = model.as_str();
+
+        // DeepSeek V4 models are text-only. Keep routing responsible for
+        // promoting current image turns to a vision provider; this is the final
+        // compatibility guard for historic images or text-only fallbacks.
+        req.diagnostic_events.extend(degradation::strip_image_parts_with_notice(
+            &mut req.messages,
+            "deepseek",
+            "DeepSeek",
+            model,
+            "To analyze images, switch to a vision-capable provider/model and re-send the request.",
+        ));
 
         // DeepSeek V4 exposes thinking as an explicit request contract. For
         // unknown DeepSeek-compatible ids we keep transparent proxy semantics:
@@ -106,6 +92,7 @@ impl super::ProviderTransform for DeepSeekProvider {
                 req.top_p = None;
                 req.presence_penalty = None;
                 req.frequency_penalty = None;
+                backfill_reasoning_content(&mut req.messages);
             } else {
                 req.reasoning_effort = None;
                 strip_reasoning_content(&mut req.messages);
@@ -182,7 +169,9 @@ impl super::ProviderTransform for DeepSeekProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::chat_completions::{ChatCompletionsRequest, ChatMessage, ToolCall, ToolCallFunction};
+    use crate::protocol::chat_completions::{
+        ChatCompletionsRequest, ChatMessage, ToolCall, ToolCallFunction,
+    };
     use crate::transform::providers::ProviderTransform;
     use serde_json::json;
 
@@ -206,6 +195,7 @@ mod tests {
             frequency_penalty: None,
             presence_penalty: None,
             parallel_tool_calls: None,
+            diagnostic_events: Vec::new(),
         }
     }
 
@@ -250,6 +240,87 @@ mod tests {
     }
 
     #[test]
+    fn deepseek_v4_backfills_reasoning_for_plain_assistant_in_thinking_mode() {
+        let mut r = req();
+        r.model = "deepseek-v4-pro".into();
+        r.messages = vec![ChatMessage {
+            role: "assistant".into(),
+            content: Some(json!("old answer")),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }];
+        DeepSeekProvider.finalize_request(&mut r, &None);
+        assert_eq!(
+            r.messages[0].reasoning_content.as_deref(),
+            Some(MIXED_MODE_REASONING_PLACEHOLDER)
+        );
+    }
+
+    #[test]
+    fn deepseek_v4_backfills_reasoning_for_tool_call_assistant_in_thinking_mode() {
+        let mut r = req();
+        r.model = "deepseek-v4-flash".into();
+        r.messages = vec![ChatMessage {
+            role: "assistant".into(),
+            content: Some(json!("text")),
+            reasoning_content: None,
+            tool_calls: Some(vec![ToolCall {
+                id: "tc-1".into(),
+                call_type: "function".into(),
+                function: ToolCallFunction {
+                    name: "f".into(),
+                    arguments: "{}".into(),
+                },
+            }]),
+            tool_call_id: None,
+            name: None,
+        }];
+        DeepSeekProvider.finalize_request(&mut r, &None);
+        assert_eq!(
+            r.messages[0].reasoning_content.as_deref(),
+            Some(MIXED_MODE_REASONING_PLACEHOLDER)
+        );
+    }
+
+    #[test]
+    fn deepseek_v4_thinking_disabled_strips_reasoning_content() {
+        let mut r = req();
+        r.model = "deepseek-v4-pro".into();
+        r.thinking = Some(json!({"type": "disabled"}));
+        r.reasoning_effort = Some("high".into());
+        r.messages = vec![ChatMessage {
+            role: "assistant".into(),
+            content: Some(json!("old answer")),
+            reasoning_content: Some("old trace".into()),
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }];
+        DeepSeekProvider.finalize_request(&mut r, &None);
+        assert!(r.reasoning_effort.is_none());
+        assert!(r.messages[0].reasoning_content.is_none());
+    }
+
+    #[test]
+    fn deepseek_unknown_model_does_not_invent_reasoning_backfill() {
+        let mut r = req();
+        r.model = "deepseek-future-vision".into();
+        r.messages = vec![ChatMessage {
+            role: "assistant".into(),
+            content: Some(json!("old answer")),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }];
+        DeepSeekProvider.finalize_request(&mut r, &None);
+        assert!(r.thinking.is_none());
+        assert!(r.messages[0].reasoning_content.is_none());
+    }
+
+    #[test]
     fn deepseek_deprecated_aliases_are_not_special_cased() {
         let mut r = req();
         r.model = "deepseek-chat".into();
@@ -266,7 +337,10 @@ mod tests {
         DeepSeekProvider.finalize_request(&mut r, &None);
         assert!(r.thinking.is_none());
         assert!(r.reasoning_effort.is_none());
-        assert_eq!(r.messages[0].reasoning_content.as_deref(), Some("old trace"));
+        assert_eq!(
+            r.messages[0].reasoning_content.as_deref(),
+            Some("old trace")
+        );
 
         let mut r = req();
         r.model = "deepseek-reasoner".into();
@@ -277,10 +351,22 @@ mod tests {
 
     #[test]
     fn deepseek_maps_reasoning_effort_to_supported_values() {
-        assert_eq!(DeepSeekProvider.map_reasoning_effort("low"), Some("high".into()));
-        assert_eq!(DeepSeekProvider.map_reasoning_effort("medium"), Some("high".into()));
-        assert_eq!(DeepSeekProvider.map_reasoning_effort("max"), Some("max".into()));
-        assert_eq!(DeepSeekProvider.map_reasoning_effort("xhigh"), Some("max".into()));
+        assert_eq!(
+            DeepSeekProvider.map_reasoning_effort("low"),
+            Some("high".into())
+        );
+        assert_eq!(
+            DeepSeekProvider.map_reasoning_effort("medium"),
+            Some("high".into())
+        );
+        assert_eq!(
+            DeepSeekProvider.map_reasoning_effort("max"),
+            Some("max".into())
+        );
+        assert_eq!(
+            DeepSeekProvider.map_reasoning_effort("xhigh"),
+            Some("max".into())
+        );
         assert_eq!(DeepSeekProvider.map_reasoning_effort("auto"), None);
     }
 
@@ -301,8 +387,10 @@ mod tests {
     }
 
     #[test]
-    fn deepseek_process_messages_strips_image_url() {
-        let messages = vec![ChatMessage {
+    fn deepseek_finalize_request_strips_image_url_with_notice() {
+        let mut r = req();
+        r.model = "deepseek-v4-pro".into();
+        r.messages = vec![ChatMessage {
             role: "user".into(),
             content: Some(json!([
                 {"type": "text", "text": "look"},
@@ -313,15 +401,22 @@ mod tests {
             tool_call_id: None,
             name: None,
         }];
-        let out = DeepSeekProvider.process_messages(messages).unwrap();
-        let arr = out[0].content.as_ref().unwrap().as_array().unwrap();
+        DeepSeekProvider.finalize_request(&mut r, &None);
+        let arr = r.messages[0].content.as_ref().unwrap().as_array().unwrap();
         assert_eq!(arr.len(), 1);
         assert_eq!(arr[0]["type"], "text");
+        assert!(arr[0]["text"].as_str().unwrap().contains("image stripped"));
+        assert!(arr[0]["text"].as_str().unwrap().contains("deepseek-v4-pro"));
+        assert_eq!(r.diagnostic_events.len(), 1);
+        assert_eq!(r.diagnostic_events[0].capability, "vision");
+        assert_eq!(r.diagnostic_events[0].provider.as_deref(), Some("deepseek"));
     }
 
     #[test]
-    fn deepseek_process_messages_image_only_becomes_empty_string() {
-        let messages = vec![ChatMessage {
+    fn deepseek_finalize_request_image_only_becomes_notice_text() {
+        let mut r = req();
+        r.model = "deepseek-v4-flash".into();
+        r.messages = vec![ChatMessage {
             role: "user".into(),
             content: Some(json!([
                 {"type": "image_url", "image_url": {"url": "http://example.com/img.png"}}
@@ -331,26 +426,11 @@ mod tests {
             tool_call_id: None,
             name: None,
         }];
-        let out = DeepSeekProvider.process_messages(messages).unwrap();
-        assert_eq!(out[0].content, Some(json!("")));
-    }
-
-    #[test]
-    fn deepseek_process_messages_backfills_reasoning_for_tool_calls() {
-        let messages = vec![ChatMessage {
-            role: "assistant".into(),
-            content: Some(json!("text")),
-            reasoning_content: None,
-            tool_calls: Some(vec![ToolCall {
-                id: "tc-1".into(),
-                call_type: "function".into(),
-                function: ToolCallFunction { name: "f".into(), arguments: "{}".into() },
-            }]),
-            tool_call_id: None,
-            name: None,
-        }];
-        let out = DeepSeekProvider.process_messages(messages).unwrap();
-        assert!(out[0].reasoning_content.is_some());
+        DeepSeekProvider.finalize_request(&mut r, &None);
+        let arr = r.messages[0].content.as_ref().unwrap().as_array().unwrap();
+        assert_eq!(arr.len(), 1);
+        assert_eq!(arr[0]["type"], "text");
+        assert!(arr[0]["text"].as_str().unwrap().contains("vision-capable"));
     }
 
     #[test]
@@ -374,7 +454,9 @@ mod tests {
 
     #[test]
     fn deepseek_enhances_invalid_key() {
-        let hint = DeepSeekProvider.enhance_error(401, "Invalid API key").unwrap();
+        let hint = DeepSeekProvider
+            .enhance_error(401, "Invalid API key")
+            .unwrap();
         assert!(hint.contains("api_keys"));
     }
 
@@ -386,7 +468,9 @@ mod tests {
 
     #[test]
     fn deepseek_falls_back_to_context_overflow() {
-        let hint = DeepSeekProvider.enhance_error(400, "context_length_exceeded").unwrap();
+        let hint = DeepSeekProvider
+            .enhance_error(400, "context_length_exceeded")
+            .unwrap();
         assert!(hint.contains("compact") || hint.contains("上下文"));
     }
 }
