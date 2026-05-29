@@ -211,21 +211,91 @@ async fn cmd_serve(
     }
     eprintln!();
 
+    // SIGHUP 监听：收到信号清空内存缓存（session_affinity + provider runtime
+    // status），DB 里的 provider 配置每次请求都即时读，本来就热的。
+    #[cfg(unix)]
+    install_sighup_handler(db.clone());
+
     match agentgate_lib::gateway::server::start(host, port, db, tls).await {
         Ok((shutdown_tx, handle, _active_requests, _port)) => {
             eprintln!("Gateway running on {scheme}://{host}:{port}");
-            eprintln!("Press Ctrl+C to stop.");
+            eprintln!("Send SIGINT (Ctrl+C) or SIGTERM to stop. SIGHUP to reload caches.");
             eprintln!();
-            tokio::signal::ctrl_c().await.ok();
+            wait_shutdown_signal().await;
             eprintln!("\nShutting down (graceful, up to 30s)...");
+            tracing::info!("shutdown signal received, draining in-flight requests");
             let _ = shutdown_tx.send(());
             let _ = handle.await;
+            tracing::info!("server stopped");
         }
         Err(e) => {
             eprintln!("Failed to start: {}", e.message);
             if let Some(ref s) = e.suggestion { eprintln!("  {s}"); }
             std::process::exit(1);
         }
+    }
+}
+
+/// SIGHUP 热重载：清 session_affinity 内存缓存 + DB 里 provider_runtime_status
+/// 全部重置为 healthy。背景循环 task，永不退出（直到进程死）。
+/// provider 配置（base_url/api_key/model_mapping 等）本来每次请求查 DB 已经
+/// 即时生效，所以 SIGHUP 不需要触发 DB-side reload。
+#[cfg(unix)]
+fn install_sighup_handler(db: Arc<Mutex<rusqlite::Connection>>) {
+    tokio::spawn(async move {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut hup = match signal(SignalKind::hangup()) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to install SIGHUP handler — hot reload disabled");
+                return;
+            }
+        };
+        loop {
+            hup.recv().await;
+            tracing::info!("SIGHUP received, clearing runtime caches");
+            agentgate_lib::gateway::session_affinity::clear();
+            if let Ok(c) = db.lock() {
+                if let Err(e) = agentgate_lib::storage::provider_runtime_status::reset_all(&c) {
+                    tracing::warn!(error = %e.message, "SIGHUP: reset_all failed");
+                }
+            }
+            tracing::info!("SIGHUP reload complete");
+        }
+    });
+}
+
+/// 监听 shutdown 信号：unix 同时收 SIGINT + SIGTERM，window 走 ctrl-c。
+/// 任一信号到达就 return。
+async fn wait_shutdown_signal() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut term = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Failed to install SIGTERM handler: {e}");
+                let _ = tokio::signal::ctrl_c().await;
+                return;
+            }
+        };
+        let mut int = match signal(SignalKind::interrupt()) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("Failed to install SIGINT handler: {e}");
+                let _ = tokio::signal::ctrl_c().await;
+                return;
+            }
+        };
+        tokio::select! {
+            _ = term.recv() => tracing::info!("SIGTERM received"),
+            _ = int.recv() => tracing::info!("SIGINT received"),
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+        tracing::info!("Ctrl-C received");
     }
 }
 

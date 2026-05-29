@@ -105,9 +105,8 @@ pub fn lookup(session_id: &str) -> Option<AffinityEntry> {
     None
 }
 
-/// Clear all entries — exposed for tests. Production callers should rely on
-/// natural TTL expiry.
-#[cfg(test)]
+/// Clear all entries. Test 用，也用于 CLI SIGHUP 热重载 —— 让用户改完
+/// provider 配置后能立刻摆脱之前的 cache-hit affinity 偏好（不需要等 TTL）。
 pub fn clear() {
     let mut g = store().lock().unwrap_or_else(|e| e.into_inner());
     g.clear();
