@@ -28,7 +28,10 @@ const DEFAULTS: &[(&str, &str, f64, f64)] = &[
     ("openai", "o4-mini", 1.10, 4.40),
     // Anthropic
     ("anthropic", "claude-sonnet-4-6", 3.00, 15.00),
+    ("anthropic", "claude-sonnet-4-7", 3.00, 15.00),
     ("anthropic", "claude-opus-4-6", 15.00, 75.00),
+    ("anthropic", "claude-opus-4-7", 15.00, 75.00),
+    ("anthropic", "claude-opus-4-8", 15.00, 75.00),
     ("anthropic", "claude-haiku-4-5", 0.80, 4.00),
     // Kimi
     ("kimi", "kimi-k2", 1.00, 4.00),

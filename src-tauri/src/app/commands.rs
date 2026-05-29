@@ -1110,7 +1110,7 @@ pub fn apply_claude_code_config(state: State<'_, AppState>) -> Result<crate::too
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
     };
-    crate::tools::claude_code::apply_config(&host, port, "claude-sonnet-4-6")
+    crate::tools::claude_code::apply_config(&host, port, "claude-sonnet-4-7")
 }
 
 #[tauri::command]
@@ -1121,7 +1121,7 @@ pub fn toggle_claude_code_provider(state: State<'_, AppState>) -> Result<crate::
         storage::recommended_mappings::MappingProfile::ClaudeCode,
     );
     let settings = storage::gateway_settings::get(&conn)?;
-    crate::tools::claude_code::toggle_provider(&settings.host, settings.port, "claude-sonnet-4-6")
+    crate::tools::claude_code::toggle_provider(&settings.host, settings.port, "claude-sonnet-4-7")
 }
 
 #[tauri::command]
@@ -1134,7 +1134,7 @@ pub fn open_claude_code_config() -> Result<bool, AppError> {
 pub fn generate_claude_code_env(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
-    Ok(crate::tools::claude_code::generate_env_snippet(&settings.host, settings.port, "claude-sonnet-4-6"))
+    Ok(crate::tools::claude_code::generate_env_snippet(&settings.host, settings.port, "claude-sonnet-4-7"))
 }
 
 // ── OpenCode Commands ─────────────────────────────────────────

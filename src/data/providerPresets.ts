@@ -95,7 +95,7 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
   anthropic: {
     baseUrl: "https://api.anthropic.com",
     protocols: ["anthropic_messages"],
-    defaultModel: "claude-sonnet-4-6",
+    defaultModel: "claude-sonnet-4-7",
   },
   deepseek: {
     baseUrl: "https://api.deepseek.com",

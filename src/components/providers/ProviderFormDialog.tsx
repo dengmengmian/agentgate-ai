@@ -627,7 +627,7 @@ export function ProviderFormDialog({
                     <ModelCombo
                       value={newMappingClient}
                       onChange={(v) => setNewMappingClient(v)}
-                      models={["gpt-5.5","gpt-5.4","gpt-5.4-mini","gpt-5.3-codex","gpt-5.2","claude-sonnet-4-6","claude-opus-4-6","claude-haiku-4-5-20251001","o3","o4-mini","gemini-2.5-flash","gemini-2.5-pro","gemini-3-pro-preview"].filter(m => !(m in modelMapping))}
+                      models={["gpt-5.5","gpt-5.4","gpt-5.4-mini","gpt-5.3-codex","gpt-5.2","claude-sonnet-4-7","claude-sonnet-4-6","claude-opus-4-8","claude-opus-4-7","claude-opus-4-6","claude-haiku-4-5-20251001","o3","o4-mini","gemini-2.5-flash","gemini-2.5-pro","gemini-3-pro-preview"].filter(m => !(m in modelMapping))}
                       placeholder={t("providers.select_client_model")}
                     />
                     <button type="button" onClick={() => {

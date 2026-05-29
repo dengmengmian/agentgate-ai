@@ -7,7 +7,13 @@ use crate::models::provider::{CreateProviderInput, Provider};
 
 const CODEX_MODELS: &[&str] = &["gpt-5.5", "gpt-5.4", "gpt-5.3-codex", "gpt-5.2"];
 const CODEX_MINI_MODELS: &[&str] = &["gpt-5.4-mini"];
-const CLAUDE_PRIMARY_MODELS: &[&str] = &["claude-sonnet-4-6", "claude-opus-4-6"];
+const CLAUDE_PRIMARY_MODELS: &[&str] = &[
+    "claude-sonnet-4-6",
+    "claude-sonnet-4-7",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+];
 const CLAUDE_SMALL_MODELS: &[&str] = &["claude-haiku-4-5-20251001"];
 
 #[derive(Debug, Clone, Copy)]

@@ -104,7 +104,7 @@ fn provider_presets() -> std::collections::HashMap<&'static str, (&'static str, 
     [
         ("deepseek", ("https://api.deepseek.com", "deepseek-v4-pro")),
         ("openai", ("https://api.openai.com", "gpt-4o")),
-        ("anthropic", ("https://api.anthropic.com", "claude-sonnet-4-6")),
+        ("anthropic", ("https://api.anthropic.com", "claude-sonnet-4-7")),
         ("kimi", ("https://api.moonshot.cn", "kimi-k2")),
         ("minimax", ("https://api.minimax.chat", "MiniMax-M1")),
         ("groq", ("https://api.groq.com/openai", "llama-3.3-70b-versatile")),
