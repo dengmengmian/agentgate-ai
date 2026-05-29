@@ -30,8 +30,20 @@ export const MIMO_TOKEN_PLAN_ENDPOINTS: ProviderEndpointUrls = {
   anthropicBaseUrl: "https://token-plan-cn.xiaomimimo.com/anthropic",
 };
 
+export const MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION: Record<string, ProviderEndpointUrls> = {
+  cn: MIMO_TOKEN_PLAN_ENDPOINTS,
+  sgp: {
+    baseUrl: "https://token-plan-sgp.xiaomimimo.com/v1",
+    anthropicBaseUrl: "https://token-plan-sgp.xiaomimimo.com/anthropic",
+  },
+  ams: {
+    baseUrl: "https://token-plan-ams.xiaomimimo.com/v1",
+    anthropicBaseUrl: "https://token-plan-ams.xiaomimimo.com/anthropic",
+  },
+};
+
 const KNOWN_MIMO_ENDPOINTS = new Set(
-  [MIMO_PAYG_ENDPOINTS, MIMO_TOKEN_PLAN_ENDPOINTS].flatMap((urls) =>
+  [MIMO_PAYG_ENDPOINTS, ...Object.values(MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION)].flatMap((urls) =>
     [urls.baseUrl, urls.anthropicBaseUrl].filter(Boolean) as string[]
   )
 );
@@ -64,8 +76,39 @@ export function getMimoEndpointsForKey(apiKey?: string | null): ProviderEndpoint
   return null;
 }
 
+export function getMimoEndpointsForKeyAndUrl(
+  apiKey?: string | null,
+  baseUrl?: string | null,
+  anthropicBaseUrl?: string | null
+): ProviderEndpointUrls | null {
+  const key = firstApiKey(apiKey);
+  if (key.startsWith("sk-")) return MIMO_PAYG_ENDPOINTS;
+  if (!key.startsWith("tp-")) return null;
+  const region = getPreferredMimoTokenPlanRegion(baseUrl, anthropicBaseUrl);
+  return MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION[region] ?? MIMO_TOKEN_PLAN_ENDPOINTS;
+}
+
 export function isKnownMimoEndpointUrl(url?: string | null): boolean {
   return KNOWN_MIMO_ENDPOINTS.has(url?.trim() ?? "");
+}
+
+function getMimoTokenPlanRegion(url?: string | null): string | null {
+  const value = url?.trim().replace(/\/$/, "") ?? "";
+  for (const [region, endpoints] of Object.entries(MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION)) {
+    if (value === endpoints.baseUrl || value === endpoints.anthropicBaseUrl) {
+      return region;
+    }
+  }
+  return null;
+}
+
+function getPreferredMimoTokenPlanRegion(baseUrl?: string | null, anthropicBaseUrl?: string | null): string {
+  const baseRegion = getMimoTokenPlanRegion(baseUrl);
+  const anthropicRegion = getMimoTokenPlanRegion(anthropicBaseUrl);
+  if (baseRegion && (baseRegion !== "cn" || !anthropicRegion)) {
+    return baseRegion;
+  }
+  return anthropicRegion ?? baseRegion ?? "cn";
 }
 
 export function resolveProviderPresetForKey(
@@ -85,9 +128,13 @@ export function resolveProviderPresetForKey(
 
 export function resolveKnownProviderEndpoints(
   type: string,
-  apiKey?: string | null
+  apiKey?: string | null,
+  baseUrl?: string | null,
+  anthropicBaseUrl?: string | null
 ): ProviderEndpointUrls | null {
-  return isMimoProviderType(type) ? getMimoEndpointsForKey(apiKey) : null;
+  return isMimoProviderType(type)
+    ? getMimoEndpointsForKeyAndUrl(apiKey, baseUrl, anthropicBaseUrl)
+    : null;
 }
 
 export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {

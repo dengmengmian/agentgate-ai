@@ -1,6 +1,9 @@
 use reqwest::Client;
 use serde_json::Value;
+use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use crate::errors::AppError;
 use crate::models::provider::Provider;
@@ -8,6 +11,10 @@ use crate::protocol::chat_completions::ChatCompletionsRequest;
 
 /// Global round-robin counter for API key rotation.
 static KEY_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+/// Process-local cache of MiMo accounts whose Web Search Plugin is not
+/// available. This is an account/plugin capability, not a model capability.
+static MIMO_WEB_SEARCH_DISABLED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 /// Internal provider config used by the gateway.
 #[derive(Debug, Clone)]
@@ -281,67 +288,90 @@ pub async fn send_non_stream(
     request: &ChatCompletionsRequest,
 ) -> Result<Value, AppError> {
     let url = config.chat_completions_url();
-    let body = serde_json::to_value(request)
-        .map_err(|e| AppError::new("TRANSFORM_ERROR", format!("Failed to serialize request: {e}")))?;
 
     let mut last_err = None;
 
-    for attempt in 0..=MAX_RETRIES {
-        let mut req_builder = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", config.select_api_key()))
-            .header("Content-Type", "application/json");
+    'retry: for attempt in 0..=MAX_RETRIES {
+        let api_key = config.select_api_key().to_string();
+        let mut effective_request = request.clone();
+        maybe_strip_mimo_web_search_for_account(config, &api_key, &mut effective_request);
+        let mut body = serde_json::to_value(&effective_request)
+            .map_err(|e| AppError::new("TRANSFORM_ERROR", format!("Failed to serialize request: {e}")))?;
+        let mut degraded_web_search = false;
 
-        for (k, v) in &config.extra_headers {
-            req_builder = req_builder.header(k.as_str(), v.as_str());
-        }
+        'send_attempt: loop {
+            let mut req_builder = client
+                .post(&url)
+                .header("Authorization", format!("Bearer {api_key}"))
+                .header("Content-Type", "application/json");
 
-        let resp = match req_builder.json(&body).send().await {
-            Ok(r) => r,
-            Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
-                tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
-                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
-                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
-                continue;
+            for (k, v) in &config.extra_headers {
+                req_builder = req_builder.header(k.as_str(), v.as_str());
             }
-            Err(e) => {
-                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Failed to connect to provider: {e}")));
+
+            let resp = match req_builder.json(&body).send().await {
+                Ok(r) => r,
+                Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
+                    tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
+                    tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
+                    last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
+                        format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                    continue 'retry;
+                }
+                Err(e) => {
+                    return Err(AppError::new("PROVIDER_REQUEST_FAILED",
+                        format!("Failed to connect to provider: {e}")));
+                }
+            };
+
+            let status = resp.status();
+
+            if status.is_success() {
+                let body_text = resp.text().await.unwrap_or_default();
+                let sanitized = config.sanitize(&body_text);
+                return serde_json::from_str(&sanitized).map_err(|e| {
+                    AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse provider response: {e}"))
+                        .with_detail(truncate(&sanitized, 500))
+                });
             }
-        };
 
-        let status = resp.status();
-
-        if status.is_success() {
+            let status_code = status.as_u16();
+            let retry_after = parse_retry_after(&resp);
             let body_text = resp.text().await.unwrap_or_default();
             let sanitized = config.sanitize(&body_text);
-            return serde_json::from_str(&sanitized).map_err(|e| {
-                AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse provider response: {e}"))
-                    .with_detail(truncate(&sanitized, 500))
-            });
-        }
 
-        let status_code = status.as_u16();
-        let retry_after = parse_retry_after(&resp);
-        let body_text = resp.text().await.unwrap_or_default();
-        let sanitized = config.sanitize(&body_text);
+            if !degraded_web_search
+                && is_mimo_web_search_disabled_http(status_code, &sanitized)
+                && strip_mimo_web_search_tool(&mut effective_request)
+            {
+                remember_mimo_web_search_disabled_key(config, &api_key);
+                tracing::warn!(
+                    provider = %config.name,
+                    "MiMo Web Search Plugin unavailable; stripped web_search and retrying once"
+                );
+                body = serde_json::to_value(&effective_request).map_err(|e| {
+                    AppError::new("TRANSFORM_ERROR", format!("Failed to serialize degraded request: {e}"))
+                })?;
+                degraded_web_search = true;
+                continue 'send_attempt;
+            }
 
-        if is_retryable(status_code) && attempt < MAX_RETRIES {
-            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
-            tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
-            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-            last_err = Some(build_upstream_error(
+            if is_retryable(status_code) && attempt < MAX_RETRIES {
+                let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+                tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
+                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                last_err = Some(build_upstream_error(
+                    config, "UPSTREAM_NON_STREAM_ERROR",
+                    format!("Provider returned HTTP {status}"), status_code, &sanitized,
+                ));
+                continue 'retry;
+            }
+
+            return Err(build_upstream_error(
                 config, "UPSTREAM_NON_STREAM_ERROR",
                 format!("Provider returned HTTP {status}"), status_code, &sanitized,
             ));
-            continue;
         }
-
-        return Err(build_upstream_error(
-            config, "UPSTREAM_NON_STREAM_ERROR",
-            format!("Provider returned HTTP {status}"), status_code, &sanitized,
-        ));
     }
 
     Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
@@ -354,65 +384,180 @@ pub async fn send_stream(
     request: &ChatCompletionsRequest,
 ) -> Result<reqwest::Response, AppError> {
     let url = config.chat_completions_url();
-    let body = serde_json::to_value(request)
-        .map_err(|e| AppError::new("TRANSFORM_ERROR", format!("Failed to serialize request: {e}")))?;
 
     let mut last_err = None;
 
-    for attempt in 0..=MAX_RETRIES {
-        let mut req_builder = client
-            .post(&url)
-            .header("Authorization", format!("Bearer {}", config.select_api_key()))
-            .header("Content-Type", "application/json")
-            .header("Accept", "text/event-stream");
+    'retry: for attempt in 0..=MAX_RETRIES {
+        let api_key = config.select_api_key().to_string();
+        let mut effective_request = request.clone();
+        maybe_strip_mimo_web_search_for_account(config, &api_key, &mut effective_request);
+        let mut body = serde_json::to_value(&effective_request)
+            .map_err(|e| AppError::new("TRANSFORM_ERROR", format!("Failed to serialize request: {e}")))?;
+        let mut degraded_web_search = false;
 
-        for (k, v) in &config.extra_headers {
-            req_builder = req_builder.header(k.as_str(), v.as_str());
-        }
+        'send_attempt: loop {
+            let mut req_builder = client
+                .post(&url)
+                .header("Authorization", format!("Bearer {api_key}"))
+                .header("Content-Type", "application/json")
+                .header("Accept", "text/event-stream");
 
-        let resp = match req_builder.json(&body).send().await {
-            Ok(r) => r,
-            Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
-                tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
-                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
-                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
-                continue;
+            for (k, v) in &config.extra_headers {
+                req_builder = req_builder.header(k.as_str(), v.as_str());
             }
-            Err(e) => {
-                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Failed to connect to provider: {e}")));
+
+            let resp = match req_builder.json(&body).send().await {
+                Ok(r) => r,
+                Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
+                    tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
+                    tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
+                    last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
+                        format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                    continue 'retry;
+                }
+                Err(e) => {
+                    return Err(AppError::new("PROVIDER_REQUEST_FAILED",
+                        format!("Failed to connect to provider: {e}")));
+                }
+            };
+
+            let status = resp.status();
+            if status.is_success() {
+                return Ok(resp);
             }
-        };
 
-        let status = resp.status();
-        if status.is_success() {
-            return Ok(resp);
-        }
+            let status_code = status.as_u16();
+            let retry_after = parse_retry_after(&resp);
+            let body_text = resp.text().await.unwrap_or_default();
+            let sanitized = config.sanitize(&body_text);
 
-        let status_code = status.as_u16();
-        let retry_after = parse_retry_after(&resp);
-        let body_text = resp.text().await.unwrap_or_default();
-        let sanitized = config.sanitize(&body_text);
+            if !degraded_web_search
+                && is_mimo_web_search_disabled_http(status_code, &sanitized)
+                && strip_mimo_web_search_tool(&mut effective_request)
+            {
+                remember_mimo_web_search_disabled_key(config, &api_key);
+                tracing::warn!(
+                    provider = %config.name,
+                    "MiMo Web Search Plugin unavailable; stripped web_search and retrying stream once"
+                );
+                body = serde_json::to_value(&effective_request).map_err(|e| {
+                    AppError::new("TRANSFORM_ERROR", format!("Failed to serialize degraded request: {e}"))
+                })?;
+                degraded_web_search = true;
+                continue 'send_attempt;
+            }
 
-        if is_retryable(status_code) && attempt < MAX_RETRIES {
-            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
-            tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
-            tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-            last_err = Some(build_upstream_error(
+            if is_retryable(status_code) && attempt < MAX_RETRIES {
+                let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+                tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
+                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                last_err = Some(build_upstream_error(
+                    config, "UPSTREAM_STREAM_ERROR",
+                    format!("Provider returned HTTP {status}"), status_code, &sanitized,
+                ));
+                continue 'retry;
+            }
+
+            return Err(build_upstream_error(
                 config, "UPSTREAM_STREAM_ERROR",
                 format!("Provider returned HTTP {status}"), status_code, &sanitized,
             ));
-            continue;
         }
-
-        return Err(build_upstream_error(
-            config, "UPSTREAM_STREAM_ERROR",
-            format!("Provider returned HTTP {status}"), status_code, &sanitized,
-        ));
     }
 
     Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))
+}
+
+pub fn is_mimo_web_search_disabled_error(err: &AppError) -> bool {
+    let detail = err.detail.as_deref().unwrap_or("");
+    contains_mimo_web_search_disabled_marker(&err.message)
+        || contains_mimo_web_search_disabled_marker(detail)
+}
+
+pub fn strip_mimo_web_search_tool(request: &mut ChatCompletionsRequest) -> bool {
+    let Some(tools) = request.tools.as_mut() else {
+        return false;
+    };
+    let before = tools.len();
+    tools.retain(|tool| tool.get("type").and_then(|t| t.as_str()) != Some("web_search"));
+    let changed = tools.len() != before;
+    if tools.is_empty() {
+        request.tools = None;
+    }
+    changed
+}
+
+pub fn remember_mimo_web_search_disabled(config: &ProviderConfig) {
+    for api_key in &config.api_keys {
+        remember_mimo_web_search_disabled_key(config, api_key);
+    }
+}
+
+fn maybe_strip_mimo_web_search_for_account(
+    config: &ProviderConfig,
+    api_key: &str,
+    request: &mut ChatCompletionsRequest,
+) -> bool {
+    if !is_mimo_provider_type(&config.provider_type) || !chat_request_has_mimo_web_search(request) {
+        return false;
+    }
+    if is_mimo_token_plan(config, api_key) || is_mimo_web_search_disabled_cached(config, api_key) {
+        return strip_mimo_web_search_tool(request);
+    }
+    false
+}
+
+fn is_mimo_web_search_disabled_http(status: u16, body: &str) -> bool {
+    status == 400 && contains_mimo_web_search_disabled_marker(body)
+}
+
+fn contains_mimo_web_search_disabled_marker(text: &str) -> bool {
+    text.contains("webSearchEnabled is false")
+}
+
+fn chat_request_has_mimo_web_search(request: &ChatCompletionsRequest) -> bool {
+    request.tools.as_ref().is_some_and(|tools| {
+        tools.iter().any(|tool| tool.get("type").and_then(|t| t.as_str()) == Some("web_search"))
+    })
+}
+
+fn remember_mimo_web_search_disabled_key(config: &ProviderConfig, api_key: &str) {
+    if !is_mimo_provider_type(&config.provider_type) {
+        return;
+    }
+    let key = mimo_web_search_account_key(config, api_key);
+    let cache = MIMO_WEB_SEARCH_DISABLED.get_or_init(|| Mutex::new(HashSet::new()));
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(key);
+    }
+}
+
+fn is_mimo_web_search_disabled_cached(config: &ProviderConfig, api_key: &str) -> bool {
+    let Some(cache) = MIMO_WEB_SEARCH_DISABLED.get() else {
+        return false;
+    };
+    let key = mimo_web_search_account_key(config, api_key);
+    cache.lock().map(|guard| guard.contains(&key)).unwrap_or(false)
+}
+
+fn mimo_web_search_account_key(config: &ProviderConfig, api_key: &str) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    api_key.hash(&mut hasher);
+    format!(
+        "{}|{}|{:016x}",
+        config.provider_type.trim().to_ascii_lowercase(),
+        config.base_url.trim_end_matches('/').to_ascii_lowercase(),
+        hasher.finish()
+    )
+}
+
+fn is_mimo_token_plan(config: &ProviderConfig, api_key: &str) -> bool {
+    config.base_url.to_ascii_lowercase().contains("token-plan") || api_key.starts_with("tp-")
+}
+
+fn is_mimo_provider_type(provider_type: &str) -> bool {
+    let pt = provider_type.trim().to_ascii_lowercase();
+    pt == "mimo" || pt == "xiaomi" || pt.contains("mimo")
 }
 
 /// Send a non-streaming request to Claude Messages API with automatic retry.
@@ -726,6 +871,8 @@ fn truncate(s: &str, max: usize) -> String {
 mod tests {
     use super::*;
     use crate::models::provider::Provider;
+    use crate::protocol::chat_completions::ChatCompletionsRequest;
+    use serde_json::json;
 
     #[test]
     fn summarize_openresty_502() {
@@ -785,6 +932,29 @@ mod tests {
             is_active: true,
             created_at: "2024-01-01".to_string(),
             updated_at: "2024-01-01".to_string(),
+        }
+    }
+
+    fn chat_req_with_tools(tools: Vec<Value>) -> ChatCompletionsRequest {
+        ChatCompletionsRequest {
+            model: "mimo-v2.5-pro".into(),
+            messages: vec![],
+            tools: Some(tools),
+            tool_choice: None,
+            stream: false,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            thinking: None,
+            stream_options: None,
+            response_format: None,
+            reasoning_effort: None,
+            seed: None,
+            stop: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            parallel_tool_calls: None,
         }
     }
 
@@ -921,6 +1091,62 @@ mod tests {
         assert!(!result.contains("sk-secret1"));
         assert!(!result.contains("sk-secret2"));
         assert!(result.contains("sk-***REDACTED***"));
+    }
+
+    #[test]
+    fn mimo_strip_web_search_keeps_function_named_web_search() {
+        let mut req = chat_req_with_tools(vec![
+            json!({"type": "web_search"}),
+            json!({"type": "function", "function": {"name": "web_search"}}),
+        ]);
+
+        assert!(strip_mimo_web_search_tool(&mut req));
+        let tools = req.tools.expect("function tool should remain");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0]["type"], "function");
+        assert_eq!(tools[0]["function"]["name"], "web_search");
+    }
+
+    #[test]
+    fn mimo_token_plan_key_strips_web_search_before_send() {
+        let mut p = test_provider();
+        p.provider_type = "mimo".into();
+        p.api_key = Some("tp-plan-key".into());
+        p.base_url = "https://token-plan-cn.xiaomimimo.com/v1".into();
+        let config = ProviderConfig::from_provider(&p).unwrap();
+        let mut req = chat_req_with_tools(vec![json!({"type": "web_search"})]);
+
+        assert!(maybe_strip_mimo_web_search_for_account(&config, "tp-plan-key", &mut req));
+        assert!(req.tools.is_none());
+    }
+
+    #[test]
+    fn mimo_disabled_cache_strips_future_web_search_for_same_key() {
+        let mut p = test_provider();
+        p.provider_type = "mimo".into();
+        p.api_key = Some("sk-cache-disabled-test".into());
+        p.base_url = "https://api.xiaomimimo.com/v1".into();
+        let config = ProviderConfig::from_provider(&p).unwrap();
+        remember_mimo_web_search_disabled_key(&config, "sk-cache-disabled-test");
+
+        let mut req = chat_req_with_tools(vec![json!({"type": "web_search"})]);
+        assert!(maybe_strip_mimo_web_search_for_account(
+            &config,
+            "sk-cache-disabled-test",
+            &mut req
+        ));
+        assert!(req.tools.is_none());
+    }
+
+    #[test]
+    fn mimo_web_search_error_detection_uses_marker() {
+        let err = AppError::new(
+            "UPSTREAM_STREAM_ERROR",
+            "Provider returned HTTP 502: upstream emitted error event",
+        )
+        .with_detail("data: {\"error\":{\"message\":\"webSearchEnabled is false\"}}");
+
+        assert!(is_mimo_web_search_disabled_error(&err));
     }
 
     // ── Retry logic tests ──

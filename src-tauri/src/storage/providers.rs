@@ -87,6 +87,7 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Provider, AppError> {
 
 pub fn create(conn: &Connection, mut input: CreateProviderInput) -> Result<Provider, AppError> {
     crate::storage::provider_endpoints::apply_to_create_input(&mut input);
+    crate::storage::recommended_mappings::apply_to_create_input(&mut input);
 
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
@@ -122,7 +123,11 @@ pub fn create(conn: &Connection, mut input: CreateProviderInput) -> Result<Provi
     get_by_id(conn, &id)
 }
 
-pub fn update(conn: &Connection, id: &str, mut input: UpdateProviderInput) -> Result<Provider, AppError> {
+pub fn update(
+    conn: &Connection,
+    id: &str,
+    mut input: UpdateProviderInput,
+) -> Result<Provider, AppError> {
     let existing = get_by_id(conn, id)?;
     let now = chrono::Utc::now().to_rfc3339();
 
@@ -201,7 +206,10 @@ pub fn delete(conn: &Connection, id: &str) -> Result<bool, AppError> {
     conn.execute("DELETE FROM providers WHERE id = ?1", [id])?;
 
     // Clean up route_profile_providers references to this provider
-    conn.execute("DELETE FROM route_profile_providers WHERE provider_id = ?1", [id])?;
+    conn.execute(
+        "DELETE FROM route_profile_providers WHERE provider_id = ?1",
+        [id],
+    )?;
 
     if was_active {
         // Set next enabled provider as active
@@ -271,7 +279,11 @@ pub fn update_status(conn: &Connection, id: &str, status: &str) -> Result<(), Ap
     Ok(())
 }
 
-pub fn update_supports_vision(conn: &Connection, id: &str, supports_vision: bool) -> Result<(), AppError> {
+pub fn update_supports_vision(
+    conn: &Connection,
+    id: &str,
+    supports_vision: bool,
+) -> Result<(), AppError> {
     let now = chrono::Utc::now().to_rfc3339();
     conn.execute(
         "UPDATE providers SET supports_vision = ?1, updated_at = ?2 WHERE id = ?3",
@@ -280,7 +292,11 @@ pub fn update_supports_vision(conn: &Connection, id: &str, supports_vision: bool
     Ok(())
 }
 
-pub fn update_supports_cache(conn: &Connection, id: &str, supports_cache: bool) -> Result<(), AppError> {
+pub fn update_supports_cache(
+    conn: &Connection,
+    id: &str,
+    supports_cache: bool,
+) -> Result<(), AppError> {
     let now = chrono::Utc::now().to_rfc3339();
     conn.execute(
         "UPDATE providers SET supports_cache = ?1, updated_at = ?2 WHERE id = ?3",
@@ -289,7 +305,11 @@ pub fn update_supports_cache(conn: &Connection, id: &str, supports_cache: bool) 
     Ok(())
 }
 
-pub fn update_model_capabilities(conn: &Connection, id: &str, matrix_json: &str) -> Result<(), AppError> {
+pub fn update_model_capabilities(
+    conn: &Connection,
+    id: &str,
+    matrix_json: &str,
+) -> Result<(), AppError> {
     let now = chrono::Utc::now().to_rfc3339();
     conn.execute(
         "UPDATE providers SET model_capabilities = ?1, updated_at = ?2 WHERE id = ?3",
@@ -310,24 +330,28 @@ mod tests {
     }
 
     fn create_test_provider(conn: &Connection, name: &str) -> Provider {
-        create(conn, CreateProviderInput {
-            name: name.to_string(),
-            provider_type: "openai".to_string(),
-            base_url: "https://api.openai.com".to_string(),
-            api_key: Some("sk-test".to_string()),
-            default_model: "gpt-4".to_string(),
-            reasoning_model: None,
-            supported_models: None,
-            model_mapping: None,
-            extra_headers: None,
-            anthropic_base_url: None,
-            responses_base_url: None,
-            protocol: r#"["openai_chat_completions"]"#.to_string(),
-            timeout_seconds: Some(120),
-            auto_cache_control: None,
-            model_capabilities: None,
-            enabled: Some(true),
-        }).unwrap()
+        create(
+            conn,
+            CreateProviderInput {
+                name: name.to_string(),
+                provider_type: "openai".to_string(),
+                base_url: "https://api.openai.com".to_string(),
+                api_key: Some("sk-test".to_string()),
+                default_model: "gpt-4".to_string(),
+                reasoning_model: None,
+                supported_models: None,
+                model_mapping: None,
+                extra_headers: None,
+                anthropic_base_url: None,
+                responses_base_url: None,
+                protocol: r#"["openai_chat_completions"]"#.to_string(),
+                timeout_seconds: Some(120),
+                auto_cache_control: None,
+                model_capabilities: None,
+                enabled: Some(true),
+            },
+        )
+        .unwrap()
     }
 
     #[test]
@@ -351,6 +375,46 @@ mod tests {
     }
 
     #[test]
+    fn test_create_deepseek_fills_v4_defaults_before_mapping() {
+        let conn = setup_db();
+        let p = create(
+            &conn,
+            CreateProviderInput {
+                name: "DeepSeek CLI".to_string(),
+                provider_type: "deepseek".to_string(),
+                base_url: "https://api.deepseek.com".to_string(),
+                api_key: Some("sk-test".to_string()),
+                default_model: "deepseek-v4-flash".to_string(),
+                reasoning_model: None,
+                supported_models: None,
+                model_mapping: None,
+                extra_headers: None,
+                anthropic_base_url: None,
+                responses_base_url: None,
+                protocol: r#"["openai_chat_completions"]"#.to_string(),
+                timeout_seconds: Some(120),
+                auto_cache_control: None,
+                model_capabilities: None,
+                enabled: Some(true),
+            },
+        )
+        .unwrap();
+        assert_eq!(p.reasoning_model.as_deref(), Some("deepseek-v4-pro"));
+        assert_eq!(
+            p.supported_models.as_deref(),
+            Some(r#"["deepseek-v4-flash","deepseek-v4-pro"]"#)
+        );
+        assert_eq!(
+            p.anthropic_base_url.as_deref(),
+            Some("https://api.deepseek.com/anthropic")
+        );
+        let mapping: serde_json::Value =
+            serde_json::from_str(p.model_mapping.as_deref().unwrap()).unwrap();
+        assert_eq!(mapping["gpt-5.5"], "deepseek-v4-pro");
+        assert_eq!(mapping["gpt-5.4-mini"], "deepseek-v4-flash");
+    }
+
+    #[test]
     fn test_get_by_id_not_found() {
         let conn = setup_db();
         let err = get_by_id(&conn, "nonexistent").unwrap_err();
@@ -361,24 +425,29 @@ mod tests {
     fn test_update_provider() {
         let conn = setup_db();
         let p = create_test_provider(&conn, "Original");
-        let updated = update(&conn, &p.id, UpdateProviderInput {
-            name: Some("Updated".to_string()),
-            provider_type: None,
-            base_url: None,
-            api_key: None,
-            default_model: None,
-            reasoning_model: None,
-            supported_models: None,
-            model_mapping: None,
-            extra_headers: None,
-            anthropic_base_url: None,
-            responses_base_url: None,
-            auto_cache_control: None,
-            model_capabilities: None,
-            protocol: None,
-            timeout_seconds: None,
-            enabled: None,
-        }).unwrap();
+        let updated = update(
+            &conn,
+            &p.id,
+            UpdateProviderInput {
+                name: Some("Updated".to_string()),
+                provider_type: None,
+                base_url: None,
+                api_key: None,
+                default_model: None,
+                reasoning_model: None,
+                supported_models: None,
+                model_mapping: None,
+                extra_headers: None,
+                anthropic_base_url: None,
+                responses_base_url: None,
+                auto_cache_control: None,
+                model_capabilities: None,
+                protocol: None,
+                timeout_seconds: None,
+                enabled: None,
+            },
+        )
+        .unwrap();
         assert_eq!(updated.name, "Updated");
     }
 

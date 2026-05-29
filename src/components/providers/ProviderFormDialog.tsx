@@ -11,7 +11,7 @@ import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/common/Toast";
 import * as api from "@/lib/api";
 import { detectProviderType } from "@/lib/keyDetection";
-import { pickModels } from "@/lib/modelHeuristics";
+import { normalizeModelsForProvider, pickModelsForProvider } from "@/lib/modelHeuristics";
 import type {
   ProviderView,
   CreateProviderInput,
@@ -85,7 +85,7 @@ export function ProviderFormDialog({
     if (providerType !== "mimo") return;
     const key = (apiKeys[0] || "").trim();
     if (!key || (!key.startsWith("tp-") && !key.startsWith("sk-"))) return;
-    const target = resolveKnownProviderEndpoints(providerType, key);
+    const target = resolveKnownProviderEndpoints(providerType, key, baseUrl, anthropicBaseUrl);
     if (!target) return;
     if (isKnownMimoEndpointUrl(baseUrl) && baseUrl !== target.baseUrl) setBaseUrl(target.baseUrl);
     if ((!anthropicBaseUrl || isKnownMimoEndpointUrl(anthropicBaseUrl)) && anthropicBaseUrl !== target.anthropicBaseUrl) {
@@ -354,7 +354,8 @@ export function ProviderFormDialog({
                     if (Object.keys(saveInput).length > 0) {
                       await api.updateProvider(provider.id, saveInput);
                     }
-                    const models = await api.fetchProviderModels(provider.id);
+                    const fetchedModels = await api.fetchProviderModels(provider.id);
+                    const models = normalizeModelsForProvider(providerType, fetchedModels);
                     setSupportedModels(JSON.stringify(models));
                     // 拉完接着自动按模型名识别能力——一步到位
                     setSeedingCaps(true);
@@ -367,7 +368,7 @@ export function ProviderFormDialog({
                     } finally { setSeedingCaps(false); }
                     // 当前 default/reasoning 不在新拉到的列表里时，按 heuristic 自动选最新——避免
                     // preset 写死的 default（如 mimo-v2.5-pro）在上游上线新版本后还指向老版本
-                    const picked = pickModels(models);
+                    const picked = pickModelsForProvider(providerType, models);
                     if (!defaultModel || !models.includes(defaultModel)) setDefaultModel(picked.default);
                     if (!reasoningModel || !models.includes(reasoningModel)) setReasoningModel(picked.reasoning);
                   } catch (err) { toast("error", (err as api.AppError).message); }

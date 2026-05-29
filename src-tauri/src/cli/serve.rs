@@ -16,7 +16,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 #[derive(Parser)]
-#[command(name = "agentgate", about = "AgentGate — Local AI gateway for coding agents", version)]
+#[command(
+    name = "agentgate",
+    about = "AgentGate — Local AI gateway for coding agents",
+    version
+)]
 struct Cli {
     /// Database directory path
     #[arg(long, global = true, env = "AGENTGATE_DB_PATH")]
@@ -200,17 +204,43 @@ fn open_db(cli: &Cli) -> rusqlite::Connection {
 /// Provider type presets: (base_url, default_model)
 fn provider_presets() -> std::collections::HashMap<&'static str, (&'static str, &'static str)> {
     [
-        ("deepseek", ("https://api.deepseek.com", "deepseek-v4-pro")),
+        (
+            "deepseek",
+            ("https://api.deepseek.com", "deepseek-v4-flash"),
+        ),
         ("openai", ("https://api.openai.com", "gpt-4o")),
-        ("anthropic", ("https://api.anthropic.com", "claude-sonnet-4-7")),
+        (
+            "anthropic",
+            ("https://api.anthropic.com", "claude-sonnet-4-7"),
+        ),
         ("kimi", ("https://api.moonshot.cn", "kimi-k2")),
         ("minimax", ("https://api.minimax.chat", "MiniMax-M1")),
-        ("groq", ("https://api.groq.com/openai", "llama-3.3-70b-versatile")),
-        ("together", ("https://api.together.xyz", "meta-llama/Llama-3.3-70B-Instruct-Turbo")),
-        ("google_gemini", ("https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash")),
+        (
+            "groq",
+            ("https://api.groq.com/openai", "llama-3.3-70b-versatile"),
+        ),
+        (
+            "together",
+            (
+                "https://api.together.xyz",
+                "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            ),
+        ),
+        (
+            "google_gemini",
+            (
+                "https://generativelanguage.googleapis.com/v1beta/openai",
+                "gemini-2.5-flash",
+            ),
+        ),
         ("xai", ("https://api.x.ai", "grok-3-latest")),
-        ("mistral", ("https://api.mistral.ai", "mistral-large-latest")),
-    ].into_iter().collect()
+        (
+            "mistral",
+            ("https://api.mistral.ai", "mistral-large-latest"),
+        ),
+    ]
+    .into_iter()
+    .collect()
 }
 
 /// 初始化结构化日志（JSON to stdout）。AGENTGATE_LOG env-filter 控制级别，
@@ -236,30 +266,83 @@ async fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::Serve { host, port, tls_cert, tls_key }) => {
-            cmd_serve(&cli, host, *port, tls_cert.clone(), tls_key.clone()).await
-        }
-        Some(Commands::ProviderAdd { r#type, name, api_key, base_url, model, active }) => {
-            cmd_provider_add(&cli, r#type, name.as_deref(), api_key, base_url.as_deref(), model.as_deref(), *active);
+        Some(Commands::Serve {
+            host,
+            port,
+            tls_cert,
+            tls_key,
+        }) => cmd_serve(&cli, host, *port, tls_cert.clone(), tls_key.clone()).await,
+        Some(Commands::ProviderAdd {
+            r#type,
+            name,
+            api_key,
+            base_url,
+            model,
+            active,
+        }) => {
+            cmd_provider_add(
+                &cli,
+                r#type,
+                name.as_deref(),
+                api_key,
+                base_url.as_deref(),
+                model.as_deref(),
+                *active,
+            );
         }
         Some(Commands::ProviderList) => cmd_provider_list(&cli),
         Some(Commands::ProviderRemove { name }) => cmd_provider_remove(&cli, name),
         Some(Commands::Token) => cmd_token(),
         Some(Commands::TokenRegen) => cmd_token_regen(),
         Some(Commands::Status) => cmd_status(&cli),
-        Some(Commands::ProviderUpdate { name, api_key, base_url, model, anthropic_url, responses_url, enabled }) => {
-            cmd_provider_update(&cli, name, api_key.as_deref(), base_url.as_deref(), model.as_deref(),
-                anthropic_url.as_deref(), responses_url.as_deref(), *enabled);
+        Some(Commands::ProviderUpdate {
+            name,
+            api_key,
+            base_url,
+            model,
+            anthropic_url,
+            responses_url,
+            enabled,
+        }) => {
+            cmd_provider_update(
+                &cli,
+                name,
+                api_key.as_deref(),
+                base_url.as_deref(),
+                model.as_deref(),
+                anthropic_url.as_deref(),
+                responses_url.as_deref(),
+                *enabled,
+            );
         }
         Some(Commands::ProviderSetActive { name }) => cmd_provider_set_active(&cli, name),
-        Some(Commands::MappingAdd { provider, from, to }) => cmd_mapping_add(&cli, provider, from, to),
+        Some(Commands::MappingAdd { provider, from, to }) => {
+            cmd_mapping_add(&cli, provider, from, to)
+        }
         Some(Commands::MappingList { provider }) => cmd_mapping_list(&cli, provider.as_deref()),
-        Some(Commands::MappingRemove { provider, from }) => cmd_mapping_remove(&cli, provider, from),
-        Some(Commands::Logs { limit, client, provider, keyword, errors_only }) => {
-            cmd_logs(&cli, *limit, client.as_deref(), provider.as_deref(), keyword.as_deref(), *errors_only);
+        Some(Commands::MappingRemove { provider, from }) => {
+            cmd_mapping_remove(&cli, provider, from)
+        }
+        Some(Commands::Logs {
+            limit,
+            client,
+            provider,
+            keyword,
+            errors_only,
+        }) => {
+            cmd_logs(
+                &cli,
+                *limit,
+                client.as_deref(),
+                provider.as_deref(),
+                keyword.as_deref(),
+                *errors_only,
+            );
         }
         Some(Commands::Stats { days }) => cmd_stats(&cli, *days),
-        Some(Commands::HealthCheck { timeout, mark }) => cmd_health_check(&cli, *timeout, *mark).await,
+        Some(Commands::HealthCheck { timeout, mark }) => {
+            cmd_health_check(&cli, *timeout, *mark).await
+        }
         None => {
             // Default: serve. env-based TLS（用户不传子命令 + 仅靠 env 配置 TLS）。
             let host = std::env::var("AGENTGATE_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
@@ -290,7 +373,9 @@ async fn cmd_serve(
 
     let provider_count = {
         let c = db.lock().unwrap();
-        agentgate_lib::storage::providers::list_all(&c).map(|p| p.len()).unwrap_or(0)
+        agentgate_lib::storage::providers::list_all(&c)
+            .map(|p| p.len())
+            .unwrap_or(0)
     };
 
     // 只提供 cert 不提供 key（或反之）直接报错——避免用户以为 TLS 开了实际还是 HTTP。
@@ -309,8 +394,19 @@ async fn cmd_serve(
 
     eprintln!("AgentGate headless server");
     eprintln!("  Database:   {}", db_dir.display());
-    eprintln!("  Providers:  {}", if provider_count > 0 { format!("{provider_count} configured") } else { "none (use `agentgate provider-add` to configure)".to_string() });
-    eprintln!("  Token:      {}...{}", &token[..8.min(token.len())], &token[token.len().saturating_sub(4)..]);
+    eprintln!(
+        "  Providers:  {}",
+        if provider_count > 0 {
+            format!("{provider_count} configured")
+        } else {
+            "none (use `agentgate provider-add` to configure)".to_string()
+        }
+    );
+    eprintln!(
+        "  Token:      {}...{}",
+        &token[..8.min(token.len())],
+        &token[token.len().saturating_sub(4)..]
+    );
     if tls.is_some() {
         eprintln!("  TLS:        enabled (HTTPS)");
     }
@@ -335,7 +431,9 @@ async fn cmd_serve(
         }
         Err(e) => {
             eprintln!("Failed to start: {}", e.message);
-            if let Some(ref s) = e.suggestion { eprintln!("  {s}"); }
+            if let Some(ref s) = e.suggestion {
+                eprintln!("  {s}");
+            }
             std::process::exit(1);
         }
     }
@@ -404,7 +502,15 @@ async fn wait_shutdown_signal() {
     }
 }
 
-fn cmd_provider_add(cli: &Cli, provider_type: &str, name: Option<&str>, api_key: &str, base_url: Option<&str>, model: Option<&str>, active: bool) {
+fn cmd_provider_add(
+    cli: &Cli,
+    provider_type: &str,
+    name: Option<&str>,
+    api_key: &str,
+    base_url: Option<&str>,
+    model: Option<&str>,
+    active: bool,
+) {
     let conn = open_db(cli);
     let presets = provider_presets();
     let (default_url, default_model) = presets.get(provider_type).copied().unwrap_or(("", ""));
@@ -454,7 +560,10 @@ fn cmd_provider_add(cli: &Cli, provider_type: &str, name: Option<&str>, api_key:
             if active {
                 let _ = agentgate_lib::storage::providers::set_active(&conn, &p.id);
             }
-            println!("✓ Provider '{}' created (type: {}, model: {}, active: {})", label, provider_type, model, active);
+            println!(
+                "✓ Provider '{}' created (type: {}, model: {}, active: {})",
+                label, provider_type, model, active
+            );
         }
         Err(e) => {
             eprintln!("Failed to create provider: {}", e.message);
@@ -472,12 +581,20 @@ fn cmd_provider_list(cli: &Cli) {
         return;
     }
 
-    println!("{:<4} {:<20} {:<15} {:<35} {:<25} {}", "#", "Name", "Type", "Base URL", "Model", "Status");
+    println!(
+        "{:<4} {:<20} {:<15} {:<35} {:<25} {}",
+        "#", "Name", "Type", "Base URL", "Model", "Status"
+    );
     println!("{}", "-".repeat(110));
     for (i, p) in providers.iter().enumerate() {
         let active = if p.is_active { " *" } else { "" };
-        let key_status = if p.api_key.as_ref().map_or(false, |k| !k.is_empty()) { "✓ key" } else { "✗ no key" };
-        println!("{:<4} {:<20} {:<15} {:<35} {:<25} {}{}",
+        let key_status = if p.api_key.as_ref().map_or(false, |k| !k.is_empty()) {
+            "✓ key"
+        } else {
+            "✗ no key"
+        };
+        println!(
+            "{:<4} {:<20} {:<15} {:<35} {:<25} {}{}",
             i + 1,
             &p.name[..p.name.len().min(18)],
             &p.provider_type[..p.provider_type.len().min(13)],
@@ -496,14 +613,18 @@ fn cmd_provider_remove(cli: &Cli, name: &str) {
     let target = providers.iter().find(|p| p.name.eq_ignore_ascii_case(name));
 
     match target {
-        Some(p) => {
-            match agentgate_lib::storage::providers::delete(&conn, &p.id) {
-                Ok(_) => println!("✓ Provider '{}' removed", p.name),
-                Err(e) => { eprintln!("Failed: {}", e.message); std::process::exit(1); }
+        Some(p) => match agentgate_lib::storage::providers::delete(&conn, &p.id) {
+            Ok(_) => println!("✓ Provider '{}' removed", p.name),
+            Err(e) => {
+                eprintln!("Failed: {}", e.message);
+                std::process::exit(1);
             }
-        }
+        },
         None => {
-            eprintln!("Provider '{}' not found. Use `agentgate provider-list` to see all.", name);
+            eprintln!(
+                "Provider '{}' not found. Use `agentgate provider-list` to see all.",
+                name
+            );
             std::process::exit(1);
         }
     }
@@ -513,14 +634,20 @@ fn cmd_token() {
     let _ = agentgate_lib::security::local_token::ensure_token();
     match agentgate_lib::security::local_token::read_token() {
         Ok(token) => println!("{token}"),
-        Err(e) => { eprintln!("Failed to read token: {}", e.message); std::process::exit(1); }
+        Err(e) => {
+            eprintln!("Failed to read token: {}", e.message);
+            std::process::exit(1);
+        }
     }
 }
 
 fn cmd_token_regen() {
     match agentgate_lib::security::local_token::regenerate_token() {
         Ok(token) => println!("✓ New token: {token}"),
-        Err(e) => { eprintln!("Failed: {}", e.message); std::process::exit(1); }
+        Err(e) => {
+            eprintln!("Failed: {}", e.message);
+            std::process::exit(1);
+        }
     }
 }
 
@@ -535,9 +662,16 @@ fn cmd_status(cli: &Cli) {
     println!("  Database:   {}", db_dir.display());
     println!("  Providers:  {} configured", providers.len());
     if let Some(a) = active {
-        println!("  Active:     {} ({} → {})", a.name, a.provider_type, a.default_model);
+        println!(
+            "  Active:     {} ({} → {})",
+            a.name, a.provider_type, a.default_model
+        );
     }
-    println!("  Token:      {}...{}", &token[..8.min(token.len())], &token[token.len().saturating_sub(4)..]);
+    println!(
+        "  Token:      {}...{}",
+        &token[..8.min(token.len())],
+        &token[token.len().saturating_sub(4)..]
+    );
 }
 
 fn cmd_provider_update(
@@ -631,10 +765,14 @@ fn cmd_mapping_list(cli: &Cli, provider_filter: Option<&str>) {
     let mut printed = 0usize;
     for p in &providers {
         if let Some(f) = provider_filter {
-            if p.name != f { continue; }
+            if p.name != f {
+                continue;
+            }
         }
         let map = parse_mapping(p.model_mapping.as_deref());
-        if map.is_empty() { continue; }
+        if map.is_empty() {
+            continue;
+        }
         println!("[{}]", p.name);
         // 排序输出，确定性
         let mut entries: Vec<_> = map.iter().collect();
@@ -691,12 +829,22 @@ fn parse_mapping(json: Option<&str>) -> std::collections::BTreeMap<String, Strin
 
 fn update_with_mapping(json: String) -> agentgate_lib::models::provider::UpdateProviderInput {
     agentgate_lib::models::provider::UpdateProviderInput {
-        name: None, provider_type: None, base_url: None, api_key: None,
-        default_model: None, reasoning_model: None, supported_models: None,
+        name: None,
+        provider_type: None,
+        base_url: None,
+        api_key: None,
+        default_model: None,
+        reasoning_model: None,
+        supported_models: None,
         model_mapping: Some(json),
-        extra_headers: None, anthropic_base_url: None, responses_base_url: None,
-        auto_cache_control: None, model_capabilities: None,
-        protocol: None, timeout_seconds: None, enabled: None,
+        extra_headers: None,
+        anthropic_base_url: None,
+        responses_base_url: None,
+        auto_cache_control: None,
+        model_capabilities: None,
+        protocol: None,
+        timeout_seconds: None,
+        enabled: None,
     }
 }
 
@@ -712,7 +860,11 @@ fn cmd_logs(
     let filter = agentgate_lib::models::request_log::RequestLogFilter {
         client: client.map(String::from),
         provider: provider.map(String::from),
-        status: if errors_only { Some("error".into()) } else { None },
+        status: if errors_only {
+            Some("error".into())
+        } else {
+            None
+        },
         keyword: keyword.map(String::from),
         limit: Some(limit),
         offset: None,
@@ -731,19 +883,34 @@ fn cmd_logs(
     }
 
     // 列：time / client / provider / model / route / status / latency
-    println!("{:<25} {:<14} {:<14} {:<22} {:<25} {:<7} {:>8}",
-        "TIMESTAMP", "CLIENT", "PROVIDER", "MODEL", "ROUTE", "STATUS", "LATENCY");
+    println!(
+        "{:<25} {:<14} {:<14} {:<22} {:<25} {:<7} {:>8}",
+        "TIMESTAMP", "CLIENT", "PROVIDER", "MODEL", "ROUTE", "STATUS", "LATENCY"
+    );
     for log in &logs {
         let ts = log.timestamp.chars().take(19).collect::<String>();
         let client = log.client.as_deref().unwrap_or("-");
         let provider = log.provider.as_deref().unwrap_or("-");
         let model = log.model.as_deref().unwrap_or("-");
         let route = log.route.as_deref().unwrap_or("-");
-        let status = log.status_code.map(|c| c.to_string()).unwrap_or_else(|| "-".into());
-        let latency = log.latency_ms.map(|l| format!("{l}ms")).unwrap_or_else(|| "-".into());
-        println!("{:<25} {:<14} {:<14} {:<22} {:<25} {:<7} {:>8}",
-            truncate(&ts, 25), truncate(client, 14), truncate(provider, 14),
-            truncate(model, 22), truncate(route, 25), status, latency);
+        let status = log
+            .status_code
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "-".into());
+        let latency = log
+            .latency_ms
+            .map(|l| format!("{l}ms"))
+            .unwrap_or_else(|| "-".into());
+        println!(
+            "{:<25} {:<14} {:<14} {:<22} {:<25} {:<7} {:>8}",
+            truncate(&ts, 25),
+            truncate(client, 14),
+            truncate(provider, 14),
+            truncate(model, 22),
+            truncate(route, 25),
+            status,
+            latency
+        );
         if let Some(ref err) = log.error_message {
             println!("  ⚠️  {}", truncate(err, 100));
         }
@@ -761,17 +928,26 @@ fn cmd_stats(cli: &Cli, days: i64) {
         }
     };
 
-    println!("AgentGate Stats (last {days} day{}, plus all-time)\n",
-        if days == 1 { "" } else { "s" });
+    println!(
+        "AgentGate Stats (last {days} day{}, plus all-time)\n",
+        if days == 1 { "" } else { "s" }
+    );
 
     println!("All-time:");
     println!("  Requests:        {}", stats.total);
-    println!("  Success:         {} ({:.1}%)", stats.success, stats.success_rate * 100.0);
+    println!(
+        "  Success:         {} ({:.1}%)",
+        stats.success,
+        stats.success_rate * 100.0
+    );
     println!("  Errors:          {}", stats.errors);
     println!("  Avg latency:     {}ms", stats.avg_latency_ms);
     println!("  Input tokens:    {}", stats.total_input_tokens);
     println!("  Output tokens:   {}", stats.total_output_tokens);
-    println!("  Cache R/W tokens:{} / {}", stats.total_cache_read_tokens, stats.total_cache_write_tokens);
+    println!(
+        "  Cache R/W tokens:{} / {}",
+        stats.total_cache_read_tokens, stats.total_cache_write_tokens
+    );
     println!("  Cost:            ${:.4}", stats.total_cost);
 
     println!("\nToday:");
@@ -783,11 +959,15 @@ fn cmd_stats(cli: &Cli, days: i64) {
 
     if !stats.daily.is_empty() {
         println!("\nDaily breakdown:");
-        println!("  {:<12} {:>8} {:>8} {:>10} {:>10} {:>10}",
-            "DATE", "TOTAL", "ERRORS", "IN_TOK", "OUT_TOK", "COST");
+        println!(
+            "  {:<12} {:>8} {:>8} {:>10} {:>10} {:>10}",
+            "DATE", "TOTAL", "ERRORS", "IN_TOK", "OUT_TOK", "COST"
+        );
         for d in &stats.daily {
-            println!("  {:<12} {:>8} {:>8} {:>10} {:>10} ${:>9.4}",
-                d.date, d.total, d.errors, d.input_tokens, d.output_tokens, d.cost);
+            println!(
+                "  {:<12} {:>8} {:>8} {:>10} {:>10} ${:>9.4}",
+                d.date, d.total, d.errors, d.input_tokens, d.output_tokens, d.cost
+            );
         }
     }
 
@@ -814,7 +994,10 @@ async fn cmd_health_check(cli: &Cli, timeout_secs: u64, mark: bool) {
         .build()
         .expect("build http client");
 
-    println!("{:<25} {:<14} {:<8} {:>10}  STATUS", "PROVIDER", "TYPE", "REACH", "LATENCY");
+    println!(
+        "{:<25} {:<14} {:<8} {:>10}  STATUS",
+        "PROVIDER", "TYPE", "REACH", "LATENCY"
+    );
     let mut unhealthy_count = 0;
     for p in &enabled {
         let start = std::time::Instant::now();
@@ -833,22 +1016,35 @@ async fn cmd_health_check(cli: &Cli, timeout_secs: u64, mark: bool) {
                 )
             }
             Err(e) => {
-                let kind = if e.is_timeout() { "timeout" }
-                    else if e.is_connect() { "connect-fail" }
-                    else { "net-err" };
+                let kind = if e.is_timeout() {
+                    "timeout"
+                } else if e.is_connect() {
+                    "connect-fail"
+                } else {
+                    "net-err"
+                };
                 ("down".to_string(), kind.to_string(), false)
             }
         };
-        println!("  {:<23} {:<14} {:<8} {:>8}ms  {}",
-            truncate(&p.name, 23), truncate(&p.provider_type, 14),
-            reach, latency_ms, status);
+        println!(
+            "  {:<23} {:<14} {:<8} {:>8}ms  {}",
+            truncate(&p.name, 23),
+            truncate(&p.provider_type, 14),
+            reach,
+            latency_ms,
+            status
+        );
 
         if mark {
             let result = if healthy {
                 agentgate_lib::storage::provider_runtime_status::mark_success(&conn, &p.id)
             } else {
                 agentgate_lib::storage::provider_runtime_status::mark_failure(
-                    &conn, &p.id, "HEALTH_CHECK_FAILED", &status, 300,
+                    &conn,
+                    &p.id,
+                    "HEALTH_CHECK_FAILED",
+                    &status,
+                    300,
                 )
             };
             if let Err(e) = result {
@@ -860,7 +1056,11 @@ async fn cmd_health_check(cli: &Cli, timeout_secs: u64, mark: bool) {
         }
     }
 
-    println!("\n{} provider(s), {} unhealthy.", enabled.len(), unhealthy_count);
+    println!(
+        "\n{} provider(s), {} unhealthy.",
+        enabled.len(),
+        unhealthy_count
+    );
     if unhealthy_count > 0 {
         std::process::exit(1);
     }

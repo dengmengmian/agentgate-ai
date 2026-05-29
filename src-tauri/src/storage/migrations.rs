@@ -109,37 +109,49 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     )?;
 
     // Migration: add supported_models column to providers
-    let has_sm: bool = conn.prepare("SELECT supported_models FROM providers LIMIT 0").is_ok();
+    let has_sm: bool = conn
+        .prepare("SELECT supported_models FROM providers LIMIT 0")
+        .is_ok();
     if !has_sm {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN supported_models TEXT;")?;
     }
 
     // Migration: add model_mapping column to providers
-    let has_mm: bool = conn.prepare("SELECT model_mapping FROM providers LIMIT 0").is_ok();
+    let has_mm: bool = conn
+        .prepare("SELECT model_mapping FROM providers LIMIT 0")
+        .is_ok();
     if !has_mm {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN model_mapping TEXT;")?;
     }
 
     // Migration: add extra_headers column to providers
-    let has_eh: bool = conn.prepare("SELECT extra_headers FROM providers LIMIT 0").is_ok();
+    let has_eh: bool = conn
+        .prepare("SELECT extra_headers FROM providers LIMIT 0")
+        .is_ok();
     if !has_eh {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN extra_headers TEXT;")?;
     }
 
     // Migration: add anthropic_base_url column to providers
-    let has_abu: bool = conn.prepare("SELECT anthropic_base_url FROM providers LIMIT 0").is_ok();
+    let has_abu: bool = conn
+        .prepare("SELECT anthropic_base_url FROM providers LIMIT 0")
+        .is_ok();
     if !has_abu {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN anthropic_base_url TEXT;")?;
     }
 
     // Migration: add supports_vision column to providers
-    let has_sv: bool = conn.prepare("SELECT supports_vision FROM providers LIMIT 0").is_ok();
+    let has_sv: bool = conn
+        .prepare("SELECT supports_vision FROM providers LIMIT 0")
+        .is_ok();
     if !has_sv {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN supports_vision INTEGER;")?;
     }
 
     // Migration: add responses_base_url column to providers
-    let has_rbu: bool = conn.prepare("SELECT responses_base_url FROM providers LIMIT 0").is_ok();
+    let has_rbu: bool = conn
+        .prepare("SELECT responses_base_url FROM providers LIMIT 0")
+        .is_ok();
     if !has_rbu {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN responses_base_url TEXT;")?;
     }
@@ -154,22 +166,28 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
             output_price REAL NOT NULL,
             is_custom INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT NOT NULL
-        )"
+        )",
     )?;
     // Populate defaults
     crate::storage::pricing::ensure_defaults(conn)?;
 
     // Migration: add cost column to request_logs
-    let has_cost: bool = conn.prepare("SELECT cost FROM request_logs LIMIT 0").is_ok();
+    let has_cost: bool = conn
+        .prepare("SELECT cost FROM request_logs LIMIT 0")
+        .is_ok();
     if !has_cost {
         conn.execute_batch("ALTER TABLE request_logs ADD COLUMN cost REAL;")?;
     }
     // Migration: add auto_cache_control and supports_cache columns
-    let has_acc: bool = conn.prepare("SELECT auto_cache_control FROM providers LIMIT 0").is_ok();
+    let has_acc: bool = conn
+        .prepare("SELECT auto_cache_control FROM providers LIMIT 0")
+        .is_ok();
     if !has_acc {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN auto_cache_control INTEGER;")?;
     }
-    let has_sc: bool = conn.prepare("SELECT supports_cache FROM providers LIMIT 0").is_ok();
+    let has_sc: bool = conn
+        .prepare("SELECT supports_cache FROM providers LIMIT 0")
+        .is_ok();
     if !has_sc {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN supports_cache INTEGER;")?;
     }
@@ -179,15 +197,21 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     // Routing layer uses this to pick the right model when request features (image/audio/...)
     // demand a capability the default_model lacks. Supersedes the per-provider supports_vision
     // flag for vision-aware routing while keeping it as a coarse summary.
-    let has_mc: bool = conn.prepare("SELECT model_capabilities FROM providers LIMIT 0").is_ok();
+    let has_mc: bool = conn
+        .prepare("SELECT model_capabilities FROM providers LIMIT 0")
+        .is_ok();
     if !has_mc {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN model_capabilities TEXT;")?;
     }
 
     // Migration: add routing_conditions to route_profile_providers
-    let has_rc: bool = conn.prepare("SELECT routing_conditions FROM route_profile_providers LIMIT 0").is_ok();
+    let has_rc: bool = conn
+        .prepare("SELECT routing_conditions FROM route_profile_providers LIMIT 0")
+        .is_ok();
     if !has_rc {
-        conn.execute_batch("ALTER TABLE route_profile_providers ADD COLUMN routing_conditions TEXT;")?;
+        conn.execute_batch(
+            "ALTER TABLE route_profile_providers ADD COLUMN routing_conditions TEXT;",
+        )?;
     }
 
     // Backfill cost for logs that have tokens but no cost (runs on every startup,
@@ -251,8 +275,9 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     }
 
     // Ensure gateway_settings has exactly one row
-    let count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM gateway_settings", [], |row| row.get(0))?;
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM gateway_settings", [], |row| {
+        row.get(0)
+    })?;
     if count == 0 {
         let now = chrono::Utc::now().to_rfc3339();
         conn.execute(
@@ -278,7 +303,10 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
 
     // Remove demo request logs seeded by older builds. Real gateway request IDs
     // are UUIDs, while these sample rows used a stable req-seed-* prefix.
-    conn.execute("DELETE FROM request_logs WHERE request_id LIKE 'req-seed-%'", [])?;
+    conn.execute(
+        "DELETE FROM request_logs WHERE request_id LIKE 'req-seed-%'",
+        [],
+    )?;
 
     // Seed default route profile on first run
     seed_default_route_profile(conn)?;
@@ -291,7 +319,7 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
             visible INTEGER NOT NULL DEFAULT 1,
             pos_x REAL NOT NULL DEFAULT 100.0,
             pos_y REAL NOT NULL DEFAULT 100.0
-        );"
+        );",
     )?;
     // Ensure pet_settings has exactly one row
     let pet_count: i64 =
@@ -355,15 +383,43 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         run_migrations(&conn).unwrap();
         let pet_type: String = conn
-            .query_row("SELECT pet_type FROM pet_settings WHERE id = 1", [], |r| r.get(0))
+            .query_row("SELECT pet_type FROM pet_settings WHERE id = 1", [], |r| {
+                r.get(0)
+            })
             .unwrap();
         assert_eq!(pet_type, "robot");
+    }
+
+    #[test]
+    fn run_migrations_seeds_deepseek_v4_provider() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        let (default_model, reasoning_model, supported_models, anthropic_base_url, protocol): (
+            String,
+            String,
+            String,
+            String,
+            String,
+        ) = conn
+            .query_row(
+                "SELECT default_model, reasoning_model, supported_models, anthropic_base_url, protocol FROM providers WHERE provider_type='deepseek'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .unwrap();
+        assert_eq!(default_model, "deepseek-v4-flash");
+        assert_eq!(reasoning_model, "deepseek-v4-pro");
+        assert_eq!(
+            supported_models,
+            r#"["deepseek-v4-flash","deepseek-v4-pro"]"#
+        );
+        assert_eq!(anthropic_base_url, "https://api.deepseek.com/anthropic");
+        assert!(protocol.contains("anthropic_messages"));
     }
 }
 
 fn seed_default_providers(conn: &Connection) -> Result<(), AppError> {
-    let count: i64 =
-        conn.query_row("SELECT COUNT(*) FROM providers", [], |row| row.get(0))?;
+    let count: i64 = conn.query_row("SELECT COUNT(*) FROM providers", [], |row| row.get(0))?;
     if count > 0 {
         return Ok(());
     }
@@ -371,8 +427,8 @@ fn seed_default_providers(conn: &Connection) -> Result<(), AppError> {
     let now = chrono::Utc::now().to_rfc3339();
 
     conn.execute(
-        "INSERT INTO providers (id, name, provider_type, base_url, default_model, reasoning_model, protocol, timeout_seconds, status, enabled, is_active, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 1, 1, ?10, ?10)",
+        "INSERT INTO providers (id, name, provider_type, base_url, default_model, reasoning_model, supported_models, anthropic_base_url, protocol, timeout_seconds, status, enabled, is_active, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1, 1, ?12, ?12)",
         rusqlite::params![
             uuid::Uuid::new_v4().to_string(),
             "DeepSeek",
@@ -380,7 +436,9 @@ fn seed_default_providers(conn: &Connection) -> Result<(), AppError> {
             "https://api.deepseek.com",
             "deepseek-v4-flash",
             "deepseek-v4-pro",
-            r#"["openai_chat_completions"]"#,
+            r#"["deepseek-v4-flash","deepseek-v4-pro"]"#,
+            "https://api.deepseek.com/anthropic",
+            r#"["openai_chat_completions","anthropic_messages"]"#,
             120,
             "not_tested",
             &now,
@@ -426,16 +484,30 @@ fn seed_default_route_profile(conn: &Connection) -> Result<(), AppError> {
     let now = chrono::Utc::now().to_rfc3339();
 
     let active_provider_id: Option<String> = conn
-        .query_row("SELECT id FROM providers WHERE is_active = 1 LIMIT 1", [], |row| row.get(0))
+        .query_row(
+            "SELECT id FROM providers WHERE is_active = 1 LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
         .ok();
 
-    let mut stmt = conn.prepare("SELECT id FROM providers WHERE enabled = 1 ORDER BY is_active DESC, created_at ASC")?;
-    let provider_ids: Vec<String> = stmt.query_map([], |row| row.get(0))?
+    let mut stmt = conn.prepare(
+        "SELECT id FROM providers WHERE enabled = 1 ORDER BY is_active DESC, created_at ASC",
+    )?;
+    let provider_ids: Vec<String> = stmt
+        .query_map([], |row| row.get(0))?
         .filter_map(|r| r.ok())
         .collect();
 
     let default_codes = serde_json::json!([402, 429, 500, 502, 503, 504]).to_string();
-    let default_kw = serde_json::json!(["quota", "insufficient balance", "rate limit", "too many requests", "timeout"]).to_string();
+    let default_kw = serde_json::json!([
+        "quota",
+        "insufficient balance",
+        "rate limit",
+        "too many requests",
+        "timeout"
+    ])
+    .to_string();
 
     // Seed one default profile per protocol (skip if already exists for that protocol)
     let profiles = [
@@ -447,7 +519,8 @@ fn seed_default_route_profile(conn: &Connection) -> Result<(), AppError> {
     for (name, protocol) in profiles {
         let exists: i64 = conn.query_row(
             "SELECT COUNT(*) FROM route_profiles WHERE input_protocol = ?1",
-            [protocol], |row| row.get(0),
+            [protocol],
+            |row| row.get(0),
         )?;
         if exists > 0 {
             continue;

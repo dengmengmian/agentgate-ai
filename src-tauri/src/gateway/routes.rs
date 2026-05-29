@@ -614,30 +614,51 @@ async fn handle_non_stream_response(
 async fn handle_stream_response(
     state: GatewayState,
     config: ProviderConfig,
-    chat_req: crate::protocol::chat_completions::ChatCompletionsRequest,
+    mut chat_req: crate::protocol::chat_completions::ChatCompletionsRequest,
     request_id: String,
     raw_request: String,
-    converted_request: String,
+    mut converted_request: String,
     model: String,
     start: Instant,
     client_type: String,
     session_id: Option<String>,
     provider_id: String,
 ) -> Result<Response, GatewayError> {
-    let upstream_resp = adapter::send_stream(&state.http_client, &config, &chat_req).await;
+    let mut degraded_bootstrap_web_search = false;
+    let upstream_resp = loop {
+        let upstream_resp = adapter::send_stream(&state.http_client, &config, &chat_req).await;
+        match upstream_resp {
+            Ok(response) => {
+                // Bootstrap-validate the upstream stream: read the leading window
+                // before any byte reaches the client so HTTP-200-with-error-frame
+                // failures become a clean Err. MiMo can report paid web_search
+                // plugin failures here, so degrade before opening the client stream.
+                match crate::gateway::sse_bootstrap::bootstrap_detect(response).await {
+                    Ok(boot) => break Ok(boot),
+                    Err(e)
+                        if !degraded_bootstrap_web_search
+                            && adapter::is_mimo_web_search_disabled_error(&e)
+                            && adapter::strip_mimo_web_search_tool(&mut chat_req) =>
+                    {
+                        adapter::remember_mimo_web_search_disabled(&config);
+                        converted_request =
+                            serde_json::to_string_pretty(&chat_req).unwrap_or_default();
+                        degraded_bootstrap_web_search = true;
+                        tracing::warn!(
+                            provider = %config.name,
+                            "MiMo stream reported Web Search Plugin disabled in bootstrap; stripped web_search and retrying once"
+                        );
+                        continue;
+                    }
+                    Err(e) => break Err(e),
+                }
+            }
+            Err(err) => break Err(err),
+        }
+    };
 
     match upstream_resp {
-        Ok(response) => {
-            // Bootstrap-validate the upstream stream: read the leading window
-            // before any byte reaches the client so HTTP-200-with-error-frame
-            // failures (quota/ban/rate-limit emitted mid-stream by MiMo / GLM
-            // / DeepSeek) become a clean Err that triggers failover instead
-            // of a half-streamed broken response to the client.
-            let boot = match crate::gateway::sse_bootstrap::bootstrap_detect(response).await {
-                Ok(b) => b,
-                Err(e) => return Err(GatewayError(e)),
-            };
-
+        Ok(boot) => {
             let resp_id = format!("resp_{}", &request_id[4..]);
             let (tx, rx) = mpsc::channel::<String>(256);
 

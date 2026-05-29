@@ -23,7 +23,7 @@ All notable changes to this project will be documented in this file.
 
 ### 新增
 
-- **MiMo 按 key 类型自动选域名** —— `sk-*` 按量付费 key 使用 `api.xiaomimimo.com`，`tp-*` Token Plan key 使用 `token-plan-cn.xiaomimimo.com`；GUI 快速添加、首次向导、手动表单、后端 create/update、headless `provider-add` 都走同一套规则，避免 key 和 host 不匹配导致 401。
+- **MiMo 按 key 类型和 Token Plan 区域自动选域名** —— `sk-*` 按量付费 key 使用 `api.xiaomimimo.com`，`tp-*` Token Plan key 使用 `token-plan-{cn|sgp|ams}.xiaomimimo.com`；如果用户已经粘贴了 `sgp` / `ams` 订阅域名，GUI 快速添加、首次向导、手动表单、后端 create/update、headless `provider-add` 都会保持同一区域，避免 key、Chat host、Anthropic host 不匹配导致 401。
 - **MiMo / DeepSeek 推荐模型映射自动补齐** —— 创建 Provider、拉取模型、测试连接成功、应用 Codex / Claude Code 配置时自动补齐缺失映射。Codex 的 `gpt-*` 自动映射到对应上游模型；Claude Code 的 `claude-*` 默认映射到普通 MiMo / DeepSeek 模型，不再自动配置 `[1m]` 后缀。
 - **Provider 表单 3 段重构** —— 新手填表卡点：旧表单一上来 8+ 字段平铺加能力矩阵默认展开，跟用户脑里的"选个 Provider 粘 Key 就完事"模型不匹配。新结构：
   - Section A 基础：只露 type / name / api key（custom 类型才显式露 base_url）
@@ -147,8 +147,8 @@ don't 500 on us.
   - `mimo-v2.5-pro` / `mimo-v2.5` 思考态自动剥 `temperature`（上游强制 1.0）
   - `mimo-v2-omni` 自动剥 `web_search` builtin（该模型不支持联网搜索）
   - `tool_choice` 非 `auto` 值客户端剥除
-  - 友好错误提示：`webSearchEnabled is false` 400 → 提示用户去开通 Web Search Plugin
-  - Token-Plan host 自动切换：粘贴 `tp-*` key 时自动改用 `token-plan-cn.xiaomimimo.com`
+  - Web Search Plugin 自动降级：Token Plan 请求预先剥离 MiMo 原生 `web_search` builtin；按量付费 key 遇到 `webSearchEnabled is false` 时剥离并重试一次，进程内记忆该 key 的不可用状态
+  - Token-Plan host 按区域自动切换：粘贴 `tp-*` key 时默认使用 `token-plan-cn.xiaomimimo.com`；已配置 `sgp` / `ams` 时保持同一区域的 Chat 和 Anthropic host
   - 内置 MiMo 海外定价（v2.5-pro / v2.5 / v2-pro / v2-omni / v2-flash + TTS）
 - **Per-model capability matrix / 模型能力矩阵**
   - 新增 `model_capabilities` JSON 字段：`{"model": ["text", "vision", "reasoning", ...]}`

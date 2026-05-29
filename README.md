@@ -67,7 +67,7 @@ AgentGate is a **local model gateway** for AI coding agents. One entry point con
   - **International**: OpenAI, Anthropic (Claude), Google Gemini, xAI (Grok), Mistral, Groq, Together, Fireworks, Cerebras, Perplexity, Cohere
   - **Aggregator**: OpenRouter
   - **Custom**: any OpenAI-compatible endpoint (vLLM / Ollama / LiteLLM / local proxies)
-- MiMo first-class support: 5 chat models (`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`), multi-turn `reasoning_content` round-trip, `sk-*` and `tp-*` keys auto-route to the correct MiMo host, friendly `webSearchEnabled` error mapping
+- MiMo first-class support: 5 chat models (`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`), multi-turn `reasoning_content` round-trip, `sk-*` / `tp-*` keys auto-route to the correct Open API or Token Plan host, region-aware Token Plan URLs (`cn` / `sgp` / `ams`), and automatic `web_search` degradation when the paid plugin is unavailable
 - Claude Code passthrough for MiMo / DeepSeek uses ordinary provider model IDs by default; AgentGate no longer auto-configures `[1m]` suffixed models.
 - Route Profiles with multi-provider priority chains, auto-matched by protocol
 - Manual switching or automatic failover
@@ -537,7 +537,7 @@ Providers marked **Provider-specific handling** have dedicated transform code in
 
 | Provider | Type | Native Protocols | Provider-Specific Handling |
 |---|---|---|---|
-| Xiaomi MiMo | `mimo` | Chat + Anthropic | Multi-turn `reasoning_content` round-trip, `tp-*` host auto-routing, temperature strip in thinking mode, tool_choice non-auto strip, omni web_search strip, web_search builtin gated by matrix, friendly Web Search Plugin error hint |
+| Xiaomi MiMo | `mimo` | Chat + Anthropic | Multi-turn `reasoning_content` round-trip, region-aware `tp-*` host auto-routing, temperature strip in thinking mode, tool_choice non-auto strip, omni web_search strip, web_search builtin gated by matrix, Web Search Plugin auto-degrade / retry |
 | DeepSeek | `deepseek` | Chat + Anthropic | Image stripping (text-only models), reasoning injection, schema cleaning, message reordering |
 | Anthropic (Claude) | `anthropic` | Anthropic Messages (native) | `tool_use`/`tool_result`, `input_schema`, thinking budget, native cache_control |
 | OpenAI | `openai` | Chat + Responses | None (Responses passthrough or Chat conversion) |

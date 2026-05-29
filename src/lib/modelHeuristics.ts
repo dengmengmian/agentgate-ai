@@ -4,6 +4,17 @@
 const REASONING = /reasoner|reasoning|thinking|deep-?think|^o\d|-r\d|r1\b/i;
 const NON_PROD = /preview|beta|alpha|draft|legacy|deprecated|experimental/i;
 const SMALLER_VARIANT = /\b(mini|nano|light|tiny|small)\b/i;
+const DEEPSEEK_V4_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro"];
+
+function isDeepSeekProvider(providerType: string): boolean {
+  return providerType.trim().toLowerCase() === "deepseek";
+}
+
+export function normalizeModelsForProvider(providerType: string, models: string[]): string[] {
+  if (!isDeepSeekProvider(providerType)) return models;
+  const available = new Set(models.map((model) => model.trim().toLowerCase()));
+  return DEEPSEEK_V4_MODELS.filter((model) => available.has(model));
+}
 
 /// 把模型名里的数字段拆出来当版本号。日期形式（8 位连续数字）过滤掉，
 /// 不然 `claude-haiku-4-5-20251001` 会把 20251001 当成超大版本号排到最前。
@@ -56,4 +67,20 @@ export function pickModels(models: string[]): { default: string; reasoning: stri
   const def = standard[0] ?? sorted[0];
   const rsn = reasoning[0] ?? def;
   return { default: def, reasoning: rsn };
+}
+
+export function pickModelsForProvider(
+  providerType: string,
+  models: string[],
+): { default: string; reasoning: string } {
+  if (!isDeepSeekProvider(providerType)) return pickModels(models);
+
+  const normalized = normalizeModelsForProvider(providerType, models);
+  const defaultModel = normalized.includes("deepseek-v4-flash")
+    ? "deepseek-v4-flash"
+    : (normalized[0] ?? "");
+  const reasoningModel = normalized.includes("deepseek-v4-pro")
+    ? "deepseek-v4-pro"
+    : defaultModel;
+  return { default: defaultModel, reasoning: reasoningModel };
 }
