@@ -254,11 +254,9 @@ async fn process_choices(
             if !content.is_empty() {
                 let (text, thinking) = acc.think_splitter.process_chunk(content);
                 if let Some(ref tk) = thinking {
-                    if !*message_item_emitted {
-                        send(tx, &ev::output_item_added_message(&acc.msg_item_id, 0)).await;
-                        *message_item_emitted = true;
-                    }
-                    // 与 reasoning_content 字段同路：先 push 到 buffer，再 stream delta
+                    // reasoning 走自己的 reasoning_item，绝不开 message item
+                    // (Bug #5 修复：旧代码这里误发 output_item_added_message，
+                    //  reasoning 自己有 stream_reasoning_delta 内部处理 added)
                     if acc.reasoning_content.is_empty() {
                         acc.reasoning_content.push_str("**Thinking**\n\n");
                     }
@@ -271,11 +269,6 @@ async fn process_choices(
                         send(tx, &ev::content_part_added(&acc.msg_item_id, 0, 0)).await;
                         acc.text_content_started = true;
                         *message_item_emitted = true;
-                    } else if !acc.text_content_started {
-                        // message item 之前可能因 reasoning_content 提前 emit 过 added，
-                        // 但还没发 content_part.added——补一发。
-                        send(tx, &ev::content_part_added(&acc.msg_item_id, 0, 0)).await;
-                        acc.text_content_started = true;
                     }
                     *has_text = true;
                     acc.full_text.push_str(&text);
@@ -284,14 +277,13 @@ async fn process_choices(
             }
         }
 
-        // ── Reasoning content ──
+        // ── Reasoning content（独立字段，DeepSeek-R1 / o1 / GLM-Z1 用）──
+        // Bug #5 修复：删掉了"先 emit message added"那段冗余/错误代码——reasoning
+        // 完全独立于 message item，自己有 reasoning_item_id 由 stream_reasoning_delta
+        // 内部 emit `output_item_added_reasoning`。原代码误发 message added 导致纯
+        // reasoning 响应时 Codex 收到孤儿 message item.added 没有对应 done。
         if let Some(ref rc) = delta.reasoning_content {
             if !rc.is_empty() {
-                if !*message_item_emitted {
-                    send(tx, &ev::output_item_added_message(&acc.msg_item_id, 0)).await;
-                    *message_item_emitted = true;
-                }
-                // Inject "**Thinking**\n\n" header so Codex TUI shows reasoning
                 if acc.reasoning_content.is_empty() {
                     acc.reasoning_content.push_str("**Thinking**\n\n");
                 }
@@ -417,7 +409,12 @@ async fn process_choices(
                     tc.id = format!("call_{}_{}", acc.response_id.replace("resp_", ""), idx);
                 }
 
-                if !tc.emitted_added && !tc.name.is_empty() {
+                // Bug #6 修复：首个 chunk 看到这个 tool_call idx 就 emit added，
+                // 不再等 name 非空。某些上游（罕见但有）首块只发 id，name 后到——
+                // 旧版 gate 会一直不发 added，后续 arguments 也被 gate 掉，整个
+                // 调用静默丢失。name 后到时不重发 added，但 mimo2codex 也这么做
+                // （openToolCall 用 name ?? ""）。
+                if !tc.emitted_added {
                     let item_id = format!("fc_{}", tc.id);
                     let oi = acc.next_output_index;
                     acc.next_output_index += 1;
@@ -484,7 +481,18 @@ async fn finalize(
         // otherwise (non-streaming reasoning paths, providers that surface
         // reasoning only in the final chunk) allocate fresh — keeps
         // back-compat with consumers that don't subscribe to delta events.
-        let oi = acc.reasoning_output_index.unwrap_or(acc.next_output_index);
+        //
+        // Bug #8 修复：fallback 路径用独立 alloc（先 ++ 占位），不再与已经
+        // 被 tool_calls 抢过的 next_output_index 重叠——之前裸 unwrap_or 会
+        // 让 reasoning 与第一个 tool_call 拿到同一个 oi，Codex 报 item 冲突。
+        let oi = match acc.reasoning_output_index {
+            Some(oi) => oi,
+            None => {
+                let oi = acc.next_output_index;
+                acc.next_output_index += 1;
+                oi
+            }
+        };
         if acc.reasoning_output_index.is_some() {
             // Streamed: close out the summary text before the item.done.
             send(&tx, &ev::reasoning_summary_text_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content)).await;
@@ -528,12 +536,16 @@ async fn finalize(
     // Tool-call-only: no message item was emitted, no need to close it
 
     // Close tool calls (Bug #1: 用 tc.output_index，不是 idx + 1)
+    // Bug #7: arguments 校验 JSON 合法性，截断/cancel 时 salvage 成 "{}"。
+    // 不 salvage 的话半截 JSON 进 client history，下轮严格 provider 400。
     if has_tool_calls {
+        let finish = acc.finish_reason.as_deref();
         for (_, tc) in &acc.tool_calls {
+            let safe_args = salvage_tool_arguments(&tc.arguments, &tc.name, &tc.id, finish);
             let item_id = format!("fc_{}", tc.id);
             let oi = tc.output_index;
-            send(&tx, &ev::function_call_arguments_done(&item_id, oi, &tc.arguments)).await;
-            send(&tx, &ev::function_call_done(&item_id, oi, &tc.id, &tc.name, &tc.arguments, rc)).await;
+            send(&tx, &ev::function_call_arguments_done(&item_id, oi, &safe_args)).await;
+            send(&tx, &ev::function_call_done(&item_id, oi, &tc.id, &tc.name, &safe_args, rc)).await;
             // 累积 function_call item 进 envelope.output（Bug #4）
             acc.output_items.push(json!({
                 "id": item_id,
@@ -541,7 +553,7 @@ async fn finalize(
                 "status": "completed",
                 "call_id": tc.id,
                 "name": tc.name,
-                "arguments": tc.arguments,
+                "arguments": safe_args,
             }));
         }
     }
@@ -557,6 +569,46 @@ async fn finalize(
 
 async fn send(tx: &mpsc::Sender<String>, event: &str) {
     let _ = tx.send(event.to_string()).await;
+}
+
+/// Bug #7 修复：tool_call arguments 必须是合法 JSON。上游 finish_reason=length /
+/// 客户端 cancel / 网络断 都可能截断 arguments 留半截 JSON。原样塞回客户端 →
+/// 下轮 history 带病 → 严格 provider（OpenAI 等）400 "unexpected end of data"。
+/// salvage 成 "{}" 至少保证下轮不挂；空字符串透传（部分 tool 无参数）。
+fn salvage_tool_arguments(
+    raw: &str,
+    tool_name: &str,
+    call_id: &str,
+    finish_reason: Option<&str>,
+) -> String {
+    if raw.is_empty() {
+        return String::new();
+    }
+    if serde_json::from_str::<serde_json::Value>(raw).is_ok() {
+        return raw.to_string();
+    }
+    let reason = match finish_reason {
+        Some("length") => "stream truncated by length limit",
+        Some(fr) => return salvage_log_with_reason(raw, tool_name, call_id, fr),
+        None => "stream ended before arguments completed",
+    };
+    tracing::warn!(
+        tool = tool_name, call_id = call_id, len = raw.len(),
+        cause = reason,
+        preview = %raw.chars().take(80).collect::<String>(),
+        "tool_call arguments not valid JSON; salvaged to {{}}"
+    );
+    "{}".to_string()
+}
+
+fn salvage_log_with_reason(raw: &str, tool_name: &str, call_id: &str, finish_reason: &str) -> String {
+    tracing::warn!(
+        tool = tool_name, call_id = call_id, len = raw.len(),
+        cause = format!("finish_reason={finish_reason} before arguments completed"),
+        preview = %raw.chars().take(80).collect::<String>(),
+        "tool_call arguments not valid JSON; salvaged to {{}}"
+    );
+    "{}".to_string()
 }
 
 /// 发送一段 reasoning 增量。首次调用会顺手把 reasoning 的 output_item

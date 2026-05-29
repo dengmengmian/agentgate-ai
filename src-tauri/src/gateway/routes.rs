@@ -686,12 +686,26 @@ async fn handle_stream_response(
                             crate::gateway::session_store::store_turn(&acc.response_id, sent_messages, asst_msgs, rc);
                         }
 
+                        // Bug #9 修复：trace 加 finish_reason / reasoning_tokens /
+                        // truncated 字段，让 `agentgate logs` 能直接看出截断原因
+                        // （而不是猜是 max_tokens 还是 AgentGate 自己挂了）。
+                        let reasoning_tokens = acc.usage.as_ref()
+                            .and_then(|u| u.get("output_tokens_details"))
+                            .and_then(|d| d.get("reasoning_tokens"))
+                            .and_then(|v| v.as_i64());
+                        let truncated = matches!(
+                            acc.finish_reason.as_deref(),
+                            Some("length") | Some("max_tokens")
+                        );
                         let trace = serde_json::json!({
                             "response_id": &acc.response_id,
                             "stream": true,
                             "text_len": acc.full_text.len(),
                             "tool_calls_count": tc_list.len(),
                             "reasoning_len": acc.reasoning_content.len(),
+                            "finish_reason": acc.finish_reason.as_deref(),
+                            "reasoning_tokens": reasoning_tokens,
+                            "truncated": truncated,
                         }).to_string();
                         // Extract tokens from SSE usage
                         let (in_tok, out_tok) = acc.usage.as_ref().map(|u| {
@@ -902,10 +916,18 @@ async fn handle_anthropic_stream_response(
 
                 match result {
                     Ok(()) => {
+                        // Bug #9 修复：anthropic stream 路径也加观测字段保持一致。
+                        // stop_reason 是 Anthropic 自己术语（end_turn/max_tokens/...）。
+                        let truncated = matches!(
+                            acc.stop_reason.as_deref(),
+                            Some("max_tokens") | Some("length")
+                        );
                         let trace = json!({
                             "response_id": &acc.response_id, "stream": true, "protocol": "anthropic_messages",
                             "text_len": acc.full_text.len(), "tool_calls_count": tc_list.len(),
                             "reasoning_len": acc.reasoning_content.len(),
+                            "stop_reason": acc.stop_reason.as_deref(),
+                            "truncated": truncated,
                         }).to_string();
                         let (in_tok, out_tok) = acc.usage.as_ref().map(|u| {
                             (u.get("input_tokens").and_then(|v| v.as_i64()),
