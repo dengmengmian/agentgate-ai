@@ -474,7 +474,7 @@ async fn handle_non_stream_response(
                                 .and_then(|c| c.get("message"))
                                 .and_then(|m| m.get("annotations"))
                                 .and_then(|a| a.as_array())
-                                .cloned()
+                                .map(|anns| crate::protocol::responses_events::normalize_annotations(anns))
                                 .unwrap_or_default();
                             let mut item = json!({
                                 "id": msg_id,

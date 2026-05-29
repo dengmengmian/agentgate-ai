@@ -81,10 +81,20 @@ pub fn output_text_done(item_id: &str, output_index: usize, content_index: usize
 }
 
 pub fn content_part_done(item_id: &str, output_index: usize, content_index: usize, text: &str) -> String {
+    content_part_done_with_annotations(item_id, output_index, content_index, text, &[])
+}
+
+pub fn content_part_done_with_annotations(
+    item_id: &str,
+    output_index: usize,
+    content_index: usize,
+    text: &str,
+    annotations: &[Value],
+) -> String {
     sse("response.content_part.done", json!({
         "type": "response.content_part.done",
         "item_id": item_id, "output_index": output_index, "content_index": content_index,
-        "part": { "type": "output_text", "text": text }
+        "part": { "type": "output_text", "text": text, "annotations": annotations }
     }))
 }
 
@@ -93,9 +103,9 @@ pub fn output_item_done_message(item_id: &str, output_index: usize, text: &str, 
 }
 
 /// Same as `output_item_done_message` but embeds web-search / citation
-/// annotations collected during streaming. `annotations` are pass-through —
-/// each entry is a JSON object with provider-defined shape (url, title,
-/// summary, publish_time, etc., per MiMo / OpenAI search-preview spec).
+/// annotations collected during streaming. Annotations should be normalized
+/// with [`normalize_annotation`] before they reach this function so Codex gets
+/// the `snippet` field it renders for MiMo/OpenAI-style URL citations.
 pub fn output_item_done_message_with_annotations(
     item_id: &str,
     output_index: usize,
@@ -109,6 +119,38 @@ pub fn output_item_done_message_with_annotations(
     });
     if let Some(rc) = reasoning_content { item["reasoning_content"] = json!(rc); }
     sse("response.output_item.done", json!({ "type": "response.output_item.done", "output_index": output_index, "item": item }))
+}
+
+/// Normalize provider citation payloads into the Responses/Codex annotation
+/// shape. MiMo sends `summary`; Codex renders `snippet`. Keep the canonical
+/// fields tight so final envelopes and streaming events match.
+pub fn normalize_annotation(annotation: &Value) -> Value {
+    let Some(obj) = annotation.as_object() else {
+        return annotation.clone();
+    };
+    let mut out = serde_json::Map::new();
+    out.insert(
+        "type".to_string(),
+        obj.get("type")
+            .cloned()
+            .unwrap_or_else(|| json!("url_citation")),
+    );
+    out.insert(
+        "url".to_string(),
+        obj.get("url").cloned().unwrap_or_else(|| json!("")),
+    );
+    out.insert(
+        "title".to_string(),
+        obj.get("title").cloned().unwrap_or_else(|| json!("")),
+    );
+    if let Some(snippet) = obj.get("snippet").or_else(|| obj.get("summary")) {
+        out.insert("snippet".to_string(), snippet.clone());
+    }
+    Value::Object(out)
+}
+
+pub fn normalize_annotations(annotations: &[Value]) -> Vec<Value> {
+    annotations.iter().map(normalize_annotation).collect()
 }
 
 /// Open a reasoning output_item placeholder. Emit this when the first reasoning
@@ -507,6 +549,24 @@ mod tests {
         assert!(s.starts_with("event: response.output_text.annotation.added"));
         assert!(s.contains("\"annotation_index\":2"));
         assert!(s.contains("https://example.com"));
+    }
+
+    #[test]
+    fn normalize_annotation_maps_summary_to_snippet() {
+        let ann = json!({
+            "type": "url_citation",
+            "url": "https://example.com",
+            "title": "Example",
+            "summary": "Relevant excerpt",
+            "publish_time": "ignored",
+        });
+        let normalized = normalize_annotation(&ann);
+        assert_eq!(normalized["type"], "url_citation");
+        assert_eq!(normalized["url"], "https://example.com");
+        assert_eq!(normalized["title"], "Example");
+        assert_eq!(normalized["snippet"], "Relevant excerpt");
+        assert!(normalized.get("summary").is_none());
+        assert!(normalized.get("publish_time").is_none());
     }
 
     #[test]

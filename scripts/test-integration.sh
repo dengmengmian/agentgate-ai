@@ -518,16 +518,23 @@ fi
 echo ""
 echo "--- Deep Verification: Pass-Through ---"
 if [ -n "$TOKEN" ]; then
+    pt_model="deepseek-chat"
+    if [ -f "$DB" ]; then
+        db_model=$(sqlite3 "$DB" "SELECT default_model FROM providers WHERE enabled=1 ORDER BY is_active DESC, updated_at DESC LIMIT 1" 2>/dev/null || true)
+        if [ -n "$db_model" ]; then
+            pt_model="$db_model"
+        fi
+    fi
     pt_status=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 -X POST "$BASE/v1/chat/completions" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d '{"model":"deepseek-chat","messages":[{"role":"user","content":"Reply OK"}],"max_tokens":5}' 2>/dev/null || echo "000")
+        -d "{\"model\":\"$pt_model\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply OK\"}],\"max_tokens\":5}" 2>/dev/null || echo "000")
 
     if [ "$pt_status" = "200" ]; then
-        green "  PASS  Chat Completions pass-through → 200"
+        green "  PASS  Chat Completions pass-through → 200 ($pt_model)"
         PASS=$((PASS + 1))
     else
-        red "  FAIL  Chat Completions pass-through → $pt_status"
+        red "  FAIL  Chat Completions pass-through → $pt_status ($pt_model)"
         FAIL=$((FAIL + 1))
     fi
 else

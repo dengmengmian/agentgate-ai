@@ -205,6 +205,35 @@ pub fn convert_tools_with_matrix(
                     }
                 }));
             }
+            "mcp" => {
+                log_dropped_mcp_tool(tool);
+            }
+            "tool_search" => {
+                // Codex Desktop's deferred tool discovery builtin is client-executed,
+                // but the upstream model still needs a callable function shape so it
+                // can ask Codex to reveal matching tools for the next turn.
+                let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or(
+                    "Search deferred local tool metadata and return matching tools.",
+                );
+                let params = tool.get("parameters").cloned().unwrap_or_else(|| json!({
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Search query for matching tools."
+                        }
+                    },
+                    "required": ["query"]
+                }));
+                result.push(json!({
+                    "type": "function",
+                    "function": {
+                        "name": "tool_search",
+                        "description": desc,
+                        "parameters": params,
+                    }
+                }));
+            }
             "web_search" | "web_search_preview" => {
                 if is_kimi {
                     // Kimi uses builtin_function/$web_search
@@ -234,6 +263,31 @@ pub fn convert_tools_with_matrix(
         }
     }
     dedupe_tools_by_name(result)
+}
+
+fn log_dropped_mcp_tool(tool: &Value) {
+    let label = tool
+        .get("server_label")
+        .or_else(|| tool.get("connector_id"))
+        .or_else(|| tool.get("server_url"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("(unnamed)");
+    if tool.get("connector_id").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).is_some() {
+        tracing::debug!(
+            label = %label,
+            "dropped OpenAI MCP connector tool; advisory system note will be injected"
+        );
+    } else if tool.get("server_url").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).is_some() {
+        tracing::warn!(
+            label = %label,
+            "dropped remote MCP tool; Chat Completions upstream does not support OpenAI MCP runtime"
+        );
+    } else {
+        tracing::warn!(
+            label = %label,
+            "dropped MCP tool without connector_id or server_url"
+        );
+    }
 }
 
 /// #1 修复：响应侧 namespace 工具还原。
@@ -686,6 +740,36 @@ mod tests {
         assert_eq!(result[0]["function"]["name"], "shell");
         assert!(result[0]["function"]["parameters"]["properties"]["command"].is_object());
         assert_eq!(result[0]["function"]["parameters"]["required"][0], "command");
+    }
+
+    #[test]
+    fn test_convert_tools_tool_search() {
+        let tools = vec![json!({
+            "type": "tool_search",
+            "description": "Search available deferred tools",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"]
+            }
+        })];
+        let result = convert_tools(&tools, false);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["type"], "function");
+        assert_eq!(result[0]["function"]["name"], "tool_search");
+        assert_eq!(result[0]["function"]["description"], "Search available deferred tools");
+        assert_eq!(result[0]["function"]["parameters"]["required"][0], "query");
+    }
+
+    #[test]
+    fn test_convert_tools_drops_mcp() {
+        let tools = vec![json!({
+            "type": "mcp",
+            "server_label": "GitHub",
+            "connector_id": "github"
+        })];
+        let result = convert_tools(&tools, false);
+        assert!(result.is_empty());
     }
 
     #[test]

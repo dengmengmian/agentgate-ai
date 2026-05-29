@@ -60,6 +60,7 @@ pub fn convert_with_provider_matrix(
     let converted_tools = req.tools.as_ref().map(|t| {
         tool_calls::convert_tools_with_matrix(t, provider.clean_schemas(), provider.provider_type(), model, matrix)
     }).filter(|t| !t.is_empty());
+    inject_mcp_advisory_if_needed(&mut messages, req.tools.as_deref());
 
     // 4. Convert tool_choice
     let tool_choice = req.tool_choice.as_ref().map(tool_calls::convert_tool_choice);
@@ -426,6 +427,86 @@ fn flush_tool_calls(messages: &mut Vec<ChatMessage>, pending: &mut Vec<ToolCall>
         tool_call_id: None,
         name: None,
     });
+}
+
+fn inject_mcp_advisory_if_needed(messages: &mut Vec<ChatMessage>, tools: Option<&[Value]>) {
+    let Some(tools) = tools else { return; };
+    let labels = collect_dropped_mcp_labels(tools);
+    if labels.is_empty() {
+        return;
+    }
+    let note = build_mcp_advisory_note(&labels);
+    let insert_at = messages.iter().take_while(|m| m.role == "system").count();
+    messages.insert(insert_at, ChatMessage {
+        role: "system".to_string(),
+        content: Some(Value::String(note)),
+        reasoning_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        name: None,
+    });
+}
+
+fn collect_dropped_mcp_labels(tools: &[Value]) -> Vec<String> {
+    let mut labels = Vec::new();
+    for tool in tools {
+        if tool.get("type").and_then(|t| t.as_str()) != Some("mcp") {
+            continue;
+        }
+        let label = tool
+            .get("server_label")
+            .or_else(|| tool.get("connector_id"))
+            .or_else(|| tool.get("server_url"))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("unnamed MCP tool");
+        labels.push(label.to_string());
+    }
+    labels.sort();
+    labels.dedup();
+    labels
+}
+
+fn build_mcp_advisory_note(labels: &[String]) -> String {
+    let list = labels.iter().map(|l| format!("\"{l}\"")).collect::<Vec<_>>().join(", ");
+    let mut note = format!(
+        "AgentGate note: the user has OpenAI Responses MCP connector tool(s) enabled ({list}), \
+         but this request is being converted to Chat Completions for the upstream provider. \
+         That upstream does not implement OpenAI's MCP runtime, so these MCP connector tools are not callable here. \
+         Do not pretend to call them. If the user asks for one of those connectors, explain that it is unavailable through this converted route and use an available shell/function alternative only if one is actually present."
+    );
+
+    let hints = connector_cli_hints(labels);
+    if !hints.is_empty() {
+        note.push_str(" Suggested command-line alternatives: ");
+        note.push_str(&hints.join("; "));
+        note.push('.');
+    }
+    note
+}
+
+fn connector_cli_hints(labels: &[String]) -> Vec<String> {
+    let mut hints = Vec::new();
+    for label in labels {
+        let lower = label.to_ascii_lowercase();
+        let hint = if lower.contains("github") {
+            Some("GitHub: gh")
+        } else if lower.contains("gmail") || lower.contains("google_drive") || lower.contains("google drive") || lower.contains("google-docs") || lower.contains("google docs") {
+            Some("Google/Gmail/Drive: rclone or Google's official CLI tools")
+        } else if lower.contains("dropbox") {
+            Some("Dropbox: rclone or dropbox CLI")
+        } else if lower.contains("canva") || lower.contains("heygen") {
+            Some("Canva/HeyGen: provider REST API via curl when the user supplies credentials")
+        } else {
+            None
+        };
+        if let Some(hint) = hint {
+            if !hints.iter().any(|h| h == hint) {
+                hints.push(hint.to_string());
+            }
+        }
+    }
+    hints
 }
 
 /// Flatten tool output to a string.
@@ -1156,6 +1237,37 @@ mod tests {
         let result = convert_with_provider(&req, "kimi-k2", &KimiProvider).unwrap();
         assert!(result.thinking.is_some());
         assert_eq!(result.thinking.unwrap()["type"], "disabled");
+    }
+
+    #[test]
+    fn test_mcp_tools_inject_advisory_without_chat_tool() {
+        let req = ResponsesRequest {
+            model: Some("gpt-4".to_string()),
+            input: json!("use github"),
+            instructions: Some("Be concise".to_string()),
+            system: None,
+            previous_response_id: None,
+            tools: Some(vec![json!({
+                "type": "mcp",
+                "server_label": "GitHub",
+                "connector_id": "github"
+            })]),
+            tool_choice: None,
+            stream: None,
+            temperature: None,
+            top_p: None,
+            max_output_tokens: None,
+            ..Default::default()
+        };
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
+        assert!(result.tools.is_none(), "MCP tools must not be sent as Chat tools");
+        assert_eq!(result.messages.len(), 2);
+        assert_eq!(result.messages[0].role, "system");
+        let sys = result.messages[0].content.as_ref().and_then(|v| v.as_str()).unwrap();
+        assert!(sys.contains("Be concise"));
+        assert!(sys.contains("GitHub"));
+        assert!(sys.contains("not callable"));
+        assert_eq!(result.messages[1].role, "user");
     }
 
     // ── apply_effort_overrides（env-driven，串行跑） ──

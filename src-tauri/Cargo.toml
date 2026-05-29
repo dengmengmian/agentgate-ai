@@ -15,6 +15,10 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "agentgate"
 path = "src/main.rs"
 
+[[bin]]
+name = "agentgate-serve"
+path = "src/cli/serve.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

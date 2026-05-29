@@ -335,6 +335,7 @@ async fn process_choices(
                 *message_item_emitted = true;
             }
             for ann in anns {
+                let ann = ev::normalize_annotation(ann);
                 let annotation_index = acc.annotations.len();
                 let oi = acc.msg_output_index.unwrap_or(0);
                 send(
@@ -344,11 +345,11 @@ async fn process_choices(
                         oi,
                         0,
                         annotation_index,
-                        ann,
+                        &ann,
                     ),
                 )
                 .await;
-                acc.annotations.push(ann.clone());
+                acc.annotations.push(ann);
             }
         }
 
@@ -561,7 +562,9 @@ async fn finalize(
             send(&tx, &ev::output_text_delta(&acc.msg_item_id, oi, 0, &extra)).await;
         }
         send(&tx, &ev::output_text_done(&acc.msg_item_id, oi, 0, &acc.full_text)).await;
-        send(&tx, &ev::content_part_done(&acc.msg_item_id, oi, 0, &acc.full_text)).await;
+        send(&tx, &ev::content_part_done_with_annotations(
+            &acc.msg_item_id, oi, 0, &acc.full_text, &acc.annotations,
+        )).await;
         send(&tx, &ev::output_item_done_message_with_annotations(
             &acc.msg_item_id, oi, &acc.full_text, rc, &acc.annotations,
         )).await;
@@ -885,7 +888,7 @@ mod tests {
     #[tokio::test]
     async fn annotations_open_message_before_annotation_event() {
         let prefix = concat!(
-            "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mimo-v2.5-pro\",\"choices\":[{\"index\":0,\"delta\":{\"annotations\":[{\"type\":\"url_citation\",\"url\":\"https://a.com\",\"title\":\"A\"}]},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mimo-v2.5-pro\",\"choices\":[{\"index\":0,\"delta\":{\"annotations\":[{\"type\":\"url_citation\",\"url\":\"https://a.com\",\"title\":\"A\",\"summary\":\"S\"}]},\"finish_reason\":null}]}\n\n",
             "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mimo-v2.5-pro\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"answer\"},\"finish_reason\":null}]}\n\n",
             "data: [DONE]\n\n"
         );
@@ -899,7 +902,10 @@ mod tests {
         assert!(content_added < annotation_added, "content part must open first");
         assert!(annotation_added < msg_done, "message item must close after annotation");
         assert!(events[annotation_added].contains("\"output_index\":0"));
+        assert!(events[annotation_added].contains("\"snippet\":\"S\""));
+        assert!(!events[annotation_added].contains("\"summary\""));
         assert_eq!(acc.msg_output_index, Some(0));
+        assert_eq!(acc.annotations[0]["snippet"], "S");
     }
 
     #[tokio::test]
