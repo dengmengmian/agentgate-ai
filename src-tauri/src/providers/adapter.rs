@@ -194,9 +194,11 @@ where
             Ok(r) => return Ok(r),
             Err(e) => {
                 if is_transient_net_err(&e) && attempt < max_retries {
-                    eprintln!(
-                        "[net-retry] transient send error attempt {}/{}: {e}",
-                        attempt + 1, max_retries,
+                    tracing::warn!(
+                        attempt = attempt + 1,
+                        max = max_retries,
+                        error = %e,
+                        "transient send error, retrying"
                     );
                     let backoff_ms = 200_u64 * (attempt as u64 + 1);
                     tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
@@ -297,7 +299,7 @@ pub async fn send_non_stream(
         let resp = match req_builder.json(&body).send().await {
             Ok(r) => r,
             Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
-                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
                 tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
                 last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
                     format!("Transient connect failure attempt {}: {e}", attempt + 1)));
@@ -327,7 +329,7 @@ pub async fn send_non_stream(
 
         if is_retryable(status_code) && attempt < MAX_RETRIES {
             let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
-            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             last_err = Some(build_upstream_error(
                 config, "UPSTREAM_NON_STREAM_ERROR",
@@ -371,7 +373,7 @@ pub async fn send_stream(
         let resp = match req_builder.json(&body).send().await {
             Ok(r) => r,
             Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
-                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
                 tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
                 last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
                     format!("Transient connect failure attempt {}: {e}", attempt + 1)));
@@ -395,7 +397,7 @@ pub async fn send_stream(
 
         if is_retryable(status_code) && attempt < MAX_RETRIES {
             let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
-            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             last_err = Some(build_upstream_error(
                 config, "UPSTREAM_STREAM_ERROR",
@@ -440,7 +442,7 @@ pub async fn send_anthropic_non_stream(
         let resp = match req_builder.json(body).send().await {
             Ok(r) => r,
             Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
-                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
                 tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
                 last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
                     format!("Transient connect failure attempt {}: {e}", attempt + 1)));
@@ -469,7 +471,7 @@ pub async fn send_anthropic_non_stream(
 
         if is_retryable(status_code) && attempt < MAX_RETRIES {
             let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
-            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             last_err = Some(AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Claude returned HTTP {status}"))
                 .with_detail(truncate(&sanitized, 2000)));
@@ -513,7 +515,7 @@ pub async fn send_anthropic_stream(
         let resp = match req_builder.json(body).send().await {
             Ok(r) => r,
             Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
-                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
                 tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
                 last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
                     format!("Transient connect failure attempt {}: {e}", attempt + 1)));
@@ -537,7 +539,7 @@ pub async fn send_anthropic_stream(
 
         if is_retryable(status_code) && attempt < MAX_RETRIES {
             let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
-            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             last_err = Some(AppError::new("UPSTREAM_STREAM_ERROR", format!("Claude returned HTTP {status}"))
                 .with_detail(truncate(&sanitized, 2000)));
@@ -573,7 +575,7 @@ pub async fn send_gemini_non_stream(
         {
             Ok(r) => r,
             Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
-                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
                 tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
                 last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
                     format!("Transient connect failure attempt {}: {e}", attempt + 1)));
@@ -602,7 +604,7 @@ pub async fn send_gemini_non_stream(
 
         if is_retryable(status_code) && attempt < MAX_RETRIES {
             let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
-            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             last_err = Some(AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Gemini returned HTTP {status}"))
                 .with_detail(truncate(&sanitized, 2000)));
@@ -637,7 +639,7 @@ pub async fn send_gemini_stream(
         {
             Ok(r) => r,
             Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
-                eprintln!("[net-retry] {url} attempt {}/{MAX_RETRIES}: {e}", attempt + 1);
+                tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
                 tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
                 last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
                     format!("Transient connect failure attempt {}: {e}", attempt + 1)));
@@ -661,7 +663,7 @@ pub async fn send_gemini_stream(
 
         if is_retryable(status_code) && attempt < MAX_RETRIES {
             let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
-            eprintln!("[retry] {url} HTTP {status_code}, attempt {}/{MAX_RETRIES}, waiting {wait}s", attempt + 1);
+            tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             last_err = Some(AppError::new("UPSTREAM_STREAM_ERROR", format!("Gemini returned HTTP {status}"))
                 .with_detail(truncate(&sanitized, 2000)));

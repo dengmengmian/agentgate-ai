@@ -36,6 +36,12 @@ enum Commands {
         /// Port to listen on
         #[arg(long, short, env = "AGENTGATE_PORT", default_value = "9090")]
         port: u16,
+        /// PEM-encoded TLS certificate file path. Provide both --tls-cert and --tls-key to enable HTTPS.
+        #[arg(long, env = "AGENTGATE_TLS_CERT")]
+        tls_cert: Option<PathBuf>,
+        /// PEM-encoded TLS private key file path.
+        #[arg(long, env = "AGENTGATE_TLS_KEY")]
+        tls_key: Option<PathBuf>,
     },
     /// Add a provider
     #[command(name = "provider-add")]
@@ -115,12 +121,32 @@ fn provider_presets() -> std::collections::HashMap<&'static str, (&'static str, 
     ].into_iter().collect()
 }
 
+/// 初始化结构化日志（JSON to stdout）。AGENTGATE_LOG env-filter 控制级别，
+/// 默认 info（含 reqwest=warn，避免每次请求一条 hyper trace）。
+/// 输出 schema: {timestamp, level, target, fields, message}。
+fn init_tracing() {
+    use tracing_subscriber::{fmt, EnvFilter};
+    let filter = EnvFilter::try_from_env("AGENTGATE_LOG")
+        .unwrap_or_else(|_| EnvFilter::new("info,reqwest=warn,hyper=warn,h2=warn,rustls=warn"));
+    fmt()
+        .with_env_filter(filter)
+        .json()
+        .with_current_span(false)
+        .with_span_list(false)
+        .with_target(true)
+        .flatten_event(true)
+        .init();
+}
+
 #[tokio::main]
 async fn main() {
+    init_tracing();
     let cli = Cli::parse();
 
     match &cli.command {
-        Some(Commands::Serve { host, port }) => cmd_serve(&cli, host, *port).await,
+        Some(Commands::Serve { host, port, tls_cert, tls_key }) => {
+            cmd_serve(&cli, host, *port, tls_cert.clone(), tls_key.clone()).await
+        }
         Some(Commands::ProviderAdd { r#type, name, api_key, base_url, model, active }) => {
             cmd_provider_add(&cli, r#type, name.as_deref(), api_key, base_url.as_deref(), model.as_deref(), *active);
         }
@@ -130,18 +156,26 @@ async fn main() {
         Some(Commands::TokenRegen) => cmd_token_regen(),
         Some(Commands::Status) => cmd_status(&cli),
         None => {
-            // Default: serve
+            // Default: serve. env-based TLS（用户不传子命令 + 仅靠 env 配置 TLS）。
             let host = std::env::var("AGENTGATE_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
             let port = std::env::var("AGENTGATE_PORT")
                 .ok()
                 .and_then(|value| value.parse::<u16>().ok())
                 .unwrap_or(9090);
-            cmd_serve(&cli, &host, port).await;
+            let tls_cert = std::env::var("AGENTGATE_TLS_CERT").ok().map(PathBuf::from);
+            let tls_key = std::env::var("AGENTGATE_TLS_KEY").ok().map(PathBuf::from);
+            cmd_serve(&cli, &host, port, tls_cert, tls_key).await;
         }
     }
 }
 
-async fn cmd_serve(cli: &Cli, host: &str, port: u16) {
+async fn cmd_serve(
+    cli: &Cli,
+    host: &str,
+    port: u16,
+    tls_cert: Option<PathBuf>,
+    tls_key: Option<PathBuf>,
+) {
     let db_dir = get_db_dir(cli);
     let conn = open_db(cli);
     let db = Arc::new(Mutex::new(conn));
@@ -154,19 +188,36 @@ async fn cmd_serve(cli: &Cli, host: &str, port: u16) {
         agentgate_lib::storage::providers::list_all(&c).map(|p| p.len()).unwrap_or(0)
     };
 
+    // 只提供 cert 不提供 key（或反之）直接报错——避免用户以为 TLS 开了实际还是 HTTP。
+    let tls = match (tls_cert, tls_key) {
+        (Some(c), Some(k)) => Some(agentgate_lib::gateway::server::TlsConfig {
+            cert_path: c,
+            key_path: k,
+        }),
+        (None, None) => None,
+        (Some(_), None) | (None, Some(_)) => {
+            eprintln!("Error: --tls-cert and --tls-key must be provided together");
+            std::process::exit(2);
+        }
+    };
+    let scheme = if tls.is_some() { "https" } else { "http" };
+
     eprintln!("AgentGate headless server");
     eprintln!("  Database:   {}", db_dir.display());
     eprintln!("  Providers:  {}", if provider_count > 0 { format!("{provider_count} configured") } else { "none (use `agentgate provider-add` to configure)".to_string() });
     eprintln!("  Token:      {}...{}", &token[..8.min(token.len())], &token[token.len().saturating_sub(4)..]);
+    if tls.is_some() {
+        eprintln!("  TLS:        enabled (HTTPS)");
+    }
     eprintln!();
 
-    match agentgate_lib::gateway::server::start(host, port, db).await {
+    match agentgate_lib::gateway::server::start(host, port, db, tls).await {
         Ok((shutdown_tx, handle, _active_requests, _port)) => {
-            eprintln!("Gateway running on http://{host}:{port}");
+            eprintln!("Gateway running on {scheme}://{host}:{port}");
             eprintln!("Press Ctrl+C to stop.");
             eprintln!();
             tokio::signal::ctrl_c().await.ok();
-            eprintln!("\nShutting down...");
+            eprintln!("\nShutting down (graceful, up to 30s)...");
             let _ = shutdown_tx.send(());
             let _ = handle.await;
         }

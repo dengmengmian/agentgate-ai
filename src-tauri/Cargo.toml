@@ -33,6 +33,9 @@ uuid = { version = "1", features = ["v4"] }
 reqwest = { version = "0.12", features = ["json", "stream", "gzip", "brotli", "zstd"] }
 tokio = { version = "1", features = ["full"] }
 axum = "0.7"
+# CLI/headless 生产部署需要 TLS：用 axum-server 替代 axum::serve，
+# 同时提供 HTTP / HTTPS 两条路径 + 优雅 shutdown（Handle::graceful_shutdown）。
+axum-server = { version = "0.7", features = ["tls-rustls"] }
 # 用于包装 axum Body 实现 active-requests 计数器（gateway/server.rs::CountingBody）。
 # transitively 通过 axum/reqwest 已经在依赖图里——这里显式声明只是稳定 API。
 http-body = "1"
@@ -49,3 +52,7 @@ rand = "0.9"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2"
 clap = { version = "4", features = ["derive", "env"] }
+# 结构化日志：CLI/headless 用 JSON 输出到 stdout（给 journalctl / docker logs 抓）。
+# GUI 模式不强制初始化。env: AGENTGATE_LOG（env-filter syntax）。
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter", "fmt"] }

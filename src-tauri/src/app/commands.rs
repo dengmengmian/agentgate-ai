@@ -697,9 +697,9 @@ pub async fn start_gateway(app_handle: tauri::AppHandle, state: State<'_, AppSta
         (settings.host, settings.port as u16)
     };
 
-    // Start real HTTP server
+    // Start real HTTP server. GUI 走纯 HTTP（127.0.0.1 本地通信，无 TLS 需求）。
     let (shutdown_tx, server_handle, active_requests, _bound_port) =
-        gateway::server::start(&host, port, state.db.clone()).await?;
+        gateway::server::start(&host, port, state.db.clone(), None).await?;
 
     // Update runtime state
     {

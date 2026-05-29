@@ -1,17 +1,31 @@
 use axum::body::Body;
 use axum::routing::{get, post};
 use axum::Router;
+use axum_server::tls_rustls::RustlsConfig;
 use http_body::{Body as HttpBody, Frame, SizeHint};
 use rusqlite::Connection;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
+use std::time::Duration;
 use tokio::sync::oneshot;
 
 use crate::errors::AppError;
 use crate::gateway::routes::{self, GatewayState};
+
+/// TLS 配置——同时提供 cert + key 文件路径才启 HTTPS，缺一退回 HTTP。
+#[derive(Clone, Debug)]
+pub struct TlsConfig {
+    pub cert_path: PathBuf,
+    pub key_path: PathBuf,
+}
+
+/// 优雅 shutdown 等 in-flight 完成的最大时长。SSE 长流式响应仍可能超时被切，
+/// 但 30s 给"正常 chat completion + 短 SSE"留够余地。
+const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// 包一层 Body，使 active-requests 计数器在 **body 真正流完**（或被
 /// drop——客户端断开）时才 decrement。
@@ -58,13 +72,18 @@ impl HttpBody for CountingBody {
     }
 }
 
-/// Start the gateway HTTP server. Returns shutdown sender, join handle,
+/// Start the gateway HTTP/HTTPS server. Returns shutdown sender, join handle,
 /// active-request counter, and the actually-bound port (useful when callers
 /// pass `port=0` to let the OS pick — integration tests rely on this).
+///
+/// `tls`: `Some` 启 HTTPS（用 rustls 加载 cert/key），`None` 启 HTTP。
+/// shutdown signal 通过 oneshot 接，内部桥接到 `axum_server::Handle`，触发
+/// 后等 `GRACEFUL_SHUTDOWN_TIMEOUT` in-flight 完成再强收。
 pub async fn start(
     host: &str,
     port: u16,
     db: Arc<Mutex<Connection>>,
+    tls: Option<TlsConfig>,
 ) -> Result<(oneshot::Sender<()>, tokio::task::JoinHandle<()>, Arc<AtomicU64>, u16), AppError> {
     let http_client = reqwest::Client::builder()
         // 不设 .timeout() —— 那是"整请求总时限"，对 streaming AI 请求语义错配：
@@ -125,7 +144,9 @@ pub async fn start(
         AppError::new("GATEWAY_BIND_ERROR", format!("Invalid address: {e}"))
     })?;
 
-    let listener = tokio::net::TcpListener::bind(addr).await.map_err(|e| {
+    // axum_server 接受 std::net::TcpListener。先用 std bind 拿到 bound_port（port=0
+    // 时 OS 才分配），set_nonblocking 让 tokio runtime 能 poll。
+    let std_listener = std::net::TcpListener::bind(addr).map_err(|e| {
         if e.kind() == std::io::ErrorKind::AddrInUse {
             AppError::new("GATEWAY_PORT_IN_USE", "Gateway port is already in use")
                 .with_detail(format!("{host}:{port}"))
@@ -136,22 +157,69 @@ pub async fn start(
             AppError::new("GATEWAY_BIND_ERROR", format!("Failed to bind: {e}"))
         }
     })?;
+    std_listener.set_nonblocking(true).map_err(|e| {
+        AppError::new("GATEWAY_BIND_ERROR", format!("set_nonblocking failed: {e}"))
+    })?;
 
-    let bound_port = listener
+    let bound_port = std_listener
         .local_addr()
         .map(|a| a.port())
         .unwrap_or(port);
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let server_handle = axum_server::Handle::new();
 
-    let handle = tokio::spawn(async move {
-        axum::serve(listener, app)
-            .with_graceful_shutdown(async {
-                let _ = shutdown_rx.await;
-            })
+    // 桥接 oneshot → axum_server::Handle::graceful_shutdown。
+    // shutdown_tx.send(()) 触发后，axum_server 停接新连接、等 in-flight 完成
+    // 直到 GRACEFUL_SHUTDOWN_TIMEOUT 再强切——比原 oneshot+5s 强杀 SSE 友好得多。
+    {
+        let sh = server_handle.clone();
+        tokio::spawn(async move {
+            let _ = shutdown_rx.await;
+            sh.graceful_shutdown(Some(GRACEFUL_SHUTDOWN_TIMEOUT));
+        });
+    }
+
+    let make_service = app.into_make_service();
+
+    tracing::info!(
+        host = %host,
+        port = bound_port,
+        tls = tls.is_some(),
+        "gateway listening"
+    );
+
+    let join_handle = if let Some(tls_cfg) = tls {
+        // HTTPS：加载 cert/key，启 axum_server with TLS
+        let rustls = RustlsConfig::from_pem_file(&tls_cfg.cert_path, &tls_cfg.key_path)
             .await
-            .ok();
-    });
+            .map_err(|e| {
+                AppError::new(
+                    "GATEWAY_TLS_LOAD_FAILED",
+                    format!("Failed to load TLS cert/key: {e}"),
+                )
+                .with_detail(format!(
+                    "cert={} key={}",
+                    tls_cfg.cert_path.display(),
+                    tls_cfg.key_path.display()
+                ))
+                .with_suggestion("Verify both files exist and are valid PEM-encoded")
+            })?;
+        tokio::spawn(async move {
+            let _ = axum_server::from_tcp_rustls(std_listener, rustls)
+                .handle(server_handle)
+                .serve(make_service)
+                .await;
+        })
+    } else {
+        // HTTP
+        tokio::spawn(async move {
+            let _ = axum_server::from_tcp(std_listener)
+                .handle(server_handle)
+                .serve(make_service)
+                .await;
+        })
+    };
 
-    Ok((shutdown_tx, handle, active_requests, bound_port))
+    Ok((shutdown_tx, join_handle, active_requests, bound_port))
 }
