@@ -105,19 +105,15 @@ pub fn convert_with_provider_matrix(
             _ => None,
         });
 
-    // A 修复：force_high_effort 兜底。env AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS
-    // 列出 provider_type 白名单（如 "mimo,deepseek,glm"），客户端没传 effort
-    // 时自动注 high。与 mimo2codex 的 forceHighEffort 等价。
+    // A/扩展修复：两层 effort 兜底，按激进程度从弱到强：
     //
-    // 现象：MiMo / DeepSeek-thinking 这类模型在 effort=medium 下 reasoning 后
-    // 偶发只输出一句"意图声明"就 stop（finish_reason=stop, output_tokens 很短）。
-    // 升 high 后倾向给更完整的 verbose 回复。
+    // 1. AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS（fill）—— 仅当客户端没传时补 high。
+    //    与 mimo2codex forceHighEffort 等价，不覆盖客户端意图。
+    // 2. AGENTGATE_EFFORT_FLOOR_PROVIDERS（floor）—— 客户端传 low/medium 也强制升 high。
+    //    覆盖客户端意图，最激进，针对 "Codex 显式传 medium 但模型仍偏好短回复" 场景。
     //
-    // 仅在客户端 None 时生效——客户端显式传 low/medium 是用户意图，不覆盖。
-    let reasoning_effort = match reasoning_effort {
-        Some(e) => Some(e),
-        None => maybe_force_high_effort(provider.provider_type()),
-    };
+    // 两个 env 独立，可同时配置不同 provider_type 列表。
+    let reasoning_effort = apply_effort_overrides(provider.provider_type(), reasoning_effort);
 
     // Convert text.format → response_format
     let response_format = req.text.as_ref()
@@ -647,14 +643,46 @@ pub fn split_think_tags(content: &str) -> (String, Option<String>) {
     }
 }
 
-/// 读 env `AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS`（逗号分隔 provider_type 白名单），
-/// 当前 provider 在列表内则返回 `Some("high")`，否则 None。
+/// 应用两层 effort env 覆盖。floor 优先（最激进，覆盖客户端）；fill 次之
+/// （仅 None 时补）。两层都不命中则返回原值。
 ///
-/// 用法示例：`AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS=mimo,deepseek`
-fn maybe_force_high_effort(provider_type: &str) -> Option<String> {
-    let raw = std::env::var("AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS").ok()?;
-    let matches = raw.split(',').any(|s| s.trim().eq_ignore_ascii_case(provider_type));
-    if matches { Some("high".to_string()) } else { None }
+/// env 配置示例：
+///   AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS=mimo,deepseek  # None → high
+///   AGENTGATE_EFFORT_FLOOR_PROVIDERS=mimo                # low/medium → high
+fn apply_effort_overrides(provider_type: &str, current: Option<String>) -> Option<String> {
+    // 1. floor 覆盖（先看，因为它对 Some/None 都生效）
+    if provider_in_env_list(provider_type, "AGENTGATE_EFFORT_FLOOR_PROVIDERS") {
+        let needs_lift = current
+            .as_deref()
+            .map(|e| effort_rank(e) < effort_rank("high"))
+            .unwrap_or(true); // None 也升
+        if needs_lift {
+            return Some("high".to_string());
+        }
+    }
+    // 2. fill 兜底（仅 None 时）
+    if current.is_none()
+        && provider_in_env_list(provider_type, "AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS")
+    {
+        return Some("high".to_string());
+    }
+    current
+}
+
+fn provider_in_env_list(provider_type: &str, env_var: &str) -> bool {
+    std::env::var(env_var)
+        .ok()
+        .map(|raw| raw.split(',').any(|s| s.trim().eq_ignore_ascii_case(provider_type)))
+        .unwrap_or(false)
+}
+
+fn effort_rank(effort: &str) -> u8 {
+    match effort.to_ascii_lowercase().as_str() {
+        "minimal" | "low" => 0,
+        "medium" => 1,
+        "high" => 2,
+        _ => 0,
+    }
 }
 
 /// 流式 `<think>...</think>` 切分器（有状态）。
@@ -1128,6 +1156,74 @@ mod tests {
         let result = convert_with_provider(&req, "kimi-k2", &KimiProvider).unwrap();
         assert!(result.thinking.is_some());
         assert_eq!(result.thinking.unwrap()["type"], "disabled");
+    }
+
+    // ── apply_effort_overrides（env-driven，串行跑） ──
+    // env 是进程全局，Rust 默认并行跑测试会让 set/remove 跨测试干扰。合成一个
+    // 测试串行跑各场景。
+    #[test]
+    fn apply_effort_overrides_covers_all_scenarios() {
+        // 1. floor 覆盖 low → high
+        std::env::set_var("AGENTGATE_EFFORT_FLOOR_PROVIDERS", "test_provider");
+        assert_eq!(
+            apply_effort_overrides("test_provider", Some("low".to_string())),
+            Some("high".to_string())
+        );
+
+        // 2. floor 覆盖 medium → high
+        assert_eq!(
+            apply_effort_overrides("test_provider", Some("medium".to_string())),
+            Some("high".to_string())
+        );
+
+        // 3. floor 不动 high
+        assert_eq!(
+            apply_effort_overrides("test_provider", Some("high".to_string())),
+            Some("high".to_string())
+        );
+
+        // 4. floor 覆盖 None → high
+        assert_eq!(
+            apply_effort_overrides("test_provider", None),
+            Some("high".to_string())
+        );
+
+        // 5. provider 大小写不敏感
+        std::env::set_var("AGENTGATE_EFFORT_FLOOR_PROVIDERS", "MiMo,DeepSeek");
+        assert_eq!(
+            apply_effort_overrides("mimo", Some("low".to_string())),
+            Some("high".to_string())
+        );
+
+        // 6. provider 不在 floor 列表 → 原值透传
+        assert_eq!(
+            apply_effort_overrides("not_in_list", Some("low".to_string())),
+            Some("low".to_string())
+        );
+
+        std::env::remove_var("AGENTGATE_EFFORT_FLOOR_PROVIDERS");
+
+        // 7. fill：客户端 None → 补 high
+        std::env::set_var("AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS", "test_fill");
+        assert_eq!(
+            apply_effort_overrides("test_fill", None),
+            Some("high".to_string())
+        );
+
+        // 8. fill：客户端传 low → 不覆盖
+        assert_eq!(
+            apply_effort_overrides("test_fill", Some("low".to_string())),
+            Some("low".to_string()),
+            "fill 仅在 None 时生效，不覆盖客户端 low"
+        );
+        std::env::remove_var("AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS");
+
+        // 9. 两 env 都不设：透传
+        assert_eq!(
+            apply_effort_overrides("anything", Some("low".to_string())),
+            Some("low".to_string())
+        );
+        assert_eq!(apply_effort_overrides("anything", None), None);
     }
 
     #[test]
