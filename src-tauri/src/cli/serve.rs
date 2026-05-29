@@ -163,6 +163,16 @@ enum Commands {
         #[arg(long, short, default_value = "7")]
         days: i64,
     },
+    /// Ping each enabled provider once and report health. Suitable for cron.
+    #[command(name = "health-check")]
+    HealthCheck {
+        /// Per-provider HTTP timeout seconds
+        #[arg(long, default_value = "10")]
+        timeout: u64,
+        /// Mark unhealthy providers in DB (sets cooldown)
+        #[arg(long)]
+        mark: bool,
+    },
 }
 
 fn get_db_dir(cli: &Cli) -> PathBuf {
@@ -249,6 +259,7 @@ async fn main() {
             cmd_logs(&cli, *limit, client.as_deref(), provider.as_deref(), keyword.as_deref(), *errors_only);
         }
         Some(Commands::Stats { days }) => cmd_stats(&cli, *days),
+        Some(Commands::HealthCheck { timeout, mark }) => cmd_health_check(&cli, *timeout, *mark).await,
         None => {
             // Default: serve. env-based TLS（用户不传子命令 + 仅靠 env 配置 TLS）。
             let host = std::env::var("AGENTGATE_HOST").unwrap_or_else(|_| "127.0.0.1".to_string());
@@ -785,6 +796,73 @@ fn cmd_stats(cli: &Cli, days: i64) {
         for p in &stats.providers {
             println!("  {:<25} {:>8}", truncate(&p.name, 25), p.count);
         }
+    }
+}
+
+async fn cmd_health_check(cli: &Cli, timeout_secs: u64, mark: bool) {
+    let conn = open_db(cli);
+    let providers = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
+    let enabled: Vec<_> = providers.into_iter().filter(|p| p.enabled).collect();
+
+    if enabled.is_empty() {
+        println!("(no enabled providers)");
+        return;
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_secs))
+        .build()
+        .expect("build http client");
+
+    println!("{:<25} {:<14} {:<8} {:>10}  STATUS", "PROVIDER", "TYPE", "REACH", "LATENCY");
+    let mut unhealthy_count = 0;
+    for p in &enabled {
+        let start = std::time::Instant::now();
+        let res = client.get(p.base_url.trim_end_matches('/')).send().await;
+        let latency_ms = start.elapsed().as_millis();
+        let (reach, status, healthy) = match res {
+            Ok(r) => {
+                let code = r.status().as_u16();
+                // 200-499 算 reachable（4xx 常见，比如未带 auth header 的 401）。
+                // 5xx / 网络错算 unhealthy。
+                let h = code < 500;
+                (
+                    if h { "ok" } else { "down" }.to_string(),
+                    format!("HTTP {code}"),
+                    h,
+                )
+            }
+            Err(e) => {
+                let kind = if e.is_timeout() { "timeout" }
+                    else if e.is_connect() { "connect-fail" }
+                    else { "net-err" };
+                ("down".to_string(), kind.to_string(), false)
+            }
+        };
+        println!("  {:<23} {:<14} {:<8} {:>8}ms  {}",
+            truncate(&p.name, 23), truncate(&p.provider_type, 14),
+            reach, latency_ms, status);
+
+        if mark {
+            let result = if healthy {
+                agentgate_lib::storage::provider_runtime_status::mark_success(&conn, &p.id)
+            } else {
+                agentgate_lib::storage::provider_runtime_status::mark_failure(
+                    &conn, &p.id, "HEALTH_CHECK_FAILED", &status, 300,
+                )
+            };
+            if let Err(e) = result {
+                eprintln!("    (DB update failed: {})", e.message);
+            }
+        }
+        if !healthy {
+            unhealthy_count += 1;
+        }
+    }
+
+    println!("\n{} provider(s), {} unhealthy.", enabled.len(), unhealthy_count);
+    if unhealthy_count > 0 {
+        std::process::exit(1);
     }
 }
 
