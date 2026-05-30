@@ -10,14 +10,14 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/dengmengmian/AgentGate/releases"><img src="https://img.shields.io/github/v/release/dengmengmian/AgentGate?style=flat-square&color=blue" alt="Release"></a>
-  <a href="https://github.com/dengmengmian/AgentGate/stargazers"><img src="https://img.shields.io/github/stars/dengmengmian/AgentGate?style=flat-square" alt="Stars"></a>
-  <a href="https://github.com/dengmengmian/AgentGate/releases"><img src="https://img.shields.io/github/downloads/dengmengmian/AgentGate/total?style=flat-square&color=green" alt="Downloads"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/github/license/dengmengmian/AgentGate?style=flat-square" alt="License"></a>
+  <a href="https://github.com/dengmengmian/agentgate-ai/releases"><img src="https://img.shields.io/github/v/release/dengmengmian/agentgate-ai?style=flat-square&color=blue" alt="Release"></a>
+  <a href="https://github.com/dengmengmian/agentgate-ai/stargazers"><img src="https://img.shields.io/github/stars/dengmengmian/agentgate-ai?style=flat-square" alt="Stars"></a>
+  <a href="https://github.com/dengmengmian/agentgate-ai/releases"><img src="https://img.shields.io/github/downloads/dengmengmian/agentgate-ai/total?style=flat-square&color=green" alt="Downloads"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/github/license/dengmengmian/agentgate-ai?style=flat-square" alt="License"></a>
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> · <a href="https://github.com/dengmengmian/AgentGate/releases">下载安装</a> · <a href="#5-分钟跑通">5 分钟跑通</a>
+  <a href="./README.md">English</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">下载安装</a> · <a href="#5-分钟跑通">5 分钟跑通</a> · <a href="./docs/use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./docs/use-codex-with-mimo.md">Codex + MiMo</a>
 </p>
 
 ---
@@ -33,6 +33,17 @@ AgentGate 是面向 AI 编程 Agent 的**本地模型网关**。它把 Codex、C
 - 不想每次切模型都手动改 `~/.codex/config.toml`、`~/.claude/settings.json`。
 
 AgentGate 的定位是：**本地统一入口 + 协议转换 + 原生直连 + 智能路由 + 图形化配置**。
+
+## 常见使用场景
+
+教程：[让 Codex 使用 DeepSeek](./docs/use-codex-with-deepseek.md) · [让 Codex 使用小米 MiMo](./docs/use-codex-with-mimo.md)
+
+| 目标 | AgentGate 做什么 |
+|---|---|
+| 让 Codex 使用 DeepSeek | 把 Codex 的 OpenAI Responses API 请求转换到 DeepSeek 兼容的 Chat Completions 或 Anthropic 兼容端点。 |
+| 让 Codex 使用小米 MiMo | 通过本地网关把 Codex 路由到 MiMo 模型，自动处理模型映射、reasoning 和能力矩阵。 |
+| 让 Claude Code 使用 DeepSeek / MiMo | 通过 Anthropic 兼容直通和模型映射连接 DeepSeek / MiMo。 |
+| 在多个 Provider 间切换 Codex | 一个本地入口切换 DeepSeek、MiMo、OpenAI、Kimi、GLM、通义千问等，无需手改配置文件。 |
 
 ## 5 分钟跑通
 
