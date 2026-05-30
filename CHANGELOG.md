@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.4] - 2026-05-30
+
+### 修复
+
+- **AtomCode / OpenCode 改用 AgentGate 虚拟模型** —— 一键配置不再把当前 provider 的真实模型名固化进客户端。AtomCode 写入 `agentgate`，OpenCode 写入 `openai/agentgate`；网关在请求时把虚拟模型解析成本次智能路由选中的真实模型，避免切换到 DeepSeek 后仍透传 `mimo-v2.5` 这类旧模型名导致 400。
+- **原生直通保持透明语义** —— 普通真实模型名仍按原规则处理：命中 Model Mapping 才改写，未命中就原样透传；只有 `agentgate` / `openai/agentgate` 这两个虚拟模型走路由解析。
+
+### 文档
+
+- README / README_ZH 补充 `agentgate` 虚拟模型规则，并强化 5 分钟上手流程、客户端配置说明和常见连接问题排查。
+
 ## [1.2.3] - 2026-05-30
 
 ### 修复
