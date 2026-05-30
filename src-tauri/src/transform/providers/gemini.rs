@@ -1,6 +1,10 @@
 pub struct GeminiProvider;
 
-impl super::ProviderTransform for GeminiProvider {}
+impl super::ProviderTransform for GeminiProvider {
+    fn provider_type(&self) -> &str {
+        "gemini"
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -34,7 +38,7 @@ mod tests {
 
     #[test]
     fn gemini_provider_type() {
-        assert_eq!(GeminiProvider.provider_type(), "");
+        assert_eq!(GeminiProvider.provider_type(), "gemini");
     }
 
     #[test]

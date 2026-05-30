@@ -6,6 +6,8 @@ use serde::Serialize;
 use crate::errors::AppError;
 use crate::security::local_token;
 
+const AGENTGATE_MODEL: &str = "agentgate";
+
 /// AtomCode config.toml path
 pub fn config_path() -> PathBuf {
     let home = std::env::var("HOME")
@@ -104,7 +106,7 @@ pub fn detect() -> AtomCodeConfigStatus {
     }
 }
 
-pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, AppError> {
+pub fn apply(host: &str, port: i64, _model: &str) -> Result<ApplyConfigResult, AppError> {
     let token = local_token::ensure_token()?;
 
     let path = config_path();
@@ -134,7 +136,7 @@ default_provider = "agentgate"
 [providers.agentgate]
 type           = "openai"
 api_key        = "{token}"
-model          = "{model}"
+model          = "{AGENTGATE_MODEL}"
 base_url       = "http://{host}:{port}/v1"
 context_window = 1000000
 "#
@@ -187,7 +189,7 @@ pub fn open_config() -> Result<(), AppError> {
     })
 }
 
-pub fn generate_snippet(host: &str, port: i64, model: &str) -> String {
+pub fn generate_snippet(host: &str, port: i64, _model: &str) -> String {
     let masked = match local_token::read_token() {
         Ok(t) => local_token::mask_token(&t),
         Err(_) => "ag_local_<not_generated>".to_string(),
@@ -198,7 +200,7 @@ pub fn generate_snippet(host: &str, port: i64, model: &str) -> String {
 [providers.agentgate]
 type           = "openai"
 api_key        = "{masked}"
-model          = "{model}"
+model          = "{AGENTGATE_MODEL}"
 base_url       = "http://{host}:{port}/v1"
 context_window = 1000000"#
     )
@@ -229,7 +231,7 @@ mod tests {
         let content = std::fs::read_to_string(config_path()).unwrap();
         assert!(content.contains("ag_local_"));
         assert!(content.contains("127.0.0.1:9090"));
-        assert!(content.contains("gpt-5.5"));
+        assert!(content.contains(r#"model          = "agentgate""#));
         assert!(content.contains("[providers.agentgate]"));
         cleanup(&temp);
     }

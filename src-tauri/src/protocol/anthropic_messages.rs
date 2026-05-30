@@ -389,7 +389,7 @@ pub fn tools_to_chat(tools: &[Value], clean_for_deepseek: bool) -> Vec<Value> {
             "function": { "name": name, "description": desc, "parameters": params }
         }));
     }
-    out
+    crate::transform::tool_calls::dedupe_tools_by_name(out)
 }
 
 /// Anthropic tool_choice → Chat Completions tool_choice。

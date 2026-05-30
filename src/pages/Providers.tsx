@@ -190,6 +190,18 @@ export function Providers() {
           icon={Inbox}
           title={t("providers.no_providers")}
           description={t("providers.add_first")}
+          action={
+            <button
+              onClick={() => {
+                setEditTarget(null);
+                setFormOpen(true);
+              }}
+              className="btn-primary"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t("providers.add")}
+            </button>
+          }
         />
       ) : filteredProviders.length === 0 ? (
         <p className="text-xs text-text-muted">{t("providers.no_match")}</p>

@@ -6,6 +6,8 @@ use serde::Serialize;
 use crate::errors::AppError;
 use crate::security::local_token;
 
+const AGENTGATE_MODEL: &str = "openai/agentgate";
+
 pub fn config_path() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
@@ -56,7 +58,7 @@ pub fn detect() -> OpenCodeConfigStatus {
 pub fn generate_snippet(host: &str, port: i64) -> String {
     serde_json::to_string_pretty(&serde_json::json!({
         "$schema": "https://opencode.ai/config.json",
-        "model": "openai/gpt-5.5",
+        "model": AGENTGATE_MODEL,
         "provider": {
             "openai": {
                 "options": {
@@ -95,7 +97,7 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     })?;
 
     // Set model
-    doc["model"] = serde_json::json!("openai/gpt-5.5");
+    doc["model"] = serde_json::json!(AGENTGATE_MODEL);
 
     // Set provider
     doc["provider"] = serde_json::json!({
@@ -169,7 +171,7 @@ mod tests {
         let content = std::fs::read_to_string(config_path()).unwrap();
         assert!(content.contains("ag_local_"));
         assert!(content.contains("127.0.0.1:9090"));
-        assert!(content.contains("openai/gpt-5.5"));
+        assert!(content.contains("openai/agentgate"));
         cleanup(&temp);
     }
 

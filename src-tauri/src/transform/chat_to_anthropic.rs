@@ -272,7 +272,7 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
             "input_schema": input_schema,
         }));
     }
-    out
+    crate::transform::tool_calls::dedupe_tools_by_name(out)
 }
 
 /// Chat tool_choice → Anthropic tool_choice。

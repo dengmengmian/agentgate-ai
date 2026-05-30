@@ -318,7 +318,7 @@ pub fn split_namespace_tool_name(name: &str) -> Option<(String, String)> {
 /// #7 修复：工具名去重。Codex CLI/Desktop 偶发 bug 把同名工具发两次，
 /// 上游可能不接受重复（OpenAI strict mode / DeepSeek 都会 400）。
 /// function tool 用 function.name 做 key，builtin 用 type 做 key。
-fn dedupe_tools_by_name(tools: Vec<Value>) -> Vec<Value> {
+pub fn dedupe_tools_by_name(tools: Vec<Value>) -> Vec<Value> {
     let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut out: Vec<Value> = Vec::with_capacity(tools.len());
     for t in tools {
@@ -332,7 +332,9 @@ fn dedupe_tools_by_name(tools: Vec<Value>) -> Vec<Value> {
                 .and_then(|n| n.as_str())
                 .map(|n| format!("builtin_fn:{n}")),
             Some(other) => Some(format!("builtin:{other}")),
-            None => None,
+            None => t.get("name")
+                .and_then(|n| n.as_str())
+                .map(|n| format!("tool:{n}")),
         };
         match key {
             Some(k) if seen.contains(&k) => {
@@ -770,6 +772,19 @@ mod tests {
         })];
         let result = convert_tools(&tools, false);
         assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_dedupe_tools_by_top_level_name() {
+        let tools = vec![
+            json!({"name": "search", "description": "a"}),
+            json!({"name": "search", "description": "b"}),
+            json!({"name": "read_file", "description": "c"}),
+        ];
+        let result = dedupe_tools_by_name(tools);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0]["description"], "a");
+        assert_eq!(result[1]["name"], "read_file");
     }
 
     #[test]

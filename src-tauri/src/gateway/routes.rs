@@ -282,7 +282,7 @@ pub async fn handle_responses(
         let result = if config.has_responses_url() {
             // Pass-through: provider has explicit Responses API endpoint
             let target_url = config.responses_url();
-            let model_override = explicit_model_mapping(&provider, req.model.as_deref());
+            let model_override = native_model_override(&provider, req.model.as_deref(), Some(&model));
             crate::gateway::pass_through::handle(
                 &state.http_client, &state.db, &config, &target_url, "/v1/responses", "openai_responses", &body, model_override.as_deref(), &request_id, start, &client_type, Some(&headers),
             ).await.map_err(|e| GatewayError(e))
@@ -1301,7 +1301,7 @@ pub async fn handle_gemini_generate(
     // 不绕 Chat 转换，避免丢 thinking / grounding / safetySettings 这些 Gemini-only 字段。
     if config.is_gemini() {
         // Override body 里的 model（如有 mapping）
-        let model_override = explicit_model_mapping(&selection.provider, Some(&model_name));
+        let model_override = native_model_override(&selection.provider, Some(&model_name), Some(&resolved_model));
         let final_model = model_override.unwrap_or(resolved_model.clone());
 
         if is_stream {
@@ -1588,7 +1588,7 @@ pub async fn handle_chat_completions(
         // 走 client_chat_to_anthropic_handle 转换请求体、调上游 Anthropic、再把响应/SSE
         // 翻译成 Chat 形态发回。
         if config.is_anthropic() && config.has_anthropic_url() {
-            let model_override = explicit_model_mapping(&provider, requested_model.as_deref());
+            let model_override = native_model_override(&provider, requested_model.as_deref(), Some(&candidate.model));
             let model = model_override.unwrap_or_else(|| candidate.model.clone());
             let result = client_chat_to_anthropic_handle(
                 state.clone(), config.clone(), &body, model.clone(),
@@ -1628,7 +1628,7 @@ pub async fn handle_chat_completions(
             continue;
         }
 
-        let model_override = explicit_model_mapping(&provider, requested_model.as_deref());
+        let model_override = native_model_override(&provider, requested_model.as_deref(), Some(&candidate.model));
         let result = crate::gateway::pass_through::handle(
             &state.http_client, &state.db, &config, &decision.target_url, "/v1/chat/completions", "openai_chat_completions", &body, model_override.as_deref(), &request_id, start, &client_type, Some(&headers),
         ).await;
@@ -1971,7 +1971,7 @@ pub async fn handle_messages(
     if config.has_anthropic_url() {
         {
             let target = config.anthropic_messages_url();
-            let model_override = explicit_model_mapping(&selection.provider, requested_model.as_deref());
+            let model_override = native_model_override(&selection.provider, requested_model.as_deref(), Some(&selection.model));
             return crate::gateway::pass_through::handle_anthropic(
                 &state.http_client,
                 &state.db,
@@ -2517,6 +2517,76 @@ mod tests {
         assert!(lock_db(&db).is_some(), "lock_db should recover from poisoned mutex");
     }
 
+    fn provider_for_native_model_tests() -> Provider {
+        Provider {
+            id: "p1".to_string(),
+            name: "DeepSeek".to_string(),
+            provider_type: "deepseek".to_string(),
+            base_url: "https://api.deepseek.com/v1".to_string(),
+            api_key: Some("sk-test".to_string()),
+            default_model: "deepseek-v4-flash".to_string(),
+            reasoning_model: Some("deepseek-v4-pro".to_string()),
+            supported_models: Some(r#"["deepseek-v4-pro","deepseek-v4-flash"]"#.to_string()),
+            model_mapping: Some(r#"{"gpt-5.5":"deepseek-v4-pro"}"#.to_string()),
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
+            protocol: "openai_chat_completions".to_string(),
+            timeout_seconds: 300,
+            status: "active".to_string(),
+            supports_vision: Some(false),
+            auto_cache_control: None,
+            supports_cache: None,
+            model_capabilities: None,
+            enabled: true,
+            is_active: true,
+            created_at: "now".to_string(),
+            updated_at: "now".to_string(),
+        }
+    }
+
+    #[test]
+    fn native_model_override_maps_agentgate_virtual_model() {
+        let provider = provider_for_native_model_tests();
+        assert_eq!(
+            native_model_override(&provider, Some("agentgate"), None),
+            Some("deepseek-v4-flash".to_string())
+        );
+    }
+
+    #[test]
+    fn native_model_override_maps_prefixed_agentgate_virtual_model() {
+        let provider = provider_for_native_model_tests();
+        assert_eq!(
+            native_model_override(&provider, Some("openai/agentgate"), None),
+            Some("deepseek-v4-flash".to_string())
+        );
+    }
+
+    #[test]
+    fn native_model_override_uses_route_selected_model_for_agentgate() {
+        let provider = provider_for_native_model_tests();
+        assert_eq!(
+            native_model_override(&provider, Some("agentgate"), Some("deepseek-v4-pro")),
+            Some("deepseek-v4-pro".to_string())
+        );
+    }
+
+    #[test]
+    fn native_model_override_still_prefers_explicit_mapping() {
+        let provider = provider_for_native_model_tests();
+        assert_eq!(
+            native_model_override(&provider, Some("gpt-5.5"), Some("deepseek-v4-flash")),
+            Some("deepseek-v4-pro".to_string())
+        );
+    }
+
+    #[test]
+    fn native_model_override_preserves_unmapped_real_model() {
+        let provider = provider_for_native_model_tests();
+        assert_eq!(native_model_override(&provider, Some("mimo-v2.5"), Some("deepseek-v4-flash")), None);
+    }
+
     #[test]
     fn test_detect_client_from_ua_empty() {
         let headers = HeaderMap::new();
@@ -2705,11 +2775,27 @@ fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayE
     Ok(provider)
 }
 
-fn explicit_model_mapping(provider: &Provider, requested_model: Option<&str>) -> Option<String> {
+const AGENTGATE_VIRTUAL_MODEL: &str = "agentgate";
+
+fn native_model_override(provider: &Provider, requested_model: Option<&str>, resolved_model: Option<&str>) -> Option<String> {
     let requested = requested_model?.trim();
     if requested.is_empty() {
         return None;
     }
+
+    if is_agentgate_virtual_model(requested) {
+        return Some(resolved_model.unwrap_or(&provider.default_model).to_string());
+    }
+
+    explicit_model_mapping(provider, requested)
+}
+
+fn is_agentgate_virtual_model(requested: &str) -> bool {
+    let model = requested.rsplit_once('/').map(|(_, model)| model).unwrap_or(requested);
+    model.eq_ignore_ascii_case(AGENTGATE_VIRTUAL_MODEL)
+}
+
+fn explicit_model_mapping(provider: &Provider, requested: &str) -> Option<String> {
     let mapping = provider.model_mapping.as_ref()?;
     serde_json::from_str::<std::collections::HashMap<String, String>>(mapping)
         .ok()

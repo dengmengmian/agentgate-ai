@@ -390,19 +390,19 @@ mod tests {
     #[test]
     fn for_config_anthropic() {
         let t = for_config(&config("anthropic"));
-        assert_eq!(t.provider_type(), "");
+        assert_eq!(t.provider_type(), "anthropic");
     }
 
     #[test]
     fn for_config_claude() {
         let t = for_config(&config("claude"));
-        assert_eq!(t.provider_type(), "");
+        assert_eq!(t.provider_type(), "anthropic");
     }
 
     #[test]
     fn for_config_google_gemini() {
         let t = for_config(&config("google_gemini"));
-        assert_eq!(t.provider_type(), "");
+        assert_eq!(t.provider_type(), "gemini");
     }
 
     #[test]

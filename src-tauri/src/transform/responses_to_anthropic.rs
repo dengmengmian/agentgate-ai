@@ -636,7 +636,7 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
         }
     }
 
-    result
+    crate::transform::tool_calls::dedupe_tools_by_name(result)
 }
 
 /// Convert Responses API tool_choice to Claude format.
@@ -832,6 +832,17 @@ mod tests {
         assert_eq!(result[0]["name"], "search");
         assert!(result[0]["input_schema"].is_object());
         assert!(result[0].get("parameters").is_none());
+    }
+
+    #[test]
+    fn test_convert_tools_dedupes_duplicate_names() {
+        let tools = vec![
+            json!({"type": "function", "function": {"name": "search", "description": "A", "parameters": {"type": "object"}}}),
+            json!({"type": "function", "function": {"name": "search", "description": "B", "parameters": {"type": "object"}}}),
+        ];
+        let result = convert_tools(&tools);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0]["description"], "A");
     }
 
     #[test]

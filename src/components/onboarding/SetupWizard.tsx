@@ -4,7 +4,8 @@ import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { detectProvider } from "@/lib/keyDetection";
 import { fetchDetectAndPersistProviderModels } from "@/lib/providerAutoSetup";
-import { resolveProviderPresetForKey } from "@/data/providerPresets";
+import { PROVIDER_PRESETS, resolveProviderPresetForKey } from "@/data/providerPresets";
+import { PROVIDER_TYPES } from "@/types/provider";
 
 interface Props {
   onComplete: () => void;
@@ -32,6 +33,13 @@ export function SetupWizard({ onComplete }: Props) {
   const [detectedProvider, setDetectedProvider] = useState<{ type: string; name: string } | null>(null);
   const [tools, setTools] = useState<ToolDetection[]>([]);
   const [setupLog, setSetupLog] = useState<SetupLogEntry[]>([]);
+
+  const quickProviderTypes = PROVIDER_TYPES.filter((tp) => PROVIDER_PRESETS[tp.value]);
+
+  const selectProvider = (type: string) => {
+    const label = PROVIDER_TYPES.find((tp) => tp.value === type)?.label ?? type;
+    setDetectedProvider(type ? { type, name: label } : null);
+  };
 
   // Step 1: detect provider from key
   const handleKeyChange = (key: string) => {
@@ -200,6 +208,25 @@ export function SetupWizard({ onComplete }: Props) {
               <div className="flex items-center gap-2 rounded-lg bg-success-soft px-3 py-2 text-xs text-success">
                 <CheckCircle className="h-3.5 w-3.5" />
                 {t("onboarding.detected")} {detectedProvider.name}
+              </div>
+            )}
+
+            {apiKey.trim() && (
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-text-secondary">
+                  {t("onboarding.provider_label")}
+                </label>
+                <select
+                  value={detectedProvider?.type ?? ""}
+                  onChange={(e) => selectProvider(e.target.value)}
+                  className="form-input text-sm"
+                >
+                  <option value="">{t("onboarding.provider_select_placeholder")}</option>
+                  {quickProviderTypes.map((tp) => (
+                    <option key={tp.value} value={tp.value}>{tp.label}</option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-text-muted">{t("onboarding.provider_hint")}</p>
               </div>
             )}
 

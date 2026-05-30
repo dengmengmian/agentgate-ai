@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Local AI Gateway for Codex, Claude Code, Gemini CLI, OpenCode & AtomCode</b><br>
-  Protocol conversion · 24 provider presets · Smart failover · Capability-aware routing · Desktop app
+  Convert when needed, pass through when possible; one local entry point for 24 providers
 </p>
 
 <p align="center">
@@ -17,14 +17,43 @@
 </p>
 
 <p align="center">
-  <a href="./README_ZH.md">中文</a> · <a href="https://github.com/dengmengmian/AgentGate/releases">Download</a> · <a href="#getting-started">Getting Started</a>
+  <a href="./README_ZH.md">中文</a> · <a href="https://github.com/dengmengmian/AgentGate/releases">Download</a> · <a href="#5-minute-quick-start">5-Minute Quick Start</a>
 </p>
 
 ---
 
-AgentGate is a **local model gateway** for AI coding agents. One entry point connects Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode to 24 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more — with automatic protocol conversion, smart failover, and per-model capability-aware routing.
+AgentGate is a **local model gateway** for AI coding agents. It gives Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode one local endpoint, then routes requests to 24 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
 
-**Why not just edit config files?** AgentGate is a desktop app with a GUI — switch providers in one click, no command line needed. It supports multi-provider priority chains (A fails → auto-switch to B), image-aware routing (skip non-vision providers), request logging, token stats, and diagnostics.
+It is built for real integration problems:
+
+- Codex speaks the Responses API, while many providers only expose Chat Completions or Anthropic-compatible Messages.
+- Claude Code can directly use DeepSeek / MiMo Anthropic-compatible endpoints, but base URLs, model names, and mapping rules are easy to misconfigure.
+- Different models from the same provider have different capabilities; sending images, tools, or `web_search` to the wrong model often causes 400 errors.
+- Multiple providers and multiple API keys should fail over automatically, with request logs, token stats, and cost tracking.
+- Switching models should not mean hand-editing `~/.codex/config.toml` or `~/.claude/settings.json`.
+
+AgentGate's job is: **one local gateway + protocol conversion + native pass-through + smart routing + GUI configuration**.
+
+## 5-Minute Quick Start
+
+1. Download AgentGate from [Releases](../../releases) and install it.
+2. Open the app, go to **Quick Setup** or **Providers**, and paste your provider API key.
+3. AgentGate detects known key prefixes and fills base URL, protocols, default model, and capability matrix. If the prefix is ambiguous, select the provider type manually.
+4. On **Overview** or **Gateway**, click **Start Gateway**. The default address is `127.0.0.1:9090`. Note: `1420` is the development UI port, not the client API gateway.
+5. On **Clients**, click **Apply Config** for Codex / Claude Code / OpenCode / Gemini CLI / AtomCode.
+6. Send a test message in the client. Click **Switch to Official** whenever you want to restore the original client config.
+
+Most users only need these steps. Model mapping, protocol endpoints, and capability matrices can be left alone at first; AgentGate fills the common defaults for you.
+
+## Three Modes
+
+| Mode | When it happens | Model handling | Typical case |
+|---|---|---|---|
+| **Protocol Conversion** | Client protocol differs from upstream protocol | Model Mapping wins; otherwise provider default model is used as a compatibility fallback | Codex Responses → DeepSeek / MiMo Chat |
+| **Native Pass-through** | Client protocol matches a native upstream endpoint | Request `model` is preserved unless a Model Mapping matches; the virtual `agentgate` model resolves to the model selected by routing | OpenCode / curl → Chat Completions |
+| **Pass-through + Model Mapping** | Protocol matches, but client model names differ from upstream names | Model Mapping rewrites `model` | Claude Code `claude-*` → DeepSeek / MiMo model |
+
+Rule of thumb: **protocol match decides pass-through vs conversion; Model Mapping only renames models.** For one-click client integrations, `agentgate` is a virtual model name that means "let AgentGate pick the provider model for this request."
 
 ## Features
 
@@ -84,32 +113,21 @@ AgentGate is a **local model gateway** for AI coding agents. One entry point con
 - OpenCode: one-click config
 - Local gateway access token (`ag_local_*`) authentication
 
-**Desktop Pet**
-- 9 original SVG pet characters: Gateway Bot, Pixel Cat, Slime, CEO, Octopus, MaFan, KuiKui, FenZong, ZhenZhen
-- Pet reacts to gateway state: idle (gentle bob), active (bounce during requests), error (shake), sleep (after 5min idle)
-- Speech bubble notifications for gateway start/stop and request errors
-- AI chat: double-click to chat, replies via your configured Provider
-- Persistent memory: remembers your name across sessions
-- Auto stats bubble: "Today: 128 requests | $0.42" every 30 minutes
-- Subtle lean toward cursor in idle state
-- Position saved and restored on restart
-- Manage in Settings > Pet tab or toggle via system tray
+**Desktop Experience**
+- System tray background operation when the window is closed
+- Auto-start on system boot, in-app updates, bilingual UI
+- Optional desktop pet for gateway status, request stats, and error bubbles; it can be disabled in Settings
 
 **Quick Setup & Diagnostics**
 - First-run onboarding: paste API key → auto-detect provider → select tools → one-click setup
-- Quick-add provider: paste API key, auto-detect type from prefix (sk-ant-, deepseek-, gsk_, etc.)
+- Quick-add provider: paste an API key; known prefixes are detected automatically, ambiguous prefixes can be selected manually
 - Connection test: 3-step status bar (Config → Gateway → Provider) on the Clients page
 - Quick Setup page in sidebar (auto-hidden after providers configured, re-enable in Settings)
 
-**Desktop Application**
-- Dark theme (warm amber tones) and Light theme (clean neutral gray)
-- Theme switcher in Settings > General
-- System tray with background operation on window close
-- Tray menu for gateway start/stop and pet toggle
-- Auto-start on system boot
-- Request logging, self-diagnostics, and diagnostic bundle export
-- Bilingual UI (Chinese and English)
-- Auto-update with in-app download and install
+**Diagnostics & Observability**
+- Request logs, token stats, cost estimates, and provider runtime status
+- Self-check and redacted diagnostic bundle export
+- Capability degradation events: image stripping, web_search downgrade, MCP advisory, and omitted tool-output images
 
 ## Screenshots
 
@@ -147,7 +165,7 @@ AgentGate is a **local model gateway** for AI coding agents. One entry point con
 | Database | SQLite (rusqlite, WAL mode) |
 | HTTP Client | reqwest |
 
-## Getting Started
+## Installation & Build
 
 ### Download
 
@@ -157,13 +175,13 @@ Download the installer for your platform from the [Releases](../../releases) pag
 |---|---|
 | macOS (Apple Silicon) | `.dmg` (aarch64) |
 | macOS (Intel) | `.dmg` (x86_64) |
-| Windows | `.msi` / `.exe` |
+| Windows | `.exe` |
 | Linux | `.AppImage` / `.deb` |
 
 <details>
 <summary><b>macOS: "Cannot verify the developer"?</b> (click to expand)</summary>
 
-The app is ad-hoc signed (won't show "damaged"), but macOS Gatekeeper blocks unnotarized apps. Three ways to fix (pick one):
+If macOS Gatekeeper blocks the app, use one of these options:
 
 **Option 1: System Settings (recommended)**
 1. Double-click AgentGate, click **Cancel** on the prompt
@@ -262,8 +280,8 @@ Launch AgentGate → **Providers** → **Add Provider**
 
 **Fast path (recommended) — paste API key:**
 
-1. Paste your API key (any provider) into the top input
-2. AgentGate detects the provider type from the key prefix (`sk-ant-` / `sk-` / `deepseek-` / `gsk_` / …)
+1. Paste your provider API key into the top input
+2. AgentGate detects known key prefixes (`sk-ant-` / `deepseek-` / `gsk_` / …). If the prefix is ambiguous, select the provider type manually
 3. Click **Create** — name, base URL, protocols, default/reasoning model, capabilities are all filled in for you. Done.
 
 **Manual mode — 3 sections, only Section A is required:**
@@ -274,7 +292,7 @@ Launch AgentGate → **Providers** → **Add Provider**
 | **Models & Capabilities** | Default model · Reasoning model · `Fetch & detect` button · capability matrix toggle | On a freshly created provider, this is **auto-run in the background** — you get newest non-mini model as default + newest reasoning model + per-model capability matrix without clicking anything |
 | **Advanced** *(collapsed, "usually no need to touch")* | Protocols + their endpoints (Chat / Responses / Anthropic) · Extra Headers · Timeout · Auto cache control · Model Mapping | Each protocol you tick shows its own URL — one place to read "which native endpoints this upstream supports" |
 
-**Model Mapping** is at the bottom of Advanced for a reason: usually not needed. AgentGate auto-fills recommended MiMo / DeepSeek mappings when you create the provider, fetch models, test the provider, or apply Codex / Claude Code config. Existing mappings are preserved. Native pass-through keeps `model` unchanged unless a mapping matches; protocol conversion uses mapping first, then falls back to `default_model` for compatibility with clients like Codex, Claude Code, and Gemini CLI.
+**Model Mapping** is at the bottom of Advanced for a reason: usually not needed. AgentGate auto-fills recommended MiMo / DeepSeek mappings when you create the provider, fetch models, test the provider, or apply Codex / Claude Code config. Existing mappings are preserved. Native pass-through keeps `model` unchanged unless a mapping matches or the client sends the virtual `agentgate` model; protocol conversion uses mapping first, then falls back to `default_model` for compatibility with clients like Codex, Claude Code, and Gemini CLI.
 
 **Provider configuration examples:**
 
@@ -412,7 +430,7 @@ Click **Switch to Official** to restore the original settings.json.
 
 **Clients** → **OpenCode** → **Apply Config**
 
-AgentGate writes to `~/.config/opencode/opencode.json`, configuring an OpenAI-compatible provider pointing to the local gateway.
+AgentGate writes to `~/.config/opencode/opencode.json`, configuring an OpenAI-compatible provider pointing to the local gateway. It uses `openai/agentgate` as a virtual model so switching providers in AgentGate does not require editing OpenCode again.
 
 ### 6. Configure Gemini CLI
 
@@ -424,7 +442,7 @@ AgentGate writes Gemini CLI's config to point at the local gateway's `/v1beta/..
 
 **Clients** → **AtomCode** → **Apply Config**
 
-AtomCode integration writes its config to use AgentGate as the upstream — same toggle pattern as the others.
+AtomCode integration writes its config to use AgentGate as the upstream — same toggle pattern as the others. It uses `agentgate` as a virtual model so the gateway can resolve DeepSeek / MiMo / other provider model names at request time.
 
 ### 8. Direct API Calls
 
@@ -479,6 +497,18 @@ curl http://127.0.0.1:9090/v1/models -H "Authorization: Bearer $TOKEN"
 ```bash
 curl http://127.0.0.1:9090/health
 ```
+
+**Client says “network connection failed”?**
+
+First check whether the gateway port is actually running:
+
+```bash
+curl http://127.0.0.1:9090/health
+```
+
+- If the connection fails: go back to AgentGate **Overview / Gateway / Clients** and click **Start Gateway**.
+- If health works: use the **Clients** page connection test to narrow it down: Config → Gateway → Provider.
+- `http://localhost:1420` is only the development UI; Codex / Claude Code / OpenCode / Gemini CLI / AtomCode call `http://127.0.0.1:9090`.
 
 ### 9. Multi-Provider & Failover
 
@@ -634,7 +664,7 @@ When the client protocol differs from the downstream provider, AgentGate convert
 
 ### Native Passthrough
 
-When the client protocol matches the downstream provider, AgentGate does not convert the request format. It replaces the URL and credentials. Model handling follows one rule: Model Mapping wins; otherwise the request model is preserved. If the client omits `model`, AgentGate uses the provider default.
+When the client protocol matches the downstream provider, AgentGate does not convert the request format. It replaces the URL and credentials. Model handling follows one rule: Model Mapping wins; otherwise the request model is preserved. If the request model is `agentgate` or `openai/agentgate`, AgentGate resolves it to the model selected by routing for that request. If the client omits `model`, AgentGate uses the provider default.
 
 ```
 ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐

@@ -27,6 +27,7 @@ import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
 import * as api from "@/lib/api";
 import type { CodexConfigStatus, ClaudeCodeEnvStatus, OpenCodeConfigStatus, GeminiCliConfigStatus, AtomCodeConfigStatus } from "@/types/config";
+import type { GatewayStatus } from "@/types/gateway";
 
 export function Tools() {
   const { t } = useI18n();
@@ -40,6 +41,8 @@ export function Tools() {
   const [openCodeStatus, setOpenCodeStatus] = useState<OpenCodeConfigStatus | null>(null);
   const [geminiStatus, setGeminiStatus] = useState<GeminiCliConfigStatus | null>(null);
   const [atomCodeStatus, setAtomCodeStatus] = useState<AtomCodeConfigStatus | null>(null);
+  const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null);
+  const [startingGateway, setStartingGateway] = useState(false);
 
   // 未检测到的 client 默认折叠——5 个全展开屏幕太长，用户只用 1-2 个。
   // 检测到的 client 默认展开。用户可以手动点 chevron 切换任一 client 状态。
@@ -55,18 +58,20 @@ export function Tools() {
 
   const load = useCallback(async () => {
     try {
-      const [c, cc, oc, gc, ac] = await Promise.all([
+      const [c, cc, oc, gc, ac, gw] = await Promise.all([
         api.detectCodexConfig(),
         api.detectClaudeCodeEnv(),
         api.detectOpenCodeConfig(),
         api.detectGeminiConfig(),
         api.detectAtomCodeConfig(),
+        api.getGatewayStatus(),
       ]);
       setCodexStatus(c);
       setClaudeEnv(cc);
       setOpenCodeStatus(oc);
       setGeminiStatus(gc);
       setAtomCodeStatus(ac);
+      setGatewayStatus(gw);
       const snippet = await api.generateCodexConfig();
       setCodexConfig(snippet);
     } catch (err) {
@@ -200,6 +205,20 @@ export function Tools() {
     }
   };
 
+  const handleStartGateway = async () => {
+    setStartingGateway(true);
+    try {
+      const status = await api.startGateway();
+      setGatewayStatus(status);
+      toast("success", t("gateway.started"));
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    } finally {
+      setStartingGateway(false);
+      load();
+    }
+  };
+
   if (loading) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
 
   return (
@@ -235,6 +254,29 @@ export function Tools() {
             {t("tools.test_connection")}
           </button>
         </div>
+        {gatewayStatus && (
+          <div className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${
+            gatewayStatus.running
+              ? "border-success/30 bg-success-soft"
+              : "border-warning/30 bg-warning/5"
+          }`}>
+            <p className={`text-xs ${gatewayStatus.running ? "text-success" : "text-warning"}`}>
+              {gatewayStatus.running
+                ? `${t("tools.gateway_running")} http://${gatewayStatus.host}:${gatewayStatus.port}`
+                : t("tools.gateway_not_running_hint")}
+            </p>
+            {!gatewayStatus.running && (
+              <button
+                onClick={handleStartGateway}
+                disabled={startingGateway}
+                className="btn-primary"
+              >
+                {startingGateway ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
+                {t("gateway.start")}
+              </button>
+            )}
+          </div>
+        )}
         {testResult?.error && (
           <p className="mt-2 text-xs text-error">{testResult.error}</p>
         )}

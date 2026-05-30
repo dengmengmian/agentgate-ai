@@ -1,6 +1,10 @@
 pub struct AnthropicProvider;
 
 impl super::ProviderTransform for AnthropicProvider {
+    fn provider_type(&self) -> &str {
+        "anthropic"
+    }
+
     fn enhance_error(&self, status: u16, body: &str) -> Option<String> {
         use crate::transform::providers as p;
         let lower = body.to_ascii_lowercase();
@@ -71,7 +75,7 @@ mod tests {
 
     #[test]
     fn anthropic_default_provider_type() {
-        assert_eq!(AnthropicProvider.provider_type(), "");
+        assert_eq!(AnthropicProvider.provider_type(), "anthropic");
     }
 
     #[test]

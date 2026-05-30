@@ -99,6 +99,8 @@ export function ProviderFormDialog({
     setDetectedType(detectProviderType(key));
   };
 
+  const quickProviderTypes = PROVIDER_TYPES.filter((tp) => PROVIDER_PRESETS[tp.value]);
+
   const handleQuickCreate = () => {
     const type = detectedType;
     if (!type || !quickKey.trim()) return;
@@ -254,23 +256,39 @@ export function ProviderFormDialog({
                 autoFocus
               />
             </div>
-            {detectedType && (
-              <div className="flex items-center justify-between rounded-xl border border-accent/30 bg-accent-soft p-4">
-                <div>
-                  <p className="text-sm font-medium text-text-primary">
-                    {PROVIDER_TYPES.find(t => t.value === detectedType)?.label}
-                  </p>
-                  <p className="text-xs text-text-muted">
-                    {PROVIDER_PRESETS[detectedType]?.defaultModel}
-                  </p>
+            {quickKey.trim() && (
+              <div className="rounded-xl border border-accent/30 bg-accent-soft p-4">
+                <div className="mb-3 space-y-1.5">
+                  <label className="text-xs font-medium text-text-secondary">
+                    {t("onboarding.provider_label")}
+                  </label>
+                  <select
+                    value={detectedType ?? ""}
+                    onChange={(e) => setDetectedType(e.target.value || null)}
+                    className="form-input text-sm"
+                  >
+                    <option value="">{t("onboarding.provider_select_placeholder")}</option>
+                    {quickProviderTypes.map((tp) => (
+                      <option key={tp.value} value={tp.value}>{tp.label}</option>
+                    ))}
+                  </select>
+                  {detectedType ? (
+                    <p className="text-xs text-text-muted">
+                      {PROVIDER_PRESETS[detectedType]?.defaultModel}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-text-muted">{t("providers.quick_add_unknown")}</p>
+                  )}
                 </div>
-                <button type="button" onClick={handleQuickCreate} className="btn-primary">
+                <button
+                  type="button"
+                  onClick={handleQuickCreate}
+                  disabled={!detectedType}
+                  className="btn-primary disabled:opacity-40"
+                >
                   {t("providers.create")}
                 </button>
               </div>
-            )}
-            {quickKey && !detectedType && (
-              <p className="text-xs text-text-muted">{t("providers.quick_add_unknown")}</p>
             )}
             <button
               type="button"
