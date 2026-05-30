@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
 - **MiMo `web_search` 自动降级** —— Token Plan 预先剥离 MiMo 原生 `web_search` builtin；按量付费 key 遇到 Web Search Plugin 未开通错误时剥离并重试一次，避免新手未购买插件时请求直接失败。
 - **Claude Code 直连模型不再写 `[1m]`** —— MiMo / DeepSeek 的推荐映射继续使用普通模型 ID，历史 `[1m]` 后缀在 Anthropic 直连发送前会被剥离。
 - **能力降级可诊断** —— MiMo / DeepSeek 图片剥离、MiMo `web_search` 自动降级、MCP advisory、tool output 图片省略会统一记录为 `degradation_events`，写入请求日志 trace，便于后续 UI 展示和排查。
+- **桌面包不再包含 headless CLI** —— `agentgate-serve` 改为 CLI feature 构建，只在 Docker / 独立 CLI 发布产物中编译，避免 macOS 桌面包签名时把未签名 CLI 当成 app 子程序。
+- **Windows 发版检查兼容 CRLF** —— Provider catalog 生成检查对行尾做归一化，避免 Windows runner 将 LF checkout 成 CRLF 后误报 generated catalog 过期。
 
 ### 文档
 

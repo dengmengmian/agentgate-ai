@@ -216,7 +216,7 @@ jobs:
           key: cli-${{ matrix.target }}
 
       - name: Build CLI
-        run: cargo build --manifest-path src-tauri/Cargo.toml --release --target ${{ matrix.target }} --bin agentgate-serve
+        run: cargo build --manifest-path src-tauri/Cargo.toml --release --features cli --target ${{ matrix.target }} --bin agentgate-serve
 
       - name: Package CLI (Unix)
         if: runner.os != 'Windows'

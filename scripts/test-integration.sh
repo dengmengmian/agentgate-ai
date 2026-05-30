@@ -647,7 +647,7 @@ if [ -x "$CLI" ]; then
 
     rm -rf "$TMPDB"
 else
-    yellow "  SKIP  CLI binary not built (run: cargo build --bin agentgate-serve)"
+    yellow "  SKIP  CLI binary not built (run: cargo build --features cli --bin agentgate-serve)"
     SKIP=$((SKIP + 8))
 fi
 

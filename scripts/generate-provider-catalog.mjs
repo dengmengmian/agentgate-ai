@@ -231,13 +231,17 @@ function replaceBetweenMarkers(file, startMarker, endMarker, content) {
 function writeOrCheck(file, content) {
   if (check) {
     const current = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-    if (current !== content) {
+    if (normalizeLineEndings(current) !== normalizeLineEndings(content)) {
       throw new Error(`${path.relative(root, file)} is out of date. Run pnpm provider:catalog:generate.`);
     }
     return;
   }
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, content);
+}
+
+function normalizeLineEndings(value) {
+  return value.replace(/\r\n/g, "\n");
 }
 
 const providers = loadCatalog();

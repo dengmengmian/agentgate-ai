@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
 COPY src-tauri/ ./
 
 # Build only the headless binary
-RUN cargo build --release --bin agentgate-serve
+RUN cargo build --release --features cli --bin agentgate-serve
 
 # Runtime stage
 FROM debian:bookworm-slim
