@@ -77,6 +77,7 @@ const linuxAppImage = findAsset(assets, [/\.AppImage$/]);
 const linuxDeb = findAsset(assets, [/\.deb$/]);
 const windowsMsi = findAsset(assets, [/\.msi$/]);
 const windowsNsis = findAsset(assets, [/(setup|installer).*\.exe$/i]);
+const windowsDefault = windowsNsis || windowsMsi;
 
 const platforms = {
   "darwin-aarch64": await platformEntry(assets, macArm),
@@ -84,10 +85,13 @@ const platforms = {
   "linux-x86_64": await platformEntry(assets, linuxAppImage),
   "linux-x86_64-appimage": await platformEntry(assets, linuxAppImage),
   "linux-x86_64-deb": await platformEntry(assets, linuxDeb),
-  "windows-x86_64": await platformEntry(assets, windowsMsi),
-  "windows-x86_64-msi": await platformEntry(assets, windowsMsi),
+  "windows-x86_64": await platformEntry(assets, windowsDefault),
   "windows-x86_64-nsis": await platformEntry(assets, windowsNsis),
 };
+
+if (windowsMsi) {
+  platforms["windows-x86_64-msi"] = await platformEntry(assets, windowsMsi);
+}
 
 for (const [key, value] of Object.entries(platforms)) {
   if (!value) throw new Error(`Missing updater artifact for ${key}`);
