@@ -67,6 +67,7 @@ MiMo 支持多种模型和 key 类型。AgentGate 会按 MiMo Open API / Token P
 
 ## Related
 
+- [Use Codex Desktop with third-party APIs and plugins](./use-codex-desktop-with-third-party-api-and-plugins.md)
 - [Use Codex with DeepSeek](./use-codex-with-deepseek.md)
 - [Main README](../README.md)
 - [中文 README](../README_ZH.md)

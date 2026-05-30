@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="./README_ZH.md">中文</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">Download</a> · <a href="#5-minute-quick-start">5-Minute Quick Start</a> · <a href="./docs/use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./docs/use-codex-with-mimo.md">Codex + MiMo</a>
+  <a href="./README_ZH.md">中文</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">Download</a> · <a href="#5-minute-quick-start">5-Minute Quick Start</a> · <a href="./docs/use-codex-desktop-with-third-party-api-and-plugins.md">Codex Desktop Plugins</a> · <a href="./docs/use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./docs/use-codex-with-mimo.md">Codex + MiMo</a>
 </p>
 
 ---
@@ -27,6 +27,7 @@ AgentGate is a **local model gateway** for AI coding agents. It gives Codex, Cla
 It is built for real integration problems:
 
 - Codex speaks the Responses API, while many providers only expose Chat Completions or Anthropic-compatible Messages.
+- Codex Desktop plugin and account features expect the official OpenAI-authenticated provider path; many third-party API proxies break that shape.
 - Claude Code can directly use DeepSeek / MiMo Anthropic-compatible endpoints, but base URLs, model names, and mapping rules are easy to misconfigure.
 - Different models from the same provider have different capabilities; sending images, tools, or `web_search` to the wrong model often causes 400 errors.
 - Multiple providers and multiple API keys should fail over automatically, with request logs, token stats, and cost tracking.
@@ -34,14 +35,24 @@ It is built for real integration problems:
 
 AgentGate's job is: **one local gateway + protocol conversion + native pass-through + smart routing + GUI configuration**.
 
+## Why Not Just a Proxy?
+
+| Plain proxy | AgentGate |
+|---|---|
+| Makes Codex call another base URL | Keeps Codex Desktop on the OpenAI-authenticated provider path while routing model requests locally |
+| May break account/plugin assumptions | Preserves signed-in account state and plugin/account feature compatibility |
+| Usually targets one provider | Routes DeepSeek, MiMo, OpenAI, Kimi, GLM, DashScope, and more |
+| Manual config edits | One-click apply / restore for supported clients |
+
 ## Common Use Cases
 
-Guides: [Use Codex with DeepSeek](./docs/use-codex-with-deepseek.md) · [Use Codex with Xiaomi MiMo](./docs/use-codex-with-mimo.md)
+Guides: [Use Codex Desktop with third-party APIs and plugins](./docs/use-codex-desktop-with-third-party-api-and-plugins.md) · [Use Codex with DeepSeek](./docs/use-codex-with-deepseek.md) · [Use Codex with Xiaomi MiMo](./docs/use-codex-with-mimo.md)
 
 | Goal | What AgentGate does |
 |---|---|
 | Use Codex with DeepSeek | Converts Codex's OpenAI Responses API requests to DeepSeek-compatible Chat Completions or Anthropic-compatible endpoints. |
 | Use Codex with Xiaomi MiMo | Routes Codex through a local gateway to MiMo models with model mapping, reasoning support, and capability checks. |
+| Use Codex Desktop plugins with third-party APIs | Keeps Codex Desktop on its official OpenAI-authenticated provider path so plugin and account features can keep working while model requests route through AgentGate. |
 | Use Claude Code with DeepSeek / MiMo | Uses Anthropic-compatible pass-through plus model mapping for DeepSeek and MiMo endpoints. |
 | Switch Codex between providers | One local endpoint lets Codex switch between DeepSeek, MiMo, OpenAI, Kimi, GLM, DashScope, and more without hand-editing config files. |
 
@@ -120,6 +131,7 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 
 **Client Configuration**
 - Codex: one-click config + toggle between official and AgentGate (preserves conversations)
+- Codex Desktop compatibility: routes model requests to third-party APIs while preserving the official OpenAI provider path, signed-in account state, and plugin/account feature compatibility
 - Claude Code: one-click config + toggle between official and AgentGate
 - OpenCode: one-click config
 - Local gateway access token (`ag_local_*`) authentication

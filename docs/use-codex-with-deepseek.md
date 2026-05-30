@@ -55,6 +55,7 @@ Codex -> http://127.0.0.1:9090/v1/responses -> AgentGate -> DeepSeek
 
 ## Related
 
+- [Use Codex Desktop with third-party APIs and plugins](./use-codex-desktop-with-third-party-api-and-plugins.md)
 - [Use Codex with Xiaomi MiMo](./use-codex-with-mimo.md)
 - [Main README](../README.md)
 - [中文 README](../README_ZH.md)
