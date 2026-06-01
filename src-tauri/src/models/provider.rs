@@ -101,6 +101,11 @@ pub struct ProviderTestResult {
     pub message: String,
     pub latency_ms: Option<u64>,
     pub supports_vision: Option<bool>,
+    /// Structured failure diagnosis (only present on failure paths).
+    /// Older clients that ignore this field still see the legacy `message`
+    /// string verbatim — backward compatible.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diagnostic: Option<crate::diagnostics::test_failure::TestDiagnostic>,
 }
 
 impl Provider {

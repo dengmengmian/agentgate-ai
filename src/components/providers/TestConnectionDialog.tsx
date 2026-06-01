@@ -1,15 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle, XCircle, Loader2, X } from "lucide-react";
+import { CheckCircle, XCircle, Loader2, X, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
-import type { ProviderView } from "@/types/provider";
+import type { ProviderView, TestDiagnostic } from "@/types/provider";
 
 type StepStatus = "pending" | "running" | "ok" | "error" | "skipped";
 
 interface StepState {
   status: StepStatus;
   detail?: string;
+  /// Structured diagnostic from the backend, only populated on connectivity
+  /// failure. When set, the dialog shows a friendly title + hint + optional
+  /// action button instead of the raw HTTP error string.
+  diagnostic?: TestDiagnostic;
 }
 
 interface Props {
@@ -57,7 +62,11 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
         const r = await api.testProvider(provider.id);
         if (cancelled) return;
         if (!r.success) {
-          setConnectivity({ status: "error", detail: r.message });
+          setConnectivity({
+            status: "error",
+            detail: r.diagnostic?.title ?? r.message,
+            diagnostic: r.diagnostic,
+          });
           return; // 失败链路终止，保留对话框让用户读错误
         }
         const ms = r.latency_ms ? `${r.latency_ms}ms` : "";
@@ -155,15 +164,61 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
           <StepRow label={t("providers.test.step_cache")} state={cacheDetect} />
         </div>
 
-        {anyError && (
+        {connectivity.diagnostic ? (
+          <DiagnosticPanel diagnostic={connectivity.diagnostic} />
+        ) : anyError ? (
           <div className="mt-4 rounded-md border border-error/30 bg-error-soft p-3">
             <p className="text-[11px] font-medium text-error">{t("providers.test.error_hint_title")}</p>
             <p className="mt-1 text-[11px] text-text-secondary">
               {t("providers.test.error_hint_desc")}
             </p>
           </div>
-        )}
+        ) : null}
       </div>
+    </div>
+  );
+}
+
+function DiagnosticPanel({ diagnostic }: { diagnostic: TestDiagnostic }) {
+  const { t } = useI18n();
+  const [showRaw, setShowRaw] = useState(false);
+
+  return (
+    <div className="mt-4 rounded-md border border-error/30 bg-error-soft p-3">
+      <p className="text-xs font-medium text-error">{diagnostic.title}</p>
+      <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">{diagnostic.hint}</p>
+
+      {diagnostic.action_url && (
+        <button
+          onClick={() => {
+            // openUrl 来自 plugin-opener，调用系统默认浏览器。失败时 swallow
+            // 避免 unhandled promise（用户看到的就是一个不打开的按钮，比抛
+            // 在控制台更好）。
+            openUrl(diagnostic.action_url!).catch(() => {});
+          }}
+          className="mt-2 inline-flex items-center gap-1 rounded-md border border-error/40 bg-card px-2 py-1 text-[11px] font-medium text-error hover:bg-error-soft"
+        >
+          {diagnostic.action_label ?? "Open"}
+          <ExternalLink className="h-3 w-3" />
+        </button>
+      )}
+
+      {diagnostic.raw && (
+        <div className="mt-2">
+          <button
+            onClick={() => setShowRaw((v) => !v)}
+            className="inline-flex items-center gap-0.5 text-[10px] text-text-muted hover:text-text-secondary"
+          >
+            {showRaw ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            {showRaw ? t("providers.test.raw_collapse") : t("providers.test.raw_toggle")}
+          </button>
+          {showRaw && (
+            <pre className="mt-1 max-h-32 overflow-auto rounded border border-border bg-card-secondary p-2 text-[10px] text-text-muted">
+              {diagnostic.raw}
+            </pre>
+          )}
+        </div>
+      )}
     </div>
   );
 }

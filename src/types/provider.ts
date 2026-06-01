@@ -76,12 +76,29 @@ export const CAPABILITY_LABELS: Record<string, string> = {
 export const ALL_CAPABILITIES = ["text", "vision", "audio_in", "tts", "video_in", "reasoning", "tools", "web_search"] as const;
 export type Capability = (typeof ALL_CAPABILITIES)[number];
 
+export interface TestDiagnostic {
+  /// Stable machine-readable code (invalid_api_key / insufficient_balance / ...).
+  code: string;
+  /// One-line plain-language reason.
+  title: string;
+  /// One-line actionable suggestion.
+  hint: string;
+  /// Optional URL the user can open to fix the issue.
+  action_url?: string;
+  /// Localized label for the action button.
+  action_label?: string;
+  /// Original HTTP/network error string (kept for power users).
+  raw: string;
+}
+
 export interface ProviderTestResult {
   success: boolean;
   status: string;
   message: string;
   latency_ms: number | null;
   supports_vision: boolean | null;
+  /// Present only on failure paths; older backends omit it (treated as undefined).
+  diagnostic?: TestDiagnostic;
 }
 
 export const PROVIDER_TYPES = [

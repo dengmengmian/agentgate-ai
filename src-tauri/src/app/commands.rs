@@ -259,15 +259,29 @@ pub async fn test_provider(
         (provider.base_url, provider.api_key, provider.timeout_seconds)
     };
 
+    let provider_type = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::providers::get_by_id(&conn, &id)?.provider_type
+    };
+
     let api_key = match api_key {
         Some(k) if !k.is_empty() => k,
         _ => {
+            let raw = "API key is not set. Please configure your API key first.";
             return Ok(ProviderTestResult {
                 success: false,
                 status: "failed".to_string(),
-                message: "API key is not set. Please configure your API key first.".to_string(),
+                message: raw.to_string(),
                 latency_ms: None,
                 supports_vision: None,
+                diagnostic: Some(crate::diagnostics::test_failure::TestDiagnostic {
+                    code: "missing_api_key".to_string(),
+                    title: "还没配置 API key".to_string(),
+                    hint: "在「API key」字段粘贴 Provider 控制台拿到的 key 再测连接。".to_string(),
+                    action_url: None,
+                    action_label: None,
+                    raw: raw.to_string(),
+                }),
             });
         }
     };
@@ -284,6 +298,8 @@ pub async fn test_provider(
 
     let start = Instant::now();
     let mut last_error = String::new();
+    let mut last_status: Option<u16> = None;
+    let mut last_body = String::new();
 
     for url in &urls {
         let result = client
@@ -310,15 +326,20 @@ pub async fn test_provider(
                     message: format!("Connection successful via {url}"),
                     latency_ms: Some(latency),
                     supports_vision: None,
+                    diagnostic: None,
                 });
             }
             Ok(resp) => {
                 let status = resp.status();
                 let body = resp.text().await.unwrap_or_default();
                 let sanitized = body.replace(&api_key, "sk-***REDACTED***");
+                last_status = Some(status.as_u16());
+                last_body = sanitized.clone();
                 last_error = format!("HTTP {status}: {sanitized}");
             }
             Err(e) => {
+                last_status = None;
+                last_body.clear();
                 last_error = format!("Connection error: {e}");
             }
         }
@@ -330,12 +351,19 @@ pub async fn test_provider(
     }
 
     let latency = start.elapsed().as_millis() as u64;
+    let diagnostic = Some(crate::diagnostics::test_failure::diagnose(
+        &provider_type,
+        last_status,
+        &last_body,
+        &last_error,
+    ));
     Ok(ProviderTestResult {
         success: false,
         status: "failed".to_string(),
         message: last_error,
         latency_ms: Some(latency),
         supports_vision: None,
+        diagnostic,
     })
 }
 
@@ -358,6 +386,7 @@ pub async fn detect_provider_vision(
                 message: "API key is not set".to_string(),
                 latency_ms: None,
                 supports_vision: None,
+                diagnostic: None,
             });
         }
     };
@@ -461,6 +490,7 @@ pub async fn detect_provider_vision(
         message,
         latency_ms: Some(latency),
         supports_vision,
+        diagnostic: None,
     })
 }
 
@@ -498,6 +528,7 @@ pub async fn detect_provider_cache(
                 message: "Cache probe only works for Anthropic or providers with Anthropic endpoint".to_string(),
                 latency_ms: None,
                 supports_vision: None,
+                diagnostic: None,
             });
         }
     };
@@ -520,6 +551,7 @@ pub async fn detect_provider_cache(
                 success: false, status: "failed".to_string(),
                 message: "API key is not set".to_string(),
                 latency_ms: None, supports_vision: None,
+                diagnostic: None,
             });
         }
     };
@@ -577,6 +609,7 @@ pub async fn detect_provider_cache(
             success: false, status: "failed".to_string(),
             message: format!("Cache probe request 1 failed: {e}"),
             latency_ms: Some(start.elapsed().as_millis() as u64), supports_vision: None,
+            diagnostic: None,
         });
     }
     let resp1 = resp1.unwrap();
@@ -587,6 +620,7 @@ pub async fn detect_provider_cache(
             success: false, status: "failed".to_string(),
             message: format!("Cache probe request 1 HTTP error: {}", &sanitized[..sanitized.len().min(500)]),
             latency_ms: Some(start.elapsed().as_millis() as u64), supports_vision: None,
+            diagnostic: None,
         });
     }
     // Consume body
@@ -631,6 +665,7 @@ pub async fn detect_provider_cache(
         message,
         latency_ms: Some(latency),
         supports_vision: None, // reuse struct, this field unused here
+        diagnostic: None,
     })
 }
 

@@ -107,6 +107,8 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Check the API key, verify the base URL (need /v1 suffix?), or run Diagnostics for full self-test.",
     zh: "检查 API key 是否正确、base URL 末尾是否需要 /v1，或去诊断页跑完整自检。",
   },
+  "providers.test.raw_toggle": { en: "Show raw error", zh: "查看原始报错" },
+  "providers.test.raw_collapse": { en: "Hide raw error", zh: "收起原始报错" },
   "providers.created": { en: "Provider created", zh: "供应商已创建" },
   "providers.hint_setup_failover": { en: "Set up failover chain?", zh: "顺手配下失败转移？" },
   "providers.go_routing": { en: "Routing →", zh: "去配置 →" },
