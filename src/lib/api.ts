@@ -54,6 +54,12 @@ export async function getProvider(id: string): Promise<ProviderView> {
   return cmd("get_provider", { id });
 }
 
+/// Plain-text api keys in storage order. Used by the edit form so each key
+/// slot can be repopulated; the masked view alone hides which key is which.
+export async function getProviderKeys(id: string): Promise<string[]> {
+  return cmd("get_provider_keys", { id });
+}
+
 export async function createProvider(input: CreateProviderInput): Promise<ProviderView> {
   return cmd("create_provider", { input });
 }

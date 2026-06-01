@@ -90,6 +90,29 @@ pub fn get_provider(id: String, state: State<'_, AppState>) -> Result<ProviderVi
     Ok(provider.to_view())
 }
 
+/// Return the plain-text api keys for a provider, in storage order.
+///
+/// Used by the edit form to repopulate every key slot so users can see
+/// which key is which (the masked view alone hides that). Calling code
+/// must keep the keys in memory only as long as the dialog is open;
+/// they're not redacted in any subsequent log path.
+#[tauri::command]
+pub fn get_provider_keys(id: String, state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let provider = storage::providers::get_by_id(&conn, &id)?;
+    let raw = match provider.api_key {
+        Some(k) if !k.trim().is_empty() => k,
+        _ => return Ok(Vec::new()),
+    };
+    let trimmed = raw.trim();
+    if trimmed.starts_with('[') {
+        if let Ok(keys) = serde_json::from_str::<Vec<String>>(trimmed) {
+            return Ok(keys.into_iter().filter(|k| !k.trim().is_empty()).collect());
+        }
+    }
+    Ok(vec![trimmed.to_string()])
+}
+
 #[tauri::command]
 pub fn create_provider(
     mut input: CreateProviderInput,
@@ -259,13 +282,27 @@ pub async fn test_provider(
         (provider.base_url, provider.api_key, provider.timeout_seconds)
     };
 
-    let provider_type = {
+    let (provider_type, extra_headers) = {
         let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-        storage::providers::get_by_id(&conn, &id)?.provider_type
+        let p = storage::providers::get_by_id(&conn, &id)?;
+        (p.provider_type, p.extra_headers)
     };
 
     let api_key = match api_key {
-        Some(k) if !k.is_empty() => k,
+        Some(k) if !k.is_empty() => {
+            // Multi-key field stores JSON array `["sk-a","sk-b"]`; pick the
+            // first non-empty entry — sending the raw `[...]` string as a
+            // bearer token would 401. Mirrors detect_provider_cache.
+            let trimmed = k.trim();
+            if trimmed.starts_with('[') {
+                serde_json::from_str::<Vec<String>>(trimmed)
+                    .ok()
+                    .and_then(|v| v.into_iter().find(|s| !s.is_empty()))
+                    .unwrap_or_else(|| trimmed.to_string())
+            } else {
+                trimmed.to_string()
+            }
+        }
         _ => {
             let raw = "API key is not set. Please configure your API key first.";
             return Ok(ProviderTestResult {
@@ -302,11 +339,26 @@ pub async fn test_provider(
     let mut last_body = String::new();
 
     for url in &urls {
-        let result = client
+        // 必须复用 provider 的 extra_headers——Kimi catalog 默认注入
+        // `User-Agent: KimiCLI/1.40.0`，Moonshot 服务端对部分 plan key
+        // 做 UA 校验，UA 不对一律 401，看起来像 "key 无效" 但其实是 UA。
+        // 同理给 Anthropic-beta 等自定义 header 留口子。
+        let mut req_builder = client
             .get(url)
-            .header("Authorization", format!("Bearer {api_key}"))
-            .send()
-            .await;
+            .header("Authorization", format!("Bearer {api_key}"));
+        if let Some(ref eh) = extra_headers {
+            if let Ok(headers) = serde_json::from_str::<std::collections::HashMap<String, String>>(eh) {
+                for (k, v) in headers {
+                    if let (Ok(name), Ok(val)) = (
+                        reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                        reqwest::header::HeaderValue::from_str(&v),
+                    ) {
+                        req_builder = req_builder.header(name, val);
+                    }
+                }
+            }
+        }
+        let result = req_builder.send().await;
 
         match result {
             Ok(resp) if resp.status().is_success() => {

@@ -223,6 +223,7 @@ pub fn run() {
             // Providers
             commands::list_providers,
             commands::get_provider,
+            commands::get_provider_keys,
             commands::create_provider,
             commands::update_provider,
             commands::delete_provider,

@@ -134,7 +134,13 @@ export function ProviderFormDialog({
       setName(provider.name);
       setProviderType(provider.provider_type);
       setBaseUrl(provider.base_url);
+      // 编辑模式：先用 [""] 占位避免一帧空，再异步拉真实 keys 回填。
+      // 这样多 key provider 也能看到全部槽，知道改的是哪一个；保存逻辑
+      // 不变（apiKeys 数组 → 单串 or JSON 数组）。
       setApiKeys([""]);
+      api.getProviderKeys(provider.id)
+        .then((keys) => setApiKeys(keys.length > 0 ? keys : [""]))
+        .catch(() => setApiKeys([""]));
       setDefaultModel(provider.default_model);
       setReasoningModel(provider.reasoning_model ?? "");
       setSupportedModels(provider.supported_models ?? "");
@@ -327,7 +333,6 @@ export function ProviderFormDialog({
             <label className="mb-1 block text-xs font-medium text-text-secondary">
               {t("providers.api_key")} {apiKeys.filter(k => k).length > 1 && <span className="text-text-muted">({apiKeys.filter(k => k).length} keys)</span>}
             </label>
-            {isEdit && provider?.masked_api_key && <p className="mb-1 text-[11px] text-text-muted">Current: {provider.masked_api_key}</p>}
             <div className="space-y-1.5">
               {apiKeys.map((key, i) => (
                 <div key={i} className="flex items-center gap-1.5">
