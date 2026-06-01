@@ -1330,6 +1330,27 @@ pub fn generate_atomcode_config(state: State<'_, AppState>) -> Result<String, Ap
     Ok(crate::tools::atomcode::generate_snippet(&settings.host, settings.port, &model))
 }
 
+/// After a client's config is rewritten, look up matching live processes
+/// so the UI can warn the user that the existing session needs to be
+/// restarted to pick up the new config. Each `client_id` maps to one or
+/// more process basenames (e.g. `codex` matches both the CLI and the
+/// macOS desktop app). Returns an empty list on Windows (pgrep-only
+/// detection); the caller treats empty as "couldn't detect", not "OK".
+#[tauri::command]
+pub fn detect_client_running(
+    client_id: String,
+) -> Result<Vec<crate::tools::process_detect::RunningProcess>, AppError> {
+    let needles: &[&str] = match client_id.as_str() {
+        "codex" => &["codex"],
+        "claude_code" => &["claude"],
+        "opencode" => &["opencode"],
+        "gemini" => &["gemini"],
+        "atomcode" => &["atomcode"],
+        _ => return Err(AppError::validation("unknown client_id")),
+    };
+    Ok(crate::tools::process_detect::find_running(needles))
+}
+
 #[tauri::command]
 pub fn toggle_atomcode_provider(state: State<'_, AppState>) -> Result<crate::tools::atomcode::ToggleResult, AppError> {
     let (host, port, model) = {

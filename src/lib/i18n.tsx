@@ -279,6 +279,22 @@ const translations: Record<string, Record<Locale, string>> = {
   "tools.gateway_running": { en: "Gateway is running at", zh: "网关已运行：" },
   "tools.gateway_not_running_hint": { en: "Gateway is not running. Clients will show network connection errors until it starts.", zh: "网关未启动。启动前客户端会显示网络连接失败。" },
   "tools.config_written": { en: "config written to", zh: "配置已写入" },
+  "tools.post_apply.title": { en: "Applied {name} config", zh: "{name} 配置已应用" },
+  "tools.post_apply.written": { en: "Config written", zh: "配置已写入" },
+  "tools.post_apply.running": {
+    en: "{name} is currently running",
+    zh: "{name} 当前正在运行",
+  },
+  "tools.post_apply.running_desc": {
+    en: "Restart the process for the new config to take effect. The terminal session will be interrupted; for Claude Code you can rejoin with `claude --resume`.",
+    zh: "需要重启该进程，新配置才会生效。当前终端会话会被中断；Claude Code 可以用 `claude --resume` 恢复上一轮对话。",
+  },
+  "tools.post_apply.not_running": {
+    en: "{name} isn't running. New config takes effect on next launch.",
+    zh: "{name} 当前未运行，下次启动自动生效。",
+  },
+  "tools.post_apply.copy_kill": { en: "Copy `kill {pid}`", zh: "复制 `kill {pid}`" },
+  "tools.post_apply.kill_copied": { en: "Kill command copied", zh: "已复制 kill 命令" },
   "tools.direct_credentials": { en: "Direct credentials", zh: "直接凭证" },
   "tools.no_credentials": { en: "No credentials", zh: "无凭证" },
   "tools.conflicts_detected": { en: "conflicts detected", zh: "冲突已检测到" },

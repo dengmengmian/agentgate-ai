@@ -311,6 +311,20 @@ export async function openAtomCodeConfig(): Promise<boolean> {
   return cmd("open_atomcode_config");
 }
 
+// ── Post-apply process detection ───────────────────────────────
+
+export interface RunningProcess {
+  pid: number;
+  command: string;
+}
+
+/// Match `client_id` ∈ {codex, claude_code, opencode, gemini, atomcode}.
+/// Returns empty list on Windows (no detection yet) — caller should treat
+/// empty as "couldn't detect" rather than "definitely not running".
+export async function detectClientRunning(clientId: string): Promise<RunningProcess[]> {
+  return cmd("detect_client_running", { clientId });
+}
+
 // ── Route Profiles ─────────────────────────────────────────────
 
 import type {

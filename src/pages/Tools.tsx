@@ -22,6 +22,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
 import { CopyButton } from "@/components/common/CopyButton";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { PostApplyDialog } from "@/components/tools/PostApplyDialog";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
@@ -56,6 +57,32 @@ export function Tools() {
   const [confirmApplyGemini, setConfirmApplyGemini] = useState(false);
   const [confirmApplyAtomCode, setConfirmApplyAtomCode] = useState(false);
 
+  /// Post-apply summary: shown once per apply with config path + running
+  /// process warning. Null means "no dialog open right now". Detect failure
+  /// degrades to processes=[] so the dialog still shows the success state.
+  const [postApply, setPostApply] = useState<{
+    clientId: string;
+    clientName: string;
+    configPath: string;
+    processes: api.RunningProcess[];
+  } | null>(null);
+
+  const showPostApply = async (
+    clientId: string,
+    clientName: string,
+    configPath: string,
+  ) => {
+    let processes: api.RunningProcess[] = [];
+    try {
+      processes = await api.detectClientRunning(clientId);
+    } catch {
+      // Detection is best-effort. Permission denied / Windows / pgrep
+      // missing all degrade to "we don't know" — dialog renders without
+      // the warning band.
+    }
+    setPostApply({ clientId, clientName, configPath, processes });
+  };
+
   const load = useCallback(async () => {
     try {
       const [c, cc, oc, gc, ac, gw] = await Promise.all([
@@ -88,11 +115,11 @@ export function Tools() {
   const handleApplyCodex = async () => {
     try {
       const result = await api.applyCodexConfig();
-      if (result.success) {
-        toast("success", `Codex ${t("tools.config_written")} ${result.config_path}`);
-      }
       setConfirmApplyCodex(false);
       load();
+      if (result.success) {
+        await showPostApply("codex", "Codex", result.config_path);
+      }
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
@@ -115,11 +142,11 @@ export function Tools() {
   const handleApplyClaude = async () => {
     try {
       const result = await api.applyClaudeCodeConfig();
-      if (result.success) {
-        toast("success", `Claude Code ${t("tools.config_written")} ${result.config_path}`);
-      }
       setConfirmApplyClaude(false);
       load();
+      if (result.success) {
+        await showPostApply("claude_code", "Claude Code", result.config_path);
+      }
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
@@ -137,11 +164,11 @@ export function Tools() {
   const handleApplyOpenCode = async () => {
     try {
       const result = await api.applyOpenCodeConfig();
-      if (result.success) {
-        toast("success", `OpenCode ${t("tools.config_written")} ${result.config_path}`);
-      }
       setConfirmApplyOpenCode(false);
       load();
+      if (result.success) {
+        await showPostApply("opencode", "OpenCode", result.config_path);
+      }
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
@@ -155,9 +182,11 @@ export function Tools() {
   const handleApplyGemini = async () => {
     try {
       const result = await api.applyGeminiConfig();
-      if (result.success) toast("success", `Gemini CLI ${t("tools.config_written")} ${result.config_path}`);
       setConfirmApplyGemini(false);
       load();
+      if (result.success) {
+        await showPostApply("gemini", "Gemini CLI", result.config_path);
+      }
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
@@ -175,9 +204,11 @@ export function Tools() {
   const handleApplyAtomCode = async () => {
     try {
       const result = await api.applyAtomCodeConfig();
-      if (result.success) toast("success", `AtomCode ${t("tools.config_written")} ${result.config_path}`);
       setConfirmApplyAtomCode(false);
       load();
+      if (result.success) {
+        await showPostApply("atomcode", "AtomCode", result.config_path);
+      }
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
@@ -584,6 +615,14 @@ export function Tools() {
       <ConfirmDialog open={confirmApplyOpenCode} title={t("tools.apply_opencode_title")} message={t("tools.apply_opencode_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyOpenCode} onCancel={() => setConfirmApplyOpenCode(false)} />
       <ConfirmDialog open={confirmApplyGemini} title={t("tools.apply_gemini_title")} message={t("tools.apply_gemini_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyGemini} onCancel={() => setConfirmApplyGemini(false)} />
       <ConfirmDialog open={confirmApplyAtomCode} title={t("tools.apply_atomcode_title")} message={t("tools.apply_atomcode_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyAtomCode} onCancel={() => setConfirmApplyAtomCode(false)} />
+
+      <PostApplyDialog
+        open={postApply !== null}
+        clientName={postApply?.clientName ?? ""}
+        configPath={postApply?.configPath ?? ""}
+        processes={postApply?.processes ?? []}
+        onClose={() => setPostApply(null)}
+      />
     </div>
   );
 }

@@ -1,0 +1,121 @@
+import { CheckCircle2, AlertTriangle, X } from "lucide-react";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { toast } from "@/components/common/Toast";
+import { useI18n } from "@/lib/i18n";
+import type { RunningProcess } from "@/lib/api";
+
+interface Props {
+  open: boolean;
+  /// Display name of the client we just applied config for, e.g. "Claude Code".
+  clientName: string;
+  /// Where the config landed on disk.
+  configPath: string;
+  /// Live processes whose basename matches the client. Empty list either
+  /// means "definitely not running" or "couldn't detect" (Windows path) —
+  /// we phrase the copy carefully so both cases are acceptable.
+  processes: RunningProcess[];
+  onClose: () => void;
+}
+
+/// Post-apply summary dialog. Replaces the previous plain success toast so
+/// users learn that an existing client session needs a restart before the
+/// new config matters, with a copy-to-clipboard kill command for advanced
+/// users. We never auto-kill — this was a deliberate UX call.
+export function PostApplyDialog({ open, clientName, configPath, processes, onClose }: Props) {
+  const { t } = useI18n();
+  if (!open) return null;
+
+  const handleCopyKill = async (pid: number) => {
+    try {
+      await writeText(`kill ${pid}`);
+      toast("success", t("tools.post_apply.kill_copied"));
+    } catch {
+      // Clipboard plugin missing or permission denied — degrade gracefully
+      // by showing the command in a toast so the user can copy by hand.
+      toast("error", `kill ${pid}`);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center">
+      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="animate-scale-in relative z-10 w-full max-w-md rounded-xl border border-border bg-card p-6"
+        style={{ boxShadow: "var(--shadow-lg)" }}
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <h3 className="text-sm font-semibold text-text-primary">
+            {t("tools.post_apply.title").replace("{name}", clientName)}
+          </h3>
+          <button
+            onClick={onClose}
+            className="rounded-md p-1 text-text-muted hover:bg-hover hover:text-text-primary"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-start gap-2 rounded-md border border-success/30 bg-success-soft p-3">
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium text-success">{t("tools.post_apply.written")}</p>
+              <p className="mt-0.5 break-all text-[11px] text-text-muted">{configPath}</p>
+            </div>
+          </div>
+
+          {processes.length > 0 ? (
+            <div className="rounded-md border border-warning/30 bg-warning-soft p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-warning">
+                    {t("tools.post_apply.running").replace("{name}", clientName)}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-text-secondary">
+                    {t("tools.post_apply.running_desc")}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-2 space-y-1">
+                {processes.map((p) => (
+                  <div
+                    key={p.pid}
+                    className="flex items-center justify-between gap-2 rounded border border-border bg-card px-2 py-1"
+                  >
+                    <code className="truncate text-[11px] text-text-secondary">
+                      PID {p.pid} · {p.command}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyKill(p.pid)}
+                      className="shrink-0 rounded bg-card-secondary px-2 py-0.5 text-[10px] font-medium text-text-primary hover:bg-hover"
+                    >
+                      {t("tools.post_apply.copy_kill").replace("{pid}", String(p.pid))}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start gap-2 rounded-md border border-border bg-card-secondary p-3">
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-text-secondary">
+                  {t("tools.post_apply.not_running").replace("{name}", clientName)}
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="mt-4 w-full rounded-md border border-border bg-card-secondary py-1.5 text-xs font-medium text-text-primary hover:bg-hover"
+        >
+          {t("common.close")}
+        </button>
+      </div>
+    </div>
+  );
+}
