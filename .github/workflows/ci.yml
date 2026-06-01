@@ -15,6 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # `tauri` is in the dependency graph of the test binaries even though
+      # the tests never spin up a window, so the linker still needs gdk /
+      # webkit headers at compile time. Mirror release.yml's build deps.
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -24,8 +32,6 @@ jobs:
           workspaces: src-tauri
           key: fixture-tests
 
-      # webkit dev libs aren't required for these test binaries (no Tauri
-      # runtime) — keeping the install minimal speeds the job up.
       - name: Run capability + protocol fixture tests
         working-directory: src-tauri
         run: |
