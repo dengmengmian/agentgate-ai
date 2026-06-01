@@ -494,6 +494,11 @@ const translations: Record<string, Record<Locale, string>> = {
   "onboarding.welcome": { en: "Welcome to AgentGate", zh: "欢迎使用 AgentGate" },
   "onboarding.welcome_desc": { en: "Paste your API key to get started", zh: "粘贴 API Key 开始配置" },
   "onboarding.detected": { en: "Detected:", zh: "已识别:" },
+  "onboarding.clipboard_hint": {
+    en: "Detected a {name} key in your clipboard.",
+    zh: "检测到剪贴板里有 {name} key。",
+  },
+  "onboarding.clipboard_use": { en: "Use it", zh: "填入" },
   "onboarding.provider_label": { en: "Provider", zh: "供应商" },
   "onboarding.provider_select_placeholder": { en: "Select provider...", zh: "选择供应商..." },
   "onboarding.provider_hint": { en: "Auto-detection is only a starting point. Change this if your key belongs to another OpenAI-compatible provider.", zh: "自动识别只是初始建议。如果你的 Key 属于其它 OpenAI 兼容供应商，请在这里改选。" },

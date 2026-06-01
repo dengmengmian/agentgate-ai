@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Key, Monitor, Rocket, CheckCircle, XCircle, Loader2, ArrowRight } from "lucide-react";
+import { Key, Monitor, Rocket, CheckCircle, XCircle, Loader2, ArrowRight, Clipboard, X } from "lucide-react";
+import { readText } from "@tauri-apps/plugin-clipboard-manager";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { detectProvider } from "@/lib/keyDetection";
@@ -31,6 +32,38 @@ export function QuickSetup() {
   const [detectedProvider, setDetectedProvider] = useState<{ type: string; name: string } | null>(null);
   const [tools, setTools] = useState<ToolDetection[]>([]);
   const [setupLog, setSetupLog] = useState<SetupLogEntry[]>([]);
+  /// 剪贴板里有可识别的 key 时显示「填入」banner。null = 没建议
+  /// （包括读不到剪贴板、识别失败、被用户关掉这三种情况）。
+  const [clipboardHint, setClipboardHint] = useState<{ key: string; type: string; name: string } | null>(null);
+  /// 本次 mount 只检测一次，避免用户切回 step="key" 又弹一遍。
+  const clipboardChecked = useRef(false);
+
+  useEffect(() => {
+    if (clipboardChecked.current) return;
+    clipboardChecked.current = true;
+    // 静默尝试读剪贴板：插件没装 / 权限被拒 / 系统不支持 / 内容超长
+    // 全部吞掉，不影响正常表单流程。这是用户明确要求的设计约束。
+    (async () => {
+      try {
+        const text = (await readText()) ?? "";
+        const candidate = text.trim();
+        // 太短不像 key，太长八成是粘了一段代码 / 文本
+        if (candidate.length < 10 || candidate.length > 200) return;
+        const detected = detectProvider(candidate);
+        if (detected) {
+          setClipboardHint({ key: candidate, type: detected.type, name: detected.label });
+        }
+      } catch {
+        // 剪贴板不可用 → banner 不出现，跟没这个功能一样
+      }
+    })();
+  }, []);
+
+  const acceptClipboardKey = () => {
+    if (!clipboardHint) return;
+    handleKeyChange(clipboardHint.key);
+    setClipboardHint(null);
+  };
 
   const quickProviderTypes = PROVIDER_TYPES.filter((tp) => PROVIDER_PRESETS[tp.value]);
 
@@ -169,6 +202,34 @@ export function QuickSetup() {
             <h2 className="text-base font-semibold text-text-primary mb-1">{t("onboarding.welcome")}</h2>
             <p className="text-xs text-text-muted">{t("onboarding.welcome_desc")}</p>
           </div>
+
+          {clipboardHint && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-accent/30 bg-accent-soft px-3 py-2">
+              <div className="flex min-w-0 items-center gap-2 text-xs">
+                <Clipboard className="h-3.5 w-3.5 shrink-0 text-accent" />
+                <span className="truncate text-text-secondary">
+                  {t("onboarding.clipboard_hint").replace("{name}", clipboardHint.name)}
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={acceptClipboardKey}
+                  className="rounded bg-accent px-2 py-1 text-[11px] font-medium text-white hover:bg-accent/90"
+                >
+                  {t("onboarding.clipboard_use")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setClipboardHint(null)}
+                  className="rounded p-1 text-text-muted hover:bg-hover hover:text-text-secondary"
+                  aria-label="dismiss"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          )}
 
           <input
             value={apiKey}

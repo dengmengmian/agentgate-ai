@@ -60,6 +60,10 @@ open = "5"
 rand = "0.9"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2"
+# Used only by Quick Setup to peek at the clipboard for a known-shaped API
+# key. Read is wrapped in try/catch on the frontend so missing capability /
+# permission / plugin failure is silent — never blocks the form.
+tauri-plugin-clipboard-manager = "2"
 clap = { version = "4", features = ["derive", "env"] }
 # 结构化日志：CLI/headless 用 JSON 输出到 stdout（给 journalctl / docker logs 抓）。
 # GUI 模式不强制初始化。env: AGENTGATE_LOG（env-filter syntax）。
