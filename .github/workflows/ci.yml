@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  fixture-tests:
+    name: Offline capability + protocol fixture tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: fixture-tests
+
+      # webkit dev libs aren't required for these test binaries (no Tauri
+      # runtime) — keeping the install minimal speeds the job up.
+      - name: Run capability + protocol fixture tests
+        working-directory: src-tauri
+        run: |
+          cargo test --test capability_fixture \
+                     --test mimo_capabilities \
+                     --test deepseek_capabilities \
+                     --test kimi_capabilities \
+                     --test protocol_fixture \
+                     -- --nocapture

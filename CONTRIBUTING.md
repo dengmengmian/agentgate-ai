@@ -28,6 +28,27 @@ Thanks for your interest in contributing! AgentGate is a local AI gateway built 
    ```
 5. Open a PR with a clear description of what changed and why
 
+### Smoke tests before releasing
+
+发版前用一条命令把三层能力转换都过一遍：
+
+```bash
+# 离线 fixture：5 个 test binary，全 mock 上游，不需要 key
+bash scripts/release-smoke.sh
+
+# 加上真实 provider 验证（先在桌面 App 里配好 MiMo / DeepSeek / Kimi）：
+AG_RUN_SMOKE_TESTS=1 bash scripts/release-smoke.sh
+```
+
+两条腿做什么：
+
+| 腿 | 文件 | 触发 | 覆盖 |
+|---|---|---|---|
+| 离线 fixture | `tests/{capability,mimo,deepseek,kimi,protocol}_*.rs` | 每次 PR（GitHub CI）+ release preflight + 本地 | L1 协议转换、L2 模型映射 + agentgate 虚拟模型、L3 能力（vision swap / image strip / web_search 降级 / reasoning placeholder / [1m] 剥离） |
+| 真实 smoke | `tests/smoke_test.rs` | 本地手动（`AG_RUN_SMOKE_TESTS=1`） | 真实 provider 联调（Responses / Chat / Messages 三端点 + 8.x 协议矩阵） |
+
+真实 smoke 要从本地 SQLite 拿 provider key，永远不会在 GitHub 上跑。env 参数（`AG_SMOKE_ANTHROPIC_PROVIDER_ID` 等）在 `src-tauri/tests/smoke_test.rs` 顶部有说明。
+
 ### Adding a New Provider
 
 Adding a provider preset is the easiest way to contribute:

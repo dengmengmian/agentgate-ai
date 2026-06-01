@@ -1,0 +1,277 @@
+//! L1 protocol conversion + L2 model-mapping regression tests.
+//!
+//! Mirrors the env-gated 8.1–8.9 block in `smoke_test.rs` but runs fully
+//! offline against a wiremock upstream. The real smoke test stays as the
+//! "true integration" verification — these are the CI-blockers that catch
+//! regressions to the transform/mapping plumbing without needing keys.
+
+mod common;
+
+use common::gateway_harness::{GatewayHarness, ProviderSpec};
+use common::mock_upstream::MockUpstream;
+use serde_json::json;
+
+// ── L1: protocol conversion ─────────────────────────────────────────────
+
+#[tokio::test]
+async fn l1_responses_to_anthropic_transform() {
+    // Codex (/v1/responses) → Anthropic-typed provider with anthropic_base_url.
+    // The gateway must convert to Anthropic Messages shape and hit /v1/messages.
+    let mock = MockUpstream::start().await;
+    mock.stub_anthropic_messages_ok("claude-sonnet-4-6", "ok").await;
+
+    let mut spec = ProviderSpec::chat_only("anthropic", "claude-sonnet-4-6");
+    spec.protocol = r#"["anthropic_messages"]"#.to_string();
+    spec.anthropic_base_url = Some(mock.url());
+
+    let harness = GatewayHarness::start(spec, &mock).await;
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/responses"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "model": "claude-sonnet-4-6",
+            "input": "ping",
+            "stream": false,
+            "max_output_tokens": 16,
+        }))
+        .send()
+        .await
+        .expect("send /v1/responses");
+    assert!(res.status().is_success(), "gateway returned {}", res.status());
+
+    let received = mock.received().await;
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].path, "/v1/messages", "must hit Anthropic Messages path");
+    // Anthropic shape requires a `messages` array, not Responses-style `input`.
+    assert!(
+        received[0].body.get("messages").is_some(),
+        "upstream should receive Anthropic-shaped messages array: {}",
+        received[0].body_raw
+    );
+
+    harness.shutdown().await;
+}
+
+#[tokio::test]
+async fn l1_chat_to_anthropic_non_stream_transform() {
+    // Generic Chat client → Anthropic-typed provider with anthropic_base_url.
+    // Goes through client_chat_to_anthropic_handle.
+    let mock = MockUpstream::start().await;
+    mock.stub_anthropic_messages_ok("claude-sonnet-4-6", "ok").await;
+
+    let mut spec = ProviderSpec::chat_only("anthropic", "claude-sonnet-4-6");
+    spec.protocol = r#"["anthropic_messages"]"#.to_string();
+    spec.anthropic_base_url = Some(mock.url());
+
+    let harness = GatewayHarness::start(spec, &mock).await;
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/chat/completions"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "model": "claude-sonnet-4-6",
+            "messages": [{ "role": "user", "content": "ping" }],
+            "stream": false,
+            "max_tokens": 16,
+        }))
+        .send()
+        .await
+        .expect("send /v1/chat/completions");
+    assert!(res.status().is_success(), "gateway returned {}", res.status());
+
+    let received = mock.received().await;
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].path, "/v1/messages");
+    assert!(
+        received[0].body.get("messages").is_some(),
+        "upstream should receive Anthropic-shaped body"
+    );
+    // Chat → Anthropic should also forward an explicit max_tokens.
+    assert!(
+        received[0].body.get("max_tokens").is_some(),
+        "max_tokens should pass through to Anthropic upstream"
+    );
+
+    harness.shutdown().await;
+}
+
+#[tokio::test]
+async fn l1_messages_to_chat_fallback_transform() {
+    // Claude Code (/v1/messages) → Chat-only provider (no anthropic_base_url).
+    // Gateway must fall back to the Messages → Chat translator and hit
+    // /v1/chat/completions upstream with a Chat-shaped body.
+    let mock = MockUpstream::start().await;
+    mock.stub_chat_completions_ok("custom-model", "ok").await;
+
+    let harness =
+        GatewayHarness::start(ProviderSpec::chat_only("custom", "custom-model"), &mock).await;
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/messages"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "model": "custom-model",
+            "max_tokens": 16,
+            "messages": [{ "role": "user", "content": "ping" }]
+        }))
+        .send()
+        .await
+        .expect("send /v1/messages");
+    assert!(res.status().is_success(), "gateway returned {}", res.status());
+
+    let received = mock.received().await;
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].path, "/v1/chat/completions");
+    let messages = received[0].body["messages"].as_array().expect("messages");
+    assert!(!messages.is_empty());
+    // Anthropic input uses `max_tokens` at the top level; Chat uses the same name
+    // — the assertion that matters is the path + flat content shape.
+
+    harness.shutdown().await;
+}
+
+// ── L2: model mapping + agentgate virtual model ─────────────────────────
+
+#[tokio::test]
+async fn l2_responses_endpoint_applies_model_mapping() {
+    // Codex sends model="gpt-5", provider mapping rewrites to "deepseek-v4-pro".
+    // The mock upstream must observe the post-mapping name.
+    let mock = MockUpstream::start().await;
+    mock.stub_chat_completions_ok("deepseek-v4-pro", "ok").await;
+
+    let spec = ProviderSpec::chat_only("custom", "deepseek-v4-pro")
+        .with_mapping(r#"{"gpt-5":"deepseek-v4-pro"}"#);
+
+    let harness = GatewayHarness::start(spec, &mock).await;
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/responses"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "model": "gpt-5",
+            "input": "ping",
+            "stream": false,
+            "max_output_tokens": 16,
+        }))
+        .send()
+        .await
+        .expect("send /v1/responses");
+    assert!(res.status().is_success(), "gateway returned {}", res.status());
+
+    let received = mock.received().await;
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].body["model"], "deepseek-v4-pro");
+
+    harness.shutdown().await;
+}
+
+#[tokio::test]
+async fn l2_chat_endpoint_applies_model_mapping() {
+    // Generic Chat client sends gpt-5, provider rewrites to deepseek-v4-pro.
+    let mock = MockUpstream::start().await;
+    mock.stub_chat_completions_ok("deepseek-v4-pro", "ok").await;
+
+    let spec = ProviderSpec::chat_only("custom", "deepseek-v4-pro")
+        .with_mapping(r#"{"gpt-5":"deepseek-v4-pro"}"#);
+
+    let harness = GatewayHarness::start(spec, &mock).await;
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/chat/completions"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "model": "gpt-5",
+            "messages": [{ "role": "user", "content": "ping" }],
+            "stream": false,
+            "max_tokens": 16,
+        }))
+        .send()
+        .await
+        .expect("send /v1/chat/completions");
+    assert!(res.status().is_success(), "gateway returned {}", res.status());
+
+    let received = mock.received().await;
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].body["model"], "deepseek-v4-pro");
+
+    harness.shutdown().await;
+}
+
+#[tokio::test]
+async fn l2_messages_endpoint_applies_model_mapping() {
+    // Claude Code sends claude-sonnet-4-6, provider rewrites to deepseek-v4-pro
+    // on the Anthropic passthrough path. The mock /v1/messages must observe
+    // the post-mapping name (and not a [1m] qualifier we didn't ask for).
+    let mock = MockUpstream::start().await;
+    mock.stub_anthropic_messages_ok("deepseek-v4-pro", "ok").await;
+
+    let spec = ProviderSpec::chat_only("deepseek", "deepseek-v4-pro")
+        .with_anthropic(mock.url())
+        .with_mapping(r#"{"claude-sonnet-4-6":"deepseek-v4-pro"}"#);
+
+    let harness = GatewayHarness::start(spec, &mock).await;
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/messages"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 16,
+            "messages": [{ "role": "user", "content": "ping" }]
+        }))
+        .send()
+        .await
+        .expect("send /v1/messages");
+    assert!(res.status().is_success(), "gateway returned {}", res.status());
+
+    let received = mock.received().await;
+    assert_eq!(received.len(), 1);
+    assert_eq!(received[0].path, "/v1/messages");
+    assert_eq!(received[0].body["model"], "deepseek-v4-pro");
+
+    harness.shutdown().await;
+}
+
+#[tokio::test]
+async fn l2_agentgate_virtual_model_resolves_to_real_model() {
+    // Per 1.2.4: AtomCode/OpenCode write `agentgate` as the client model so
+    // the gateway can pick whichever real model the active route lands on.
+    // On a Chat pass-through, the upstream must see the resolved real model,
+    // not the literal "agentgate".
+    let mock = MockUpstream::start().await;
+    mock.stub_chat_completions_ok("real-model-v1", "ok").await;
+
+    let spec = ProviderSpec::chat_only("custom", "real-model-v1");
+    let harness = GatewayHarness::start(spec, &mock).await;
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/chat/completions"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "model": "agentgate",
+            "messages": [{ "role": "user", "content": "ping" }],
+            "stream": false,
+            "max_tokens": 16,
+        }))
+        .send()
+        .await
+        .expect("send /v1/chat/completions");
+    assert!(res.status().is_success(), "gateway returned {}", res.status());
+
+    let received = mock.received().await;
+    assert_eq!(received.len(), 1);
+    assert_eq!(
+        received[0].body["model"], "real-model-v1",
+        "virtual `agentgate` should resolve to the provider's default model"
+    );
+
+    harness.shutdown().await;
+}

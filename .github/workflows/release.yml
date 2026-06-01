@@ -30,6 +30,24 @@ jobs:
       - name: Provider catalog drift check
         run: pnpm provider:catalog:check
 
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: preflight-fixture
+
+      - name: Offline capability + protocol fixture tests
+        working-directory: src-tauri
+        run: |
+          cargo test --test capability_fixture \
+                     --test mimo_capabilities \
+                     --test deepseek_capabilities \
+                     --test kimi_capabilities \
+                     --test protocol_fixture
+
       - name: Docker preflight
         run: bash scripts/release-preflight.sh
 

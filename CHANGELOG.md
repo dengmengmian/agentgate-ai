@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### 工程
+
+- **三层能力转换离线冒烟测试** —— 新增 5 个 `src-tauri/tests/*_fixture.rs` test binary（mock 上游 + 隔离 in-memory SQLite + 真实 axum 网关），覆盖：
+  - **L1 协议转换**：Responses↔Anthropic / Chat↔Anthropic / Messages→Chat fallback
+  - **L2 模型映射**：`/v1/responses` `/v1/chat/completions` `/v1/messages` 三端点 + `agentgate` 虚拟模型解析
+  - **L3 能力矩阵**：MiMo vision promotion / 图片 strip + notice / `web_search` PAYG 自动降级重试 / thinking-mode reasoning_content 占位；DeepSeek 图片 strip / `reasoning_content` 端到端透传 / Claude 直连 `[1m]` 后缀剥离；Kimi `$web_search` builtin 改写 + 同时 disable thinking / 多轮 tool_call ↔ tool_result 闭环
+- **CI 接入**：新增 `.github/workflows/ci.yml`，PR + main push 自动跑全部 fixture，发现回归立即阻断 merge；不依赖任何 key 或外网请求。`release.yml` preflight 也加跑一遍，发版前再卡一道。
+- **一键 smoke 脚本**：新增 `scripts/release-smoke.sh`，离线 fixture 默认跑；`AG_RUN_SMOKE_TESTS=1` 时把真实 provider smoke（从本地 SQLite 取 key，永远只在开发机上跑）一起跑。
+- **dev-dependency**：`wiremock = "0.6"` + `tempfile = "3"`，只在 `cargo test` 时编译。
+
 ## [1.2.4] - 2026-05-30
 
 ### 修复
