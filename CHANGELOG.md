@@ -2,7 +2,21 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.3.0] - 2026-06-01
+
+围绕「5 分钟跑通」上手体验做一轮闭环，同时把三层能力转换的回归测试基建立起来。
+
+### 新增
+
+- **测试连接结构化诊断** —— 失败时不再裸露 `HTTP 401: <body>`。后端把 13 种典型失败（invalid_key / insufficient_balance / rate_limited / web_search_plugin_disabled / model_not_found / region_blocked / endpoint_not_found / upstream_5xx / dns_failed / network_timeout / connection_refused / tls_error / unknown）分类成结构化诊断，每种一句话原因 + 一句话建议；11 家主流 provider 内置 keys / billing / plugin URL 表，UI 直接给「去重建 key」「查看账户余额」「去开通插件」等一键按钮，跳到对应控制台。
+- **快速配置静默检测剪贴板里的 key** —— 进入 Quick Setup 时尝试读一次剪贴板，识别为已知前缀（`sk-ant-` / `tp-` / `xai-` / `gsk_` / `pplx-` / `sk-or-` / `deepseek-` / DeepSeek/Kimi 特征 `sk-`）就在输入框上方弹可关闭 banner，点「填入」直接带进表单 + 自动选好 provider type。剪贴板读不到 / capability 没批 / 内容不像 key → banner 完全不出现，跟没这个功能时一致，不阻断现有流程。
+- **应用客户端配置后检测进程** —— Codex / Claude Code / OpenCode / Gemini CLI / AtomCode 任一点「应用配置」成功后，新增 PostApplyDialog 显示配置 path + 进程状态：在跑就给 PID 列表 + 一键复制 `kill <pid>` + 警告（终端会话会被中断、Claude Code 可以 `--resume` 恢复）；未跑就直接告知「下次启动自动生效」。从不自动 kill，只复制命令到剪贴板让用户自己执行。
+
+### 修复
+
+- **`test_provider` 没转发 `extra_headers`** —— Kimi catalog 默认注入 `User-Agent: KimiCLI/1.40.0`，Moonshot 服务端对部分 plan key 做 UA 校验，UA 不对一律 401，看起来像 key 错了。现在测试连接和能力探测路径都正确转发 provider 自定义 header。
+- **`test_provider` 没解析多 key 字段** —— `["sk-a","sk-b"]` 这种 JSON 数组形式之前直接当字面量拼进 `Bearer`，必 401。现在和 `detect_provider_cache` 一致地取首个非空 key。
+- **编辑 provider 时多 key 不可见** —— 表单总是显示 1 个空槽且 placeholder 只是掩码摘要，用户不知道现有几把 key、改的是哪一把。新增 `get_provider_keys` command 编辑时异步明文回填到每个槽，多 key provider 也能精确改谁改谁。
 
 ### 工程
 
@@ -10,9 +24,10 @@ All notable changes to this project will be documented in this file.
   - **L1 协议转换**：Responses↔Anthropic / Chat↔Anthropic / Messages→Chat fallback
   - **L2 模型映射**：`/v1/responses` `/v1/chat/completions` `/v1/messages` 三端点 + `agentgate` 虚拟模型解析
   - **L3 能力矩阵**：MiMo vision promotion / 图片 strip + notice / `web_search` PAYG 自动降级重试 / thinking-mode reasoning_content 占位；DeepSeek 图片 strip / `reasoning_content` 端到端透传 / Claude 直连 `[1m]` 后缀剥离；Kimi `$web_search` builtin 改写 + 同时 disable thinking / 多轮 tool_call ↔ tool_result 闭环
-- **CI 接入**：新增 `.github/workflows/ci.yml`，PR + main push 自动跑全部 fixture，发现回归立即阻断 merge；不依赖任何 key 或外网请求。`release.yml` preflight 也加跑一遍，发版前再卡一道。
+- **CI 接入**：新增 `.github/workflows/ci.yml`，PR + main push 自动跑全部 fixture，发现回归立即阻断 merge；不依赖任何 key 或外网请求。`release.yml` preflight 也加跑一遍，发版前再卡一道。Ubuntu runner 顺手装齐 `libwebkit2gtk-4.1-dev` 等系统依赖供 tauri 链接。
 - **一键 smoke 脚本**：新增 `scripts/release-smoke.sh`，离线 fixture 默认跑；`AG_RUN_SMOKE_TESTS=1` 时把真实 provider smoke（从本地 SQLite 取 key，永远只在开发机上跑）一起跑。
 - **dev-dependency**：`wiremock = "0.6"` + `tempfile = "3"`，只在 `cargo test` 时编译。
+- **新增运行时依赖**：`tauri-plugin-clipboard-manager`（剪贴板检测 + 复制 kill 命令用）。
 
 ## [1.2.4] - 2026-05-30
 
