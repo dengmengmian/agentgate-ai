@@ -12,6 +12,7 @@ import {
   Rocket,
   PanelLeftClose,
   PanelLeftOpen,
+  FileText,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { cn } from "@/lib/utils";
@@ -29,6 +30,7 @@ const navItems = [
   { to: "/routes", labelKey: "nav.routes", icon: GitBranch },
   { to: "/logs", labelKey: "nav.logs", icon: ScrollText },
   { to: "/diagnostics", labelKey: "nav.diagnostics", icon: Stethoscope },
+  { to: "/instructions", labelKey: "nav.instructions", icon: FileText },
   { to: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 

@@ -355,6 +355,11 @@ pub fn run() {
             // Config Import / Export
             commands::export_config_json,
             commands::import_config_json,
+            // Global instructions (CLAUDE.md / AGENTS.md)
+            commands::list_instructions_templates,
+            commands::read_global_instructions,
+            commands::write_global_instructions,
+            commands::apply_instructions_template,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

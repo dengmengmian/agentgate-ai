@@ -1514,6 +1514,69 @@ pub fn open_atomcode_config() -> Result<bool, AppError> {
     Ok(true)
 }
 
+// ── Global Instructions (CLAUDE.md / AGENTS.md) ────────────────
+
+/// 列出内置模板。模板是只读静态资源，不需要参数也不消耗 DB。
+#[tauri::command]
+pub fn list_instructions_templates()
+    -> Result<Vec<crate::tools::instructions_templates::InstructionsTemplate>, AppError> {
+    // 静态 slice → Vec 让 Tauri 能序列化。
+    Ok(crate::tools::instructions_templates::TEMPLATES.iter().cloned().collect())
+}
+
+/// 读取某 scope（claude_global / codex_global）的全局指令文件原文。
+/// 文件不存在时返回 `exists=false, content=""`，让前端 textarea 仍可编辑。
+#[tauri::command]
+pub fn read_global_instructions(scope: String)
+    -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
+    let s = crate::tools::instructions::InstructionsScope::from_str(&scope)
+        .ok_or_else(|| AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}")))?;
+    Ok(crate::tools::instructions::read(s))
+}
+
+/// 手动编辑后保存。和 5 个客户端的 apply 流程一致：写盘前 snapshot 一次磁盘
+/// 原文，便于事后回滚。
+#[tauri::command]
+pub fn write_global_instructions(
+    state: State<'_, AppState>,
+    scope: String,
+    content: String,
+) -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
+    let s = crate::tools::instructions::InstructionsScope::from_str(&scope)
+        .ok_or_else(|| AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}")))?;
+    record_pre_apply(
+        &state,
+        s.history_client_id(),
+        "write",
+        crate::tools::instructions::snapshot_paths(s),
+        "manual edit",
+    );
+    crate::tools::instructions::write(s, &content)
+}
+
+/// 把模板按 overwrite / append 写入目标 scope。同样在写盘前打 snapshot。
+#[tauri::command]
+pub fn apply_instructions_template(
+    state: State<'_, AppState>,
+    scope: String,
+    template_id: String,
+    mode: String,
+) -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
+    let s = crate::tools::instructions::InstructionsScope::from_str(&scope)
+        .ok_or_else(|| AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}")))?;
+    let m = crate::tools::instructions::ApplyMode::from_str(&mode)
+        .ok_or_else(|| AppError::new("INSTRUCTIONS_BAD_MODE", format!("unknown mode: {mode}")))?;
+    let summary = format!("template {template_id} ({mode})");
+    record_pre_apply(
+        &state,
+        s.history_client_id(),
+        "apply_template",
+        crate::tools::instructions::snapshot_paths(s),
+        &summary,
+    );
+    crate::tools::instructions::apply_template(s, &template_id, m)
+}
+
 // ── Provider Health Commands ──────────────────────────────────
 
 #[tauri::command]

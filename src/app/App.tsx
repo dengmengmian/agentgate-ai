@@ -12,6 +12,7 @@ import { Logs } from "@/pages/Logs";
 import { Diagnostics } from "@/pages/Diagnostics";
 import { Settings } from "@/pages/Settings";
 import { QuickSetup } from "@/pages/QuickSetup";
+import { Instructions } from "@/pages/Instructions";
 
 export function App() {
   return (
@@ -27,6 +28,7 @@ export function App() {
             <Route path="/gateway" element={<Gateway />} />
             <Route path="/logs" element={<Logs />} />
             <Route path="/diagnostics" element={<Diagnostics />} />
+            <Route path="/instructions" element={<Instructions />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Routes>

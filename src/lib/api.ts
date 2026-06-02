@@ -400,6 +400,53 @@ export async function rollbackClientApply(
   return cmd("rollback_client_apply", { historyId });
 }
 
+// ── Global Instructions (CLAUDE.md / AGENTS.md) ────────────────
+
+export type InstructionsScope = "claude_global" | "codex_global";
+export type InstructionsApplyMode = "overwrite" | "append";
+
+export interface InstructionsTemplate {
+  id: string;
+  title: string;
+  description: string;
+  /// `"claude"` / `"codex"` / `"all"`
+  scopes: string[];
+  content: string;
+}
+
+export interface InstructionsStatus {
+  scope: string;
+  path: string;
+  exists: boolean;
+  content: string;
+  size_bytes: number;
+}
+
+export async function listInstructionsTemplates(): Promise<InstructionsTemplate[]> {
+  return cmd("list_instructions_templates");
+}
+
+export async function readGlobalInstructions(
+  scope: InstructionsScope
+): Promise<InstructionsStatus> {
+  return cmd("read_global_instructions", { scope });
+}
+
+export async function writeGlobalInstructions(
+  scope: InstructionsScope,
+  content: string
+): Promise<InstructionsStatus> {
+  return cmd("write_global_instructions", { scope, content });
+}
+
+export async function applyInstructionsTemplate(
+  scope: InstructionsScope,
+  templateId: string,
+  mode: InstructionsApplyMode
+): Promise<InstructionsStatus> {
+  return cmd("apply_instructions_template", { scope, templateId, mode });
+}
+
 // ── Route Profiles ─────────────────────────────────────────────
 
 import type {

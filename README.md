@@ -134,6 +134,7 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 - Codex Desktop compatibility: routes model requests to third-party APIs while preserving the official OpenAI provider path, signed-in account state, and plugin/account feature compatibility
 - Claude Code: one-click config + toggle between official and AgentGate
 - OpenCode: one-click config
+- Global instruction files: edit `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` from inside AgentGate with 4 built-in templates (minimal rules / TDD / code review / security audit); overwrite or append, with auto-snapshot and one-click rollback
 - Local gateway access token (`ag_local_*`) authentication
 
 **Desktop Experience**

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Terminal,
   Code,
@@ -15,8 +15,6 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
-  ChevronDown,
-  ChevronRight,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
@@ -28,8 +26,25 @@ import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
 import * as api from "@/lib/api";
-import type { CodexConfigStatus, ClaudeCodeEnvStatus, OpenCodeConfigStatus, GeminiCliConfigStatus, AtomCodeConfigStatus } from "@/types/config";
+import type {
+  CodexConfigStatus,
+  ClaudeCodeEnvStatus,
+  OpenCodeConfigStatus,
+  GeminiCliConfigStatus,
+  AtomCodeConfigStatus,
+} from "@/types/config";
 import type { GatewayStatus } from "@/types/gateway";
+
+/// Master-detail 布局：左侧 5 行客户端列表常驻显示状态，右侧渲染选中客户端
+/// 的完整详情。比原先的手风琴更适合「同时管理 5 个客户端」的场景——总览不
+/// 丢失、详情区不再被卡片 chrome 切碎。
+type ClientId = "codex" | "claude_code" | "opencode" | "gemini_cli" | "atomcode";
+
+/// 把每个客户端在「列表行」上需要的状态压成统一三态：
+/// - `active`：已接入 AgentGate
+/// - `detected`：检测到配置但未接入 AgentGate
+/// - `absent`：未检测到
+type ClientPresence = "active" | "detected" | "absent";
 
 export function Tools() {
   const { t } = useI18n();
@@ -46,12 +61,6 @@ export function Tools() {
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null);
   const [startingGateway, setStartingGateway] = useState(false);
 
-  // 未检测到的 client 默认折叠——5 个全展开屏幕太长，用户只用 1-2 个。
-  // 检测到的 client 默认展开。用户可以手动点 chevron 切换任一 client 状态。
-  const [expandedClients, setExpandedClients] = useState<Record<string, boolean>>({});
-  const toggleExpanded = (id: string) => setExpandedClients(s => ({ ...s, [id]: !(s[id] ?? false) }));
-  const isExpanded = (id: string, detected: boolean) =>
-    expandedClients[id] !== undefined ? expandedClients[id] : detected;
   const [confirmApplyCodex, setConfirmApplyCodex] = useState(false);
   const [confirmApplyClaude, setConfirmApplyClaude] = useState(false);
   const [confirmApplyOpenCode, setConfirmApplyOpenCode] = useState(false);
@@ -67,6 +76,16 @@ export function Tools() {
     configPath: string;
     processes: api.RunningProcess[];
   } | null>(null);
+
+  // 当前选中的客户端。默认选第一个「已应用 / 检测到」的客户端，没有则回退
+  // 到 codex（catalog 的第一项）。用 sessionStorage 记住一下，刷新不丢。
+  const [selectedClientId, setSelectedClientId] = useState<ClientId>(() => {
+    const saved = sessionStorage.getItem("agentgate_tools_selected") as ClientId | null;
+    return saved ?? "codex";
+  });
+  useEffect(() => {
+    sessionStorage.setItem("agentgate_tools_selected", selectedClientId);
+  }, [selectedClientId]);
 
   const showPostApply = async (
     clientId: string,
@@ -251,46 +270,71 @@ export function Tools() {
     }
   };
 
+  // 列表行的元数据。每个客户端的 presence 直接从对应 status 推断，避免
+  // 列表/详情两边对「是否检测到」的判定标准不一致。
+  const clientRows: {
+    id: ClientId;
+    name: string;
+    desc: string;
+    icon: React.ComponentType<{ className?: string }>;
+    presence: ClientPresence;
+  }[] = useMemo(() => {
+    const codexPresence: ClientPresence = codexStatus?.has_agentgate
+      ? "active"
+      : codexStatus?.exists
+        ? "detected"
+        : "absent";
+    const claudePresence: ClientPresence = claudeEnv?.has_agentgate
+      ? "active"
+      : claudeEnv?.has_api_key || claudeEnv?.has_auth_token
+        ? "detected"
+        : "absent";
+    const opencodePresence: ClientPresence = openCodeStatus?.has_agentgate
+      ? "active"
+      : openCodeStatus?.exists
+        ? "detected"
+        : "absent";
+    const geminiPresence: ClientPresence = geminiStatus?.has_agentgate
+      ? "active"
+      : geminiStatus?.exists
+        ? "detected"
+        : "absent";
+    const atomPresence: ClientPresence = atomCodeStatus?.has_agentgate
+      ? "active"
+      : atomCodeStatus?.exists
+        ? "detected"
+        : "absent";
+    return [
+      { id: "codex", name: t("tools.codex"), desc: t("tools.codex_desc"), icon: Code, presence: codexPresence },
+      { id: "claude_code", name: t("tools.claude_code"), desc: t("tools.claude_code_desc"), icon: Terminal, presence: claudePresence },
+      { id: "opencode", name: t("tools.opencode"), desc: t("tools.opencode_desc"), icon: Braces, presence: opencodePresence },
+      { id: "gemini_cli", name: t("tools.gemini_cli"), desc: t("tools.gemini_cli_desc"), icon: Sparkles, presence: geminiPresence },
+      { id: "atomcode", name: t("tools.atomcode"), desc: t("tools.atomcode_desc"), icon: Atom, presence: atomPresence },
+    ];
+  }, [codexStatus, claudeEnv, openCodeStatus, geminiStatus, atomCodeStatus, t]);
+
   if (loading) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Connection Status Bar */}
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <ConnectionStep
-              label={t("tools.step_config")}
-              ok={testResult?.config_ok ?? null}
-              testing={testing}
-            />
+            <ConnectionStep label={t("tools.step_config")} ok={testResult?.config_ok ?? null} testing={testing} />
             <div className="h-px w-6 bg-border" />
-            <ConnectionStep
-              label={t("tools.step_gateway")}
-              ok={testResult?.gateway_ok ?? null}
-              testing={testing}
-            />
+            <ConnectionStep label={t("tools.step_gateway")} ok={testResult?.gateway_ok ?? null} testing={testing} />
             <div className="h-px w-6 bg-border" />
-            <ConnectionStep
-              label={t("tools.step_provider")}
-              ok={testResult?.provider_ok ?? null}
-              testing={testing}
-            />
+            <ConnectionStep label={t("tools.step_provider")} ok={testResult?.provider_ok ?? null} testing={testing} />
           </div>
-          <button
-            onClick={handleTestConnection}
-            disabled={testing}
-            className="btn-secondary"
-          >
+          <button onClick={handleTestConnection} disabled={testing} className="btn-secondary">
             {testing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
             {t("tools.test_connection")}
           </button>
         </div>
         {gatewayStatus && (
           <div className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${
-            gatewayStatus.running
-              ? "border-success/30 bg-success-soft"
-              : "border-warning/30 bg-warning/5"
+            gatewayStatus.running ? "border-success/30 bg-success-soft" : "border-warning/30 bg-warning/5"
           }`}>
             <p className={`text-xs ${gatewayStatus.running ? "text-success" : "text-warning"}`}>
               {gatewayStatus.running
@@ -298,322 +342,104 @@ export function Tools() {
                 : t("tools.gateway_not_running_hint")}
             </p>
             {!gatewayStatus.running && (
-              <button
-                onClick={handleStartGateway}
-                disabled={startingGateway}
-                className="btn-primary"
-              >
+              <button onClick={handleStartGateway} disabled={startingGateway} className="btn-primary">
                 {startingGateway ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
                 {t("gateway.start")}
               </button>
             )}
           </div>
         )}
-        {testResult?.error && (
-          <p className="mt-2 text-xs text-error">{testResult.error}</p>
-        )}
+        {testResult?.error && <p className="mt-2 text-xs text-error">{testResult.error}</p>}
       </div>
 
-      {/* Codex Card */}
-      <div className="rounded-xl border border-border bg-card p-5">
-        <button
-          type="button"
-          onClick={() => toggleExpanded("codex")}
-          className="mb-4 flex w-full items-start justify-between text-left"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
-              <Code className="h-5 w-5 text-accent" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">{t("tools.codex")}</h3>
-              <p className="text-xs text-text-muted">{t("tools.codex_desc")}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <StatusBadge variant={codexStatus?.has_agentgate ? "success" : codexStatus?.exists ? "warning" : "muted"}>
-              {codexStatus?.has_agentgate ? t("tools.agentgate_configured") : codexStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
-            </StatusBadge>
-            {isExpanded("codex", !!codexStatus?.exists) ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
-          </div>
-        </button>
+      {/* Master-detail */}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
+        {/* Left list */}
+        <aside className="rounded-xl border border-border bg-card p-2">
+          <ul className="space-y-1">
+            {clientRows.map((row) => {
+              const Icon = row.icon;
+              const selected = selectedClientId === row.id;
+              return (
+                <li key={row.id}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedClientId(row.id)}
+                    className={
+                      "flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors " +
+                      (selected
+                        ? "bg-accent-soft text-accent"
+                        : "text-text-secondary hover:bg-hover hover:text-text-primary")
+                    }
+                  >
+                    <PresenceDot presence={row.presence} />
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-xs font-medium">{row.name}</div>
+                      <div className={
+                        "truncate text-[10px] " +
+                        (selected ? "text-accent/80" : "text-text-muted")
+                      }>
+                        {presenceLabel(row.presence, t)}
+                      </div>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </aside>
 
-        {isExpanded("codex", !!codexStatus?.exists) && <>
-        {codexStatus && (
-          <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
-            <div><span className="text-text-muted">config.toml</span><p className="font-mono text-text-secondary text-[11px]">{codexStatus.config_path}</p></div>
-            <div><span className="text-text-muted">{t("tools.current_provider")}</span><p className="text-text-primary">{codexStatus.current_provider ?? "—"}</p></div>
-            <div><span className="text-text-muted">auth.json</span><p className="font-mono text-text-secondary text-[11px]">{codexStatus.auth_json_path}</p></div>
-            <div><span className="text-text-muted">{t("tools.auth_status")}</span><p className="flex items-center gap-1 text-text-primary"><Shield className="h-3 w-3 text-accent" />{codexStatus.has_agentgate_auth ? t("tools.token_set") : t("tools.not_configured")}</p></div>
-          </div>
-        )}
-
-        {codexStatus?.openai_key_polluted && (
-          <div className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-3">
-            <div className="flex items-center gap-2 text-xs font-medium text-warning">
-              <AlertTriangle className="h-3.5 w-3.5" />
-              {t("tools.openai_key_polluted")}
-            </div>
-            <p className="mt-1 text-[11px] text-text-secondary">{t("tools.openai_key_polluted_desc")}</p>
-          </div>
-        )}
-
-        {codexStatus?.is_agentgate_active && (
-          <div className="mb-3 rounded-md border border-success/30 bg-success-soft p-3">
-            <div className="flex items-center gap-2 text-xs font-medium text-success">
-              <Shield className="h-3.5 w-3.5" />
-              代理模式已启用：对话走 AgentGate · IDE 插件继续可用
-            </div>
-            <p className="mt-1 text-[11px] text-text-secondary">
-              当前配置使用「劫持 OpenAI provider + <code className="font-mono">requires_openai_auth</code>」方案：
-              对话请求路由到 AgentGate（→ 第三方模型），同时保留 ChatGPT 官方登录态 —
-              Browser / Computer-Use / Mobile / 配额查询 全部可用。<br />
-              要切回 Codex 直连 ChatGPT 官方，点击 "切换到官方"。
-            </p>
-          </div>
-        )}
-
-        {!codexStatus?.is_agentgate_active && codexStatus?.exists && (
-          <div className="mb-3 rounded-md border border-border bg-card-secondary p-3">
-            <div className="text-xs font-medium text-text-primary">
-              原生模式：Codex 直连 ChatGPT 官方
-            </div>
-            <p className="mt-1 text-[11px] text-text-secondary">
-              当前不经过 AgentGate。如需路由到 MiMo / DeepSeek / Kimi 等第三方模型，
-              点击 "应用配置" 切换到代理模式 —— 切换后 IDE 插件 / Codex Mobile 仍可正常使用。
-            </p>
-          </div>
-        )}
-
-        <p className="mb-3 text-[11px] text-text-muted">{t("tools.codex_auth_desc")}</p>
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button onClick={() => setConfirmApplyCodex(true)} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
-          {codexStatus?.is_agentgate_active && codexStatus?.has_saved_official && (
-            <button onClick={handleToggleCodex} className="btn-secondary">
-              <ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}
-            </button>
+        {/* Right detail */}
+        <section className="min-w-0">
+          {selectedClientId === "codex" && (
+            <CodexDetail
+              status={codexStatus}
+              codexConfig={codexConfig}
+              onApply={() => setConfirmApplyCodex(true)}
+              onToggle={handleToggleCodex}
+              load={load}
+              t={t}
+            />
           )}
-          {!codexStatus?.is_agentgate_active && codexStatus?.has_agentgate && (
-            <button onClick={handleToggleCodex} className="btn-primary">
-              <ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}
-            </button>
+          {selectedClientId === "claude_code" && (
+            <ClaudeDetail
+              env={claudeEnv}
+              snippet={claudeSnippet}
+              onApply={() => setConfirmApplyClaude(true)}
+              onToggle={handleToggleClaude}
+              onGenerateSnippet={handleGenerateClaudeSnippet}
+              load={load}
+              t={t}
+            />
           )}
-          {codexStatus?.exists && (
-            <button onClick={() => api.openCodexConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
+          {selectedClientId === "opencode" && (
+            <OpenCodeDetail
+              status={openCodeStatus}
+              onApply={() => setConfirmApplyOpenCode(true)}
+              load={load}
+              t={t}
+            />
           )}
-          <ClientHistoryButton clientId="codex" clientName="Codex" onRollbackDone={load} />
-          <CopyButton text={codexConfig} />
-        </div>
-        </>}
-      </div>
-
-      {/* Claude Code Card */}
-      <div className="rounded-xl border border-border bg-card p-5">
-        <button
-          type="button"
-          onClick={() => toggleExpanded("claude_code")}
-          className="mb-4 flex w-full items-start justify-between text-left"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
-              <Terminal className="h-5 w-5 text-accent" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">{t("tools.claude_code")}</h3>
-              <p className="text-xs text-text-muted">{t("tools.claude_code_desc")}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <StatusBadge variant={claudeEnv?.has_agentgate ? "success" : claudeEnv?.has_api_key || claudeEnv?.has_auth_token ? "warning" : "muted"}>
-              {claudeEnv?.has_agentgate ? t("tools.agentgate_configured") : claudeEnv?.has_api_key || claudeEnv?.has_auth_token ? t("tools.direct_credentials") : t("tools.no_credentials")}
-            </StatusBadge>
-            {isExpanded("claude_code", !!claudeEnv?.settings_exists) ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
-          </div>
-        </button>
-
-        {isExpanded("claude_code", !!claudeEnv?.settings_exists) && <>
-        {claudeEnv && (
-          <>
-            <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
-              <div><span className="text-text-muted">Settings Path</span><p className="font-mono text-text-secondary text-[11px]">{claudeEnv.settings_path}</p></div>
-              <div><span className="text-text-muted">{t("settings.auth_mode")}</span><p className="flex items-center gap-1 text-text-primary"><Shield className="h-3 w-3 text-accent" />{claudeEnv.auth_mode}</p></div>
-              <div><span className="text-text-muted">{t("providers.base_url")}</span><p className="font-mono text-text-secondary">{claudeEnv.active_base_url ?? "default"}</p></div>
-              <div><span className="text-text-muted">{t("logs.model")}</span><p className="font-mono text-text-primary">{claudeEnv.active_model ?? "default"}</p></div>
-            </div>
-
-            {claudeEnv.conflicts.length > 0 && (
-              <div className="mb-4 rounded-md border border-warning/30 bg-warning/5 p-3">
-                <div className="flex items-center gap-2 text-xs font-medium text-warning"><AlertTriangle className="h-3.5 w-3.5" />{claudeEnv.conflicts.length} {t("tools.conflicts_detected")}</div>
-                {claudeEnv.conflicts.map((c, i) => <p key={i} className="mt-1 text-[11px] text-text-secondary">{c}</p>)}
-              </div>
-            )}
-          </>
-        )}
-
-        <p className="mb-3 text-[11px] text-text-muted">{t("tools.claude_auth_desc")}</p>
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button onClick={() => setConfirmApplyClaude(true)} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
-          {claudeEnv?.has_agentgate && claudeEnv?.has_saved_official && (
-            <button onClick={handleToggleClaude} className="btn-secondary">
-              <ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}
-            </button>
+          {selectedClientId === "gemini_cli" && (
+            <GeminiDetail
+              status={geminiStatus}
+              onApply={() => setConfirmApplyGemini(true)}
+              onToggle={handleToggleGemini}
+              load={load}
+              t={t}
+            />
           )}
-          {!claudeEnv?.has_agentgate && claudeEnv?.has_saved_official && (
-            <button onClick={handleToggleClaude} className="btn-primary">
-              <ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}
-            </button>
+          {selectedClientId === "atomcode" && (
+            <AtomCodeDetail
+              status={atomCodeStatus}
+              onApply={() => setConfirmApplyAtomCode(true)}
+              onToggle={handleToggleAtomCode}
+              load={load}
+              t={t}
+            />
           )}
-          {claudeEnv?.settings_exists && (
-            <button onClick={() => api.openClaudeCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
-          )}
-          <ClientHistoryButton clientId="claude_code" clientName="Claude Code" onRollbackDone={load} />
-          <button onClick={handleGenerateClaudeSnippet} className="btn-secondary"><Code className="h-3 w-3" />{t("tools.env_snippet")}</button>
-        </div>
-
-        {claudeSnippet && <JsonCodeBlock title="Claude Code Environment" content={claudeSnippet} language="bash" />}
-        </>}
-      </div>
-
-      {/* OpenCode Card */}
-      <div className="rounded-xl border border-border bg-card p-5">
-        <button
-          type="button"
-          onClick={() => toggleExpanded("opencode")}
-          className="mb-4 flex w-full items-start justify-between text-left"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
-              <Braces className="h-5 w-5 text-accent" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">{t("tools.opencode")}</h3>
-              <p className="text-xs text-text-muted">{t("tools.opencode_desc")}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-          <StatusBadge variant={openCodeStatus?.has_agentgate ? "success" : openCodeStatus?.exists ? "warning" : "muted"}>
-            {openCodeStatus?.has_agentgate ? t("tools.agentgate_configured") : openCodeStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
-          </StatusBadge>
-          {isExpanded("opencode", !!openCodeStatus?.exists) ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
-          </div>
-        </button>
-
-        {isExpanded("opencode", !!openCodeStatus?.exists) && <>
-        {openCodeStatus && (
-          <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
-            <div><span className="text-text-muted">opencode.json</span><p className="font-mono text-text-secondary text-[11px]">{openCodeStatus.config_path}</p></div>
-            <div><span className="text-text-muted">{t("logs.model")}</span><p className="text-text-primary">{openCodeStatus.current_model ?? "—"}</p></div>
-          </div>
-        )}
-
-        <p className="mb-3 text-[11px] text-text-muted">{t("tools.opencode_auth_desc")}</p>
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button onClick={() => setConfirmApplyOpenCode(true)} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
-          {openCodeStatus?.exists && (
-            <button onClick={() => api.openOpenCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
-          )}
-          <ClientHistoryButton clientId="opencode" clientName="OpenCode" onRollbackDone={load} />
-        </div>
-        </>}
-      </div>
-
-      {/* Gemini CLI Card */}
-      <div className="rounded-xl border border-border bg-card p-5">
-        <button
-          type="button"
-          onClick={() => toggleExpanded("gemini_cli")}
-          className="mb-4 flex w-full items-start justify-between text-left"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
-              <Sparkles className="h-5 w-5 text-accent" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">{t("tools.gemini_cli")}</h3>
-              <p className="text-xs text-text-muted">{t("tools.gemini_cli_desc")}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <StatusBadge variant={geminiStatus?.has_agentgate ? "success" : geminiStatus?.exists ? "warning" : "muted"}>
-              {geminiStatus?.has_agentgate ? t("tools.agentgate_configured") : geminiStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
-            </StatusBadge>
-            {isExpanded("gemini_cli", !!geminiStatus?.exists) ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
-          </div>
-        </button>
-
-        {isExpanded("gemini_cli", !!geminiStatus?.exists) && <>
-        {geminiStatus && (
-          <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
-            <div><span className="text-text-muted">settings.json</span><p className="font-mono text-text-secondary text-[11px]">{geminiStatus.config_path}</p></div>
-            <div><span className="text-text-muted">{t("logs.model")}</span><p className="text-text-primary">{geminiStatus.current_model ?? "—"}</p></div>
-          </div>
-        )}
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button onClick={() => setConfirmApplyGemini(true)} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
-          {geminiStatus?.has_agentgate && geminiStatus?.has_saved_official && (
-            <button onClick={handleToggleGemini} className="btn-secondary"><ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}</button>
-          )}
-          {!geminiStatus?.has_agentgate && geminiStatus?.has_saved_official && (
-            <button onClick={handleToggleGemini} className="btn-primary"><ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}</button>
-          )}
-          {geminiStatus?.exists && (
-            <button onClick={() => api.openGeminiConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
-          )}
-          <ClientHistoryButton clientId="gemini" clientName="Gemini CLI" onRollbackDone={load} />
-        </div>
-        </>}
-      </div>
-
-      {/* AtomCode Card */}
-      <div className="rounded-xl border border-border bg-card p-5">
-        <button
-          type="button"
-          onClick={() => toggleExpanded("atomcode")}
-          className="mb-4 flex w-full items-start justify-between text-left"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
-              <Atom className="h-5 w-5 text-accent" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-text-primary">{t("tools.atomcode")}</h3>
-              <p className="text-xs text-text-muted">{t("tools.atomcode_desc")}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <StatusBadge variant={atomCodeStatus?.has_agentgate ? "success" : atomCodeStatus?.exists ? "warning" : "muted"}>
-              {atomCodeStatus?.has_agentgate ? t("tools.agentgate_configured") : atomCodeStatus?.exists ? t("tools.not_configured") : t("tools.no_config")}
-            </StatusBadge>
-            {isExpanded("atomcode", !!atomCodeStatus?.exists) ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
-          </div>
-        </button>
-
-        {isExpanded("atomcode", !!atomCodeStatus?.exists) && <>
-        {atomCodeStatus && (
-          <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
-            <div><span className="text-text-muted">config.toml</span><p className="font-mono text-text-secondary text-[11px]">{atomCodeStatus.config_path}</p></div>
-            <div><span className="text-text-muted">{t("logs.model")}</span><p className="text-text-primary">{atomCodeStatus.current_model ?? "—"}</p></div>
-          </div>
-        )}
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          <button onClick={() => setConfirmApplyAtomCode(true)} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
-          {atomCodeStatus?.has_agentgate && atomCodeStatus?.has_saved_official && (
-            <button onClick={handleToggleAtomCode} className="btn-secondary"><ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}</button>
-          )}
-          {!atomCodeStatus?.has_agentgate && atomCodeStatus?.has_saved_official && (
-            <button onClick={handleToggleAtomCode} className="btn-primary"><ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}</button>
-          )}
-          {atomCodeStatus?.exists && (
-            <button onClick={() => api.openAtomCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
-          )}
-          <ClientHistoryButton clientId="atomcode" clientName="AtomCode" onRollbackDone={load} />
-        </div>
-        </>}
+        </section>
       </div>
 
       <ConfirmDialog open={confirmApplyCodex} title={t("tools.apply_codex_title")} message={t("tools.apply_codex_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyCodex} onCancel={() => setConfirmApplyCodex(false)} />
@@ -630,6 +456,333 @@ export function Tools() {
         processes={postApply?.processes ?? []}
         onClose={() => setPostApply(null)}
       />
+    </div>
+  );
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+
+function PresenceDot({ presence }: { presence: ClientPresence }) {
+  const cls = presence === "active"
+    ? "bg-success"
+    : presence === "detected"
+      ? "bg-warning"
+      : "bg-border";
+  return <span className={`h-2 w-2 shrink-0 rounded-full ${cls}`} />;
+}
+
+function presenceLabel(p: ClientPresence, t: (k: string) => string): string {
+  switch (p) {
+    case "active": return t("tools.agentgate_configured");
+    case "detected": return t("tools.not_configured");
+    case "absent": return t("tools.no_config");
+  }
+}
+
+type T = (k: string) => string;
+
+/// 详情区共用的页眉：图标 + 标题 + 描述 + 状态徽章。
+function DetailHeader({
+  Icon, name, desc, badge,
+}: {
+  Icon: React.ComponentType<{ className?: string }>;
+  name: string;
+  desc: string;
+  badge: React.ReactNode;
+}) {
+  return (
+    <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-soft">
+          <Icon className="h-5 w-5 text-accent" />
+        </div>
+        <div>
+          <h3 className="text-sm font-semibold text-text-primary">{name}</h3>
+          <p className="text-xs text-text-muted">{desc}</p>
+        </div>
+      </div>
+      <div>{badge}</div>
+    </div>
+  );
+}
+
+// ── Per-client detail components ───────────────────────────────
+
+function CodexDetail({
+  status, codexConfig, onApply, onToggle, load, t,
+}: {
+  status: CodexConfigStatus | null;
+  codexConfig: string;
+  onApply: () => void;
+  onToggle: () => void;
+  load: () => void;
+  t: T;
+}) {
+  const badge = (
+    <StatusBadge variant={status?.has_agentgate ? "success" : status?.exists ? "warning" : "muted"}>
+      {status?.has_agentgate ? t("tools.agentgate_configured") : status?.exists ? t("tools.not_configured") : t("tools.no_config")}
+    </StatusBadge>
+  );
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <DetailHeader Icon={Code} name={t("tools.codex")} desc={t("tools.codex_desc")} badge={badge} />
+
+      {status && (
+        <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
+          <div><span className="text-text-muted">config.toml</span><p className="font-mono text-text-secondary text-[11px]">{status.config_path}</p></div>
+          <div><span className="text-text-muted">{t("tools.current_provider")}</span><p className="text-text-primary">{status.current_provider ?? "—"}</p></div>
+          <div><span className="text-text-muted">auth.json</span><p className="font-mono text-text-secondary text-[11px]">{status.auth_json_path}</p></div>
+          <div><span className="text-text-muted">{t("tools.auth_status")}</span><p className="flex items-center gap-1 text-text-primary"><Shield className="h-3 w-3 text-accent" />{status.has_agentgate_auth ? t("tools.token_set") : t("tools.not_configured")}</p></div>
+        </div>
+      )}
+
+      {status?.openai_key_polluted && (
+        <div className="mb-3 rounded-md border border-warning/30 bg-warning/5 p-3">
+          <div className="flex items-center gap-2 text-xs font-medium text-warning">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {t("tools.openai_key_polluted")}
+          </div>
+          <p className="mt-1 text-[11px] text-text-secondary">{t("tools.openai_key_polluted_desc")}</p>
+        </div>
+      )}
+
+      {status?.is_agentgate_active && (
+        <div className="mb-3 rounded-md border border-success/30 bg-success-soft p-3">
+          <div className="flex items-center gap-2 text-xs font-medium text-success">
+            <Shield className="h-3.5 w-3.5" />
+            代理模式已启用：对话走 AgentGate · IDE 插件继续可用
+          </div>
+          <p className="mt-1 text-[11px] text-text-secondary">
+            当前配置使用「劫持 OpenAI provider + <code className="font-mono">requires_openai_auth</code>」方案：
+            对话请求路由到 AgentGate（→ 第三方模型），同时保留 ChatGPT 官方登录态 —
+            Browser / Computer-Use / Mobile / 配额查询 全部可用。<br />
+            要切回 Codex 直连 ChatGPT 官方，点击 "切换到官方"。
+          </p>
+        </div>
+      )}
+
+      {!status?.is_agentgate_active && status?.exists && (
+        <div className="mb-3 rounded-md border border-border bg-card-secondary p-3">
+          <div className="text-xs font-medium text-text-primary">
+            原生模式：Codex 直连 ChatGPT 官方
+          </div>
+          <p className="mt-1 text-[11px] text-text-secondary">
+            当前不经过 AgentGate。如需路由到 MiMo / DeepSeek / Kimi 等第三方模型，
+            点击 "应用配置" 切换到代理模式 —— 切换后 IDE 插件 / Codex Mobile 仍可正常使用。
+          </p>
+        </div>
+      )}
+
+      <p className="mb-3 text-[11px] text-text-muted">{t("tools.codex_auth_desc")}</p>
+
+      <div className="flex flex-wrap gap-2">
+        <button onClick={onApply} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
+        {status?.is_agentgate_active && status?.has_saved_official && (
+          <button onClick={onToggle} className="btn-secondary">
+            <ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}
+          </button>
+        )}
+        {!status?.is_agentgate_active && status?.has_agentgate && (
+          <button onClick={onToggle} className="btn-primary">
+            <ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}
+          </button>
+        )}
+        {status?.exists && (
+          <button onClick={() => api.openCodexConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
+        )}
+        <ClientHistoryButton clientId="codex" clientName="Codex" onRollbackDone={load} />
+        <CopyButton text={codexConfig} />
+      </div>
+    </div>
+  );
+}
+
+function ClaudeDetail({
+  env, snippet, onApply, onToggle, onGenerateSnippet, load, t,
+}: {
+  env: ClaudeCodeEnvStatus | null;
+  snippet: string;
+  onApply: () => void;
+  onToggle: () => void;
+  onGenerateSnippet: () => void;
+  load: () => void;
+  t: T;
+}) {
+  const badge = (
+    <StatusBadge variant={env?.has_agentgate ? "success" : env?.has_api_key || env?.has_auth_token ? "warning" : "muted"}>
+      {env?.has_agentgate ? t("tools.agentgate_configured") : env?.has_api_key || env?.has_auth_token ? t("tools.direct_credentials") : t("tools.no_credentials")}
+    </StatusBadge>
+  );
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <DetailHeader Icon={Terminal} name={t("tools.claude_code")} desc={t("tools.claude_code_desc")} badge={badge} />
+
+      {env && (
+        <>
+          <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
+            <div><span className="text-text-muted">Settings Path</span><p className="font-mono text-text-secondary text-[11px]">{env.settings_path}</p></div>
+            <div><span className="text-text-muted">{t("settings.auth_mode")}</span><p className="flex items-center gap-1 text-text-primary"><Shield className="h-3 w-3 text-accent" />{env.auth_mode}</p></div>
+            <div><span className="text-text-muted">{t("providers.base_url")}</span><p className="font-mono text-text-secondary">{env.active_base_url ?? "default"}</p></div>
+            <div><span className="text-text-muted">{t("logs.model")}</span><p className="font-mono text-text-primary">{env.active_model ?? "default"}</p></div>
+          </div>
+
+          {env.conflicts.length > 0 && (
+            <div className="mb-4 rounded-md border border-warning/30 bg-warning/5 p-3">
+              <div className="flex items-center gap-2 text-xs font-medium text-warning"><AlertTriangle className="h-3.5 w-3.5" />{env.conflicts.length} {t("tools.conflicts_detected")}</div>
+              {env.conflicts.map((c, i) => <p key={i} className="mt-1 text-[11px] text-text-secondary">{c}</p>)}
+            </div>
+          )}
+        </>
+      )}
+
+      <p className="mb-3 text-[11px] text-text-muted">{t("tools.claude_auth_desc")}</p>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <button onClick={onApply} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
+        {env?.has_agentgate && env?.has_saved_official && (
+          <button onClick={onToggle} className="btn-secondary">
+            <ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}
+          </button>
+        )}
+        {!env?.has_agentgate && env?.has_saved_official && (
+          <button onClick={onToggle} className="btn-primary">
+            <ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}
+          </button>
+        )}
+        {env?.settings_exists && (
+          <button onClick={() => api.openClaudeCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
+        )}
+        <ClientHistoryButton clientId="claude_code" clientName="Claude Code" onRollbackDone={load} />
+        <button onClick={onGenerateSnippet} className="btn-secondary"><Code className="h-3 w-3" />{t("tools.env_snippet")}</button>
+      </div>
+
+      {snippet && <JsonCodeBlock title="Claude Code Environment" content={snippet} language="bash" />}
+    </div>
+  );
+}
+
+function OpenCodeDetail({
+  status, onApply, load, t,
+}: {
+  status: OpenCodeConfigStatus | null;
+  onApply: () => void;
+  load: () => void;
+  t: T;
+}) {
+  const badge = (
+    <StatusBadge variant={status?.has_agentgate ? "success" : status?.exists ? "warning" : "muted"}>
+      {status?.has_agentgate ? t("tools.agentgate_configured") : status?.exists ? t("tools.not_configured") : t("tools.no_config")}
+    </StatusBadge>
+  );
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <DetailHeader Icon={Braces} name={t("tools.opencode")} desc={t("tools.opencode_desc")} badge={badge} />
+
+      {status && (
+        <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
+          <div><span className="text-text-muted">opencode.json</span><p className="font-mono text-text-secondary text-[11px]">{status.config_path}</p></div>
+          <div><span className="text-text-muted">{t("logs.model")}</span><p className="text-text-primary">{status.current_model ?? "—"}</p></div>
+        </div>
+      )}
+
+      <p className="mb-3 text-[11px] text-text-muted">{t("tools.opencode_auth_desc")}</p>
+
+      <div className="flex flex-wrap gap-2">
+        <button onClick={onApply} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
+        {status?.exists && (
+          <button onClick={() => api.openOpenCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
+        )}
+        <ClientHistoryButton clientId="opencode" clientName="OpenCode" onRollbackDone={load} />
+      </div>
+    </div>
+  );
+}
+
+function GeminiDetail({
+  status, onApply, onToggle, load, t,
+}: {
+  status: GeminiCliConfigStatus | null;
+  onApply: () => void;
+  onToggle: () => void;
+  load: () => void;
+  t: T;
+}) {
+  const badge = (
+    <StatusBadge variant={status?.has_agentgate ? "success" : status?.exists ? "warning" : "muted"}>
+      {status?.has_agentgate ? t("tools.agentgate_configured") : status?.exists ? t("tools.not_configured") : t("tools.no_config")}
+    </StatusBadge>
+  );
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <DetailHeader Icon={Sparkles} name={t("tools.gemini_cli")} desc={t("tools.gemini_cli_desc")} badge={badge} />
+
+      {status && (
+        <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
+          <div><span className="text-text-muted">settings.json</span><p className="font-mono text-text-secondary text-[11px]">{status.config_path}</p></div>
+          <div><span className="text-text-muted">{t("logs.model")}</span><p className="text-text-primary">{status.current_model ?? "—"}</p></div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <button onClick={onApply} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
+        {status?.has_agentgate && status?.has_saved_official && (
+          <button onClick={onToggle} className="btn-secondary"><ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}</button>
+        )}
+        {!status?.has_agentgate && status?.has_saved_official && (
+          <button onClick={onToggle} className="btn-primary"><ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}</button>
+        )}
+        {status?.exists && (
+          <button onClick={() => api.openGeminiConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
+        )}
+        <ClientHistoryButton clientId="gemini" clientName="Gemini CLI" onRollbackDone={load} />
+      </div>
+    </div>
+  );
+}
+
+function AtomCodeDetail({
+  status, onApply, onToggle, load, t,
+}: {
+  status: AtomCodeConfigStatus | null;
+  onApply: () => void;
+  onToggle: () => void;
+  load: () => void;
+  t: T;
+}) {
+  const badge = (
+    <StatusBadge variant={status?.has_agentgate ? "success" : status?.exists ? "warning" : "muted"}>
+      {status?.has_agentgate ? t("tools.agentgate_configured") : status?.exists ? t("tools.not_configured") : t("tools.no_config")}
+    </StatusBadge>
+  );
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <DetailHeader Icon={Atom} name={t("tools.atomcode")} desc={t("tools.atomcode_desc")} badge={badge} />
+
+      {status && (
+        <div className="mb-4 grid grid-cols-2 gap-y-2 text-xs">
+          <div><span className="text-text-muted">config.toml</span><p className="font-mono text-text-secondary text-[11px]">{status.config_path}</p></div>
+          <div><span className="text-text-muted">{t("logs.model")}</span><p className="text-text-primary">{status.current_model ?? "—"}</p></div>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <button onClick={onApply} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
+        {status?.has_agentgate && status?.has_saved_official && (
+          <button onClick={onToggle} className="btn-secondary"><ToggleRight className="h-3 w-3" />{t("tools.switch_to_official")}</button>
+        )}
+        {!status?.has_agentgate && status?.has_saved_official && (
+          <button onClick={onToggle} className="btn-primary"><ToggleLeft className="h-3 w-3" />{t("tools.switch_to_agentgate")}</button>
+        )}
+        {status?.exists && (
+          <button onClick={() => api.openAtomCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
+        )}
+        <ClientHistoryButton clientId="atomcode" clientName="AtomCode" onRollbackDone={load} />
+      </div>
     </div>
   );
 }

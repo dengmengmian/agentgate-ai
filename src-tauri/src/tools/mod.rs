@@ -6,3 +6,5 @@ pub mod opencode;
 pub mod gemini_cli;
 pub mod atomcode;
 pub mod process_detect;
+pub mod instructions;
+pub mod instructions_templates;

@@ -12,6 +12,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "nav.logs": { en: "Logs", zh: "日志" },
   "nav.diagnostics": { en: "Diagnostics", zh: "诊断" },
   "nav.quick_setup": { en: "Quick Setup", zh: "快速配置" },
+  "nav.instructions": { en: "Instructions", zh: "全局指令" },
   "nav.settings": { en: "Settings", zh: "设置" },
   "nav.collapse": { en: "Collapse sidebar", zh: "折叠侧边栏" },
   "nav.expand": { en: "Expand sidebar", zh: "展开侧边栏" },
@@ -330,6 +331,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "tools.history.action.apply": { en: "Apply", zh: "应用" },
   "tools.history.action.disable": { en: "Disable", zh: "关闭" },
   "tools.history.action.toggle": { en: "Toggle", zh: "切换" },
+  "tools.history.action.write": { en: "Edit", zh: "编辑" },
+  "tools.history.action.apply_template": { en: "Apply template", zh: "应用模板" },
   "tools.history.rollback": { en: "Roll back", zh: "回滚" },
   "tools.history.confirm_title": { en: "Roll back this snapshot?", zh: "回滚到该版本？" },
   "tools.history.confirm_msg": {
@@ -338,6 +341,41 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "tools.history.confirm_btn": { en: "Roll back", zh: "回滚" },
   "tools.history.rollback_done": { en: "Rolled back", zh: "已回滚" },
+
+  // ── Global Instructions ──
+  "instructions.title": { en: "Global instructions", zh: "全局指令" },
+  "instructions.subtitle": {
+    en: "Manage the user-level CLAUDE.md / AGENTS.md files that every project sees.",
+    zh: "管理 Claude Code / Codex 的用户级指令文件，所有项目都会读到。",
+  },
+  "instructions.scope.claude": { en: "Claude (~/.claude/CLAUDE.md)", zh: "Claude（~/.claude/CLAUDE.md）" },
+  "instructions.scope.codex": { en: "Codex (~/.codex/AGENTS.md)", zh: "Codex（~/.codex/AGENTS.md）" },
+  "instructions.file_status.exists": { en: "{size} bytes on disk", zh: "磁盘上 {size} 字节" },
+  "instructions.file_status.missing": { en: "Not created yet — will be created on save.", zh: "尚未创建，保存时会自动建立。" },
+  "instructions.editor.placeholder": {
+    en: "Write your global instructions here. Markdown is supported by the agent runtime.",
+    zh: "在这里写你的全局指令。Markdown 语法会被客户端原样读取。",
+  },
+  "instructions.save": { en: "Save", zh: "保存" },
+  "instructions.reload": { en: "Reload from disk", zh: "从磁盘重新载入" },
+  "instructions.saved": { en: "Saved", zh: "已保存" },
+  "instructions.unsaved": { en: "Unsaved changes", zh: "有未保存修改" },
+  "instructions.templates.title": { en: "Templates", zh: "模板" },
+  "instructions.templates.hint": {
+    en: "Pick a template, then choose how to apply it. The current file is snapshotted first — rollback any time.",
+    zh: "选择模板后再选应用方式。当前文件会先打快照，随时可回滚。",
+  },
+  "instructions.templates.apply_overwrite": { en: "Overwrite", zh: "覆盖" },
+  "instructions.templates.apply_append": { en: "Append", zh: "追加" },
+  "instructions.templates.empty": { en: "No templates available for this scope.", zh: "当前 scope 暂无可用模板。" },
+  "instructions.confirm_overwrite_title": { en: "Overwrite current file?", zh: "覆盖当前文件？" },
+  "instructions.confirm_overwrite_msg": {
+    en: "The current contents of {file} will be replaced by template \"{template}\". A snapshot is saved first so you can roll back.",
+    zh: "{file} 当前内容将被模板「{template}」整个替换。已自动留快照，可随时回滚。",
+  },
+  "instructions.confirm_btn": { en: "Continue", zh: "继续" },
+  "instructions.applied": { en: "Template applied", zh: "模板已应用" },
+
   "tools.direct_credentials": { en: "Direct credentials", zh: "直接凭证" },
   "tools.no_credentials": { en: "No credentials", zh: "无凭证" },
   "tools.conflicts_detected": { en: "conflicts detected", zh: "冲突已检测到" },

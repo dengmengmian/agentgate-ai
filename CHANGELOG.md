@@ -1,17 +1,18 @@
 # Changelog / 更新日志
 
-## [Unreleased]
+## [1.3.1] - 2026-06-02
 
 ### 新增
 
-- **客户端配置版本史与一键回滚** —— 5 个客户端（Codex / Claude Code / OpenCode / Gemini CLI / AtomCode）每次「应用 / 关闭 / 切换」前，自动 snapshot 一次盘上配置（config.toml / auth.json / settings.json / .env 等），保留首次「初始」永久 + 最近 10 条滚动。每个客户端卡片新增「历史」按钮，可时间线查看 + 二次确认后一键回滚到任意时点的盘上状态。回滚本身不写新历史，避免把保留窗撑满。
-- **一键重启 Codex 桌面应用**（macOS） —— Codex 应用配置成功后，弹窗里多一个「重启 Codex 桌面应用」按钮。点了才执行 `pkill -x Codex` + `open -a Codex`，按 basename 精确匹配只杀桌面 App，不动 CLI 二进制。默认不自动触发，避免误伤正在对话的用户。Windows / Linux 暂不支持，按钮不显示。
-- **节点测速** —— Providers 页加「测速」按钮，对所有启用 provider 并行发一个 1-token 探测，按延迟从快到慢排表，连接 / TTFB / 总耗时三段染色（< 500ms 绿 / 500-1500ms 黄 / > 1500ms 红）。手动触发，每次会消耗少量 token。
-- **网关精炼层** —— 「设置 → 通用 → 网关精炼层」一个全局开关组，三项默认全关，开了才生效：
-    - **请求字段过滤**：自动剥掉 provider 不支持的字段（如 DeepSeek 的 `web_search`），少踩 400。
-    - **推理参数校正**：把 `thinking.budget_tokens` / `reasoning.effort` 调到 provider 接受的范围。
-    - **错误响应归一**：把 provider 错误改写成客户端期望的形态；并识别中英文常见的"上下文超长"提示（OpenAI `maximum context length` / Anthropic `prompt is too long` / 国产模型「输入过长」「上下文过长」等），统一标为 `context_length_exceeded` 并附"清理对话历史或换长上下文模型"建议。
-    - 内置 DeepSeek / MiMo / Anthropic / OpenAI / Kimi 默认规则。
+- **全局指令文件管理** —— 在 AgentGate 内直接编辑 `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md`，4 个内置模板（极简中文规范 / TDD / 代码评审 / 安全审计）可覆盖或追加。写盘前自动 snapshot，可一键回滚。
+- **客户端配置版本史与一键回滚** —— 5 个客户端每次「应用 / 关闭 / 切换」前自动 snapshot 盘上配置，保留初始版本 + 最近 10 条滚动。卡片上新增「历史」按钮，二次确认后一键回滚。
+- **一键重启 Codex 桌面应用**（macOS） —— Codex 应用配置后弹窗多一个重启按钮,按 basename 精确匹配只杀桌面 App,不动 CLI。默认手动触发,Windows / Linux 不显示。
+- **节点测速** —— Providers 页对所有启用 provider 并行发 1-token 探测,按延迟排序,连接 / TTFB / 总耗时三段染色。手动触发。
+- **网关精炼层** —— 「设置 → 通用」全局开关,三项默认关:请求字段过滤(剥不支持字段)、推理参数校正(`thinking.budget_tokens` / `reasoning.effort` 收口到 provider 范围)、错误响应归一(识别中英文上下文超长提示统一标 `context_length_exceeded`)。内置 DeepSeek / MiMo / Anthropic / OpenAI / Kimi 规则。
+
+### 改进
+
+- **客户端页改主从布局** —— 5 张厚卡手风琴改成左侧 260px 列表 + 右侧详情。列表常驻显示三态状态点（已接入 / 已检测 / 未检测）,详情区不再被卡片切碎,选中项 sessionStorage 记忆。
 
 ## [1.3.0] - 2026-06-01
 
