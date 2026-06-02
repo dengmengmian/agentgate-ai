@@ -42,10 +42,18 @@ pub struct ThinkingBlock {
 
 impl ThinkingBlock {
     pub fn thinking(text: impl Into<String>) -> Self {
-        Self { kind: "thinking".into(), text: text.into(), ..Default::default() }
+        Self {
+            kind: "thinking".into(),
+            text: text.into(),
+            ..Default::default()
+        }
     }
     pub fn redacted(data: impl Into<String>) -> Self {
-        Self { kind: "redacted_thinking".into(), data: data.into(), ..Default::default() }
+        Self {
+            kind: "redacted_thinking".into(),
+            data: data.into(),
+            ..Default::default()
+        }
     }
 }
 
@@ -139,9 +147,19 @@ mod tests {
     #[test]
     fn round_trip_mixed_blocks() {
         let blocks = vec![
-            ThinkingBlock { kind: "thinking".into(), text: "t1".into(), signature: "s1".into(), data: String::new() },
+            ThinkingBlock {
+                kind: "thinking".into(),
+                text: "t1".into(),
+                signature: "s1".into(),
+                data: String::new(),
+            },
             ThinkingBlock::redacted("REDACT1"),
-            ThinkingBlock { kind: "thinking".into(), text: "t2".into(), signature: "s2".into(), data: String::new() },
+            ThinkingBlock {
+                kind: "thinking".into(),
+                text: "t2".into(),
+                signature: "s2".into(),
+                data: String::new(),
+            },
         ];
         let encoded = encode_for_encrypted_content(&blocks).unwrap();
         assert_eq!(decode_from_encrypted_content(&encoded), blocks);
@@ -170,7 +188,12 @@ mod tests {
         // 无签名的 thinking 块不能发给 Anthropic（会 400），过滤掉。
         let blocks = vec![
             ThinkingBlock::thinking("orphan without signature"),
-            ThinkingBlock { kind: "thinking".into(), text: "valid".into(), signature: "sig".into(), data: String::new() },
+            ThinkingBlock {
+                kind: "thinking".into(),
+                text: "valid".into(),
+                signature: "sig".into(),
+                data: String::new(),
+            },
         ];
         let anth = to_anthropic_content_blocks(&blocks);
         assert_eq!(anth.len(), 1);

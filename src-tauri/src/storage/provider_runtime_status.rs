@@ -9,11 +9,19 @@ pub fn get(conn: &Connection, provider_id: &str) -> Result<ProviderRuntimeStatus
                 last_error_at, cooldown_until, quota_exhausted, updated_at
          FROM provider_runtime_status WHERE provider_id = ?1",
         [provider_id],
-        |row| Ok(ProviderRuntimeStatus {
-            provider_id: row.get(0)?, available: row.get(1)?, consecutive_failures: row.get(2)?,
-            last_error: row.get(3)?, last_error_code: row.get(4)?, last_error_at: row.get(5)?,
-            cooldown_until: row.get(6)?, quota_exhausted: row.get(7)?, updated_at: row.get(8)?,
-        }),
+        |row| {
+            Ok(ProviderRuntimeStatus {
+                provider_id: row.get(0)?,
+                available: row.get(1)?,
+                consecutive_failures: row.get(2)?,
+                last_error: row.get(3)?,
+                last_error_code: row.get(4)?,
+                last_error_at: row.get(5)?,
+                cooldown_until: row.get(6)?,
+                quota_exhausted: row.get(7)?,
+                updated_at: row.get(8)?,
+            })
+        },
     );
     match result {
         Ok(s) => Ok(s),
@@ -26,9 +34,15 @@ pub fn get(conn: &Connection, provider_id: &str) -> Result<ProviderRuntimeStatus
                 params![provider_id, &now],
             )?;
             Ok(ProviderRuntimeStatus {
-                provider_id: provider_id.to_string(), available: true, consecutive_failures: 0,
-                last_error: None, last_error_code: None, last_error_at: None,
-                cooldown_until: None, quota_exhausted: false, updated_at: now,
+                provider_id: provider_id.to_string(),
+                available: true,
+                consecutive_failures: 0,
+                last_error: None,
+                last_error_code: None,
+                last_error_at: None,
+                cooldown_until: None,
+                quota_exhausted: false,
+                updated_at: now,
             })
         }
         Err(e) => Err(AppError::database(e)),
@@ -41,19 +55,34 @@ pub fn list_all(conn: &Connection) -> Result<Vec<ProviderRuntimeStatus>, AppErro
                 last_error_at, cooldown_until, quota_exhausted, updated_at
          FROM provider_runtime_status ORDER BY provider_id",
     )?;
-    let rows = stmt.query_map([], |row| Ok(ProviderRuntimeStatus {
-        provider_id: row.get(0)?, available: row.get(1)?, consecutive_failures: row.get(2)?,
-        last_error: row.get(3)?, last_error_code: row.get(4)?, last_error_at: row.get(5)?,
-        cooldown_until: row.get(6)?, quota_exhausted: row.get(7)?, updated_at: row.get(8)?,
-    }))?;
+    let rows = stmt.query_map([], |row| {
+        Ok(ProviderRuntimeStatus {
+            provider_id: row.get(0)?,
+            available: row.get(1)?,
+            consecutive_failures: row.get(2)?,
+            last_error: row.get(3)?,
+            last_error_code: row.get(4)?,
+            last_error_at: row.get(5)?,
+            cooldown_until: row.get(6)?,
+            quota_exhausted: row.get(7)?,
+            updated_at: row.get(8)?,
+        })
+    })?;
     rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
-pub fn mark_failure(conn: &Connection, provider_id: &str, error_code: &str, error_msg: &str, cooldown_seconds: i64) -> Result<(), AppError> {
+pub fn mark_failure(
+    conn: &Connection,
+    provider_id: &str,
+    error_code: &str,
+    error_msg: &str,
+    cooldown_seconds: i64,
+) -> Result<(), AppError> {
     let now = chrono::Utc::now();
     let cooldown_until = (now + chrono::Duration::seconds(cooldown_seconds)).to_rfc3339();
     let now_str = now.to_rfc3339();
-    let is_quota = error_msg.to_lowercase().contains("quota") || error_msg.to_lowercase().contains("insufficient balance");
+    let is_quota = error_msg.to_lowercase().contains("quota")
+        || error_msg.to_lowercase().contains("insufficient balance");
 
     conn.execute(
         "INSERT INTO provider_runtime_status (provider_id, available, consecutive_failures, last_error, last_error_code, last_error_at, cooldown_until, quota_exhausted, updated_at)
@@ -149,7 +178,14 @@ mod tests {
     #[test]
     fn test_mark_failure_quota_detection() {
         let conn = setup_db();
-        mark_failure(&conn, "p1", "INSUFFICIENT_QUOTA", "insufficient balance", 60).unwrap();
+        mark_failure(
+            &conn,
+            "p1",
+            "INSUFFICIENT_QUOTA",
+            "insufficient balance",
+            60,
+        )
+        .unwrap();
         let status = get(&conn, "p1").unwrap();
         assert!(status.quota_exhausted);
     }
@@ -188,4 +224,3 @@ mod tests {
         assert!(ids.contains(&"p2"));
     }
 }
-

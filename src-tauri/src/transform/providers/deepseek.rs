@@ -67,7 +67,8 @@ impl super::ProviderTransform for DeepSeekProvider {
         // DeepSeek V4 models are text-only. Keep routing responsible for
         // promoting current image turns to a vision provider; this is the final
         // compatibility guard for historic images or text-only fallbacks.
-        req.diagnostic_events.extend(degradation::strip_image_parts_with_notice(
+        req.diagnostic_events
+            .extend(degradation::strip_image_parts_with_notice(
             &mut req.messages,
             "deepseek",
             "DeepSeek",

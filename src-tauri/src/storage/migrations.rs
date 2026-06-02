@@ -264,7 +264,11 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     // Migration: per-provider refiner switches. NULL = inherit global toggle
     // from gateway_settings, 0 = force off, 1 = force on. Default NULL keeps
     // every existing provider in "transparent" mode until the user opts in.
-    for col in ["body_filter_enabled", "thinking_rectifier_enabled", "error_mapper_enabled"] {
+    for col in [
+        "body_filter_enabled",
+        "thinking_rectifier_enabled",
+        "error_mapper_enabled",
+    ] {
         let has: bool = conn
             .prepare(&format!("SELECT {col} FROM providers LIMIT 0"))
             .is_ok();
@@ -307,7 +311,11 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
 
     // Migration: global refiner toggles on gateway_settings. Default 0 (off)
     // — per-provider switch can still force on if user opts in explicitly.
-    for col in ["body_filter_global", "thinking_rectifier_global", "error_mapper_global"] {
+    for col in [
+        "body_filter_global",
+        "thinking_rectifier_global",
+        "error_mapper_global",
+    ] {
         let has: bool = conn
             .prepare(&format!("SELECT {col} FROM gateway_settings LIMIT 0"))
             .is_ok();

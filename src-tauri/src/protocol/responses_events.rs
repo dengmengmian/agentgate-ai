@@ -3,9 +3,13 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 static SEQ: AtomicU64 = AtomicU64::new(0);
 
-fn next_seq() -> u64 { SEQ.fetch_add(1, Ordering::Relaxed) }
+fn next_seq() -> u64 {
+    SEQ.fetch_add(1, Ordering::Relaxed)
+}
 
-pub fn reset_sequence() { SEQ.store(0, Ordering::Relaxed); }
+pub fn reset_sequence() {
+    SEQ.store(0, Ordering::Relaxed);
+}
 
 fn sse(event_type: &str, mut data: Value) -> String {
     data["sequence_number"] = json!(next_seq());
@@ -41,46 +45,79 @@ fn build_envelope(response_id: &str, model: &str, status: &str) -> Value {
 
 pub fn response_created(response_id: &str, model: &str) -> String {
     let envelope = build_envelope(response_id, model, "in_progress");
-    sse("response.created", json!({"type": "response.created", "response": envelope}))
+    sse(
+        "response.created",
+        json!({"type": "response.created", "response": envelope}),
+    )
 }
 
 pub fn response_in_progress(response_id: &str, model: &str) -> String {
     let envelope = build_envelope(response_id, model, "in_progress");
-    sse("response.in_progress", json!({"type": "response.in_progress", "response": envelope}))
+    sse(
+        "response.in_progress",
+        json!({"type": "response.in_progress", "response": envelope}),
+    )
 }
 
 pub fn output_item_added_message(item_id: &str, output_index: usize) -> String {
-    sse("response.output_item.added", json!({
-        "type": "response.output_item.added", "output_index": output_index,
-        "item": { "id": item_id, "type": "message", "status": "in_progress", "role": "assistant", "content": [] }
-    }))
+    sse(
+        "response.output_item.added",
+        json!({
+            "type": "response.output_item.added", "output_index": output_index,
+            "item": { "id": item_id, "type": "message", "status": "in_progress", "role": "assistant", "content": [] }
+        }),
+    )
 }
 
 pub fn content_part_added(item_id: &str, output_index: usize, content_index: usize) -> String {
-    sse("response.content_part.added", json!({
-        "type": "response.content_part.added",
-        "item_id": item_id, "output_index": output_index, "content_index": content_index,
-        "part": { "type": "output_text", "text": "", "annotations": [] }
-    }))
+    sse(
+        "response.content_part.added",
+        json!({
+            "type": "response.content_part.added",
+            "item_id": item_id, "output_index": output_index, "content_index": content_index,
+            "part": { "type": "output_text", "text": "", "annotations": [] }
+        }),
+    )
 }
 
-pub fn output_text_delta(item_id: &str, output_index: usize, content_index: usize, delta: &str) -> String {
-    sse("response.output_text.delta", json!({
-        "type": "response.output_text.delta",
-        "item_id": item_id, "output_index": output_index, "content_index": content_index,
-        "delta": delta
-    }))
+pub fn output_text_delta(
+    item_id: &str,
+    output_index: usize,
+    content_index: usize,
+    delta: &str,
+) -> String {
+    sse(
+        "response.output_text.delta",
+        json!({
+            "type": "response.output_text.delta",
+            "item_id": item_id, "output_index": output_index, "content_index": content_index,
+            "delta": delta
+        }),
+    )
 }
 
-pub fn output_text_done(item_id: &str, output_index: usize, content_index: usize, text: &str) -> String {
-    sse("response.output_text.done", json!({
-        "type": "response.output_text.done",
-        "item_id": item_id, "output_index": output_index, "content_index": content_index,
-        "text": text
-    }))
+pub fn output_text_done(
+    item_id: &str,
+    output_index: usize,
+    content_index: usize,
+    text: &str,
+) -> String {
+    sse(
+        "response.output_text.done",
+        json!({
+            "type": "response.output_text.done",
+            "item_id": item_id, "output_index": output_index, "content_index": content_index,
+            "text": text
+        }),
+    )
 }
 
-pub fn content_part_done(item_id: &str, output_index: usize, content_index: usize, text: &str) -> String {
+pub fn content_part_done(
+    item_id: &str,
+    output_index: usize,
+    content_index: usize,
+    text: &str,
+) -> String {
     content_part_done_with_annotations(item_id, output_index, content_index, text, &[])
 }
 
@@ -91,14 +128,22 @@ pub fn content_part_done_with_annotations(
     text: &str,
     annotations: &[Value],
 ) -> String {
-    sse("response.content_part.done", json!({
-        "type": "response.content_part.done",
-        "item_id": item_id, "output_index": output_index, "content_index": content_index,
-        "part": { "type": "output_text", "text": text, "annotations": annotations }
-    }))
+    sse(
+        "response.content_part.done",
+        json!({
+            "type": "response.content_part.done",
+            "item_id": item_id, "output_index": output_index, "content_index": content_index,
+            "part": { "type": "output_text", "text": text, "annotations": annotations }
+        }),
+    )
 }
 
-pub fn output_item_done_message(item_id: &str, output_index: usize, text: &str, reasoning_content: Option<&str>) -> String {
+pub fn output_item_done_message(
+    item_id: &str,
+    output_index: usize,
+    text: &str,
+    reasoning_content: Option<&str>,
+) -> String {
     output_item_done_message_with_annotations(item_id, output_index, text, reasoning_content, &[])
 }
 
@@ -117,8 +162,13 @@ pub fn output_item_done_message_with_annotations(
         "id": item_id, "type": "message", "status": "completed", "role": "assistant",
         "content": [{ "type": "output_text", "text": text, "annotations": annotations }]
     });
-    if let Some(rc) = reasoning_content { item["reasoning_content"] = json!(rc); }
-    sse("response.output_item.done", json!({ "type": "response.output_item.done", "output_index": output_index, "item": item }))
+    if let Some(rc) = reasoning_content {
+        item["reasoning_content"] = json!(rc);
+    }
+    sse(
+        "response.output_item.done",
+        json!({ "type": "response.output_item.done", "output_index": output_index, "item": item }),
+    )
 }
 
 /// Normalize provider citation payloads into the Responses/Codex annotation
@@ -159,16 +209,19 @@ pub fn normalize_annotations(annotations: &[Value]) -> Vec<Value> {
 /// belongs to a real item — without this, deltas would arrive against an
 /// unknown `item_id`.
 pub fn output_item_added_reasoning(item_id: &str, output_index: usize) -> String {
-    sse("response.output_item.added", json!({
-        "type": "response.output_item.added",
-        "output_index": output_index,
-        "item": {
-            "id": item_id,
-            "type": "reasoning",
-            "status": "in_progress",
-            "summary": [],
-        }
-    }))
+    sse(
+        "response.output_item.added",
+        json!({
+            "type": "response.output_item.added",
+            "output_index": output_index,
+            "item": {
+                "id": item_id,
+                "type": "reasoning",
+                "status": "in_progress",
+                "summary": [],
+            }
+        }),
+    )
 }
 
 pub fn reasoning_summary_part_added(
@@ -176,13 +229,16 @@ pub fn reasoning_summary_part_added(
     output_index: usize,
     summary_index: usize,
 ) -> String {
-    sse("response.reasoning_summary_part.added", json!({
-        "type": "response.reasoning_summary_part.added",
-        "item_id": item_id,
-        "output_index": output_index,
-        "summary_index": summary_index,
-        "part": { "type": "summary_text", "text": "" },
-    }))
+    sse(
+        "response.reasoning_summary_part.added",
+        json!({
+            "type": "response.reasoning_summary_part.added",
+            "item_id": item_id,
+            "output_index": output_index,
+            "summary_index": summary_index,
+            "part": { "type": "summary_text", "text": "" },
+        }),
+    )
 }
 
 /// Incremental reasoning text chunk. Emitted as the upstream's thinking-mode
@@ -194,13 +250,16 @@ pub fn reasoning_summary_text_delta(
     summary_index: usize,
     delta: &str,
 ) -> String {
-    sse("response.reasoning_summary_text.delta", json!({
-        "type": "response.reasoning_summary_text.delta",
-        "item_id": item_id,
-        "output_index": output_index,
-        "summary_index": summary_index,
-        "delta": delta,
-    }))
+    sse(
+        "response.reasoning_summary_text.delta",
+        json!({
+            "type": "response.reasoning_summary_text.delta",
+            "item_id": item_id,
+            "output_index": output_index,
+            "summary_index": summary_index,
+            "delta": delta,
+        }),
+    )
 }
 
 /// Close the streamed reasoning summary. Always paired with a preceding
@@ -212,13 +271,16 @@ pub fn reasoning_summary_text_done(
     summary_index: usize,
     text: &str,
 ) -> String {
-    sse("response.reasoning_summary_text.done", json!({
-        "type": "response.reasoning_summary_text.done",
-        "item_id": item_id,
-        "output_index": output_index,
-        "summary_index": summary_index,
-        "text": text,
-    }))
+    sse(
+        "response.reasoning_summary_text.done",
+        json!({
+            "type": "response.reasoning_summary_text.done",
+            "item_id": item_id,
+            "output_index": output_index,
+            "summary_index": summary_index,
+            "text": text,
+        }),
+    )
 }
 
 pub fn reasoning_summary_part_done(
@@ -227,13 +289,16 @@ pub fn reasoning_summary_part_done(
     summary_index: usize,
     text: &str,
 ) -> String {
-    sse("response.reasoning_summary_part.done", json!({
-        "type": "response.reasoning_summary_part.done",
-        "item_id": item_id,
-        "output_index": output_index,
-        "summary_index": summary_index,
-        "part": { "type": "summary_text", "text": text },
-    }))
+    sse(
+        "response.reasoning_summary_part.done",
+        json!({
+            "type": "response.reasoning_summary_part.done",
+            "item_id": item_id,
+            "output_index": output_index,
+            "summary_index": summary_index,
+            "part": { "type": "summary_text", "text": text },
+        }),
+    )
 }
 
 /// Emit a `reasoning` output_item with the full reasoning trace pinned in
@@ -290,17 +355,25 @@ pub fn output_text_annotation_added(
     annotation_index: usize,
     annotation: &Value,
 ) -> String {
-    sse("response.output_text.annotation.added", json!({
-        "type": "response.output_text.annotation.added",
-        "item_id": item_id,
-        "output_index": output_index,
-        "content_index": content_index,
-        "annotation_index": annotation_index,
-        "annotation": annotation,
-    }))
+    sse(
+        "response.output_text.annotation.added",
+        json!({
+            "type": "response.output_text.annotation.added",
+            "item_id": item_id,
+            "output_index": output_index,
+            "content_index": content_index,
+            "annotation_index": annotation_index,
+            "annotation": annotation,
+        }),
+    )
 }
 
-pub fn function_call_added(item_id: &str, output_index: usize, call_id: &str, name: &str) -> String {
+pub fn function_call_added(
+    item_id: &str,
+    output_index: usize,
+    call_id: &str,
+    name: &str,
+) -> String {
     function_call_added_with_namespace(item_id, output_index, call_id, name, None)
 }
 
@@ -321,26 +394,50 @@ pub fn function_call_added_with_namespace(
     if let Some(ns) = namespace {
         item["namespace"] = json!(ns);
     }
-    sse("response.output_item.added", json!({
-        "type": "response.output_item.added", "output_index": output_index,
-        "item": item,
-    }))
+    sse(
+        "response.output_item.added",
+        json!({
+            "type": "response.output_item.added", "output_index": output_index,
+            "item": item,
+        }),
+    )
 }
 
 pub fn function_call_arguments_delta(item_id: &str, output_index: usize, delta: &str) -> String {
-    sse("response.function_call_arguments.delta", json!({
-        "type": "response.function_call_arguments.delta", "item_id": item_id, "output_index": output_index, "delta": delta
-    }))
+    sse(
+        "response.function_call_arguments.delta",
+        json!({
+            "type": "response.function_call_arguments.delta", "item_id": item_id, "output_index": output_index, "delta": delta
+        }),
+    )
 }
 
 pub fn function_call_arguments_done(item_id: &str, output_index: usize, arguments: &str) -> String {
-    sse("response.function_call_arguments.done", json!({
-        "type": "response.function_call_arguments.done", "item_id": item_id, "output_index": output_index, "arguments": arguments
-    }))
+    sse(
+        "response.function_call_arguments.done",
+        json!({
+            "type": "response.function_call_arguments.done", "item_id": item_id, "output_index": output_index, "arguments": arguments
+        }),
+    )
 }
 
-pub fn function_call_done(item_id: &str, output_index: usize, call_id: &str, name: &str, arguments: &str, reasoning_content: Option<&str>) -> String {
-    function_call_done_with_namespace(item_id, output_index, call_id, name, arguments, reasoning_content, None)
+pub fn function_call_done(
+    item_id: &str,
+    output_index: usize,
+    call_id: &str,
+    name: &str,
+    arguments: &str,
+    reasoning_content: Option<&str>,
+) -> String {
+    function_call_done_with_namespace(
+        item_id,
+        output_index,
+        call_id,
+        name,
+        arguments,
+        reasoning_content,
+        None,
+    )
 }
 
 pub fn function_call_done_with_namespace(
@@ -356,9 +453,127 @@ pub fn function_call_done_with_namespace(
         "id": item_id, "type": "function_call", "status": "completed",
         "call_id": call_id, "name": name, "arguments": arguments
     });
-    if let Some(rc) = reasoning_content { item["reasoning_content"] = json!(rc); }
-    if let Some(ns) = namespace { item["namespace"] = json!(ns); }
-    sse("response.output_item.done", json!({ "type": "response.output_item.done", "output_index": output_index, "item": item }))
+    if let Some(rc) = reasoning_content {
+        item["reasoning_content"] = json!(rc);
+    }
+    if let Some(ns) = namespace {
+        item["namespace"] = json!(ns);
+    }
+    sse(
+        "response.output_item.done",
+        json!({ "type": "response.output_item.done", "output_index": output_index, "item": item }),
+    )
+}
+
+pub fn custom_tool_call_added(
+    item_id: &str,
+    output_index: usize,
+    call_id: &str,
+    name: &str,
+) -> String {
+    sse(
+        "response.output_item.added",
+        json!({
+            "type": "response.output_item.added",
+            "output_index": output_index,
+            "item": {
+                "id": item_id,
+                "type": "custom_tool_call",
+                "status": "in_progress",
+                "call_id": call_id,
+                "name": name,
+                "input": "",
+            }
+        }),
+    )
+}
+
+pub fn custom_tool_call_input_delta(item_id: &str, output_index: usize, delta: &str) -> String {
+    sse(
+        "response.custom_tool_call_input.delta",
+        json!({
+            "type": "response.custom_tool_call_input.delta",
+            "item_id": item_id,
+            "output_index": output_index,
+            "delta": delta,
+        }),
+    )
+}
+
+pub fn custom_tool_call_input_done(item_id: &str, output_index: usize, input: &str) -> String {
+    sse(
+        "response.custom_tool_call_input.done",
+        json!({
+            "type": "response.custom_tool_call_input.done",
+            "item_id": item_id,
+            "output_index": output_index,
+            "input": input,
+        }),
+    )
+}
+
+pub fn custom_tool_call_done(
+    item_id: &str,
+    output_index: usize,
+    call_id: &str,
+    name: &str,
+    input: &str,
+    reasoning_content: Option<&str>,
+) -> String {
+    let mut item = json!({
+        "id": item_id,
+        "type": "custom_tool_call",
+        "status": "completed",
+        "call_id": call_id,
+        "name": name,
+        "input": input,
+    });
+    if let Some(rc) = reasoning_content {
+        item["reasoning_content"] = json!(rc);
+    }
+    sse(
+        "response.output_item.done",
+        json!({ "type": "response.output_item.done", "output_index": output_index, "item": item }),
+    )
+}
+
+pub fn tool_search_call_added(output_index: usize, call_id: &str) -> String {
+    sse(
+        "response.output_item.added",
+        json!({
+            "type": "response.output_item.added",
+            "output_index": output_index,
+            "item": {
+                "type": "tool_search_call",
+                "status": "in_progress",
+                "call_id": call_id,
+                "execution": "client",
+                "arguments": {},
+            }
+        }),
+    )
+}
+
+pub fn tool_search_call_done(
+    output_index: usize,
+    call_id: &str,
+    arguments: &Value,
+    reasoning_content: Option<&str>,
+) -> String {
+    let mut item = json!({
+        "type": "tool_search_call",
+        "status": "completed",
+        "call_id": call_id,
+        "execution": "client",
+        "arguments": arguments,
+    });
+    if let Some(rc) = reasoning_content {
+        item["reasoning_content"] = json!(rc);
+    }
+    sse(
+        "response.output_item.done",
+        json!({ "type": "response.output_item.done", "output_index": output_index, "item": item }),
+    )
 }
 
 pub fn response_completed(response_id: &str, model: &str, usage: Option<&Value>) -> String {
@@ -395,7 +610,10 @@ pub fn response_completed_with_stop_reason(
     envelope["usage"] = u.clone();
     envelope["incomplete_details"] = incomplete_details;
     envelope["output"] = json!(output);
-    sse("response.completed", json!({"type": "response.completed", "response": envelope}))
+    sse(
+        "response.completed",
+        json!({"type": "response.completed", "response": envelope}),
+    )
 }
 
 /// 三家 stop_reason → Responses (status, incomplete_details) 映射。
@@ -405,18 +623,16 @@ fn map_stop_reason(stop_reason: Option<&str>) -> (&'static str, Value) {
     };
     match reason {
         // 正常完成
-        "end_turn" | "stop" | "stop_sequence" | "tool_use" | "tool_calls"
-        | "function_call" | "STOP" => ("completed", Value::Null),
+        "end_turn" | "stop" | "stop_sequence" | "tool_use" | "tool_calls" | "function_call"
+        | "STOP" => ("completed", Value::Null),
         // 命中输出长度上限
-        "max_tokens" | "length" | "MAX_TOKENS" => (
-            "incomplete",
-            json!({ "reason": "max_output_tokens" }),
-        ),
+        "max_tokens" | "length" | "MAX_TOKENS" => {
+            ("incomplete", json!({ "reason": "max_output_tokens" }))
+        }
         // 安全审查 / 内容过滤
-        "content_filter" | "SAFETY" | "RECITATION" | "refusal" => (
-            "incomplete",
-            json!({ "reason": "content_filter" }),
-        ),
+        "content_filter" | "SAFETY" | "RECITATION" | "refusal" => {
+            ("incomplete", json!({ "reason": "content_filter" }))
+        }
         // 未识别——按完成处理但留个 reason 字段供 client 调试
         _ => ("completed", Value::Null),
     }
@@ -425,7 +641,10 @@ fn map_stop_reason(stop_reason: Option<&str>) -> (&'static str, Value) {
 pub fn response_failed(response_id: &str, model: &str, error_msg: &str) -> String {
     let mut envelope = build_envelope(response_id, model, "failed");
     envelope["error"] = json!({"message": error_msg, "code": "upstream_error"});
-    sse("response.failed", json!({"type": "response.failed", "response": envelope}))
+    sse(
+        "response.failed",
+        json!({"type": "response.failed", "response": envelope}),
+    )
 }
 
 #[cfg(test)]
@@ -464,7 +683,15 @@ mod tests {
 
     #[test]
     fn map_stop_reason_completed_variants() {
-        for r in ["end_turn", "stop", "stop_sequence", "tool_use", "tool_calls", "function_call", "STOP"] {
+        for r in [
+            "end_turn",
+            "stop",
+            "stop_sequence",
+            "tool_use",
+            "tool_calls",
+            "function_call",
+            "STOP",
+        ] {
             let (status, det) = map_stop_reason(Some(r));
             assert_eq!(status, "completed", "{r}");
             assert!(det.is_null(), "{r}");
@@ -571,7 +798,10 @@ mod tests {
 
     #[test]
     fn output_item_done_with_annotations_embeds_citations() {
-        let anns: Vec<serde_json::Value> = vec![json!({"url": "https://a.com"}), json!({"url": "https://b.com"})];
+        let anns: Vec<serde_json::Value> = vec![
+            json!({"url": "https://a.com"}),
+            json!({"url": "https://b.com"}),
+        ];
         let s = output_item_done_message_with_annotations("msg_1", 0, "answer", None, &anns);
         assert!(s.contains("https://a.com"));
         assert!(s.contains("https://b.com"));

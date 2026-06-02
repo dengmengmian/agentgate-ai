@@ -51,10 +51,7 @@ mod tests {
 
     #[test]
     fn mimo_legacy_1m_suffix_is_stripped() {
-        assert_eq!(
-            for_anthropic("mimo", "mimo-v2.5-pro[1m]"),
-            "mimo-v2.5-pro"
-        );
+        assert_eq!(for_anthropic("mimo", "mimo-v2.5-pro[1m]"), "mimo-v2.5-pro");
     }
 
     #[test]
@@ -75,7 +72,10 @@ mod tests {
 
     #[test]
     fn deepseek_v4_pro_passes_through() {
-        assert_eq!(for_anthropic("deepseek", "deepseek-v4-pro"), "deepseek-v4-pro");
+        assert_eq!(
+            for_anthropic("deepseek", "deepseek-v4-pro"),
+            "deepseek-v4-pro"
+        );
     }
 
     #[test]

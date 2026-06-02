@@ -1,6 +1,6 @@
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use tokio::sync::mpsc;
-use serde_json::{json, Value};
 
 use crate::protocol::responses_events as ev;
 
@@ -44,7 +44,8 @@ impl AnthropicSseAccumulator {
         let msg_item_id = format!("msg_{}", response_id.replace("resp_", ""));
         let reasoning_item_id = format!("rs_{}", response_id.replace("resp_", ""));
         Self {
-            response_id, model,
+            response_id,
+            model,
             full_text: String::new(),
             tool_calls: BTreeMap::new(),
             reasoning_content: String::new(),
@@ -96,7 +97,11 @@ pub async fn process_anthropic_stream(
                 Some(Ok(b)) => b,
                 Some(Err(e)) => {
                     let err_msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);
-                    send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &err_msg)).await;
+                    send(
+                        &tx,
+                        &ev::response_failed(&acc.response_id, &acc.model, &err_msg),
+                    )
+                    .await;
                     return Err(err_msg);
                 }
                 None => break,
@@ -160,10 +165,15 @@ pub async fn process_anthropic_stream(
                                 "input_tokens": u.get("input_tokens").and_then(|v| v.as_i64()).unwrap_or(0),
                                 "output_tokens": 0
                             });
-                            if let Some(cc) = u.get("cache_creation_input_tokens").and_then(|v| v.as_i64()) {
+                            if let Some(cc) = u
+                                .get("cache_creation_input_tokens")
+                                .and_then(|v| v.as_i64())
+                            {
                                 usage["cache_creation_input_tokens"] = json!(cc);
                             }
-                            if let Some(cr) = u.get("cache_read_input_tokens").and_then(|v| v.as_i64()) {
+                            if let Some(cr) =
+                                u.get("cache_read_input_tokens").and_then(|v| v.as_i64())
+                            {
                                 usage["cache_read_input_tokens"] = json!(cr);
                             }
                             acc.usage = Some(usage);
@@ -184,7 +194,8 @@ pub async fn process_anthropic_stream(
                             if !acc.text_item_emitted {
                                 let oi = acc.next_output_index;
                                 acc.next_output_index += 1;
-                                send(&tx, &ev::output_item_added_message(&acc.msg_item_id, oi)).await;
+                                send(&tx, &ev::output_item_added_message(&acc.msg_item_id, oi))
+                                    .await;
                                 send(&tx, &ev::content_part_added(&acc.msg_item_id, oi, 0)).await;
                                 acc.text_item_emitted = true;
                             }
@@ -192,24 +203,32 @@ pub async fn process_anthropic_stream(
                         "tool_use" => {
                             let id = block.get("id").and_then(|i| i.as_str()).unwrap_or("");
                             let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                            let clamped_id = crate::transform::tool_calls::sanitize_call_id(id).into_owned();
+                            let clamped_id =
+                                crate::transform::tool_calls::sanitize_call_id(id).into_owned();
                             let oi = acc.next_output_index;
                             acc.next_output_index += 1;
                             let item_id = format!("fc_{}", clamped_id);
-                            acc.tool_calls.insert(index, AccumulatedToolCall {
-                                id: clamped_id.clone(),
-                                name: name.to_string(),
-                                arguments: String::new(),
-                                last_args_len: 0,
-                                output_index: oi,
-                            });
-                            send(&tx, &ev::function_call_added(&item_id, oi, &clamped_id, name)).await;
+                            acc.tool_calls.insert(
+                                index,
+                                AccumulatedToolCall {
+                                    id: clamped_id.clone(),
+                                    name: name.to_string(),
+                                    arguments: String::new(),
+                                    last_args_len: 0,
+                                    output_index: oi,
+                                },
+                            );
+                            send(
+                                &tx,
+                                &ev::function_call_added(&item_id, oi, &clamped_id, name),
+                            )
+                            .await;
                         }
                         "thinking" => {
                             // 新 thinking 块开始——预留位置，文本和签名分别由
                             // thinking_delta / signature_delta 填进来。
                             acc.thinking_blocks.push(
-                                crate::transform::thinking_blocks::ThinkingBlock::thinking("")
+                                crate::transform::thinking_blocks::ThinkingBlock::thinking(""),
                             );
                         }
                         "redacted_thinking" => {
@@ -217,7 +236,7 @@ pub async fn process_anthropic_stream(
                             // 没有 delta 流式过程，必须原样保留以支持下一轮签名链。
                             let data = block.get("data").and_then(|d| d.as_str()).unwrap_or("");
                             acc.thinking_blocks.push(
-                                crate::transform::thinking_blocks::ThinkingBlock::redacted(data)
+                                crate::transform::thinking_blocks::ThinkingBlock::redacted(data),
                             );
                         }
                         _ => {}
@@ -234,17 +253,28 @@ pub async fn process_anthropic_stream(
                             if let Some(text) = delta.get("text").and_then(|t| t.as_str()) {
                                 acc.full_text.push_str(text);
                                 if acc.text_item_emitted {
-                                    send(&tx, &ev::output_text_delta(&acc.msg_item_id, 0, 0, text)).await;
+                                    send(&tx, &ev::output_text_delta(&acc.msg_item_id, 0, 0, text))
+                                        .await;
                                 }
                             }
                         }
                         "input_json_delta" => {
-                            if let Some(partial) = delta.get("partial_json").and_then(|p| p.as_str()) {
+                            if let Some(partial) =
+                                delta.get("partial_json").and_then(|p| p.as_str())
+                            {
                                 if let Some(tc) = acc.tool_calls.get_mut(&index) {
                                     tc.arguments.push_str(partial);
                                     let delta_args = &tc.arguments[tc.last_args_len..];
                                     let item_id = format!("fc_{}", tc.id);
-                                    send(&tx, &ev::function_call_arguments_delta(&item_id, tc.output_index, delta_args)).await;
+                                    send(
+                                        &tx,
+                                        &ev::function_call_arguments_delta(
+                                            &item_id,
+                                            tc.output_index,
+                                            delta_args,
+                                        ),
+                                    )
+                                    .await;
                                     tc.last_args_len = tc.arguments.len();
                                 }
                             }
@@ -283,15 +313,21 @@ pub async fn process_anthropic_stream(
                 }
                 "message_delta" => {
                     if let Some(u) = data.get("usage") {
-                        let out_tokens = u.get("output_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
+                        let out_tokens =
+                            u.get("output_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
                         if let Some(ref mut existing) = acc.usage {
                             existing["output_tokens"] = json!(out_tokens);
                         } else {
-                            acc.usage = Some(json!({"input_tokens": 0, "output_tokens": out_tokens}));
+                            acc.usage =
+                                Some(json!({"input_tokens": 0, "output_tokens": out_tokens}));
                         }
                     }
                     // 捕获 stop_reason 给 finalize 映射成 Responses status。
-                    if let Some(sr) = data.get("delta").and_then(|d| d.get("stop_reason")).and_then(|s| s.as_str()) {
+                    if let Some(sr) = data
+                        .get("delta")
+                        .and_then(|d| d.get("stop_reason"))
+                        .and_then(|s| s.as_str())
+                    {
                         if !sr.is_empty() {
                             acc.stop_reason = Some(sr.to_string());
                         }
@@ -302,12 +338,17 @@ pub async fn process_anthropic_stream(
                     finalize(acc, &tx).await;
                 }
                 "error" => {
-                    let err_msg = data.get("error")
+                    let err_msg = data
+                        .get("error")
                         .and_then(|e| e.get("message"))
                         .and_then(|m| m.as_str())
                         .unwrap_or("Unknown Claude API error");
                     let full_err = format!("Claude API error: {err_msg}");
-                    send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &full_err)).await;
+                    send(
+                        &tx,
+                        &ev::response_failed(&acc.response_id, &acc.model, &full_err),
+                    )
+                    .await;
                     return Err(full_err);
                 }
                 _ => {}
@@ -320,7 +361,11 @@ pub async fn process_anthropic_stream(
         finalize(acc, &tx).await;
     } else {
         // Stream ended with no content at all — notify client
-        send(&tx, &ev::response_failed(&acc.response_id, &acc.model, "Stream ended unexpectedly")).await;
+        send(
+            &tx,
+            &ev::response_failed(&acc.response_id, &acc.model, "Stream ended unexpectedly"),
+        )
+        .await;
     }
 
     Ok(())
@@ -342,11 +387,19 @@ async fn stream_reasoning_delta(
             let oi = acc.next_output_index;
             acc.next_output_index += 1;
             acc.reasoning_output_index = Some(oi);
-            send(tx, &ev::output_item_added_reasoning(&acc.reasoning_item_id, oi)).await;
+            send(
+                tx,
+                &ev::output_item_added_reasoning(&acc.reasoning_item_id, oi),
+            )
+            .await;
             oi
         }
     };
-    send(tx, &ev::reasoning_summary_text_delta(&acc.reasoning_item_id, oi, 0, delta)).await;
+    send(
+        tx,
+        &ev::reasoning_summary_text_delta(&acc.reasoning_item_id, oi, 0, delta),
+    )
+    .await;
 }
 
 async fn finalize(acc: &mut AnthropicSseAccumulator, tx: &mpsc::Sender<String>) {
@@ -361,35 +414,88 @@ async fn finalize(acc: &mut AnthropicSseAccumulator, tx: &mpsc::Sender<String>) 
     // 的 thinking 签名块编码进 encrypted_content——下一轮 client 回传时能
     // 还原签名链，否则 Anthropic 会因为 sig-chain 校验失败 400。
     if let Some(oi) = acc.reasoning_output_index {
-        send(tx, &ev::reasoning_summary_text_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content)).await;
-        send(tx, &ev::output_item_done_reasoning_with_blocks(
-            &acc.reasoning_item_id, oi, &acc.reasoning_content, &acc.thinking_blocks,
-        )).await;
+        send(
+            tx,
+            &ev::reasoning_summary_text_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content),
+        )
+        .await;
+        send(
+            tx,
+            &ev::output_item_done_reasoning_with_blocks(
+                &acc.reasoning_item_id,
+                oi,
+                &acc.reasoning_content,
+                &acc.thinking_blocks,
+            ),
+        )
+        .await;
     }
 
     // Text done events
     if acc.text_item_emitted {
-        send(tx, &ev::output_text_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
-        send(tx, &ev::content_part_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
-        let rc = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.as_str()) };
-        send(tx, &ev::output_item_done_message(&acc.msg_item_id, 0, &acc.full_text, rc)).await;
+        send(
+            tx,
+            &ev::output_text_done(&acc.msg_item_id, 0, 0, &acc.full_text),
+        )
+        .await;
+        send(
+            tx,
+            &ev::content_part_done(&acc.msg_item_id, 0, 0, &acc.full_text),
+        )
+        .await;
+        let rc = if acc.reasoning_content.is_empty() {
+            None
+        } else {
+            Some(acc.reasoning_content.as_str())
+        };
+        send(
+            tx,
+            &ev::output_item_done_message(&acc.msg_item_id, 0, &acc.full_text, rc),
+        )
+        .await;
     }
 
     // Tool call done events
     for tc in acc.tool_calls.values() {
         let item_id = format!("fc_{}", tc.id);
-        let rc = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.as_str()) };
-        send(tx, &ev::function_call_arguments_done(&item_id, tc.output_index, &tc.arguments)).await;
-        send(tx, &ev::function_call_done(&item_id, tc.output_index, &tc.id, &tc.name, &tc.arguments, rc)).await;
+        let rc = if acc.reasoning_content.is_empty() {
+            None
+        } else {
+            Some(acc.reasoning_content.as_str())
+        };
+        send(
+            tx,
+            &ev::function_call_arguments_done(&item_id, tc.output_index, &tc.arguments),
+        )
+        .await;
+        send(
+            tx,
+            &ev::function_call_done(
+                &item_id,
+                tc.output_index,
+                &tc.id,
+                &tc.name,
+                &tc.arguments,
+                rc,
+            ),
+        )
+        .await;
     }
 
     // response.completed —— 顺手把 Anthropic stop_reason 映射进 status。
     // output 暂传空数组（Anthropic 路径暂未累积 output_items；与 sse.rs 同步
     // 改造是独立工作）。
-    send(tx, &ev::response_completed_with_stop_reason(
-        &acc.response_id, &acc.model, acc.usage.as_ref(), acc.stop_reason.as_deref(),
-        &[],
-    )).await;
+    send(
+        tx,
+        &ev::response_completed_with_stop_reason(
+            &acc.response_id,
+            &acc.model,
+            acc.usage.as_ref(),
+            acc.stop_reason.as_deref(),
+            &[],
+        ),
+    )
+    .await;
 }
 
 async fn send(tx: &mpsc::Sender<String>, event: &str) {

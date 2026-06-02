@@ -41,12 +41,19 @@ async fn harness_chat_completions_passthrough_roundtrip() {
         .expect("send request");
     let status = res.status();
     let body_text = res.text().await.unwrap_or_default();
-    assert!(status.is_success(), "gateway returned {status} body={body_text}");
+    assert!(
+        status.is_success(),
+        "gateway returned {status} body={body_text}"
+    );
     let body: serde_json::Value = serde_json::from_str(&body_text).expect("parse response");
     assert_eq!(body["choices"][0]["message"]["content"], "ok");
 
     let received = mock.received().await;
-    assert_eq!(received.len(), 1, "mock should have seen exactly one request");
+    assert_eq!(
+        received.len(),
+        1,
+        "mock should have seen exactly one request"
+    );
     assert_eq!(received[0].path, "/v1/chat/completions");
     assert_eq!(received[0].body["model"], "test-model");
     assert_eq!(received[0].body["messages"][0]["content"], "ping");

@@ -100,7 +100,12 @@ pub fn get_price(conn: &Connection, provider: &str, model: &str) -> Option<(f64,
 }
 
 /// Calculate cost in USD from token counts and prices.
-pub fn calculate_cost(input_tokens: Option<i64>, output_tokens: Option<i64>, input_price: f64, output_price: f64) -> f64 {
+pub fn calculate_cost(
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    input_price: f64,
+    output_price: f64,
+) -> f64 {
     let input = input_tokens.unwrap_or(0) as f64;
     let output = output_tokens.unwrap_or(0) as f64;
     (input * input_price + output * output_price) / 1_000_000.0
@@ -124,14 +129,22 @@ pub fn backfill_costs(conn: &Connection) -> Result<u64, AppError> {
     let mut stmt = conn.prepare(
         "SELECT id, provider, model, input_tokens, output_tokens FROM request_logs WHERE cost IS NULL AND (input_tokens IS NOT NULL OR output_tokens IS NOT NULL)"
     )?;
-    let rows: Vec<(String, String, String, Option<i64>, Option<i64>)> = stmt.query_map([], |r| {
-        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
-    })?.filter_map(|r| r.ok()).collect();
+    let rows: Vec<(String, String, String, Option<i64>, Option<i64>)> = stmt
+        .query_map([], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
 
     let mut updated = 0u64;
     for (id, provider, model, input_tokens, output_tokens) in &rows {
-        if let Some(cost) = calculate_cost_for_request(conn, provider, model, *input_tokens, *output_tokens) {
-            conn.execute("UPDATE request_logs SET cost = ?1 WHERE id = ?2", params![cost, id])?;
+        if let Some(cost) =
+            calculate_cost_for_request(conn, provider, model, *input_tokens, *output_tokens)
+        {
+            conn.execute(
+                "UPDATE request_logs SET cost = ?1 WHERE id = ?2",
+                params![cost, id],
+            )?;
             updated += 1;
         }
     }
@@ -215,8 +228,9 @@ mod tests {
                 output_price REAL NOT NULL,
                 is_custom INTEGER NOT NULL DEFAULT 0,
                 updated_at TEXT NOT NULL
-            )"
-        ).unwrap();
+            )",
+        )
+        .unwrap();
         conn
     }
 
@@ -321,6 +335,7 @@ mod tests {
         ensure_defaults(&conn).unwrap();
         upsert_custom(&conn, "test", "model", 1.0, 2.0).unwrap();
         assert!(delete_custom(&conn, "custom_test_model").unwrap());
-        assert!(!delete_custom(&conn, "default_deepseek_deepseek-v4-pro").unwrap()); // can't delete defaults
+        assert!(!delete_custom(&conn, "default_deepseek_deepseek-v4-pro").unwrap());
+        // can't delete defaults
     }
 }

@@ -31,10 +31,7 @@ pub fn apply(provider: &Provider, body: &mut Value) -> Vec<ThinkingRectifierActi
                 if let Some(budget) = thinking.get("budget_tokens").and_then(|v| v.as_i64()) {
                     let clamped = budget.clamp(range.min, range.max);
                     if clamped != budget {
-                        thinking.insert(
-                            "budget_tokens".into(),
-                            Value::from(clamped),
-                        );
+                        thinking.insert("budget_tokens".into(), Value::from(clamped));
                         actions.push(ThinkingRectifierAction {
                             field: "thinking.budget_tokens".into(),
                             from: Some(budget.to_string()),
@@ -56,19 +53,13 @@ pub fn apply(provider: &Provider, body: &mut Value) -> Vec<ThinkingRectifierActi
                     .map(String::from)
                 {
                     if !quirks.reasoning_effort_values.contains(&effort) {
-                        let target = if quirks
-                            .reasoning_effort_values
-                            .iter()
-                            .any(|v| v == "medium")
+                        let target = if quirks.reasoning_effort_values.iter().any(|v| v == "medium")
                         {
                             "medium".to_string()
                         } else {
                             quirks.reasoning_effort_values[0].clone()
                         };
-                        reasoning.insert(
-                            "effort".into(),
-                            Value::String(target.clone()),
-                        );
+                        reasoning.insert("effort".into(), Value::String(target.clone()));
                         actions.push(ThinkingRectifierAction {
                             field: "reasoning.effort".into(),
                             from: Some(effort),
@@ -91,22 +82,34 @@ mod tests {
 
     fn provider(provider_type: &str, quirks_json: Option<&str>) -> Provider {
         Provider {
-            id: "p".into(), name: "P".into(), provider_type: provider_type.into(),
-            base_url: "https://x".into(), api_key: Some("sk".into()),
-            default_model: "m".into(), reasoning_model: None,
-            supported_models: None, model_mapping: None, extra_headers: None,
-            anthropic_base_url: None, responses_base_url: None,
+            id: "p".into(),
+            name: "P".into(),
+            provider_type: provider_type.into(),
+            base_url: "https://x".into(),
+            api_key: Some("sk".into()),
+            default_model: "m".into(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "anthropic_messages".into(),
-            timeout_seconds: 60, status: "ok".into(),
-            supports_vision: None, auto_cache_control: None, supports_cache: None,
+            timeout_seconds: 60,
+            status: "ok".into(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
             model_capabilities: None,
             provider_quirks: quirks_json.map(|s| s.to_string()),
             body_filter_enabled: None,
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
-            enabled: true, is_active: true,
-            created_at: "now".into(), updated_at: "now".into(),
+            enabled: true,
+            is_active: true,
+            created_at: "now".into(),
+            updated_at: "now".into(),
         }
     }
 
@@ -180,7 +183,10 @@ mod tests {
 
     #[test]
     fn user_thinking_budget_override_wins_over_default() {
-        let p = provider("mimo", Some(r#"{"thinking_budget":{"min":2048,"max":4096}}"#));
+        let p = provider(
+            "mimo",
+            Some(r#"{"thinking_budget":{"min":2048,"max":4096}}"#),
+        );
         let mut body = json!({"thinking": {"budget_tokens": 100}});
         apply(&p, &mut body);
         assert_eq!(body["thinking"]["budget_tokens"].as_i64(), Some(2048));

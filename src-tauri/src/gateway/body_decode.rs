@@ -76,7 +76,10 @@ fn decompress_gzip(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut decoder = flate2::read::GzDecoder::new(data);
     let mut out = Vec::with_capacity(data.len() * 2);
     decoder.read_to_end(&mut out).map_err(|e| {
-        AppError::new("GZIP_DECODE_FAILED", format!("Failed to decompress gzip body: {e}"))
+        AppError::new(
+            "GZIP_DECODE_FAILED",
+            format!("Failed to decompress gzip body: {e}"),
+        )
     })?;
     Ok(out)
 }
@@ -85,7 +88,10 @@ fn decompress_deflate(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut decoder = flate2::read::DeflateDecoder::new(data);
     let mut out = Vec::with_capacity(data.len() * 2);
     decoder.read_to_end(&mut out).map_err(|e| {
-        AppError::new("DEFLATE_DECODE_FAILED", format!("Failed to decompress deflate body: {e}"))
+        AppError::new(
+            "DEFLATE_DECODE_FAILED",
+            format!("Failed to decompress deflate body: {e}"),
+        )
     })?;
     Ok(out)
 }
@@ -94,18 +100,27 @@ fn decompress_brotli(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut decoder = brotli::Decompressor::new(data, 4096);
     let mut out = Vec::with_capacity(data.len() * 3);
     decoder.read_to_end(&mut out).map_err(|e| {
-        AppError::new("BROTLI_DECODE_FAILED", format!("Failed to decompress brotli body: {e}"))
+        AppError::new(
+            "BROTLI_DECODE_FAILED",
+            format!("Failed to decompress brotli body: {e}"),
+        )
     })?;
     Ok(out)
 }
 
 fn decompress_zstd(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut decoder = zstd::stream::Decoder::new(data).map_err(|e| {
-        AppError::new("ZSTD_DECODE_FAILED", format!("Failed to init zstd decoder: {e}"))
+        AppError::new(
+            "ZSTD_DECODE_FAILED",
+            format!("Failed to init zstd decoder: {e}"),
+        )
     })?;
     let mut out = Vec::with_capacity(data.len() * 3);
     decoder.read_to_end(&mut out).map_err(|e| {
-        AppError::new("ZSTD_DECODE_FAILED", format!("Failed to decompress zstd body: {e}"))
+        AppError::new(
+            "ZSTD_DECODE_FAILED",
+            format!("Failed to decompress zstd body: {e}"),
+        )
     })?;
     Ok(out)
 }

@@ -54,8 +54,11 @@ fn decide_with_protocols(
         "/v1/chat/completions" | "/chat/completions" => ClientProtocol::OpenAIChatCompletions,
         "/v1/responses" | "/responses" => ClientProtocol::OpenAIResponses,
         _ => {
-            return Err(AppError::new("ROUTE_NOT_SUPPORTED", format!("Route '{route}' is not supported"))
-                .with_suggestion("Use /v1/chat/completions, /v1/responses, or /v1/models"));
+            return Err(AppError::new(
+                "ROUTE_NOT_SUPPORTED",
+                format!("Route '{route}' is not supported"),
+            )
+            .with_suggestion("Use /v1/chat/completions, /v1/responses, or /v1/models"));
         }
     };
 
@@ -114,29 +117,58 @@ mod tests {
 
     #[test]
     fn test_decide_chat_completions_pass_through() {
-        let decision = decide("/v1/chat/completions", "openai_chat_completions", "https://api.openai.com").unwrap();
-        assert_eq!(decision.client_protocol, ClientProtocol::OpenAIChatCompletions);
+        let decision = decide(
+            "/v1/chat/completions",
+            "openai_chat_completions",
+            "https://api.openai.com",
+        )
+        .unwrap();
+        assert_eq!(
+            decision.client_protocol,
+            ClientProtocol::OpenAIChatCompletions
+        );
         assert_eq!(decision.mode, RouteMode::PassThrough);
-        assert_eq!(decision.target_url, "https://api.openai.com/v1/chat/completions");
+        assert_eq!(
+            decision.target_url,
+            "https://api.openai.com/v1/chat/completions"
+        );
     }
 
     #[test]
     fn test_decide_responses_transform() {
-        let decision = decide("/v1/responses", "openai_chat_completions", "https://api.deepseek.com").unwrap();
+        let decision = decide(
+            "/v1/responses",
+            "openai_chat_completions",
+            "https://api.deepseek.com",
+        )
+        .unwrap();
         assert_eq!(decision.client_protocol, ClientProtocol::OpenAIResponses);
         assert_eq!(decision.mode, RouteMode::Transform);
-        assert_eq!(decision.target_url, "https://api.deepseek.com/v1/chat/completions");
+        assert_eq!(
+            decision.target_url,
+            "https://api.deepseek.com/v1/chat/completions"
+        );
     }
 
     #[test]
     fn test_decide_unsupported_route() {
-        let err = decide("/v1/unknown", "openai_chat_completions", "https://api.openai.com").unwrap_err();
+        let err = decide(
+            "/v1/unknown",
+            "openai_chat_completions",
+            "https://api.openai.com",
+        )
+        .unwrap_err();
         assert_eq!(err.code, "ROUTE_NOT_SUPPORTED");
     }
 
     #[test]
     fn test_decide_unsupported_protocol() {
-        let err = decide("/v1/chat/completions", "anthropic_messages", "https://api.anthropic.com").unwrap_err();
+        let err = decide(
+            "/v1/chat/completions",
+            "anthropic_messages",
+            "https://api.anthropic.com",
+        )
+        .unwrap_err();
         assert_eq!(err.code, "PROTOCOL_TRANSFORM_NOT_SUPPORTED");
     }
 
@@ -182,22 +214,41 @@ mod tests {
 
     #[test]
     fn test_build_responses_url() {
-        assert_eq!(build_responses_url("https://api.openai.com"), "https://api.openai.com/v1/responses");
-        assert_eq!(build_responses_url("https://api.openai.com/v1"), "https://api.openai.com/v1/responses");
+        assert_eq!(
+            build_responses_url("https://api.openai.com"),
+            "https://api.openai.com/v1/responses"
+        );
+        assert_eq!(
+            build_responses_url("https://api.openai.com/v1"),
+            "https://api.openai.com/v1/responses"
+        );
     }
 
     // ── Multi-protocol (JSON array) tests ──
 
     #[test]
     fn test_decide_json_array_chat_completions_pass_through() {
-        let decision = decide("/v1/chat/completions", r#"["openai_chat_completions","openai_responses"]"#, "https://newapi.com").unwrap();
+        let decision = decide(
+            "/v1/chat/completions",
+            r#"["openai_chat_completions","openai_responses"]"#,
+            "https://newapi.com",
+        )
+        .unwrap();
         assert_eq!(decision.mode, RouteMode::PassThrough);
-        assert_eq!(decision.target_url, "https://newapi.com/v1/chat/completions");
+        assert_eq!(
+            decision.target_url,
+            "https://newapi.com/v1/chat/completions"
+        );
     }
 
     #[test]
     fn test_decide_json_array_responses_pass_through() {
-        let decision = decide("/v1/responses", r#"["openai_chat_completions","openai_responses"]"#, "https://newapi.com").unwrap();
+        let decision = decide(
+            "/v1/responses",
+            r#"["openai_chat_completions","openai_responses"]"#,
+            "https://newapi.com",
+        )
+        .unwrap();
         assert_eq!(decision.mode, RouteMode::PassThrough);
         assert_eq!(decision.target_url, "https://newapi.com/v1/responses");
     }
@@ -205,9 +256,17 @@ mod tests {
     #[test]
     fn test_decide_json_array_responses_fallback_to_transform() {
         // Provider only supports chat_completions, not responses → must transform
-        let decision = decide("/v1/responses", r#"["openai_chat_completions"]"#, "https://api.deepseek.com").unwrap();
+        let decision = decide(
+            "/v1/responses",
+            r#"["openai_chat_completions"]"#,
+            "https://api.deepseek.com",
+        )
+        .unwrap();
         assert_eq!(decision.mode, RouteMode::Transform);
-        assert_eq!(decision.target_url, "https://api.deepseek.com/v1/chat/completions");
+        assert_eq!(
+            decision.target_url,
+            "https://api.deepseek.com/v1/chat/completions"
+        );
     }
 
     #[test]
@@ -222,14 +281,24 @@ mod tests {
     #[test]
     fn test_decide_json_array_responses_prefers_pass_through() {
         // Provider supports both responses and chat_completions → prefer pass-through for /v1/responses
-        let decision = decide("/v1/responses", r#"["openai_responses","openai_chat_completions"]"#, "https://newapi.com").unwrap();
+        let decision = decide(
+            "/v1/responses",
+            r#"["openai_responses","openai_chat_completions"]"#,
+            "https://newapi.com",
+        )
+        .unwrap();
         assert_eq!(decision.mode, RouteMode::PassThrough);
         assert_eq!(decision.target_url, "https://newapi.com/v1/responses");
     }
 
     #[test]
     fn test_decide_unsupported_protocol_json_array() {
-        let err = decide("/v1/chat/completions", r#"["anthropic_messages"]"#, "https://api.anthropic.com").unwrap_err();
+        let err = decide(
+            "/v1/chat/completions",
+            r#"["anthropic_messages"]"#,
+            "https://api.anthropic.com",
+        )
+        .unwrap_err();
         assert_eq!(err.code, "PROTOCOL_TRANSFORM_NOT_SUPPORTED");
     }
 }

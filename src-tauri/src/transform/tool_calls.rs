@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 
 use serde_json::{json, Value};
 
@@ -11,6 +12,20 @@ pub const MAX_CALL_ID_LEN: usize = 64;
 
 /// Tool **name** 上限。Anthropic / OpenAI 都是 `^[a-zA-Z0-9_-]{1,128}$`。
 pub const MAX_TOOL_NAME_LEN: usize = 128;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolCallResponseKind {
+    Function {
+        name: String,
+        namespace: Option<String>,
+    },
+    Custom {
+        name: String,
+    },
+    ToolSearch,
+}
+
+pub type ToolCallResolutionMap = HashMap<String, ToolCallResponseKind>;
 
 /// tool_call arguments 必须是合法 JSON。上游 finish_reason=length / 客户端
 /// cancel / 网络断 都可能截断 arguments 留半截 JSON。原样塞回客户端 →
@@ -36,7 +51,9 @@ pub fn salvage_tool_arguments(
     let cause = match finish_reason {
         Some("length") => "stream truncated by length limit".to_string(),
         Some(fr) => format!("finish_reason={fr} before arguments completed"),
-        None => "history-resurrected: arguments not valid JSON (likely truncated last turn)".to_string(),
+        None => {
+            "history-resurrected: arguments not valid JSON (likely truncated last turn)".to_string()
+        }
     };
     tracing::warn!(
         tool = tool_name, call_id = call_id, len = raw.len(),
@@ -59,7 +76,11 @@ pub fn salvage_tool_arguments(
 /// 严格白名单是三家协议的最小公分母。
 ///
 /// 仅当输入合法且长度未超时返回 [`Cow::Borrowed`]——绝大多数请求零分配。
-fn sanitize_identifier<'a>(input: &'a str, max_len: usize, empty_placeholder: &str) -> Cow<'a, str> {
+fn sanitize_identifier<'a>(
+    input: &'a str,
+    max_len: usize,
+    empty_placeholder: &str,
+) -> Cow<'a, str> {
     let needs_truncate = input.len() > max_len;
     let has_invalid = input
         .bytes()
@@ -115,18 +136,26 @@ pub fn convert_tools_with_matrix(
     matrix: &std::collections::HashMap<String, Vec<String>>,
 ) -> Vec<Value> {
     let is_kimi = provider_type == "kimi" || provider_type.contains("moonshot");
-    let is_mimo = provider_type == "mimo" || provider_type == "xiaomi" || provider_type.contains("mimo");
+    let is_mimo =
+        provider_type == "mimo" || provider_type == "xiaomi" || provider_type.contains("mimo");
 
     // Strip [1m]/[...] qualifier before looking up in matrix (matrix keys use base id).
     let model_base = {
         let m = model;
         if let Some(stripped) = m.strip_suffix(']') {
-            if let Some(open) = stripped.rfind('[') { &stripped[..open] } else { m }
-        } else { m }
+            if let Some(open) = stripped.rfind('[') {
+                &stripped[..open]
+            } else {
+                m
+            }
+        } else {
+            m
+        }
     };
     // Whether to emit web_search for MiMo: only suppress when matrix has an
     // explicit entry that excludes web_search. Empty matrix → emit (back-compat).
-    let mimo_emit_web_search = matrix.get(model_base)
+    let mimo_emit_web_search = matrix
+        .get(model_base)
         .map(|caps| caps.iter().any(|c| c == "web_search"))
         .unwrap_or(true);
 
@@ -146,11 +175,15 @@ pub fn convert_tools_with_matrix(
                     for sub in sub_tools {
                         let sub_type = sub.get("type").and_then(|t| t.as_str()).unwrap_or("");
                         if sub_type == "function" {
-                            if let Some(mut converted) = convert_function_tool(sub, clean_for_deepseek) {
+                            if let Some(mut converted) =
+                                convert_function_tool(sub, clean_for_deepseek)
+                            {
                                 // Prefix function name with namespace for uniqueness
                                 if !ns_name.is_empty() {
                                     if let Some(func) = converted.get_mut("function") {
-                                        if let Some(name) = func.get("name").and_then(|n| n.as_str()) {
+                                        if let Some(name) =
+                                            func.get("name").and_then(|n| n.as_str())
+                                        {
                                             let prefixed = format!("{ns_name}__{name}");
                                             func["name"] = json!(prefixed);
                                         }
@@ -164,8 +197,14 @@ pub fn convert_tools_with_matrix(
             }
             "custom" => {
                 // Downgrade custom tool to function with single string input
-                let name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("custom_tool");
-                let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or("");
+                let name = tool
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("custom_tool");
+                let desc = tool
+                    .get("description")
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("");
                 result.push(json!({
                     "type": "function",
                     "function": {
@@ -212,19 +251,22 @@ pub fn convert_tools_with_matrix(
                 // Codex Desktop's deferred tool discovery builtin is client-executed,
                 // but the upstream model still needs a callable function shape so it
                 // can ask Codex to reveal matching tools for the next turn.
-                let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or(
-                    "Search deferred local tool metadata and return matching tools.",
-                );
-                let params = tool.get("parameters").cloned().unwrap_or_else(|| json!({
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Search query for matching tools."
-                        }
-                    },
-                    "required": ["query"]
-                }));
+                let desc = tool
+                    .get("description")
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("Search deferred local tool metadata and return matching tools.");
+                let params = tool.get("parameters").cloned().unwrap_or_else(|| {
+                    json!({
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Search query for matching tools."
+                            }
+                        },
+                        "required": ["query"]
+                    })
+                });
                 result.push(json!({
                     "type": "function",
                     "function": {
@@ -272,12 +314,22 @@ fn log_dropped_mcp_tool(tool: &Value) {
         .or_else(|| tool.get("server_url"))
         .and_then(|v| v.as_str())
         .unwrap_or("(unnamed)");
-    if tool.get("connector_id").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).is_some() {
+    if tool
+        .get("connector_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .is_some()
+    {
         tracing::debug!(
             label = %label,
             "dropped OpenAI MCP connector tool; advisory system note will be injected"
         );
-    } else if tool.get("server_url").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).is_some() {
+    } else if tool
+        .get("server_url")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .is_some()
+    {
         tracing::warn!(
             label = %label,
             "dropped remote MCP tool; Chat Completions upstream does not support OpenAI MCP runtime"
@@ -315,6 +367,125 @@ pub fn split_namespace_tool_name(name: &str) -> Option<(String, String)> {
     Some((ns.to_string(), tool.to_string()))
 }
 
+pub fn build_tool_call_resolution_map(raw_responses_body: &str) -> ToolCallResolutionMap {
+    let Ok(body) = serde_json::from_str::<Value>(raw_responses_body) else {
+        return ToolCallResolutionMap::new();
+    };
+    let Some(tools) = body.get("tools").and_then(|v| v.as_array()) else {
+        return ToolCallResolutionMap::new();
+    };
+    let mut map = ToolCallResolutionMap::new();
+    for tool in tools {
+        collect_tool_resolution(tool, None, &mut map);
+    }
+    map
+}
+
+fn collect_tool_resolution(tool: &Value, namespace: Option<&str>, map: &mut ToolCallResolutionMap) {
+    let tool_type = tool.get("type").and_then(|t| t.as_str()).unwrap_or("");
+    match tool_type {
+        "function" => {
+            if let Some(name) = responses_tool_name(tool) {
+                let chat_name = namespace
+                    .map(|ns| format!("{ns}__{name}"))
+                    .unwrap_or_else(|| name.clone());
+                map.entry(chat_name)
+                    .or_insert_with(|| ToolCallResponseKind::Function {
+                        name,
+                        namespace: namespace.map(ToString::to_string),
+                    });
+            }
+        }
+        "namespace" => {
+            let ns_name = tool
+                .get("name")
+                .and_then(|n| n.as_str())
+                .filter(|s| !s.is_empty());
+            let Some(ns_name) = ns_name else {
+                return;
+            };
+            if let Some(children) = tool
+                .get("tools")
+                .or_else(|| tool.get("children"))
+                .and_then(|v| v.as_array())
+            {
+                for child in children {
+                    collect_tool_resolution(child, Some(ns_name), map);
+                }
+            }
+        }
+        "custom" => {
+            if let Some(name) = responses_tool_name(tool) {
+                map.entry(name.clone())
+                    .or_insert_with(|| ToolCallResponseKind::Custom { name });
+            }
+        }
+        "tool_search" => {
+            map.entry("tool_search".to_string())
+                .or_insert(ToolCallResponseKind::ToolSearch);
+        }
+        "local_shell" => {
+            map.entry("shell".to_string())
+                .or_insert_with(|| ToolCallResponseKind::Function {
+                    name: "shell".to_string(),
+                    namespace: None,
+                });
+        }
+        _ => {}
+    }
+}
+
+fn responses_tool_name(tool: &Value) -> Option<String> {
+    tool.get("name")
+        .or_else(|| tool.get("function").and_then(|f| f.get("name")))
+        .and_then(|n| n.as_str())
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+}
+
+pub fn resolve_tool_call_response_kind(
+    chat_name: &str,
+    map: &ToolCallResolutionMap,
+) -> ToolCallResponseKind {
+    if let Some(kind) = map.get(chat_name) {
+        return kind.clone();
+    }
+    if let Some((namespace, name)) = split_namespace_tool_name(chat_name) {
+        return ToolCallResponseKind::Function {
+            name,
+            namespace: Some(namespace),
+        };
+    }
+    ToolCallResponseKind::Function {
+        name: chat_name.to_string(),
+        namespace: None,
+    }
+}
+
+pub fn custom_tool_input_from_arguments(arguments: &str) -> String {
+    if arguments.trim().is_empty() {
+        return String::new();
+    }
+    match serde_json::from_str::<Value>(arguments) {
+        Ok(Value::Object(obj)) => obj
+            .get("input")
+            .and_then(|value| value.as_str())
+            .unwrap_or(arguments)
+            .to_string(),
+        _ => arguments.to_string(),
+    }
+}
+
+pub fn tool_search_arguments_from_arguments(arguments: &str) -> Value {
+    if arguments.trim().is_empty() {
+        return json!({});
+    }
+    serde_json::from_str::<Value>(arguments)
+        .ok()
+        .filter(|value| value.is_object())
+        .unwrap_or_else(|| json!({ "query": arguments }))
+}
+
 /// #7 修复：工具名去重。Codex CLI/Desktop 偶发 bug 把同名工具发两次，
 /// 上游可能不接受重复（OpenAI strict mode / DeepSeek 都会 400）。
 /// function tool 用 function.name 做 key，builtin 用 type 做 key。
@@ -323,16 +494,19 @@ pub fn dedupe_tools_by_name(tools: Vec<Value>) -> Vec<Value> {
     let mut out: Vec<Value> = Vec::with_capacity(tools.len());
     for t in tools {
         let key = match t.get("type").and_then(|x| x.as_str()) {
-            Some("function") => t.get("function")
+            Some("function") => t
+                .get("function")
                 .and_then(|f| f.get("name"))
                 .and_then(|n| n.as_str())
                 .map(|n| format!("fn:{n}")),
-            Some("builtin_function") => t.get("function")
+            Some("builtin_function") => t
+                .get("function")
                 .and_then(|f| f.get("name"))
                 .and_then(|n| n.as_str())
                 .map(|n| format!("builtin_fn:{n}")),
             Some(other) => Some(format!("builtin:{other}")),
-            None => t.get("name")
+            None => t
+                .get("name")
                 .and_then(|n| n.as_str())
                 .map(|n| format!("tool:{n}")),
         };
@@ -360,7 +534,10 @@ pub fn dedupe_tools_by_name(tools: Vec<Value>) -> Vec<Value> {
 pub fn contains_kimi_web_search(tools: &[Value]) -> bool {
     tools.iter().any(|t| {
         t.get("type").and_then(|ty| ty.as_str()) == Some("builtin_function")
-            && t.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()) == Some("$web_search")
+            && t.get("function")
+                .and_then(|f| f.get("name"))
+                .and_then(|n| n.as_str())
+                == Some("$web_search")
     })
 }
 
@@ -369,7 +546,10 @@ fn convert_function_tool(tool: &Value, clean_for_deepseek: bool) -> Option<Value
     if let Some(func) = tool.get("function") {
         let mut result = json!({ "type": "function", "function": func.clone() });
         if clean_for_deepseek {
-            if let Some(params) = result.get_mut("function").and_then(|f| f.get_mut("parameters")) {
+            if let Some(params) = result
+                .get_mut("function")
+                .and_then(|f| f.get_mut("parameters"))
+            {
                 clean_schema_for_deepseek(params);
             }
         }
@@ -378,7 +558,10 @@ fn convert_function_tool(tool: &Value, clean_for_deepseek: bool) -> Option<Value
 
     // Structure A: flat name/description/parameters
     let name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("");
-    let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or("");
+    let desc = tool
+        .get("description")
+        .and_then(|d| d.as_str())
+        .unwrap_or("");
     let mut params = tool.get("parameters").cloned().unwrap_or(json!({}));
 
     if clean_for_deepseek {
@@ -479,9 +662,10 @@ pub fn remove_orphan_tool_messages(mut messages: Vec<ChatMessage>) -> Vec<ChatMe
     while i < messages.len() {
         let role = messages[i].role.as_str();
         if role == "assistant" {
-            valid_ids = messages[i].tool_calls.as_ref().map(|tcs| {
-                tcs.iter().map(|tc| tc.id.clone()).collect()
-            });
+            valid_ids = messages[i]
+                .tool_calls
+                .as_ref()
+                .map(|tcs| tcs.iter().map(|tc| tc.id.clone()).collect());
             i += 1;
         } else if role == "tool" {
             let keep = match (&valid_ids, &messages[i].tool_call_id) {
@@ -596,19 +780,25 @@ pub fn fix_tool_message_order(messages: Vec<ChatMessage>) -> Result<Vec<ChatMess
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use crate::protocol::chat_completions::{ChatMessage, ToolCall, ToolCallFunction};
+    use serde_json::json;
 
     #[test]
     fn sanitize_call_id_passes_through_clean() {
         assert!(matches!(sanitize_call_id("call_abc123"), Cow::Borrowed(_)));
-        assert!(matches!(sanitize_call_id("toolu_01A-9zZ"), Cow::Borrowed(_)));
+        assert!(matches!(
+            sanitize_call_id("toolu_01A-9zZ"),
+            Cow::Borrowed(_)
+        ));
         assert_eq!(sanitize_call_id("call_abc123").as_ref(), "call_abc123");
     }
 
     #[test]
     fn sanitize_call_id_replaces_invalid_characters() {
-        assert_eq!(sanitize_call_id("call:abc/def.1").as_ref(), "call_abc_def_1");
+        assert_eq!(
+            sanitize_call_id("call:abc/def.1").as_ref(),
+            "call_abc_def_1"
+        );
         assert_eq!(sanitize_call_id("a b c").as_ref(), "a_b_c");
         assert_eq!(sanitize_call_id("call#7").as_ref(), "call_7");
     }
@@ -643,8 +833,14 @@ mod tests {
 
     #[test]
     fn sanitize_tool_name_passes_clean_names() {
-        assert!(matches!(sanitize_tool_name("get_weather"), Cow::Borrowed(_)));
-        assert!(matches!(sanitize_tool_name("search-web-v2"), Cow::Borrowed(_)));
+        assert!(matches!(
+            sanitize_tool_name("get_weather"),
+            Cow::Borrowed(_)
+        ));
+        assert!(matches!(
+            sanitize_tool_name("search-web-v2"),
+            Cow::Borrowed(_)
+        ));
         assert!(matches!(sanitize_tool_name("MyTool123"), Cow::Borrowed(_)));
     }
 
@@ -730,7 +926,10 @@ mod tests {
         let result = convert_tools(&tools, false);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0]["function"]["name"], "my_tool");
-        assert_eq!(result[0]["function"]["parameters"]["properties"]["input"]["type"], "string");
+        assert_eq!(
+            result[0]["function"]["parameters"]["properties"]["input"]["type"],
+            "string"
+        );
     }
 
     #[test]
@@ -741,7 +940,10 @@ mod tests {
         assert_eq!(result[0]["type"], "function");
         assert_eq!(result[0]["function"]["name"], "shell");
         assert!(result[0]["function"]["parameters"]["properties"]["command"].is_object());
-        assert_eq!(result[0]["function"]["parameters"]["required"][0], "command");
+        assert_eq!(
+            result[0]["function"]["parameters"]["required"][0],
+            "command"
+        );
     }
 
     #[test]
@@ -759,8 +961,84 @@ mod tests {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0]["type"], "function");
         assert_eq!(result[0]["function"]["name"], "tool_search");
-        assert_eq!(result[0]["function"]["description"], "Search available deferred tools");
+        assert_eq!(
+            result[0]["function"]["description"],
+            "Search available deferred tools"
+        );
         assert_eq!(result[0]["function"]["parameters"]["required"][0], "query");
+    }
+
+    #[test]
+    fn tool_resolution_restores_namespace_custom_and_tool_search_semantics() {
+        let raw = json!({
+            "tools": [
+                {
+                    "type": "namespace",
+                    "name": "multi_agent_v1",
+                    "tools": [
+                        {"type": "function", "name": "spawn_agent", "parameters": {"type": "object"}}
+                    ]
+                },
+                {"type": "custom", "name": "grammar_answer"},
+                {"type": "tool_search"}
+            ]
+        })
+        .to_string();
+        let map = build_tool_call_resolution_map(&raw);
+
+        assert_eq!(
+            resolve_tool_call_response_kind("multi_agent_v1__spawn_agent", &map),
+            ToolCallResponseKind::Function {
+                name: "spawn_agent".into(),
+                namespace: Some("multi_agent_v1".into())
+            }
+        );
+        assert_eq!(
+            resolve_tool_call_response_kind("grammar_answer", &map),
+            ToolCallResponseKind::Custom {
+                name: "grammar_answer".into()
+            }
+        );
+        assert_eq!(
+            resolve_tool_call_response_kind("tool_search", &map),
+            ToolCallResponseKind::ToolSearch
+        );
+    }
+
+    #[test]
+    fn tool_resolution_preserves_user_function_named_tool_search() {
+        let raw = json!({
+            "tools": [
+                {"type": "function", "name": "tool_search", "parameters": {"type": "object"}},
+                {"type": "tool_search"}
+            ]
+        })
+        .to_string();
+        let map = build_tool_call_resolution_map(&raw);
+        assert_eq!(
+            resolve_tool_call_response_kind("tool_search", &map),
+            ToolCallResponseKind::Function {
+                name: "tool_search".into(),
+                namespace: None
+            }
+        );
+    }
+
+    #[test]
+    fn custom_and_tool_search_arguments_restore_responses_shapes() {
+        assert_eq!(
+            custom_tool_input_from_arguments(r#"{"input":"hello"}"#),
+            "hello"
+        );
+        assert_eq!(custom_tool_input_from_arguments("plain"), "plain");
+        assert_eq!(
+            tool_search_arguments_from_arguments(r#"{"query":"rust","limit":3}"#),
+            json!({"query": "rust", "limit": 3})
+        );
+        assert_eq!(
+            tool_search_arguments_from_arguments("rust"),
+            json!({"query": "rust"})
+        );
     }
 
     #[test]
@@ -817,9 +1095,15 @@ mod tests {
         // → user has opted out, translator must skip emitting web_search.
         let tools = vec![json!({"type": "web_search"})];
         let mut matrix: std::collections::HashMap<String, Vec<String>> = Default::default();
-        matrix.insert("mimo-v2.5".to_string(), vec!["text".into(), "vision".into()]);
+        matrix.insert(
+            "mimo-v2.5".to_string(),
+            vec!["text".into(), "vision".into()],
+        );
         let result = convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5", &matrix);
-        assert!(result.is_empty(), "web_search should be suppressed when matrix says model doesn't have it");
+        assert!(
+            result.is_empty(),
+            "web_search should be suppressed when matrix says model doesn't have it"
+        );
     }
 
     #[test]
@@ -829,14 +1113,20 @@ mod tests {
         let mut matrix: std::collections::HashMap<String, Vec<String>> = Default::default();
         matrix.insert("mimo-v2.5-pro".to_string(), vec!["text".into()]);
         let result = convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5-pro[1m]", &matrix);
-        assert!(result.is_empty(), "[1m] qualifier should be stripped before matrix lookup");
+        assert!(
+            result.is_empty(),
+            "[1m] qualifier should be stripped before matrix lookup"
+        );
     }
 
     #[test]
     fn test_convert_tools_mimo_matrix_allows_web_search_when_listed() {
         let tools = vec![json!({"type": "web_search"})];
         let mut matrix: std::collections::HashMap<String, Vec<String>> = Default::default();
-        matrix.insert("mimo-v2.5-pro".to_string(), vec!["text".into(), "web_search".into()]);
+        matrix.insert(
+            "mimo-v2.5-pro".to_string(),
+            vec!["text".into(), "web_search".into()],
+        );
         let result = convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5-pro", &matrix);
         assert_eq!(result.len(), 1);
         assert_eq!(result[0]["type"], "web_search");
@@ -846,7 +1136,8 @@ mod tests {
     fn test_convert_tools_mimo_empty_matrix_keeps_back_compat() {
         // No matrix configured → keep emitting (existing behavior).
         let tools = vec![json!({"type": "web_search"})];
-        let result = convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5-pro", &Default::default());
+        let result =
+            convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5-pro", &Default::default());
         assert_eq!(result.len(), 1);
     }
 
@@ -857,7 +1148,11 @@ mod tests {
         let mut matrix: std::collections::HashMap<String, Vec<String>> = Default::default();
         matrix.insert("other-model".to_string(), vec!["text".into()]);
         let result = convert_tools_with_matrix(&tools, false, "mimo", "mimo-v2.5-pro", &matrix);
-        assert_eq!(result.len(), 1, "unknown model → assume web_search supported");
+        assert_eq!(
+            result.len(),
+            1,
+            "unknown model → assume web_search supported"
+        );
     }
 
     #[test]
@@ -917,7 +1212,10 @@ mod tests {
                 tool_calls: Some(vec![ToolCall {
                     id: "call_1".to_string(),
                     call_type: "function".to_string(),
-                    function: ToolCallFunction { name: "search".to_string(), arguments: "{}".to_string() },
+                    function: ToolCallFunction {
+                        name: "search".to_string(),
+                        arguments: "{}".to_string(),
+                    },
                 }]),
                 tool_call_id: None,
                 name: None,
@@ -947,10 +1245,22 @@ mod tests {
                 content: None,
                 reasoning_content: None,
                 tool_calls: Some(vec![
-                    ToolCall { id: "a".into(), call_type: "function".into(),
-                        function: ToolCallFunction { name: "f".into(), arguments: "{}".into() } },
-                    ToolCall { id: "b".into(), call_type: "function".into(),
-                        function: ToolCallFunction { name: "g".into(), arguments: "{}".into() } },
+                    ToolCall {
+                        id: "a".into(),
+                        call_type: "function".into(),
+                        function: ToolCallFunction {
+                            name: "f".into(),
+                            arguments: "{}".into(),
+                        },
+                    },
+                    ToolCall {
+                        id: "b".into(),
+                        call_type: "function".into(),
+                        function: ToolCallFunction {
+                            name: "g".into(),
+                            arguments: "{}".into(),
+                        },
+                    },
                 ]),
                 tool_call_id: None,
                 name: None,
@@ -979,8 +1289,12 @@ mod tests {
                 content: None,
                 reasoning_content: None,
                 tool_calls: Some(vec![ToolCall {
-                    id: "x".into(), call_type: "function".into(),
-                    function: ToolCallFunction { name: "f".into(), arguments: "{}".into() },
+                    id: "x".into(),
+                    call_type: "function".into(),
+                    function: ToolCallFunction {
+                        name: "f".into(),
+                        arguments: "{}".into(),
+                    },
                 }]),
                 tool_call_id: None,
                 name: None,
@@ -1011,7 +1325,10 @@ mod tests {
                 tool_calls: Some(vec![ToolCall {
                     id: "call_1".to_string(),
                     call_type: "function".to_string(),
-                    function: ToolCallFunction { name: "search".to_string(), arguments: "{}".to_string() },
+                    function: ToolCallFunction {
+                        name: "search".to_string(),
+                        arguments: "{}".to_string(),
+                    },
                 }]),
                 tool_call_id: None,
                 name: None,
@@ -1036,20 +1353,21 @@ mod tests {
 
     #[test]
     fn test_fix_tool_message_order_lenient_last() {
-        let messages = vec![
-            ChatMessage {
-                role: "assistant".to_string(),
-                content: Some(json!("call tool")),
-                reasoning_content: None,
-                tool_calls: Some(vec![ToolCall {
-                    id: "call_1".to_string(),
-                    call_type: "function".to_string(),
-                    function: ToolCallFunction { name: "search".to_string(), arguments: "{}".to_string() },
-                }]),
-                tool_call_id: None,
-                name: None,
-            },
-        ];
+        let messages = vec![ChatMessage {
+            role: "assistant".to_string(),
+            content: Some(json!("call tool")),
+            reasoning_content: None,
+            tool_calls: Some(vec![ToolCall {
+                id: "call_1".to_string(),
+                call_type: "function".to_string(),
+                function: ToolCallFunction {
+                    name: "search".to_string(),
+                    arguments: "{}".to_string(),
+                },
+            }]),
+            tool_call_id: None,
+            name: None,
+        }];
         let result = fix_tool_message_order(messages).unwrap();
         assert_eq!(result.len(), 1);
     }
@@ -1066,12 +1384,18 @@ mod tests {
                     ToolCall {
                         id: "call_1".to_string(),
                         call_type: "function".to_string(),
-                        function: ToolCallFunction { name: "a".to_string(), arguments: "{}".to_string() },
+                        function: ToolCallFunction {
+                            name: "a".to_string(),
+                            arguments: "{}".to_string(),
+                        },
                     },
                     ToolCall {
                         id: "call_2".to_string(),
                         call_type: "function".to_string(),
-                        function: ToolCallFunction { name: "b".to_string(), arguments: "{}".to_string() },
+                        function: ToolCallFunction {
+                            name: "b".to_string(),
+                            arguments: "{}".to_string(),
+                        },
                     },
                 ]),
                 tool_call_id: None,
@@ -1140,7 +1464,10 @@ mod tests {
                 tool_calls: Some(vec![ToolCall {
                     id: "call_1".to_string(),
                     call_type: "function".to_string(),
-                    function: ToolCallFunction { name: "search".to_string(), arguments: "{}".to_string() },
+                    function: ToolCallFunction {
+                        name: "search".to_string(),
+                        arguments: "{}".to_string(),
+                    },
                 }]),
                 tool_call_id: None,
                 name: None,

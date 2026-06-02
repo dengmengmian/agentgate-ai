@@ -42,7 +42,10 @@ pub async fn render() -> impl IntoResponse {
     match HANDLE.get() {
         Some(h) => (
             axum::http::StatusCode::OK,
-            [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+            [(
+                axum::http::header::CONTENT_TYPE,
+                "text/plain; version=0.0.4",
+            )],
             h.render(),
         ),
         None => (
@@ -63,13 +66,15 @@ pub fn record_request(route: &str, client: &str, provider: &str, status: u16, la
         "client" => client.to_string(),
         "provider" => provider.to_string(),
         "status" => status.to_string(),
-    ).increment(1);
+    )
+    .increment(1);
     metrics::histogram!(
         "agentgate_request_duration_seconds",
         "route" => route.to_string(),
         "client" => client.to_string(),
         "provider" => provider.to_string(),
-    ).record(latency_secs);
+    )
+    .record(latency_secs);
 }
 
 /// 记 upstream token 用量（input / output / cache_read / cache_creation 分别记）。
@@ -82,7 +87,8 @@ pub fn record_tokens(provider: &str, model: &str, direction: &str, count: i64) {
         "provider" => provider.to_string(),
         "model" => model.to_string(),
         "direction" => direction.to_string(),
-    ).increment(count as u64);
+    )
+    .increment(count as u64);
 }
 
 /// 记 failover 尝试：上一条 provider 挂的原因（http 状态码或 net-error 类）。
@@ -91,7 +97,8 @@ pub fn record_failover(from_provider: &str, reason: &str) {
         "agentgate_failover_attempts_total",
         "from_provider" => from_provider.to_string(),
         "reason" => reason.to_string(),
-    ).increment(1);
+    )
+    .increment(1);
 }
 
 /// 实时活跃请求数（gauge），从 server.rs::CountingBody 的 AtomicU64 镜像而来。

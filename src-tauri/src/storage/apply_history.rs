@@ -147,7 +147,16 @@ pub fn record(
         "INSERT INTO client_apply_history
          (id, client_id, action, snapshot_json, summary, is_initial, agentgate_version, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-        params![&id, client_id, action, &snapshot_json, summary, is_initial, &version, &now],
+        params![
+            &id,
+            client_id,
+            action,
+            &snapshot_json,
+            summary,
+            is_initial,
+            &version,
+            &now
+        ],
     )?;
 
     trim_old(conn, client_id)?;
@@ -266,7 +275,14 @@ mod tests {
     fn retention_keeps_initial_plus_10_most_recent() {
         let conn = setup();
         for i in 0..15 {
-            record(&conn, "codex", "apply", &dummy_snapshot(&i.to_string()), &i.to_string()).unwrap();
+            record(
+                &conn,
+                "codex",
+                "apply",
+                &dummy_snapshot(&i.to_string()),
+                &i.to_string(),
+            )
+            .unwrap();
             std::thread::sleep(std::time::Duration::from_millis(2));
         }
         let rows = list(&conn, "codex").unwrap();
@@ -296,8 +312,18 @@ mod tests {
         let conn = setup();
         let snap = ClientSnapshot {
             files: vec![
-                SnapshotFile { name: "config.toml".into(), absolute_path: "/x".into(), existed: true, content: "[k]\nv=1".into() },
-                SnapshotFile { name: "auth.json".into(), absolute_path: "/y".into(), existed: false, content: "".into() },
+                SnapshotFile {
+                    name: "config.toml".into(),
+                    absolute_path: "/x".into(),
+                    existed: true,
+                    content: "[k]\nv=1".into(),
+                },
+                SnapshotFile {
+                    name: "auth.json".into(),
+                    absolute_path: "/y".into(),
+                    existed: false,
+                    content: "".into(),
+                },
             ],
         };
         let id = record(&conn, "codex", "apply", &snap, "test").unwrap();

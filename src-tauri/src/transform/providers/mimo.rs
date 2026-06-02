@@ -34,10 +34,7 @@ fn strip_qualifier(model: &str) -> &str {
 }
 
 impl super::ProviderTransform for MimoProvider {
-    fn process_messages(
-        &self,
-        messages: Vec<ChatMessage>,
-    ) -> Result<Vec<ChatMessage>, AppError> {
+    fn process_messages(&self, messages: Vec<ChatMessage>) -> Result<Vec<ChatMessage>, AppError> {
         let mut messages = tool_calls::fix_tool_message_order(messages)?;
 
         // MiMo thinking-mode multi-turn invariant: 历史里**所有** assistant 消息
@@ -62,8 +59,8 @@ impl super::ProviderTransform for MimoProvider {
                             .find_map(|tc| reasoning_store::lookup_by_tool_call_id(&tc.id))
                     })
                 });
-                msg.reasoning_content = stored
-                    .or_else(|| Some("(this turn ran without thinking mode)".to_string()));
+                msg.reasoning_content =
+                    stored.or_else(|| Some("(this turn ran without thinking mode)".to_string()));
             }
         }
 
@@ -166,8 +163,7 @@ impl super::ProviderTransform for MimoProvider {
         }
         if p::detect_rate_limit(status, body) {
             return Some(
-                "MiMo 触发限流。AgentGate 已冷却该 provider，路由会优先尝试其它候选。"
-                    .to_string(),
+                "MiMo 触发限流。AgentGate 已冷却该 provider，路由会优先尝试其它候选。".to_string(),
             );
         }
         // Fall back to shared context-overflow detection.
@@ -230,7 +226,10 @@ mod tests {
         r.thinking = Some(json!({"type": "enabled"}));
         r.temperature = Some(0.5);
         MimoProvider.finalize_request(&mut r, &None);
-        assert!(r.temperature.is_none(), "v2.5-pro thinking mode strips temperature");
+        assert!(
+            r.temperature.is_none(),
+            "v2.5-pro thinking mode strips temperature"
+        );
     }
 
     #[test]
@@ -257,7 +256,11 @@ mod tests {
         r.thinking = Some(json!({"type": "disabled"}));
         r.temperature = Some(0.5);
         MimoProvider.finalize_request(&mut r, &None);
-        assert_eq!(r.temperature, Some(0.5), "disabled thinking → temp passes through");
+        assert_eq!(
+            r.temperature,
+            Some(0.5),
+            "disabled thinking → temp passes through"
+        );
     }
 
     #[test]
@@ -313,10 +316,17 @@ mod tests {
     #[test]
     fn enhance_error_maps_web_search_plugin_not_activated() {
         let body = r#"{"error":{"message":"web search tool found in the request body, but webSearchEnabled is false","type":"invalid_request_error"}}"#;
-        let suggestion = MimoProvider.enhance_error(400, body)
+        let suggestion = MimoProvider
+            .enhance_error(400, body)
             .expect("400 + webSearchEnabled marker should produce a suggestion");
-        assert!(suggestion.contains("Web Search Plugin"), "suggestion should mention the plugin");
-        assert!(suggestion.contains("xiaomimimo.com"), "suggestion should include activation URL");
+        assert!(
+            suggestion.contains("Web Search Plugin"),
+            "suggestion should mention the plugin"
+        );
+        assert!(
+            suggestion.contains("xiaomimimo.com"),
+            "suggestion should include activation URL"
+        );
     }
 
     #[test]
@@ -343,7 +353,10 @@ mod tests {
         let mut r = req("mimo-v2-omni");
         r.tools = Some(vec![json!({"type": "web_search"})]);
         MimoProvider.finalize_request(&mut r, &None);
-        assert!(r.tools.is_none(), "empty tools array → None (cleaner request body)");
+        assert!(
+            r.tools.is_none(),
+            "empty tools array → None (cleaner request body)"
+        );
     }
 
     #[test]
@@ -400,7 +413,11 @@ mod tests {
         }];
         MimoProvider.finalize_request(&mut r, &None);
         let parts = r.messages[0].content.as_ref().unwrap().as_array().unwrap();
-        assert_eq!(parts.len(), 2, "v2.5 supports vision, image should be preserved");
+        assert_eq!(
+            parts.len(),
+            2,
+            "v2.5 supports vision, image should be preserved"
+        );
     }
 
     #[test]
@@ -442,9 +459,14 @@ mod tests {
         assert_eq!(parts.len(), 1, "image stripped, text notice synthesized");
         assert_eq!(parts[0]["type"], "text");
         let text = parts[0]["text"].as_str().unwrap();
-        assert!(text.contains("image stripped"), "notice should mention stripping");
-        assert!(text.contains("mimo-v2.5") || text.contains("mimo-v2-omni"),
-            "notice should suggest vision-capable models");
+        assert!(
+            text.contains("image stripped"),
+            "notice should mention stripping"
+        );
+        assert!(
+            text.contains("mimo-v2.5") || text.contains("mimo-v2-omni"),
+            "notice should suggest vision-capable models"
+        );
         assert_eq!(r.diagnostic_events.len(), 1);
         assert_eq!(r.diagnostic_events[0].capability, "vision");
         assert_eq!(r.diagnostic_events[0].provider.as_deref(), Some("mimo"));

@@ -61,7 +61,10 @@ pub fn ensure_token() -> Result<String, AppError> {
 
     if path.exists() {
         let token = fs::read_to_string(&path).map_err(|e| {
-            AppError::new("LOCAL_ACCESS_TOKEN_NOT_FOUND", format!("Cannot read token file: {e}"))
+            AppError::new(
+                "LOCAL_ACCESS_TOKEN_NOT_FOUND",
+                format!("Cannot read token file: {e}"),
+            )
         })?;
         let token = token.trim().to_string();
         if !token.is_empty() {
@@ -72,12 +75,18 @@ pub fn ensure_token() -> Result<String, AppError> {
     // Generate new token
     let dir = token_dir();
     fs::create_dir_all(&dir).map_err(|e| {
-        AppError::new("LOCAL_ACCESS_TOKEN_GENERATE_FAILED", format!("Cannot create token directory: {e}"))
+        AppError::new(
+            "LOCAL_ACCESS_TOKEN_GENERATE_FAILED",
+            format!("Cannot create token directory: {e}"),
+        )
     })?;
 
     let token = generate_token();
     fs::write(&path, &token).map_err(|e| {
-        AppError::new("LOCAL_ACCESS_TOKEN_GENERATE_FAILED", format!("Cannot write token file: {e}"))
+        AppError::new(
+            "LOCAL_ACCESS_TOKEN_GENERATE_FAILED",
+            format!("Cannot write token file: {e}"),
+        )
     })?;
 
     // Set file permissions to 0600 on Unix
@@ -94,11 +103,16 @@ pub fn ensure_token() -> Result<String, AppError> {
 pub fn read_token() -> Result<String, AppError> {
     let path = token_path();
     if !path.exists() {
-        return Err(AppError::new("LOCAL_ACCESS_TOKEN_NOT_FOUND", "Token file does not exist")
-            .with_suggestion("Restart AgentGate to auto-generate a token"));
+        return Err(
+            AppError::new("LOCAL_ACCESS_TOKEN_NOT_FOUND", "Token file does not exist")
+                .with_suggestion("Restart AgentGate to auto-generate a token"),
+        );
     }
     let token = fs::read_to_string(&path).map_err(|e| {
-        AppError::new("LOCAL_ACCESS_TOKEN_NOT_FOUND", format!("Cannot read token: {e}"))
+        AppError::new(
+            "LOCAL_ACCESS_TOKEN_NOT_FOUND",
+            format!("Cannot read token: {e}"),
+        )
     })?;
     Ok(token.trim().to_string())
 }
@@ -107,13 +121,19 @@ pub fn read_token() -> Result<String, AppError> {
 pub fn regenerate_token() -> Result<String, AppError> {
     let dir = token_dir();
     fs::create_dir_all(&dir).map_err(|e| {
-        AppError::new("LOCAL_ACCESS_TOKEN_REGENERATE_FAILED", format!("Cannot create directory: {e}"))
+        AppError::new(
+            "LOCAL_ACCESS_TOKEN_REGENERATE_FAILED",
+            format!("Cannot create directory: {e}"),
+        )
     })?;
 
     let token = generate_token();
     let path = token_path();
     fs::write(&path, &token).map_err(|e| {
-        AppError::new("LOCAL_ACCESS_TOKEN_REGENERATE_FAILED", format!("Cannot write token: {e}"))
+        AppError::new(
+            "LOCAL_ACCESS_TOKEN_REGENERATE_FAILED",
+            format!("Cannot write token: {e}"),
+        )
     })?;
 
     #[cfg(unix)]
@@ -164,7 +184,7 @@ pub fn validate_token(provided: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{FS_LOCK, setup_temp_home, cleanup};
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
 
     #[test]
     fn test_generate_token_format() {
@@ -221,7 +241,9 @@ mod tests {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         let _ = ensure_token().unwrap();
-        assert!(!validate_token("ag_local_wrongtoken1234567890abcdefghijklmnopqrstuvwxyz"));
+        assert!(!validate_token(
+            "ag_local_wrongtoken1234567890abcdefghijklmnopqrstuvwxyz"
+        ));
         cleanup(&temp);
     }
 
@@ -239,7 +261,9 @@ mod tests {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         let _ = std::fs::remove_file(token_path());
-        assert!(!validate_token("ag_local_abcdefghijklmnopqrstuvwxyz1234567890"));
+        assert!(!validate_token(
+            "ag_local_abcdefghijklmnopqrstuvwxyz1234567890"
+        ));
         cleanup(&temp);
     }
 
@@ -288,11 +312,12 @@ mod tests {
         assert!(validate_token(&token));
         // One char different at start
         let mut wrong = token.clone();
-        wrong.replace_range(10..11, "X");
+        let replacement = if &token[10..11] == "X" { "Y" } else { "X" };
+        wrong.replace_range(10..11, replacement);
         assert!(!validate_token(&wrong));
         // One char different at end
         let mut wrong2 = token.clone();
-        wrong2.replace_range(token.len()-1..token.len(), "X");
+        wrong2.replace_range(token.len() - 1..token.len(), "X");
         assert!(!validate_token(&wrong2));
         cleanup(&temp);
     }

@@ -50,7 +50,10 @@ pub fn convert(upstream: &Value, model: &str) -> Value {
         }
     }
 
-    let stop_reason = upstream.get("stop_reason").and_then(|s| s.as_str()).unwrap_or("");
+    let stop_reason = upstream
+        .get("stop_reason")
+        .and_then(|s| s.as_str())
+        .unwrap_or("");
     let finish_reason = map_stop_reason(stop_reason, !tool_calls.is_empty());
 
     let mut message = json!({
@@ -64,10 +67,21 @@ pub fn convert(upstream: &Value, model: &str) -> Value {
         message["tool_calls"] = json!(tool_calls);
     }
 
-    let resp_id = upstream.get("id").and_then(|i| i.as_str()).map(String::from)
-        .unwrap_or_else(|| format!("chatcmpl_{}", uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string()));
+    let resp_id = upstream
+        .get("id")
+        .and_then(|i| i.as_str())
+        .map(String::from)
+        .unwrap_or_else(|| {
+            format!(
+                "chatcmpl_{}",
+                uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string()
+            )
+        });
 
-    let resp_model = upstream.get("model").and_then(|m| m.as_str()).unwrap_or(model);
+    let resp_model = upstream
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or(model);
 
     json!({
         "id": resp_id,
@@ -108,7 +122,9 @@ fn remap_usage(anthropic_usage: Option<&Value>) -> Value {
     let input = u.get("input_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
     let output = u.get("output_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
     let cache_read = u.get("cache_read_input_tokens").and_then(|v| v.as_i64());
-    let cache_creation = u.get("cache_creation_input_tokens").and_then(|v| v.as_i64());
+    let cache_creation = u
+        .get("cache_creation_input_tokens")
+        .and_then(|v| v.as_i64());
 
     let mut out = json!({
         "prompt_tokens": input,
@@ -159,7 +175,9 @@ mod tests {
         });
         let resp = convert(&upstream, "claude-3");
         assert_eq!(resp["choices"][0]["finish_reason"], "tool_calls");
-        let tcs = resp["choices"][0]["message"]["tool_calls"].as_array().unwrap();
+        let tcs = resp["choices"][0]["message"]["tool_calls"]
+            .as_array()
+            .unwrap();
         assert_eq!(tcs.len(), 1);
         assert_eq!(tcs[0]["id"], "tu1");
         assert_eq!(tcs[0]["type"], "function");
@@ -178,7 +196,10 @@ mod tests {
         });
         let resp = convert(&upstream, "claude-3");
         assert_eq!(resp["choices"][0]["message"]["content"], "Answer: 42");
-        assert_eq!(resp["choices"][0]["message"]["reasoning_content"], "Let me consider...");
+        assert_eq!(
+            resp["choices"][0]["message"]["reasoning_content"],
+            "Let me consider..."
+        );
     }
 
     #[test]

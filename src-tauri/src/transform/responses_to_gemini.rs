@@ -6,7 +6,10 @@ use crate::protocol::openai_responses::ResponsesRequest;
 /// Convert a Responses API request into a Gemini API request body.
 pub fn convert(req: &ResponsesRequest, _model: &str) -> Result<Value, AppError> {
     // 1. System instruction (separate field in Gemini, text only)
-    let system_instruction = req.instructions.as_ref().or(req.system.as_ref())
+    let system_instruction = req
+        .instructions
+        .as_ref()
+        .or(req.system.as_ref())
         .filter(|s| !s.is_empty())
         .map(|text| json!({"parts": [{"text": text}]}));
 
@@ -20,9 +23,7 @@ pub fn convert(req: &ResponsesRequest, _model: &str) -> Result<Value, AppError> 
                     "assistant" => "model",
                     "tool" => {
                         // Tool results → user message with functionResponse part
-                        let content = msg.content.as_ref()
-                            .and_then(|c| c.as_str())
-                            .unwrap_or("");
+                        let content = msg.content.as_ref().and_then(|c| c.as_str()).unwrap_or("");
                         let name = msg.name.as_deref().unwrap_or("unknown");
                         contents.push(json!({
                             "role": "user",
@@ -46,8 +47,8 @@ pub fn convert(req: &ResponsesRequest, _model: &str) -> Result<Value, AppError> 
                 // Tool calls → functionCall parts
                 if let Some(ref tcs) = msg.tool_calls {
                     for tc in tcs {
-                        let args: Value = serde_json::from_str(&tc.function.arguments)
-                            .unwrap_or(json!({}));
+                        let args: Value =
+                            serde_json::from_str(&tc.function.arguments).unwrap_or(json!({}));
                         parts.push(json!({
                             "functionCall": {
                                 "name": tc.function.name,
@@ -72,7 +73,11 @@ pub fn convert(req: &ResponsesRequest, _model: &str) -> Result<Value, AppError> 
     contents = merge_consecutive_roles(contents);
 
     // 5. Convert tools
-    let tools = req.tools.as_ref().map(|t| convert_tools(t)).filter(|t| !t.is_empty());
+    let tools = req
+        .tools
+        .as_ref()
+        .map(|t| convert_tools(t))
+        .filter(|t| !t.is_empty());
 
     // 6. Generation config
     let mut gen_config = json!({});
@@ -87,7 +92,10 @@ pub fn convert(req: &ResponsesRequest, _model: &str) -> Result<Value, AppError> 
     }
     if let Some(ref stop) = req.stop {
         if let Some(arr) = stop.as_array() {
-            let seqs: Vec<String> = arr.iter().filter_map(|v| v.as_str().map(String::from)).collect();
+            let seqs: Vec<String> = arr
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect();
             if !seqs.is_empty() {
                 gen_config["stopSequences"] = json!(seqs);
             }
@@ -127,17 +135,15 @@ pub fn convert(req: &ResponsesRequest, _model: &str) -> Result<Value, AppError> 
 
 fn convert_input(input: &Value) -> Result<Vec<Value>, AppError> {
     match input {
-        Value::String(s) => {
-            Ok(vec![json!({"role": "user", "parts": [{"text": s}]})])
-        }
+        Value::String(s) => Ok(vec![json!({"role": "user", "parts": [{"text": s}]})]),
         Value::Array(items) => convert_input_array(items),
         Value::Object(_) => {
             let text = extract_text(Some(input));
             Ok(vec![json!({"role": "user", "parts": [{"text": text}]})])
         }
-        _ => {
-            Ok(vec![json!({"role": "user", "parts": [{"text": input.to_string()}]})])
-        }
+        _ => Ok(vec![
+            json!({"role": "user", "parts": [{"text": input.to_string()}]}),
+        ]),
     }
 }
 
@@ -166,10 +172,16 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<Value>, AppError> {
             }
             "function_call" => {
                 let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                let arguments = item.get("arguments").map(|a| {
-                    if a.is_string() { a.as_str().unwrap().to_string() }
-                    else { a.to_string() }
-                }).unwrap_or_default();
+                let arguments = item
+                    .get("arguments")
+                    .map(|a| {
+                        if a.is_string() {
+                            a.as_str().unwrap().to_string()
+                        } else {
+                            a.to_string()
+                        }
+                    })
+                    .unwrap_or_default();
                 let args: Value = serde_json::from_str(&arguments).unwrap_or(json!({}));
 
                 pending_function_calls.push(json!({
@@ -181,15 +193,23 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<Value>, AppError> {
 
                 let call_id = item.get("call_id").and_then(|c| c.as_str()).unwrap_or("");
                 if call_id.is_empty() {
-                    return Err(AppError::new("FUNCTION_CALL_OUTPUT_ID_MISSING",
-                        "function_call_output is missing call_id"));
+                    return Err(AppError::new(
+                        "FUNCTION_CALL_OUTPUT_ID_MISSING",
+                        "function_call_output is missing call_id",
+                    ));
                 }
 
                 let name = item.get("name").and_then(|n| n.as_str()).unwrap_or(call_id);
-                let output = item.get("output").map(|o| {
-                    if o.is_string() { o.as_str().unwrap().to_string() }
-                    else { o.to_string() }
-                }).unwrap_or_default();
+                let output = item
+                    .get("output")
+                    .map(|o| {
+                        if o.is_string() {
+                            o.as_str().unwrap().to_string()
+                        } else {
+                            o.to_string()
+                        }
+                    })
+                    .unwrap_or_default();
 
                 contents.push(json!({
                     "role": "user",
@@ -200,7 +220,8 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<Value>, AppError> {
                 // Skip reasoning items; handle compaction as user message
                 if item_type.contains("compaction") {
                     flush_function_calls(&mut contents, &mut pending_function_calls);
-                    let summary = item.get("summary")
+                    let summary = item
+                        .get("summary")
                         .or(item.get("content"))
                         .map(|v| extract_text(Some(v)))
                         .unwrap_or_else(|| "[context compacted]".to_string());
@@ -225,7 +246,9 @@ fn convert_input_array(items: &[Value]) -> Result<Vec<Value>, AppError> {
 }
 
 fn flush_function_calls(contents: &mut Vec<Value>, pending: &mut Vec<Value>) {
-    if pending.is_empty() { return; }
+    if pending.is_empty() {
+        return;
+    }
     contents.push(json!({"role": "model", "parts": std::mem::take(pending)}));
 }
 
@@ -233,15 +256,16 @@ fn extract_text(content: Option<&Value>) -> String {
     match content {
         None => String::new(),
         Some(Value::String(s)) => s.clone(),
-        Some(Value::Array(arr)) => {
-            arr.iter()
-                .filter_map(|p| p.get("text").and_then(|t| t.as_str()).map(String::from))
-                .collect::<Vec<_>>()
-                .join("")
-        }
-        Some(Value::Object(obj)) => {
-            obj.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string()
-        }
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .filter_map(|p| p.get("text").and_then(|t| t.as_str()).map(String::from))
+            .collect::<Vec<_>>()
+            .join(""),
+        Some(Value::Object(obj)) => obj
+            .get("text")
+            .and_then(|t| t.as_str())
+            .unwrap_or("")
+            .to_string(),
         Some(other) => other.to_string(),
     }
 }
@@ -281,8 +305,14 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
             "function" => {
                 if let Some(func) = tool.get("function") {
                     let name = func.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                    let desc = func.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                    let params = func.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
+                    let desc = func
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("");
+                    let params = func
+                        .get("parameters")
+                        .cloned()
+                        .unwrap_or(json!({"type": "object", "properties": {}}));
                     declarations.push(json!({
                         "name": name,
                         "description": desc,
@@ -291,8 +321,14 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                 } else {
                     // Flat structure
                     let name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                    let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                    let params = tool.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
+                    let desc = tool
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("");
+                    let params = tool
+                        .get("parameters")
+                        .cloned()
+                        .unwrap_or(json!({"type": "object", "properties": {}}));
                     declarations.push(json!({
                         "name": name,
                         "description": desc,
@@ -320,9 +356,19 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                     for sub in sub_tools {
                         if sub.get("type").and_then(|t| t.as_str()) == Some("function") {
                             let name = sub.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                            let desc = sub.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                            let params = sub.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
-                            let prefixed = if ns_name.is_empty() { name.to_string() } else { format!("{ns_name}__{name}") };
+                            let desc = sub
+                                .get("description")
+                                .and_then(|d| d.as_str())
+                                .unwrap_or("");
+                            let params = sub
+                                .get("parameters")
+                                .cloned()
+                                .unwrap_or(json!({"type": "object", "properties": {}}));
+                            let prefixed = if ns_name.is_empty() {
+                                name.to_string()
+                            } else {
+                                format!("{ns_name}__{name}")
+                            };
                             declarations.push(json!({"name": prefixed, "description": desc, "parameters": params}));
                         }
                     }
@@ -372,7 +418,10 @@ mod tests {
         let mut req = make_req(json!("hello"));
         req.instructions = Some("Be helpful".to_string());
         let result = convert(&req, "gemini-2.5-flash").unwrap();
-        assert_eq!(result["systemInstruction"]["parts"][0]["text"], "Be helpful");
+        assert_eq!(
+            result["systemInstruction"]["parts"][0]["text"],
+            "Be helpful"
+        );
     }
 
     #[test]

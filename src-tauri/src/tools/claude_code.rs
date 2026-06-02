@@ -23,11 +23,13 @@ fn save_official_settings() -> Result<(), AppError> {
         return Ok(());
     }
     let dir = saved_dir();
-    fs::create_dir_all(&dir).map_err(|e| {
-        AppError::new("CLAUDE_SAVE_FAILED", format!("Cannot create dir: {e}"))
-    })?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| AppError::new("CLAUDE_SAVE_FAILED", format!("Cannot create dir: {e}")))?;
     fs::copy(&src, saved_settings_path()).map_err(|e| {
-        AppError::new("CLAUDE_SAVE_FAILED", format!("Cannot save settings.json: {e}"))
+        AppError::new(
+            "CLAUDE_SAVE_FAILED",
+            format!("Cannot save settings.json: {e}"),
+        )
     })?;
     Ok(())
 }
@@ -41,11 +43,16 @@ pub fn has_saved_official() -> bool {
 fn restore_official_settings() -> Result<(), AppError> {
     let saved = saved_settings_path();
     if !saved.exists() {
-        return Err(AppError::new("CLAUDE_NO_SAVED_FILES",
-            "No saved official settings found."));
+        return Err(AppError::new(
+            "CLAUDE_NO_SAVED_FILES",
+            "No saved official settings found.",
+        ));
     }
     fs::copy(&saved, settings_path()).map_err(|e| {
-        AppError::new("CLAUDE_RESTORE_FAILED", format!("Cannot restore settings.json: {e}"))
+        AppError::new(
+            "CLAUDE_RESTORE_FAILED",
+            format!("Cannot restore settings.json: {e}"),
+        )
     })?;
     Ok(())
 }
@@ -151,7 +158,10 @@ pub fn detect_env() -> ClaudeCodeEnvStatus {
             (false, 0)
         };
         detected_profiles.push(ProfileDetection {
-            path: path.to_string_lossy().to_string(), exists, has_anthropic_vars: has_vars, var_count,
+            path: path.to_string_lossy().to_string(),
+            exists,
+            has_anthropic_vars: has_vars,
+            var_count,
         });
     }
 
@@ -168,16 +178,30 @@ pub fn detect_env() -> ClaudeCodeEnvStatus {
 
     let mut recommendations = Vec::new();
     if !has_api_key && !has_auth_token && !has_agentgate {
-        recommendations.push("No credentials found. Apply AgentGate config to set up Claude Code.".to_string());
+        recommendations.push(
+            "No credentials found. Apply AgentGate config to set up Claude Code.".to_string(),
+        );
     }
     if has_api_key && has_auth_token {
-        recommendations.push("Remove one of ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN to avoid conflicts.".to_string());
+        recommendations.push(
+            "Remove one of ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN to avoid conflicts."
+                .to_string(),
+        );
     }
 
     ClaudeCodeEnvStatus {
-        settings_path: sp_str, settings_exists, current_env, detected_profiles, conflicts,
-        active_base_url, active_model, has_api_key, has_auth_token, has_agentgate,
-        auth_mode: "inline_token".to_string(), recommendations,
+        settings_path: sp_str,
+        settings_exists,
+        current_env,
+        detected_profiles,
+        conflicts,
+        active_base_url,
+        active_model,
+        has_api_key,
+        has_auth_token,
+        has_agentgate,
+        auth_mode: "inline_token".to_string(),
+        recommendations,
         has_saved_official: has_saved_official(),
     }
 }
@@ -192,7 +216,10 @@ pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigRes
     // Ensure parent dir
     if let Some(parent) = sp.parent() {
         fs::create_dir_all(parent).map_err(|e| {
-            AppError::new("CLAUDE_CONFIG_WRITE_FAILED", format!("Cannot create directory: {e}"))
+            AppError::new(
+                "CLAUDE_CONFIG_WRITE_FAILED",
+                format!("Cannot create directory: {e}"),
+            )
         })?;
     }
 
@@ -210,39 +237,65 @@ pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigRes
     };
 
     let mut doc: serde_json::Value = serde_json::from_str(&existing).map_err(|e| {
-        AppError::new("CLAUDE_CONFIG_PARSE_ERROR", format!("Cannot parse settings.json: {e}"))
+        AppError::new(
+            "CLAUDE_CONFIG_PARSE_ERROR",
+            format!("Cannot parse settings.json: {e}"),
+        )
     })?;
 
     if doc.get("env").is_none() {
         doc["env"] = serde_json::json!({});
     }
 
-    let env = doc["env"].as_object_mut().ok_or_else(|| {
-        AppError::new("CLAUDE_CONFIG_PARSE_ERROR", "env field is not an object")
-    })?;
+    let env = doc["env"]
+        .as_object_mut()
+        .ok_or_else(|| AppError::new("CLAUDE_CONFIG_PARSE_ERROR", "env field is not an object"))?;
 
-    env.insert("ANTHROPIC_BASE_URL".to_string(), serde_json::json!(format!("http://{host}:{port}")));
+    env.insert(
+        "ANTHROPIC_BASE_URL".to_string(),
+        serde_json::json!(format!("http://{host}:{port}")),
+    );
     env.insert("ANTHROPIC_API_KEY".to_string(), serde_json::json!(token));
     env.insert("ANTHROPIC_MODEL".to_string(), serde_json::json!(model));
-    env.insert("ANTHROPIC_DEFAULT_SONNET_MODEL".to_string(), serde_json::json!(model));
-    env.insert("ANTHROPIC_DEFAULT_OPUS_MODEL".to_string(), serde_json::json!(model));
-    env.insert("ANTHROPIC_DEFAULT_HAIKU_MODEL".to_string(), serde_json::json!(model));
+    env.insert(
+        "ANTHROPIC_DEFAULT_SONNET_MODEL".to_string(),
+        serde_json::json!(model),
+    );
+    env.insert(
+        "ANTHROPIC_DEFAULT_OPUS_MODEL".to_string(),
+        serde_json::json!(model),
+    );
+    env.insert(
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL".to_string(),
+        serde_json::json!(model),
+    );
 
     if env.remove("ANTHROPIC_AUTH_TOKEN").is_some() {
-        warnings.push("Removed ANTHROPIC_AUTH_TOKEN to avoid conflict with ANTHROPIC_API_KEY".to_string());
+        warnings.push(
+            "Removed ANTHROPIC_AUTH_TOKEN to avoid conflict with ANTHROPIC_API_KEY".to_string(),
+        );
     }
 
     let new_content = serde_json::to_string_pretty(&doc).map_err(|e| {
-        AppError::new("CLAUDE_CONFIG_WRITE_FAILED", format!("Cannot serialize: {e}"))
+        AppError::new(
+            "CLAUDE_CONFIG_WRITE_FAILED",
+            format!("Cannot serialize: {e}"),
+        )
     })?;
 
     let tmp_path = sp.with_extension("json.tmp");
     fs::write(&tmp_path, &new_content).map_err(|e| {
-        AppError::new("CLAUDE_CONFIG_WRITE_FAILED", format!("Failed to write temp: {e}"))
+        AppError::new(
+            "CLAUDE_CONFIG_WRITE_FAILED",
+            format!("Failed to write temp: {e}"),
+        )
     })?;
     fs::rename(&tmp_path, &sp).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
-        AppError::new("CLAUDE_CONFIG_WRITE_FAILED", format!("Failed to replace: {e}"))
+        AppError::new(
+            "CLAUDE_CONFIG_WRITE_FAILED",
+            format!("Failed to replace: {e}"),
+        )
     })?;
 
     if has_saved_official() {
@@ -250,13 +303,17 @@ pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigRes
     }
 
     let changed_keys = vec![
-        "ANTHROPIC_BASE_URL".to_string(), "ANTHROPIC_API_KEY".to_string(),
+        "ANTHROPIC_BASE_URL".to_string(),
+        "ANTHROPIC_API_KEY".to_string(),
         "ANTHROPIC_MODEL".to_string(),
     ];
 
     Ok(ApplyConfigResult {
-        success: true, config_path: sp_str,
-        backup_path: None, changed_keys, warnings,
+        success: true,
+        config_path: sp_str,
+        backup_path: None,
+        changed_keys,
+        warnings,
     })
 }
 
@@ -293,11 +350,13 @@ pub struct ToggleResult {
 pub fn open_config() -> Result<(), AppError> {
     let sp = settings_path();
     if !sp.exists() {
-        return Err(AppError::new("CLAUDE_CONFIG_NOT_FOUND", "Claude Code settings.json does not exist"));
+        return Err(AppError::new(
+            "CLAUDE_CONFIG_NOT_FOUND",
+            "Claude Code settings.json does not exist",
+        ));
     }
-    open::that(&sp).map_err(|e| {
-        AppError::new("CLAUDE_CONFIG_OPEN_FAILED", format!("Failed to open: {e}"))
-    })
+    open::that(&sp)
+        .map_err(|e| AppError::new("CLAUDE_CONFIG_OPEN_FAILED", format!("Failed to open: {e}")))
 }
 
 pub fn generate_env_snippet(host: &str, port: i64, model: &str) -> String {
@@ -329,7 +388,7 @@ pub(crate) fn mask_value(val: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{FS_LOCK, setup_temp_home, cleanup};
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
 
     #[test]
     fn test_generate_env_snippet_format() {
@@ -374,7 +433,11 @@ mod tests {
         let temp = setup_temp_home();
         // Pre-create settings with official config
         std::fs::create_dir_all(settings_path().parent().unwrap()).unwrap();
-        std::fs::write(settings_path(), r#"{"env":{"ANTHROPIC_API_KEY":"sk-real"}}"#).unwrap();
+        std::fs::write(
+            settings_path(),
+            r#"{"env":{"ANTHROPIC_API_KEY":"sk-real"}}"#,
+        )
+        .unwrap();
         // Apply agentgate
         apply_config("127.0.0.1", 9090, "model").unwrap();
         let content = std::fs::read_to_string(settings_path()).unwrap();
@@ -398,10 +461,17 @@ mod tests {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         std::fs::create_dir_all(settings_path().parent().unwrap()).unwrap();
-        std::fs::write(settings_path(), r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"secret"}}"#).unwrap();
+        std::fs::write(
+            settings_path(),
+            r#"{"env":{"ANTHROPIC_AUTH_TOKEN":"secret"}}"#,
+        )
+        .unwrap();
         let result = apply_config("127.0.0.1", 9090, "model").unwrap();
         assert!(result.success);
-        assert!(result.warnings.iter().any(|w| w.contains("ANTHROPIC_AUTH_TOKEN")));
+        assert!(result
+            .warnings
+            .iter()
+            .any(|w| w.contains("ANTHROPIC_AUTH_TOKEN")));
         let content = std::fs::read_to_string(settings_path()).unwrap();
         assert!(!content.contains("ANTHROPIC_AUTH_TOKEN"));
         cleanup(&temp);

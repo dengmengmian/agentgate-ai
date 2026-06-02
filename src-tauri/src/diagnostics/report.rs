@@ -14,15 +14,39 @@ pub struct CheckItem {
 
 impl CheckItem {
     pub fn ok(id: &str, name: &str, msg: &str) -> Self {
-        Self { id: id.into(), name: name.into(), status: "ok".into(), message: msg.into(), detail: None, suggestion: None }
+        Self {
+            id: id.into(),
+            name: name.into(),
+            status: "ok".into(),
+            message: msg.into(),
+            detail: None,
+            suggestion: None,
+        }
     }
     pub fn warning(id: &str, name: &str, msg: &str) -> Self {
-        Self { id: id.into(), name: name.into(), status: "warning".into(), message: msg.into(), detail: None, suggestion: None }
+        Self {
+            id: id.into(),
+            name: name.into(),
+            status: "warning".into(),
+            message: msg.into(),
+            detail: None,
+            suggestion: None,
+        }
     }
     pub fn failed(id: &str, name: &str, msg: &str) -> Self {
-        Self { id: id.into(), name: name.into(), status: "failed".into(), message: msg.into(), detail: None, suggestion: None }
+        Self {
+            id: id.into(),
+            name: name.into(),
+            status: "failed".into(),
+            message: msg.into(),
+            detail: None,
+            suggestion: None,
+        }
     }
-    pub fn with_suggestion(mut self, s: &str) -> Self { self.suggestion = Some(s.into()); self }
+    pub fn with_suggestion(mut self, s: &str) -> Self {
+        self.suggestion = Some(s.into());
+        self
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -38,7 +62,13 @@ impl CheckReport {
     pub fn new(name: &str, checks: Vec<CheckItem>) -> Self {
         let has_failed = checks.iter().any(|c| c.status == "failed");
         let has_warning = checks.iter().any(|c| c.status == "warning");
-        let status = if has_failed { "failed" } else if has_warning { "warning" } else { "ok" };
+        let status = if has_failed {
+            "failed"
+        } else if has_warning {
+            "warning"
+        } else {
+            "ok"
+        };
         let ok_count = checks.iter().filter(|c| c.status == "ok").count();
         let summary = format!("{}/{} passed", ok_count, checks.len());
         Self {
@@ -102,10 +132,7 @@ mod tests {
 
     #[test]
     fn check_report_all_ok() {
-        let checks = vec![
-            CheckItem::ok("a", "A", "ok"),
-            CheckItem::ok("b", "B", "ok"),
-        ];
+        let checks = vec![CheckItem::ok("a", "A", "ok"), CheckItem::ok("b", "B", "ok")];
         let report = CheckReport::new("Test", checks);
         assert_eq!(report.status, "ok");
         assert_eq!(report.summary, "2/2 passed");

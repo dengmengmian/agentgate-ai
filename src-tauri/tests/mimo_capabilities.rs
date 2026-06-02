@@ -58,7 +58,11 @@ async fn mimo_vision_promotion_swaps_to_capable_sibling() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1, "expected exactly one upstream call");
@@ -114,7 +118,11 @@ async fn mimo_strips_image_with_notice_when_no_vision_sibling() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);
@@ -167,7 +175,11 @@ async fn mimo_web_search_auto_degrades_on_plugin_unavailable() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(
@@ -185,7 +197,10 @@ async fn mimo_web_search_auto_degrades_on_plugin_unavailable() {
                 .any(|t| t.get("type").and_then(|x| x.as_str()) == Some("web_search"))
         })
         .unwrap_or(false);
-    assert!(first_has_ws, "first attempt must include web_search builtin");
+    assert!(
+        first_has_ws,
+        "first attempt must include web_search builtin"
+    );
 
     // Second attempt should have stripped web_search.
     let second_tools = &received[1].body["tools"];
@@ -237,7 +252,11 @@ async fn mimo_thinking_mode_injects_reasoning_placeholder_for_history() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);

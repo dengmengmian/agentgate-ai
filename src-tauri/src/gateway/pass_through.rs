@@ -21,11 +21,7 @@ const MAX_SSE_LOG: usize = 1_000_000;
 const ANTHROPIC_FORWARD_HEADERS: &[&str] = &["anthropic-beta", "anthropic-version"];
 
 /// OpenAI 兼容透传路径转发的客户端 header 白名单。
-const OPENAI_FORWARD_HEADERS: &[&str] = &[
-    "openai-beta",
-    "openai-organization",
-    "openai-project",
-];
+const OPENAI_FORWARD_HEADERS: &[&str] = &["openai-beta", "openai-organization", "openai-project"];
 
 // 注：pass_through 当前**不**转发上游响应 header（只显式设 Content-Type），
 // 所以不需要 hop-by-hop 黑名单。未来若加 anthropic-ratelimit-* / x-request-id
@@ -38,7 +34,9 @@ fn forward_client_headers(
     client_headers: Option<&HeaderMap>,
     whitelist: &[&str],
 ) -> reqwest::RequestBuilder {
-    let Some(headers) = client_headers else { return builder };
+    let Some(headers) = client_headers else {
+        return builder;
+    };
     for name in whitelist {
         if let Some(v) = headers.get(*name).and_then(|h| h.to_str().ok()) {
             if !v.is_empty() {
@@ -64,28 +62,71 @@ pub async fn handle(
     client_type: &str,
     client_headers: Option<&HeaderMap>,
 ) -> Result<Response, AppError> {
-    let mut body_json: serde_json::Value = serde_json::from_str(raw_body)
-        .unwrap_or(serde_json::json!({}));
+    let mut body_json: serde_json::Value =
+        serde_json::from_str(raw_body).unwrap_or(serde_json::json!({}));
 
-    let is_stream = body_json.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
+    let is_stream = body_json
+        .get("stream")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     // Native pass-through is transparent by default: preserve the request model.
     // Only rewrite when the caller supplies an explicit override (for example,
     // model_mapping). If the client omitted model entirely, fall back to default.
-    let requested = body_json.get("model").and_then(|v| v.as_str()).unwrap_or("");
-    let (model, model_resolution) = resolve_native_model(requested, model_override, &config.default_model);
+    let requested = body_json
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let (model, model_resolution) =
+        resolve_native_model(requested, model_override, &config.default_model);
     let trace_mode = native_trace_mode(model_override);
     body_json["model"] = serde_json::json!(&model);
     let rewritten_body = body_json.to_string();
 
     if is_stream {
-        handle_stream(http_client, db, config, target_url, route, client_protocol, &rewritten_body, request_id, &model, trace_mode, model_resolution, start, client_type, client_headers).await
+        handle_stream(
+            http_client,
+            db,
+            config,
+            target_url,
+            route,
+            client_protocol,
+            &rewritten_body,
+            request_id,
+            &model,
+            trace_mode,
+            model_resolution,
+            start,
+            client_type,
+            client_headers,
+        )
+        .await
     } else {
-        handle_non_stream(http_client, db, config, target_url, route, client_protocol, &rewritten_body, request_id, &model, trace_mode, model_resolution, start, client_type, client_headers).await
+        handle_non_stream(
+            http_client,
+            db,
+            config,
+            target_url,
+            route,
+            client_protocol,
+            &rewritten_body,
+            request_id,
+            &model,
+            trace_mode,
+            model_resolution,
+            start,
+            client_type,
+            client_headers,
+        )
+        .await
     }
 }
 
-fn resolve_native_model(requested: &str, model_override: Option<&str>, default_model: &str) -> (String, &'static str) {
+fn resolve_native_model(
+    requested: &str,
+    model_override: Option<&str>,
+    default_model: &str,
+) -> (String, &'static str) {
     if let Some(mapped) = model_override {
         return (mapped.to_string(), "model_mapping");
     }
@@ -119,16 +160,27 @@ async fn handle_non_stream(
     client_type: &str,
     client_headers: Option<&HeaderMap>,
 ) -> Result<Response, AppError> {
-    let resp = crate::providers::adapter::send_with_net_retry(|| {
-        let b = http_client
-            .post(target_url)
-            .header("Authorization", format!("Bearer {}", config.select_api_key()))
-            .header("Content-Type", "application/json");
-        forward_client_headers(b, client_headers, OPENAI_FORWARD_HEADERS)
-            .body(raw_body.to_string())
-    }, 1).await
-        .map_err(|e| AppError::new("PASS_THROUGH_REQUEST_FAILED",
-            format!("Failed to connect to provider: {e}")))?;
+    let resp = crate::providers::adapter::send_with_net_retry(
+        || {
+            let b = http_client
+                .post(target_url)
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", config.select_api_key()),
+                )
+                .header("Content-Type", "application/json");
+            forward_client_headers(b, client_headers, OPENAI_FORWARD_HEADERS)
+                .body(raw_body.to_string())
+        },
+        1,
+    )
+    .await
+    .map_err(|e| {
+        AppError::new(
+            "PASS_THROUGH_REQUEST_FAILED",
+            format!("Failed to connect to provider: {e}"),
+        )
+    })?;
 
     let upstream_status = resp.status();
     let body_text = resp.text().await.unwrap_or_default();
@@ -143,7 +195,8 @@ async fn handle_non_stream(
         "route": route,
         "target_url": target_url,
         "upstream_status": upstream_status.as_u16(),
-    }).to_string();
+    })
+    .to_string();
 
     let status_code = upstream_status.as_u16() as i64;
     let error_msg = if upstream_status.is_success() {
@@ -153,16 +206,22 @@ async fn handle_non_stream(
     };
 
     log_to_db(
-        db, client_type, route, request_id, &config.name, model,
+        db,
+        client_type,
+        route,
+        request_id,
+        &config.name,
+        model,
         &sanitize(raw_body, config.api_key()),
         &sanitized_response,
         error_msg.as_deref(),
         &trace,
-        status_code, latency,
+        status_code,
+        latency,
     );
 
-    let axum_status = StatusCode::from_u16(upstream_status.as_u16())
-        .unwrap_or(StatusCode::BAD_GATEWAY);
+    let axum_status =
+        StatusCode::from_u16(upstream_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
 
     Ok(Response::builder()
         .status(axum_status)
@@ -187,17 +246,28 @@ async fn handle_stream(
     client_type: &str,
     client_headers: Option<&HeaderMap>,
 ) -> Result<Response, AppError> {
-    let resp = crate::providers::adapter::send_with_net_retry(|| {
-        let b = http_client
-            .post(target_url)
-            .header("Authorization", format!("Bearer {}", config.select_api_key()))
-            .header("Content-Type", "application/json")
-            .header("Accept", "text/event-stream");
-        forward_client_headers(b, client_headers, OPENAI_FORWARD_HEADERS)
-            .body(raw_body.to_string())
-    }, 1).await
-        .map_err(|e| AppError::new("PASS_THROUGH_STREAM_FAILED",
-            format!("Failed to connect to provider: {e}")))?;
+    let resp = crate::providers::adapter::send_with_net_retry(
+        || {
+            let b = http_client
+                .post(target_url)
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", config.select_api_key()),
+                )
+                .header("Content-Type", "application/json")
+                .header("Accept", "text/event-stream");
+            forward_client_headers(b, client_headers, OPENAI_FORWARD_HEADERS)
+                .body(raw_body.to_string())
+        },
+        1,
+    )
+    .await
+    .map_err(|e| {
+        AppError::new(
+            "PASS_THROUGH_STREAM_FAILED",
+            format!("Failed to connect to provider: {e}"),
+        )
+    })?;
 
     let upstream_status = resp.status();
     if !upstream_status.is_success() {
@@ -213,17 +283,26 @@ async fn handle_stream(
             "route": route,
             "target_url": target_url,
             "upstream_status": upstream_status.as_u16(),
-        }).to_string();
+        })
+        .to_string();
 
         log_to_db(
-            db, client_type, route, request_id, &config.name, model,
+            db,
+            client_type,
+            route,
+            request_id,
+            &config.name,
+            model,
             &sanitize(raw_body, config.api_key()),
-            "", Some(&truncate(&sanitized, 2000)),
-            &trace, upstream_status.as_u16() as i64, latency,
+            "",
+            Some(&truncate(&sanitized, 2000)),
+            &trace,
+            upstream_status.as_u16() as i64,
+            latency,
         );
 
-        let axum_status = StatusCode::from_u16(upstream_status.as_u16())
-            .unwrap_or(StatusCode::BAD_GATEWAY);
+        let axum_status =
+            StatusCode::from_u16(upstream_status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
 
         return Ok(Response::builder()
             .status(axum_status)
@@ -311,29 +390,44 @@ async fn handle_stream(
             "target_url": &target,
             "stream": true,
             "sse_bytes": sse_size,
-        }).to_string();
+        })
+        .to_string();
 
         let sanitized_sse = sanitize(&sse_log, &api_key);
         if let Some(conn) = lock_db(&db_clone) {
             let _ = crate::storage::request_logs::insert(
-                &conn, &req_id, &client_type_owned, &provider_name, &model_clone,
-                &route_owned, 200, latency,
-                Some(&raw_req), None,
-                None, None,
+                &conn,
+                &req_id,
+                &client_type_owned,
+                &provider_name,
+                &model_clone,
+                &route_owned,
+                200,
+                latency,
+                Some(&raw_req),
+                None,
+                None,
+                None,
                 Some(&truncate(&sanitized_sse, MAX_SSE_LOG)),
-                None, None,
+                None,
+                None,
                 Some(&trace),
-                None, None, None, // no cost / tokens parsed on stream pass-through
-                None, None,        // no cache tokens
-                Some("gateway"), None, Some(&req_id),
+                None,
+                None,
+                None, // no cost / tokens parsed on stream pass-through
+                None,
+                None, // no cache tokens
+                Some("gateway"),
+                None,
+                Some(&req_id),
             );
         }
     });
 
     let stream = ReceiverStream::new(rx);
-    let body = Body::from_stream(
-        tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
-    );
+    let body = Body::from_stream(tokio_stream::StreamExt::map(stream, |s| {
+        Ok::<_, std::convert::Infallible>(s)
+    }));
 
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -388,16 +482,34 @@ fn log_to_db(
 ) {
     if let Some(conn) = lock_db(db) {
         let _ = crate::storage::request_logs::insert(
-            &conn, request_id, client_type, provider, model,
-            route, status_code, latency_ms,
-            Some(raw_request), None,
-            if raw_response.is_empty() { None } else { Some(raw_response) },
-            None, None, None,
+            &conn,
+            request_id,
+            client_type,
+            provider,
+            model,
+            route,
+            status_code,
+            latency_ms,
+            Some(raw_request),
+            None,
+            if raw_response.is_empty() {
+                None
+            } else {
+                Some(raw_response)
+            },
+            None,
+            None,
+            None,
             error_message,
             Some(trace_json),
-            None, None, None,
-            None, None,
-            Some("gateway"), None, Some(request_id),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("gateway"),
+            None,
+            Some(request_id),
         );
     }
 }
@@ -421,18 +533,20 @@ pub async fn handle_anthropic(
         .and_then(|v| v.get("stream")?.as_bool())
         .unwrap_or(false);
 
-    let mut body_json: serde_json::Value = serde_json::from_str(raw_body)
-        .unwrap_or(serde_json::json!({}));
-    let requested = body_json.get("model").and_then(|v| v.as_str()).unwrap_or("");
-    let (base_model, model_resolution) = resolve_native_model(requested, model_override, &config.default_model);
+    let mut body_json: serde_json::Value =
+        serde_json::from_str(raw_body).unwrap_or(serde_json::json!({}));
+    let requested = body_json
+        .get("model")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let (base_model, model_resolution) =
+        resolve_native_model(requested, model_override, &config.default_model);
     let trace_mode = native_trace_mode(model_override);
     // Provider-specific final model cleanup for Anthropic passthrough.
     // OpenAI/Codex paths use their own resolved model value before reaching
     // this handler.
-    let model = crate::gateway::anthropic_model_suffix::for_anthropic(
-        &config.provider_type,
-        &base_model,
-    );
+    let model =
+        crate::gateway::anthropic_model_suffix::for_anthropic(&config.provider_type, &base_model);
     body_json["model"] = serde_json::json!(&model);
     let rewritten_body = body_json.to_string();
 
@@ -461,7 +575,8 @@ pub async fn handle_anthropic(
 
     if is_stream {
         // Stream pass-through
-        let resp = crate::providers::adapter::send_with_net_retry(&build_request, 1).await
+        let resp = crate::providers::adapter::send_with_net_retry(&build_request, 1)
+            .await
             .map_err(|e| AppError::new("PASS_THROUGH_REQUEST_FAILED", format!("Failed: {e}")))?;
 
         let status = resp.status();
@@ -469,14 +584,28 @@ pub async fn handle_anthropic(
             let body_text = resp.text().await.unwrap_or_default();
             let sanitized = sanitize(&body_text, config.api_key());
             let latency = start.elapsed().as_millis() as i64;
-            log_to_db(db, client_type, "/v1/messages", request_id, &config.name, &model,
-                &sanitize(raw_body, config.api_key()), "", Some(&truncate(&sanitized, 2000)),
-                &json!({"mode":trace_mode,"target":target_url,"model_resolution":model_resolution}).to_string(),
-                status.as_u16() as i64, latency);
-            let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-            return Ok(Response::builder().status(axum_status)
+            log_to_db(
+                db,
+                client_type,
+                "/v1/messages",
+                request_id,
+                &config.name,
+                &model,
+                &sanitize(raw_body, config.api_key()),
+                "",
+                Some(&truncate(&sanitized, 2000)),
+                &json!({"mode":trace_mode,"target":target_url,"model_resolution":model_resolution})
+                    .to_string(),
+                status.as_u16() as i64,
+                latency,
+            );
+            let axum_status =
+                StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
+            return Ok(Response::builder()
+                .status(axum_status)
                 .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(body_text)).unwrap());
+                .body(Body::from(body_text))
+                .unwrap());
         }
 
         // Pipe SSE stream
@@ -500,7 +629,11 @@ pub async fn handle_anthropic(
                 match chunk_result {
                     Ok(bytes) => {
                         let text = String::from_utf8_lossy(&bytes).to_string();
-                        if sse_size < MAX_SSE_LOG { let to_add = text.len().min(MAX_SSE_LOG - sse_size); sse_log.push_str(&text[..to_add]); sse_size += to_add; }
+                        if sse_size < MAX_SSE_LOG {
+                            let to_add = text.len().min(MAX_SSE_LOG - sse_size);
+                            sse_log.push_str(&text[..to_add]);
+                            sse_size += to_add;
+                        }
                         // Client 断开则提前退出，省 upstream token。
                         if tx.send(text).await.is_err() {
                             break;
@@ -522,42 +655,81 @@ pub async fn handle_anthropic(
             let sanitized_sse = sanitize(&sse_log, &api_key);
             if let Some(conn) = lock_db(&db_clone) {
                 let _ = crate::storage::request_logs::insert(
-                    &conn, &req_id, client_type_owned.as_str(), &provider_name, &model,
-                    "/v1/messages", 200, latency,
-                    Some(&raw_req), None, None, None,
-                    Some(&truncate(&sanitized_sse, MAX_SSE_LOG)), None, None, Some(&trace), None, None, None,
-                    None, None,
-                    Some("gateway"), None, Some(&req_id),
+                    &conn,
+                    &req_id,
+                    client_type_owned.as_str(),
+                    &provider_name,
+                    &model,
+                    "/v1/messages",
+                    200,
+                    latency,
+                    Some(&raw_req),
+                    None,
+                    None,
+                    None,
+                    Some(&truncate(&sanitized_sse, MAX_SSE_LOG)),
+                    None,
+                    None,
+                    Some(&trace),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some("gateway"),
+                    None,
+                    Some(&req_id),
                 );
             }
         });
 
         let stream = ReceiverStream::new(rx);
-        let body = Body::from_stream(
-            tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
-        );
-        Ok(Response::builder().status(StatusCode::OK)
+        let body = Body::from_stream(tokio_stream::StreamExt::map(stream, |s| {
+            Ok::<_, std::convert::Infallible>(s)
+        }));
+        Ok(Response::builder()
+            .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "text/event-stream")
             .header(header::CACHE_CONTROL, "no-cache")
-            .body(body).unwrap())
+            .body(body)
+            .unwrap())
     } else {
         // Non-stream
-        let resp = crate::providers::adapter::send_with_net_retry(&build_request, 1).await
+        let resp = crate::providers::adapter::send_with_net_retry(&build_request, 1)
+            .await
             .map_err(|e| AppError::new("PASS_THROUGH_REQUEST_FAILED", format!("Failed: {e}")))?;
         let status = resp.status();
         let body_text = resp.text().await.unwrap_or_default();
         let sanitized = sanitize(&body_text, config.api_key());
         let latency = start.elapsed().as_millis() as i64;
-        let trace = json!({"mode":trace_mode,"target":target_url,"model_resolution":model_resolution}).to_string();
-        let err_msg = if status.is_success() { None } else { Some(truncate(&sanitized, 2000)) };
-        log_to_db(db, client_type, "/v1/messages", request_id, &config.name, &model,
-            &sanitize(raw_body, config.api_key()), &sanitized,
+        let trace =
+            json!({"mode":trace_mode,"target":target_url,"model_resolution":model_resolution})
+                .to_string();
+        let err_msg = if status.is_success() {
+            None
+        } else {
+            Some(truncate(&sanitized, 2000))
+        };
+        log_to_db(
+            db,
+            client_type,
+            "/v1/messages",
+            request_id,
+            &config.name,
+            &model,
+            &sanitize(raw_body, config.api_key()),
+            &sanitized,
             err_msg.as_deref(),
-            &trace, status.as_u16() as i64, latency);
+            &trace,
+            status.as_u16() as i64,
+            latency,
+        );
         let axum_status = StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-        Ok(Response::builder().status(axum_status)
+        Ok(Response::builder()
+            .status(axum_status)
             .header(header::CONTENT_TYPE, "application/json")
-            .body(Body::from(body_text)).unwrap())
+            .body(Body::from(body_text))
+            .unwrap())
     }
 }
 
@@ -568,7 +740,11 @@ mod tests {
     #[test]
     fn native_model_mapping_wins() {
         assert_eq!(
-            resolve_native_model("claude-sonnet-4-6", Some("mimo-v2.5-pro[1m]"), "mimo-v2.5-pro"),
+            resolve_native_model(
+                "claude-sonnet-4-6",
+                Some("mimo-v2.5-pro[1m]"),
+                "mimo-v2.5-pro"
+            ),
             ("mimo-v2.5-pro[1m]".to_string(), "model_mapping")
         );
     }
@@ -636,7 +812,7 @@ mod tests {
     #[test]
     fn test_truncate_chinese_boundary() {
         let s = "你好世界"; // 4 chars, 12 bytes
-        // Truncate at byte 7 — inside "世" (bytes 6..9) → snap back to 6
+                            // Truncate at byte 7 — inside "世" (bytes 6..9) → snap back to 6
         let result = truncate(s, 7);
         assert_eq!(result, "你好...(truncated)");
     }
@@ -644,7 +820,7 @@ mod tests {
     #[test]
     fn test_truncate_emoji_boundary() {
         let s = "hi🎉ok"; // "hi" 2B + 🎉 4B + "ok" 2B = 8B
-        // Truncate at 3 — inside 🎉 → snap back to 2
+                          // Truncate at 3 — inside 🎉 → snap back to 2
         let result = truncate(s, 3);
         assert_eq!(result, "hi...(truncated)");
     }

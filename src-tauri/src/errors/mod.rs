@@ -29,10 +29,7 @@ impl AppError {
     }
 
     pub fn not_found(entity: &str, id: &str) -> Self {
-        Self::new(
-            "NOT_FOUND",
-            format!("{entity} '{id}' not found"),
-        )
+        Self::new("NOT_FOUND", format!("{entity} '{id}' not found"))
     }
 
     pub fn validation(message: impl Into<String>) -> Self {
@@ -40,8 +37,7 @@ impl AppError {
     }
 
     pub fn database(err: rusqlite::Error) -> Self {
-        Self::new("DATABASE_ERROR", "Database operation failed")
-            .with_detail(err.to_string())
+        Self::new("DATABASE_ERROR", "Database operation failed").with_detail(err.to_string())
     }
 
     pub fn internal(message: impl Into<String>) -> Self {
@@ -57,8 +53,7 @@ impl From<rusqlite::Error> for AppError {
 
 impl From<reqwest::Error> for AppError {
     fn from(err: reqwest::Error) -> Self {
-        Self::new("NETWORK_ERROR", "Network request failed")
-            .with_detail(err.to_string())
+        Self::new("NETWORK_ERROR", "Network request failed").with_detail(err.to_string())
     }
 }
 

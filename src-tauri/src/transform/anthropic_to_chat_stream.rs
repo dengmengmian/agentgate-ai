@@ -128,7 +128,8 @@ impl AnthropicToChatStream {
             "tool_use" => {
                 // 分配新的 chat tool_call_index、emit 首块 tool_calls delta 带 id + name + ""
                 let chat_tool_idx = self.alloc_tool_idx();
-                self.tool_blocks.insert(idx, ToolBlockMapping { chat_tool_idx });
+                self.tool_blocks
+                    .insert(idx, ToolBlockMapping { chat_tool_idx });
                 let id = block.get("id").and_then(|v| v.as_str()).unwrap_or("");
                 let name = block.get("name").and_then(|v| v.as_str()).unwrap_or("");
                 vec![self.emit_chunk(
@@ -171,7 +172,10 @@ impl AnthropicToChatStream {
                 vec![self.emit_chunk(json!({"reasoning_content": text}), None)]
             }
             "input_json_delta" => {
-                let partial = delta.get("partial_json").and_then(|p| p.as_str()).unwrap_or("");
+                let partial = delta
+                    .get("partial_json")
+                    .and_then(|p| p.as_str())
+                    .unwrap_or("");
                 if partial.is_empty() {
                     return Vec::new();
                 }
@@ -286,17 +290,20 @@ mod tests {
     #[test]
     fn message_start_emits_role_chunk() {
         let mut s = AnthropicToChatStream::new("claude-3");
-        let events = s.process_event("message_start", &json!({
-            "type": "message_start",
-            "message": {
-                "id": "msg_abc",
-                "type": "message",
-                "role": "assistant",
-                "model": "claude-3-sonnet",
-                "content": [],
-                "usage": {"input_tokens": 100, "output_tokens": 1},
-            }
-        }));
+        let events = s.process_event(
+            "message_start",
+            &json!({
+                "type": "message_start",
+                "message": {
+                    "id": "msg_abc",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-3-sonnet",
+                    "content": [],
+                    "usage": {"input_tokens": 100, "output_tokens": 1},
+                }
+            }),
+        );
         assert_eq!(events.len(), 1);
         assert!(events[0].contains("\"role\":\"assistant\""));
         assert!(events[0].contains("\"id\":\"msg_abc\""));
@@ -307,14 +314,20 @@ mod tests {
     fn text_delta_emits_content_chunk() {
         let mut s = AnthropicToChatStream::new("claude-3");
         let _ = s.process_event("message_start", &json!({"message": {}}));
-        let _ = s.process_event("content_block_start", &json!({
-            "index": 0,
-            "content_block": {"type": "text", "text": ""}
-        }));
-        let events = s.process_event("content_block_delta", &json!({
-            "index": 0,
-            "delta": {"type": "text_delta", "text": "Hello"}
-        }));
+        let _ = s.process_event(
+            "content_block_start",
+            &json!({
+                "index": 0,
+                "content_block": {"type": "text", "text": ""}
+            }),
+        );
+        let events = s.process_event(
+            "content_block_delta",
+            &json!({
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "Hello"}
+            }),
+        );
         assert_eq!(events.len(), 1);
         assert!(events[0].contains("\"content\":\"Hello\""));
     }
@@ -323,14 +336,20 @@ mod tests {
     fn thinking_delta_emits_reasoning_content() {
         let mut s = AnthropicToChatStream::new("claude-3");
         let _ = s.process_event("message_start", &json!({"message": {}}));
-        let _ = s.process_event("content_block_start", &json!({
-            "index": 0,
-            "content_block": {"type": "thinking", "thinking": ""}
-        }));
-        let events = s.process_event("content_block_delta", &json!({
-            "index": 0,
-            "delta": {"type": "thinking_delta", "thinking": "Hmm..."}
-        }));
+        let _ = s.process_event(
+            "content_block_start",
+            &json!({
+                "index": 0,
+                "content_block": {"type": "thinking", "thinking": ""}
+            }),
+        );
+        let events = s.process_event(
+            "content_block_delta",
+            &json!({
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "Hmm..."}
+            }),
+        );
         assert_eq!(events.len(), 1);
         assert!(events[0].contains("\"reasoning_content\":\"Hmm...\""));
     }
@@ -339,10 +358,13 @@ mod tests {
     fn tool_use_block_start_emits_initial_tool_call_chunk() {
         let mut s = AnthropicToChatStream::new("claude-3");
         let _ = s.process_event("message_start", &json!({"message": {}}));
-        let events = s.process_event("content_block_start", &json!({
-            "index": 1,
-            "content_block": {"type": "tool_use", "id": "tu1", "name": "search", "input": {}}
-        }));
+        let events = s.process_event(
+            "content_block_start",
+            &json!({
+                "index": 1,
+                "content_block": {"type": "tool_use", "id": "tu1", "name": "search", "input": {}}
+            }),
+        );
         assert_eq!(events.len(), 1);
         assert!(events[0].contains("\"tool_calls\""));
         assert!(events[0].contains("\"index\":0"));
@@ -355,14 +377,20 @@ mod tests {
     fn input_json_delta_emits_arguments_chunk() {
         let mut s = AnthropicToChatStream::new("claude-3");
         let _ = s.process_event("message_start", &json!({"message": {}}));
-        let _ = s.process_event("content_block_start", &json!({
-            "index": 0,
-            "content_block": {"type": "tool_use", "id": "tu1", "name": "search", "input": {}}
-        }));
-        let events = s.process_event("content_block_delta", &json!({
-            "index": 0,
-            "delta": {"type": "input_json_delta", "partial_json": "{\"q\":\"r"}
-        }));
+        let _ = s.process_event(
+            "content_block_start",
+            &json!({
+                "index": 0,
+                "content_block": {"type": "tool_use", "id": "tu1", "name": "search", "input": {}}
+            }),
+        );
+        let events = s.process_event(
+            "content_block_delta",
+            &json!({
+                "index": 0,
+                "delta": {"type": "input_json_delta", "partial_json": "{\"q\":\"r"}
+            }),
+        );
         assert_eq!(events.len(), 1);
         assert!(events[0].contains("\"arguments\":\"{\\\"q\\\":\\\"r\""));
         assert!(events[0].contains("\"index\":0"));
@@ -374,17 +402,26 @@ mod tests {
         // → Chat tool_calls index 0=a, index 1=b
         let mut s = AnthropicToChatStream::new("claude-3");
         let _ = s.process_event("message_start", &json!({"message": {}}));
-        let _ = s.process_event("content_block_start", &json!({
-            "index": 0, "content_block": {"type": "text", "text": ""}
-        }));
-        let events_a = s.process_event("content_block_start", &json!({
-            "index": 1,
-            "content_block": {"type": "tool_use", "id": "tu_a", "name": "alpha"}
-        }));
-        let events_b = s.process_event("content_block_start", &json!({
-            "index": 2,
-            "content_block": {"type": "tool_use", "id": "tu_b", "name": "beta"}
-        }));
+        let _ = s.process_event(
+            "content_block_start",
+            &json!({
+                "index": 0, "content_block": {"type": "text", "text": ""}
+            }),
+        );
+        let events_a = s.process_event(
+            "content_block_start",
+            &json!({
+                "index": 1,
+                "content_block": {"type": "tool_use", "id": "tu_a", "name": "alpha"}
+            }),
+        );
+        let events_b = s.process_event(
+            "content_block_start",
+            &json!({
+                "index": 2,
+                "content_block": {"type": "tool_use", "id": "tu_b", "name": "beta"}
+            }),
+        );
         assert!(events_a[0].contains("\"index\":0"));
         assert!(events_a[0].contains("\"id\":\"tu_a\""));
         assert!(events_b[0].contains("\"index\":1"));
@@ -394,14 +431,23 @@ mod tests {
     #[test]
     fn message_stop_emits_finish_chunk_and_done() {
         let mut s = AnthropicToChatStream::new("claude-3");
-        let _ = s.process_event("message_start", &json!({"message": {"usage": {"input_tokens": 100}}}));
-        let _ = s.process_event("content_block_delta", &json!({
-            "index": 0, "delta": {"type": "text_delta", "text": "hi"}
-        }));
-        let _ = s.process_event("message_delta", &json!({
-            "delta": {"stop_reason": "end_turn"},
-            "usage": {"output_tokens": 5}
-        }));
+        let _ = s.process_event(
+            "message_start",
+            &json!({"message": {"usage": {"input_tokens": 100}}}),
+        );
+        let _ = s.process_event(
+            "content_block_delta",
+            &json!({
+                "index": 0, "delta": {"type": "text_delta", "text": "hi"}
+            }),
+        );
+        let _ = s.process_event(
+            "message_delta",
+            &json!({
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {"output_tokens": 5}
+            }),
+        );
         let stop_events = s.process_event("message_stop", &json!({"type": "message_stop"}));
         let final_events = s.finalize();
         let joined = stop_events.join("") + &final_events.join("");
@@ -416,9 +462,12 @@ mod tests {
     fn stop_reason_max_tokens_maps_to_length() {
         let mut s = AnthropicToChatStream::new("claude-3");
         let _ = s.process_event("message_start", &json!({"message": {}}));
-        let _ = s.process_event("message_delta", &json!({
-            "delta": {"stop_reason": "max_tokens"}
-        }));
+        let _ = s.process_event(
+            "message_delta",
+            &json!({
+                "delta": {"stop_reason": "max_tokens"}
+            }),
+        );
         let events = s.process_event("message_stop", &json!({}));
         let joined = events.join("");
         assert!(joined.contains("\"finish_reason\":\"length\""));
@@ -428,9 +477,12 @@ mod tests {
     fn stop_reason_tool_use_maps_to_tool_calls() {
         let mut s = AnthropicToChatStream::new("claude-3");
         let _ = s.process_event("message_start", &json!({"message": {}}));
-        let _ = s.process_event("message_delta", &json!({
-            "delta": {"stop_reason": "tool_use"}
-        }));
+        let _ = s.process_event(
+            "message_delta",
+            &json!({
+                "delta": {"stop_reason": "tool_use"}
+            }),
+        );
         let events = s.process_event("message_stop", &json!({}));
         let joined = events.join("");
         assert!(joined.contains("\"finish_reason\":\"tool_calls\""));

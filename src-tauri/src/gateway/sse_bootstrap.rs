@@ -61,15 +61,24 @@ async fn bootstrap_detect_stream(
             return Err(err);
         }
         if has_valid_data_event(&buffer) {
-            return Ok(Bootstrap { prefix: buffer, stream });
+            return Ok(Bootstrap {
+                prefix: buffer,
+                stream,
+            });
         }
         if buffer.len() >= max_bytes {
-            return Ok(Bootstrap { prefix: buffer, stream });
+            return Ok(Bootstrap {
+                prefix: buffer,
+                stream,
+            });
         }
 
         let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
         if remaining.is_zero() {
-            return Ok(Bootstrap { prefix: buffer, stream });
+            return Ok(Bootstrap {
+                prefix: buffer,
+                stream,
+            });
         }
 
         match tokio::time::timeout(remaining, stream.next()).await {
@@ -83,10 +92,16 @@ async fn bootstrap_detect_stream(
                 ));
             }
             Ok(None) => {
-                return Ok(Bootstrap { prefix: buffer, stream });
+                return Ok(Bootstrap {
+                    prefix: buffer,
+                    stream,
+                });
             }
             Err(_) => {
-                return Ok(Bootstrap { prefix: buffer, stream });
+                return Ok(Bootstrap {
+                    prefix: buffer,
+                    stream,
+                });
             }
         }
     }
@@ -110,7 +125,11 @@ fn scan_for_error(buf: &[u8]) -> Option<AppError> {
             if name == "error" || name.contains("error") {
                 let detail = next_data_payload(&text, line).unwrap_or_default();
                 let status = classify_status("", "", &detail);
-                return Some(make_stream_error(status, "upstream emitted error event", &detail));
+                return Some(make_stream_error(
+                    status,
+                    "upstream emitted error event",
+                    &detail,
+                ));
             }
             last_event = Some(name);
             continue;
@@ -122,7 +141,11 @@ fn scan_for_error(buf: &[u8]) -> Option<AppError> {
             // Anthropic-style: previous `event: error` followed by a data frame.
             if last_event.as_deref() == Some("error") {
                 let status = classify_status("", "", data);
-                return Some(make_stream_error(status, "upstream emitted error event", data));
+                return Some(make_stream_error(
+                    status,
+                    "upstream emitted error event",
+                    data,
+                ));
             }
             if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
                 if let Some(err_obj) = v.get("error") {
@@ -273,14 +296,16 @@ mod tests {
 
     #[test]
     fn scan_picks_up_unauthorized() {
-        let buf = b"data: {\"error\":{\"message\":\"Invalid API key\",\"code\":\"invalid_api_key\"}}\n\n";
+        let buf =
+            b"data: {\"error\":{\"message\":\"Invalid API key\",\"code\":\"invalid_api_key\"}}\n\n";
         let err = scan_for_error(buf).expect("invalid api key should be detected");
         assert!(err.message.contains("HTTP 401"));
     }
 
     #[test]
     fn scan_ignores_valid_chat_completion_chunk() {
-        let buf = b"data: {\"id\":\"x\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n";
+        let buf =
+            b"data: {\"id\":\"x\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hi\"}}]}\n\n";
         assert!(scan_for_error(buf).is_none());
     }
 

@@ -185,22 +185,14 @@ fn scope_string(scope: InstructionsScope) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    /// `set_var("HOME", ...)` 是进程级共享，cargo test 默认并行跑，
-    /// 不串行化会让两个测试改同一个 env 导致 path 错位。
-    static HOME_LOCK: Mutex<()> = Mutex::new(());
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
 
     /// 单元测试用临时 HOME，确保不污染真实文件，也不互相污染。
     fn with_temp_home<F: FnOnce()>(f: F) {
-        let _guard = HOME_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let tmp = tempfile::tempdir().unwrap();
-        let old_home = std::env::var("HOME").ok();
-        std::env::set_var("HOME", tmp.path());
+        let _guard = FS_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let temp = setup_temp_home();
         f();
-        if let Some(h) = old_home {
-            std::env::set_var("HOME", h);
-        }
+        cleanup(&temp);
     }
 
     #[test]
@@ -241,12 +233,8 @@ mod tests {
     fn apply_append_keeps_existing_and_separates_with_rule() {
         with_temp_home(|| {
             write(InstructionsScope::ClaudeGlobal, "OLD_CONTENT").unwrap();
-            let s = apply_template(
-                InstructionsScope::ClaudeGlobal,
-                "tdd",
-                ApplyMode::Append,
-            )
-            .unwrap();
+            let s =
+                apply_template(InstructionsScope::ClaudeGlobal, "tdd", ApplyMode::Append).unwrap();
             assert!(s.content.contains("OLD_CONTENT"));
             assert!(s.content.contains("---"));
             assert!(s.content.contains("TDD 模式"));
@@ -257,12 +245,8 @@ mod tests {
     fn apply_append_to_empty_file_acts_like_overwrite() {
         with_temp_home(|| {
             write(InstructionsScope::ClaudeGlobal, "").unwrap();
-            let s = apply_template(
-                InstructionsScope::ClaudeGlobal,
-                "tdd",
-                ApplyMode::Append,
-            )
-            .unwrap();
+            let s =
+                apply_template(InstructionsScope::ClaudeGlobal, "tdd", ApplyMode::Append).unwrap();
             assert!(!s.content.contains("---"));
             assert!(s.content.contains("TDD 模式"));
         });

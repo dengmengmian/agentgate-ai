@@ -212,9 +212,7 @@ impl Provider {
 
     /// Parse `model_degradation_chain` JSON into `{model → [fallbacks]}`.
     /// Returns empty map on missing/invalid JSON.
-    pub fn parse_degradation_chain(
-        &self,
-    ) -> std::collections::HashMap<String, Vec<String>> {
+    pub fn parse_degradation_chain(&self) -> std::collections::HashMap<String, Vec<String>> {
         self.model_degradation_chain
             .as_deref()
             .and_then(|s| {
@@ -260,11 +258,17 @@ impl Provider {
 
     /// Check if a model name is known to this provider.
     pub fn is_model_supported(&self, model: &str) -> bool {
-        if model == self.default_model { return true; }
-        if self.reasoning_model.as_deref() == Some(model) { return true; }
+        if model == self.default_model {
+            return true;
+        }
+        if self.reasoning_model.as_deref() == Some(model) {
+            return true;
+        }
         if let Some(ref sm) = self.supported_models {
             if let Ok(list) = serde_json::from_str::<Vec<String>>(sm) {
-                if list.iter().any(|m| m == model) { return true; }
+                if list.iter().any(|m| m == model) {
+                    return true;
+                }
             }
         }
         false
@@ -275,7 +279,9 @@ impl Provider {
     pub fn parse_capabilities(&self) -> std::collections::HashMap<String, Vec<String>> {
         self.model_capabilities
             .as_deref()
-            .and_then(|s| serde_json::from_str::<std::collections::HashMap<String, Vec<String>>>(s).ok())
+            .and_then(|s| {
+                serde_json::from_str::<std::collections::HashMap<String, Vec<String>>>(s).ok()
+            })
             .unwrap_or_default()
     }
 
@@ -296,7 +302,11 @@ impl Provider {
         };
         order
             .into_iter()
-            .filter(|m| caps.get(m).map(|c| c.iter().any(|x| x == capability)).unwrap_or(false))
+            .filter(|m| {
+                caps.get(m)
+                    .map(|c| c.iter().any(|x| x == capability))
+                    .unwrap_or(false)
+            })
             .collect()
     }
 
@@ -534,20 +544,39 @@ mod tests {
     #[test]
     fn test_protocols_json_array() {
         let provider = Provider {
-            id: "1".to_string(), name: "Test".to_string(), provider_type: "openai".to_string(),
-            base_url: "https://api.openai.com".to_string(), api_key: None,
-            default_model: "gpt-4".to_string(), reasoning_model: None, supported_models: None,
-            model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
+            id: "1".to_string(),
+            name: "Test".to_string(),
+            provider_type: "openai".to_string(),
+            base_url: "https://api.openai.com".to_string(),
+            api_key: None,
+            default_model: "gpt-4".to_string(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
             protocol: r#"["openai_chat_completions","openai_responses"]"#.to_string(),
-            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None, model_capabilities: None,
+            timeout_seconds: 60,
+            status: "ok".to_string(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
+            model_capabilities: None,
             provider_quirks: None,
             body_filter_enabled: None,
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
-            enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
+            enabled: true,
+            is_active: true,
+            created_at: "2024-01-01".to_string(),
+            updated_at: "2024-01-01".to_string(),
         };
-        assert_eq!(provider.protocols(), vec!["openai_chat_completions", "openai_responses"]);
+        assert_eq!(
+            provider.protocols(),
+            vec!["openai_chat_completions", "openai_responses"]
+        );
         assert!(provider.supports_protocol("openai_chat_completions"));
         assert!(provider.supports_protocol("openai_responses"));
         assert!(!provider.supports_protocol("anthropic_messages"));
@@ -556,18 +585,34 @@ mod tests {
     #[test]
     fn test_protocols_single_string_fallback() {
         let provider = Provider {
-            id: "1".to_string(), name: "Test".to_string(), provider_type: "deepseek".to_string(),
-            base_url: "https://api.deepseek.com".to_string(), api_key: None,
-            default_model: "deepseek-v4-flash".to_string(), reasoning_model: None, supported_models: None,
-            model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
+            id: "1".to_string(),
+            name: "Test".to_string(),
+            provider_type: "deepseek".to_string(),
+            base_url: "https://api.deepseek.com".to_string(),
+            api_key: None,
+            default_model: "deepseek-v4-flash".to_string(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_chat_completions".to_string(),
-            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None, model_capabilities: None,
+            timeout_seconds: 60,
+            status: "ok".to_string(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
+            model_capabilities: None,
             provider_quirks: None,
             body_filter_enabled: None,
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
-            enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
+            enabled: true,
+            is_active: true,
+            created_at: "2024-01-01".to_string(),
+            updated_at: "2024-01-01".to_string(),
         };
         assert_eq!(provider.protocols(), vec!["openai_chat_completions"]);
         assert!(provider.supports_protocol("openai_chat_completions"));
@@ -577,18 +622,35 @@ mod tests {
     #[test]
     fn test_protocols_three_protocols() {
         let provider = Provider {
-            id: "1".to_string(), name: "NewAPI".to_string(), provider_type: "custom_openai_compatible".to_string(),
-            base_url: "https://newapi.example.com".to_string(), api_key: None,
-            default_model: "gpt-4o".to_string(), reasoning_model: None, supported_models: None,
-            model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
-            protocol: r#"["openai_chat_completions","openai_responses","anthropic_messages"]"#.to_string(),
-            timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None, model_capabilities: None,
+            id: "1".to_string(),
+            name: "NewAPI".to_string(),
+            provider_type: "custom_openai_compatible".to_string(),
+            base_url: "https://newapi.example.com".to_string(),
+            api_key: None,
+            default_model: "gpt-4o".to_string(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
+            protocol: r#"["openai_chat_completions","openai_responses","anthropic_messages"]"#
+                .to_string(),
+            timeout_seconds: 60,
+            status: "ok".to_string(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
+            model_capabilities: None,
             provider_quirks: None,
             body_filter_enabled: None,
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
-            enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
+            enabled: true,
+            is_active: true,
+            created_at: "2024-01-01".to_string(),
+            updated_at: "2024-01-01".to_string(),
         };
         assert!(provider.supports_protocol("openai_chat_completions"));
         assert!(provider.supports_protocol("openai_responses"));

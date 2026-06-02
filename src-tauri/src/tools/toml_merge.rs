@@ -188,7 +188,10 @@ fn top_level_key_name(line: &str) -> Option<&str> {
     }
     // TOML bare keys are `[A-Za-z0-9_-]+`. Quoted keys like `"a.b" = 1` we
     // don't support — none of our callers write or want them.
-    if !key_part.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+    if !key_part
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-')
+    {
         return None;
     }
     Some(key_part)
@@ -227,7 +230,10 @@ mod tests {
     fn top_level_replaces_existing_key_in_place() {
         let input = "# my header comment\nmodel = \"gpt-5\"\nmodel_provider = \"old\"\nother = 1\n";
         let out = upsert_top_level_key(input, "model_provider", "\"OpenAI\"");
-        assert_eq!(out, "# my header comment\nmodel = \"gpt-5\"\nmodel_provider = \"OpenAI\"\nother = 1\n");
+        assert_eq!(
+            out,
+            "# my header comment\nmodel = \"gpt-5\"\nmodel_provider = \"OpenAI\"\nother = 1\n"
+        );
     }
 
     #[test]
@@ -242,14 +248,20 @@ mod tests {
         let input = "[mcp_servers]\nmodel_provider = \"nope\"\n";
         let out = upsert_top_level_key(input, "model_provider", "\"OpenAI\"");
         // Inserted before [mcp_servers], the in-section key is untouched.
-        assert_eq!(out, "model_provider = \"OpenAI\"\n[mcp_servers]\nmodel_provider = \"nope\"\n");
+        assert_eq!(
+            out,
+            "model_provider = \"OpenAI\"\n[mcp_servers]\nmodel_provider = \"nope\"\n"
+        );
     }
 
     #[test]
     fn top_level_appends_when_no_section_and_no_existing_key() {
         let input = "model = \"gpt-5\"\nother = 1\n";
         let out = upsert_top_level_key(input, "model_provider", "\"OpenAI\"");
-        assert_eq!(out, "model = \"gpt-5\"\nother = 1\nmodel_provider = \"OpenAI\"\n");
+        assert_eq!(
+            out,
+            "model = \"gpt-5\"\nother = 1\nmodel_provider = \"OpenAI\"\n"
+        );
     }
 
     #[test]
@@ -281,7 +293,8 @@ mod tests {
 
     #[test]
     fn section_replaces_existing_body_keeps_header_position() {
-        let input = "# pre\n[model_providers.OpenAI]\nold_key = 1\nstill_old = 2\n[mcp_servers]\nfoo = 1\n";
+        let input =
+            "# pre\n[model_providers.OpenAI]\nold_key = 1\nstill_old = 2\n[mcp_servers]\nfoo = 1\n";
         let out = upsert_section(
             input,
             "model_providers.OpenAI",
@@ -304,7 +317,10 @@ mod tests {
     fn section_appended_with_blank_line_when_missing() {
         let input = "model_provider = \"OpenAI\"\n";
         let out = upsert_section(input, "model_providers.OpenAI", "name = \"x\"\n");
-        assert_eq!(out, "model_provider = \"OpenAI\"\n\n[model_providers.OpenAI]\nname = \"x\"\n");
+        assert_eq!(
+            out,
+            "model_provider = \"OpenAI\"\n\n[model_providers.OpenAI]\nname = \"x\"\n"
+        );
     }
 
     #[test]
@@ -317,7 +333,8 @@ mod tests {
 
     #[test]
     fn section_preserves_unrelated_sections() {
-        let input = "[providers.deepseek]\nkey = \"sk-real\"\n[providers.kimi]\nkey = \"sk-kimi\"\n";
+        let input =
+            "[providers.deepseek]\nkey = \"sk-real\"\n[providers.kimi]\nkey = \"sk-kimi\"\n";
         let out = upsert_section(input, "providers.agentgate", "type = \"openai\"\n");
         assert_eq!(
             out,
@@ -461,5 +478,4 @@ api_key = \"sk-kimi\"
         let out = upsert_top_level_key(input, "model_provider", "\"OpenAI\"");
         assert!(out.ends_with('\n'));
     }
-
 }

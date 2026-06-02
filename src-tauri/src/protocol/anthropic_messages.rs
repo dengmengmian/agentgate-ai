@@ -35,12 +35,11 @@ pub fn to_chat_messages(
     if let Some(ref sys) = req.system {
         let text = match sys {
             Value::String(s) => s.clone(),
-            Value::Array(arr) => {
-                arr.iter()
-                    .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            }
+            Value::Array(arr) => arr
+                .iter()
+                .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join("\n"),
             _ => sys.to_string(),
         };
         if !text.is_empty() {
@@ -70,9 +69,17 @@ pub fn to_chat_messages(
                 let (text, tool_calls) = extract_assistant_content(&msg.content);
                 messages.push(crate::protocol::chat_completions::ChatMessage {
                     role: "assistant".to_string(),
-                    content: if text.is_empty() { None } else { Some(Value::String(text)) },
+                    content: if text.is_empty() {
+                        None
+                    } else {
+                        Some(Value::String(text))
+                    },
                     reasoning_content: None,
-                    tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
+                    tool_calls: if tool_calls.is_empty() {
+                        None
+                    } else {
+                        Some(tool_calls)
+                    },
                     tool_call_id: None,
                     name: None,
                 });
@@ -93,8 +100,15 @@ pub fn to_chat_messages(
                     // Array of tool_result blocks
                     for block in msg.content.as_array().unwrap_or(&vec![]) {
                         if block.get("type").and_then(|t| t.as_str()) == Some("tool_result") {
-                            let tid = block.get("tool_use_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                            let output = block.get("content").map(|c| extract_text_content(c)).unwrap_or_default();
+                            let tid = block
+                                .get("tool_use_id")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let output = block
+                                .get("content")
+                                .map(|c| extract_text_content(c))
+                                .unwrap_or_default();
                             messages.push(crate::protocol::chat_completions::ChatMessage {
                                 role: "tool".to_string(),
                                 content: Some(Value::String(output)),
@@ -158,11 +172,16 @@ fn split_user_content(
         let bt = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
         match bt {
             "tool_result" => {
-                let tid = block.get("tool_use_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let tid = block
+                    .get("tool_use_id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
                 // tool_result.content 可能是 string、可能是 [text+image] array。
                 // Chat 协议的 tool 消息 content 只接 string——图片信息无奈丢弃，
                 // 至少把 text 块保留下来。flatten_tool_output 已经实现这个语义。
-                let output = block.get("content")
+                let output = block
+                    .get("content")
                     .map(crate::transform::responses_to_chat::flatten_tool_output)
                     .unwrap_or_default();
                 messages.push(ChatMessage {
@@ -183,11 +202,16 @@ fn split_user_content(
                 // Anthropic image: { type:"image", source:{type:"base64", media_type, data} }
                 // 转 Chat image_url: { type:"image_url", image_url:{url:"data:<mt>;base64,<data>"} }
                 if let Some(src) = block.get("source") {
-                    let mt = src.get("media_type").and_then(|m| m.as_str()).unwrap_or("image/png");
+                    let mt = src
+                        .get("media_type")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("image/png");
                     let data = src.get("data").and_then(|d| d.as_str()).unwrap_or("");
                     if !data.is_empty() {
                         if !user_text_buffer.is_empty() {
-                            user_parts.push(serde_json::json!({"type":"text","text":user_text_buffer.clone()}));
+                            user_parts.push(
+                                serde_json::json!({"type":"text","text":user_text_buffer.clone()}),
+                            );
                             user_text_buffer.clear();
                         }
                         user_parts.push(serde_json::json!({
@@ -211,7 +235,10 @@ fn split_user_content(
     if !user_text_buffer.is_empty() || has_image {
         let content = if has_image {
             if !user_text_buffer.is_empty() {
-                user_parts.insert(0, serde_json::json!({"type":"text","text":user_text_buffer}));
+                user_parts.insert(
+                    0,
+                    serde_json::json!({"type":"text","text":user_text_buffer}),
+                );
             }
             Value::Array(user_parts)
         } else {
@@ -231,24 +258,25 @@ fn split_user_content(
 fn extract_text_content(content: &Value) -> String {
     match content {
         Value::String(s) => s.clone(),
-        Value::Array(arr) => {
-            arr.iter()
-                .filter_map(|p| {
-                    let t = p.get("type").and_then(|t| t.as_str()).unwrap_or("");
-                    if t == "text" || t == "input_text" {
-                        p.get("text").and_then(|t| t.as_str()).map(String::from)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join("")
-        }
+        Value::Array(arr) => arr
+            .iter()
+            .filter_map(|p| {
+                let t = p.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                if t == "text" || t == "input_text" {
+                    p.get("text").and_then(|t| t.as_str()).map(String::from)
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(""),
         _ => content.to_string(),
     }
 }
 
-fn extract_assistant_content(content: &Value) -> (String, Vec<crate::protocol::chat_completions::ToolCall>) {
+fn extract_assistant_content(
+    content: &Value,
+) -> (String, Vec<crate::protocol::chat_completions::ToolCall>) {
     let mut text = String::new();
     let mut tool_calls = Vec::new();
 
@@ -264,13 +292,27 @@ fn extract_assistant_content(content: &Value) -> (String, Vec<crate::protocol::c
                         }
                     }
                     "tool_use" => {
-                        let id = block.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let name = block.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                        let input = block.get("input").map(|v| v.to_string()).unwrap_or("{}".to_string());
+                        let id = block
+                            .get("id")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let name = block
+                            .get("name")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let input = block
+                            .get("input")
+                            .map(|v| v.to_string())
+                            .unwrap_or("{}".to_string());
                         tool_calls.push(crate::protocol::chat_completions::ToolCall {
                             id,
                             call_type: "function".to_string(),
-                            function: crate::protocol::chat_completions::ToolCallFunction { name, arguments: input },
+                            function: crate::protocol::chat_completions::ToolCallFunction {
+                                name,
+                                arguments: input,
+                            },
                         });
                     }
                     _ => {}
@@ -314,13 +356,22 @@ pub fn from_chat_response(upstream: &Value, model: &str) -> Value {
                 if let Some(tcs) = msg.get("tool_calls").and_then(|t| t.as_array()) {
                     for tc in tcs {
                         let id = tc.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                        let raw_name = tc.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("");
+                        let raw_name = tc
+                            .get("function")
+                            .and_then(|f| f.get("name"))
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("");
                         // 对称 sanitize：与请求侧一致，避免上游 echo 出含 `.`/中文
                         // 的 tool name 让下游 Claude Code 拒收。
                         let name = crate::transform::tool_calls::sanitize_tool_name(raw_name);
                         let sanitized_id = crate::transform::tool_calls::sanitize_call_id(id);
-                        let args_str = tc.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str()).unwrap_or("{}");
-                        let input: Value = serde_json::from_str(args_str).unwrap_or(serde_json::json!({}));
+                        let args_str = tc
+                            .get("function")
+                            .and_then(|f| f.get("arguments"))
+                            .and_then(|a| a.as_str())
+                            .unwrap_or("{}");
+                        let input: Value =
+                            serde_json::from_str(args_str).unwrap_or(serde_json::json!({}));
                         content.push(serde_json::json!({
                             "type": "tool_use",
                             "id": sanitized_id.as_ref(),
@@ -359,7 +410,10 @@ fn map_finish_reason_to_stop_reason(fr: &Option<String>, content: &[Value]) -> &
         };
     }
     // 没有 finish_reason 字段（极少数老上游）：靠 content 形状兜底
-    if content.iter().any(|c| c.get("type").and_then(|t| t.as_str()) == Some("tool_use")) {
+    if content
+        .iter()
+        .any(|c| c.get("type").and_then(|t| t.as_str()) == Some("tool_use"))
+    {
         "tool_use"
     } else {
         "end_turn"
@@ -378,9 +432,15 @@ pub fn tools_to_chat(tools: &[Value], clean_for_deepseek: bool) -> Vec<Value> {
         if name.is_empty() {
             continue;
         }
-        let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or("");
+        let desc = tool
+            .get("description")
+            .and_then(|d| d.as_str())
+            .unwrap_or("");
         // Anthropic 用 input_schema；Chat 用 parameters。两者都是 JSON Schema object。
-        let mut params = tool.get("input_schema").cloned().unwrap_or(json!({"type":"object"}));
+        let mut params = tool
+            .get("input_schema")
+            .cloned()
+            .unwrap_or(json!({"type":"object"}));
         if clean_for_deepseek {
             crate::transform::schema_cleaner::clean_schema_for_deepseek(&mut params);
         }
@@ -479,12 +539,10 @@ fn remap_usage_to_anthropic(chat_usage: Option<&Value>) -> Value {
     out
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
-
 
     #[test]
     fn test_to_chat_messages_with_string_system() {
@@ -696,8 +754,15 @@ mod tests {
                     {"type": "text", "text": "Now what?"}
                 ]),
             }],
-            system: None, max_tokens: None, stream: None, temperature: None, top_p: None,
-            tools: None, tool_choice: None, thinking: None, extra: std::collections::HashMap::new(),
+            system: None,
+            max_tokens: None,
+            stream: None,
+            temperature: None,
+            top_p: None,
+            tools: None,
+            tool_choice: None,
+            thinking: None,
+            extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
         assert_eq!(messages.len(), 3);
@@ -720,8 +785,15 @@ mod tests {
                     {"type": "tool_result", "tool_use_id": "tu1", "content": "ok"}
                 ]),
             }],
-            system: None, max_tokens: None, stream: None, temperature: None, top_p: None,
-            tools: None, tool_choice: None, thinking: None, extra: std::collections::HashMap::new(),
+            system: None,
+            max_tokens: None,
+            stream: None,
+            temperature: None,
+            top_p: None,
+            tools: None,
+            tool_choice: None,
+            thinking: None,
+            extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
         assert_eq!(messages.len(), 1);
@@ -739,8 +811,15 @@ mod tests {
                     {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "abc123"}}
                 ]),
             }],
-            system: None, max_tokens: None, stream: None, temperature: None, top_p: None,
-            tools: None, tool_choice: None, thinking: None, extra: std::collections::HashMap::new(),
+            system: None,
+            max_tokens: None,
+            stream: None,
+            temperature: None,
+            top_p: None,
+            tools: None,
+            tool_choice: None,
+            thinking: None,
+            extra: std::collections::HashMap::new(),
         };
         let messages = to_chat_messages(&req);
         assert_eq!(messages.len(), 1);
@@ -750,7 +829,10 @@ mod tests {
         assert_eq!(arr.len(), 2);
         assert_eq!(arr[0]["type"], "text");
         assert_eq!(arr[1]["type"], "image_url");
-        assert!(arr[1]["image_url"]["url"].as_str().unwrap().starts_with("data:image/png;base64,"));
+        assert!(arr[1]["image_url"]["url"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:image/png;base64,"));
     }
 
     #[test]
@@ -824,7 +906,10 @@ mod tests {
         assert_eq!(out[0]["type"], "function");
         assert_eq!(out[0]["function"]["name"], "search");
         assert_eq!(out[0]["function"]["description"], "Search the web");
-        assert_eq!(out[0]["function"]["parameters"]["properties"]["q"]["type"], "string");
+        assert_eq!(
+            out[0]["function"]["parameters"]["properties"]["q"]["type"],
+            "string"
+        );
     }
 
     #[test]
@@ -843,7 +928,10 @@ mod tests {
     #[test]
     fn tool_choice_to_chat_maps_all_anthropic_variants() {
         assert_eq!(tool_choice_to_chat(&json!({"type":"auto"})), json!("auto"));
-        assert_eq!(tool_choice_to_chat(&json!({"type":"any"})), json!("required"));
+        assert_eq!(
+            tool_choice_to_chat(&json!({"type":"any"})),
+            json!("required")
+        );
         assert_eq!(tool_choice_to_chat(&json!({"type":"none"})), json!("none"));
         assert_eq!(
             tool_choice_to_chat(&json!({"type":"tool","name":"search"})),
@@ -881,7 +969,9 @@ mod tests {
     fn thinking_to_reasoning_effort_returns_none_when_disabled_or_missing() {
         assert!(thinking_to_reasoning_effort(&json!({"type":"disabled"})).is_none());
         assert!(thinking_to_reasoning_effort(&json!({})).is_none());
-        assert!(thinking_to_reasoning_effort(&json!({"type":"enabled","budget_tokens":0})).is_none());
+        assert!(
+            thinking_to_reasoning_effort(&json!({"type":"enabled","budget_tokens":0})).is_none()
+        );
     }
 
     #[test]

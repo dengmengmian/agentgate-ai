@@ -1,12 +1,12 @@
-use std::collections::BTreeMap;
 use futures::StreamExt;
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use tokio::sync::mpsc;
 
 use crate::protocol::chat_completions::ChatCompletionChunk;
+use crate::protocol::responses_events as ev;
 use crate::transform::reasoning_store;
 use crate::transform::responses_to_chat::ThinkSplitter;
-use crate::protocol::responses_events as ev;
 
 const MAX_EVENTS_LOG_SIZE: usize = 1_000_000; // 1MB
 /// Accumulated tool call from streaming deltas.
@@ -62,6 +62,7 @@ pub struct SseAccumulator {
     /// function_call 各自 done 时的 final JSON）。最后塞进
     /// `response.completed` envelope.output 字段。
     pub output_items: Vec<Value>,
+    pub tool_call_resolution: crate::transform::tool_calls::ToolCallResolutionMap,
 }
 
 impl SseAccumulator {
@@ -87,6 +88,7 @@ impl SseAccumulator {
             finish_reason: None,
             think_splitter: ThinkSplitter::new(),
             output_items: Vec::new(),
+            tool_call_resolution: Default::default(),
         }
     }
 
@@ -174,7 +176,11 @@ pub async fn process_upstream_stream_inner(
             Some(Ok(b)) => b,
             Some(Err(e)) => {
                 let msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);
-                send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &msg)).await;
+                send(
+                    &tx,
+                    &ev::response_failed(&acc.response_id, &acc.model, &msg),
+                )
+                .await;
                 return Err(msg);
             }
             None => {
@@ -216,7 +222,9 @@ async fn dispatch_line(
     };
 
     if data == "[DONE]" {
-        return LineOutcome::Done(finalize(tx.clone(), acc, *has_text, *has_tool_calls, emit_completed).await);
+        return LineOutcome::Done(
+            finalize(tx.clone(), acc, *has_text, *has_tool_calls, emit_completed).await,
+        );
     }
 
     acc.log_event(data);
@@ -383,21 +391,27 @@ async fn process_choices(
                 acc.next_output_index += 1;
                 tc.output_index = oi;
                 // #1 namespace 还原
-                let (added_name, added_ns) =
-                    crate::transform::tool_calls::split_namespace_tool_name(&tc.name)
-                        .map(|(ns, name)| (name, Some(ns)))
-                        .unwrap_or_else(|| (tc.name.clone(), None));
-                send(tx, &ev::function_call_added_with_namespace(
-                    &item_id, oi, &tc.id, &added_name, added_ns.as_deref(),
-                )).await;
+                send_tool_call_added(
+                    tx,
+                    &acc.tool_call_resolution,
+                    &item_id,
+                    oi,
+                    &tc.id,
+                    &tc.name,
+                )
+                .await;
                 tc.emitted_added = true;
             }
             if tc.emitted_added && tc.arguments.len() > tc.last_args_len {
                 let delta_args = &tc.arguments[tc.last_args_len..];
                 let item_id = format!("fc_{}", tc.id);
-                send(
+                send_tool_call_arguments_delta(
                     tx,
-                    &ev::function_call_arguments_delta(&item_id, tc.output_index, delta_args),
+                    &acc.tool_call_resolution,
+                    &item_id,
+                    tc.output_index,
+                    &tc.name,
+                    delta_args,
                 )
                 .await;
                 tc.last_args_len = tc.arguments.len();
@@ -410,14 +424,17 @@ async fn process_choices(
             for tc_delta in tcs {
                 let idx = tc_delta.index.unwrap_or(0) as usize;
 
-                let tc = acc.tool_calls.entry(idx).or_insert_with(|| AccumulatedToolCall {
-                    id: String::new(),
-                    name: String::new(),
-                    arguments: String::new(),
-                    emitted_added: false,
-                    last_args_len: 0,
-                    output_index: 0,
-                });
+                let tc = acc
+                    .tool_calls
+                    .entry(idx)
+                    .or_insert_with(|| AccumulatedToolCall {
+                        id: String::new(),
+                        name: String::new(),
+                        arguments: String::new(),
+                        emitted_added: false,
+                        last_args_len: 0,
+                        output_index: 0,
+                    });
 
                 if let Some(ref id) = tc_delta.id {
                     if tc.id.is_empty() {
@@ -448,23 +465,28 @@ async fn process_choices(
                     let oi = acc.next_output_index;
                     acc.next_output_index += 1;
                     tc.output_index = oi;
-                    // #1 namespace 还原（name 为空时 split 必返 None，安全）
-                    let (added_name, added_ns) =
-                        crate::transform::tool_calls::split_namespace_tool_name(&tc.name)
-                            .map(|(ns, name)| (name, Some(ns)))
-                            .unwrap_or_else(|| (tc.name.clone(), None));
-                    send(tx, &ev::function_call_added_with_namespace(
-                        &item_id, oi, &tc.id, &added_name, added_ns.as_deref(),
-                    )).await;
+                    send_tool_call_added(
+                        tx,
+                        &acc.tool_call_resolution,
+                        &item_id,
+                        oi,
+                        &tc.id,
+                        &tc.name,
+                    )
+                    .await;
                     tc.emitted_added = true;
                 }
 
                 if tc.emitted_added && tc.arguments.len() > tc.last_args_len {
                     let delta_args = &tc.arguments[tc.last_args_len..];
                     let item_id = format!("fc_{}", tc.id);
-                    send(
+                    send_tool_call_arguments_delta(
                         tx,
-                        &ev::function_call_arguments_delta(&item_id, tc.output_index, delta_args),
+                        &acc.tool_call_resolution,
+                        &item_id,
+                        tc.output_index,
+                        &tc.name,
+                        delta_args,
                     )
                     .await;
                     tc.last_args_len = tc.arguments.len();
@@ -537,10 +559,32 @@ async fn finalize(
         };
         if acc.reasoning_output_index.is_some() {
             // Streamed: close out the summary text before the item.done.
-            send(&tx, &ev::reasoning_summary_text_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content)).await;
-            send(&tx, &ev::reasoning_summary_part_done(&acc.reasoning_item_id, oi, 0, &acc.reasoning_content)).await;
+            send(
+                &tx,
+                &ev::reasoning_summary_text_done(
+                    &acc.reasoning_item_id,
+                    oi,
+                    0,
+                    &acc.reasoning_content,
+                ),
+            )
+            .await;
+            send(
+                &tx,
+                &ev::reasoning_summary_part_done(
+                    &acc.reasoning_item_id,
+                    oi,
+                    0,
+                    &acc.reasoning_content,
+                ),
+            )
+            .await;
         }
-        send(&tx, &ev::output_item_done_reasoning(&acc.reasoning_item_id, oi, &acc.reasoning_content)).await;
+        send(
+            &tx,
+            &ev::output_item_done_reasoning(&acc.reasoning_item_id, oi, &acc.reasoning_content),
+        )
+        .await;
         // 累积进 envelope.output（Bug #4）
         acc.output_items.push(json!({
             "id": acc.reasoning_item_id,
@@ -561,13 +605,33 @@ async fn finalize(
         if let Some(extra) = extra_text {
             send(&tx, &ev::output_text_delta(&acc.msg_item_id, oi, 0, &extra)).await;
         }
-        send(&tx, &ev::output_text_done(&acc.msg_item_id, oi, 0, &acc.full_text)).await;
-        send(&tx, &ev::content_part_done_with_annotations(
-            &acc.msg_item_id, oi, 0, &acc.full_text, &acc.annotations,
-        )).await;
-        send(&tx, &ev::output_item_done_message_with_annotations(
-            &acc.msg_item_id, oi, &acc.full_text, rc, &acc.annotations,
-        )).await;
+        send(
+            &tx,
+            &ev::output_text_done(&acc.msg_item_id, oi, 0, &acc.full_text),
+        )
+        .await;
+        send(
+            &tx,
+            &ev::content_part_done_with_annotations(
+                &acc.msg_item_id,
+                oi,
+                0,
+                &acc.full_text,
+                &acc.annotations,
+            ),
+        )
+        .await;
+        send(
+            &tx,
+            &ev::output_item_done_message_with_annotations(
+                &acc.msg_item_id,
+                oi,
+                &acc.full_text,
+                rc,
+                &acc.annotations,
+            ),
+        )
+        .await;
         // 累积 message item 进 envelope.output（Bug #4）
         let mut msg_item = json!({
             "id": acc.msg_item_id,
@@ -576,7 +640,9 @@ async fn finalize(
             "role": "assistant",
             "content": [{"type": "output_text", "text": &acc.full_text, "annotations": &acc.annotations}],
         });
-        if let Some(r) = rc { msg_item["reasoning_content"] = json!(r); }
+        if let Some(r) = rc {
+            msg_item["reasoning_content"] = json!(r);
+        }
         acc.output_items.push(msg_item);
     }
     // Tool-call-only: no message item was emitted, no need to close it
@@ -586,31 +652,15 @@ async fn finalize(
         let finish = acc.finish_reason.as_deref();
         for (_, tc) in &acc.tool_calls {
             let safe_args = crate::transform::tool_calls::salvage_tool_arguments(
-                &tc.arguments, &tc.name, &tc.id, finish,
+                &tc.arguments,
+                &tc.name,
+                &tc.id,
+                finish,
             );
-            // #1 修复：split `ns__tool_name` 还原 namespace。tool 名本身含 `__`
-            // 的边缘 case 会被误判，但 OpenAI/Anthropic 标准 snake_case 命名
-            // 很少这样——实际触发率极低。
-            let (display_name, namespace) =
-                crate::transform::tool_calls::split_namespace_tool_name(&tc.name)
-                    .map(|(ns, name)| (name, Some(ns)))
-                    .unwrap_or_else(|| (tc.name.clone(), None));
             let item_id = format!("fc_{}", tc.id);
             let oi = tc.output_index;
-            send(&tx, &ev::function_call_arguments_done(&item_id, oi, &safe_args)).await;
-            send(&tx, &ev::function_call_done_with_namespace(
-                &item_id, oi, &tc.id, &display_name, &safe_args, rc, namespace.as_deref(),
-            )).await;
-            // 累积 function_call item 进 envelope.output（含 namespace 字段）
-            let mut item = json!({
-                "id": item_id,
-                "type": "function_call",
-                "status": "completed",
-                "call_id": tc.id,
-                "name": display_name,
-                "arguments": safe_args,
-            });
-            if let Some(ref ns) = namespace { item["namespace"] = json!(ns); }
+            let item =
+                send_tool_call_done(&tx, acc, &item_id, oi, &tc.id, &tc.name, &safe_args, rc).await;
             acc.output_items.push(item);
         }
     }
@@ -618,16 +668,197 @@ async fn finalize(
     // response.completed with usage + finish_reason → Responses status/incomplete_details 映射
     // 同时把累积的 output_items 塞进 envelope.output（Bug #4 协议契约完整性）
     if emit_completed {
-        send(&tx, &ev::response_completed_with_stop_reason(
-            &acc.response_id, &acc.model, acc.usage.as_ref(), acc.finish_reason.as_deref(),
-            &acc.output_items,
-        )).await;
+        send(
+            &tx,
+            &ev::response_completed_with_stop_reason(
+                &acc.response_id,
+                &acc.model,
+                acc.usage.as_ref(),
+                acc.finish_reason.as_deref(),
+                &acc.output_items,
+            ),
+        )
+        .await;
     }
     Ok(())
 }
 
 async fn send(tx: &mpsc::Sender<String>, event: &str) {
     let _ = tx.send(event.to_string()).await;
+}
+
+async fn send_tool_call_added(
+    tx: &mpsc::Sender<String>,
+    resolution: &crate::transform::tool_calls::ToolCallResolutionMap,
+    item_id: &str,
+    output_index: usize,
+    call_id: &str,
+    chat_name: &str,
+) {
+    let kind = crate::transform::tool_calls::resolve_tool_call_response_kind(chat_name, resolution);
+    match kind {
+        crate::transform::tool_calls::ToolCallResponseKind::Function { name, namespace } => {
+            send(
+                tx,
+                &ev::function_call_added_with_namespace(
+                    item_id,
+                    output_index,
+                    call_id,
+                    &name,
+                    namespace.as_deref(),
+                ),
+            )
+            .await;
+        }
+        crate::transform::tool_calls::ToolCallResponseKind::Custom { name } => {
+            send(
+                tx,
+                &ev::custom_tool_call_added(item_id, output_index, call_id, &name),
+            )
+            .await;
+        }
+        crate::transform::tool_calls::ToolCallResponseKind::ToolSearch => {
+            send(tx, &ev::tool_search_call_added(output_index, call_id)).await;
+        }
+    }
+}
+
+async fn send_tool_call_arguments_delta(
+    tx: &mpsc::Sender<String>,
+    resolution: &crate::transform::tool_calls::ToolCallResolutionMap,
+    item_id: &str,
+    output_index: usize,
+    chat_name: &str,
+    delta_args: &str,
+) {
+    let kind = crate::transform::tool_calls::resolve_tool_call_response_kind(chat_name, resolution);
+    if matches!(
+        kind,
+        crate::transform::tool_calls::ToolCallResponseKind::Function { .. }
+    ) {
+        send(
+            tx,
+            &ev::function_call_arguments_delta(item_id, output_index, delta_args),
+        )
+        .await;
+    }
+}
+
+async fn send_tool_call_done(
+    tx: &mpsc::Sender<String>,
+    acc: &SseAccumulator,
+    item_id: &str,
+    output_index: usize,
+    call_id: &str,
+    chat_name: &str,
+    arguments: &str,
+    reasoning_content: Option<&str>,
+) -> Value {
+    let kind = crate::transform::tool_calls::resolve_tool_call_response_kind(
+        chat_name,
+        &acc.tool_call_resolution,
+    );
+    match kind {
+        crate::transform::tool_calls::ToolCallResponseKind::Function { name, namespace } => {
+            send(
+                tx,
+                &ev::function_call_arguments_done(item_id, output_index, arguments),
+            )
+            .await;
+            send(
+                tx,
+                &ev::function_call_done_with_namespace(
+                    item_id,
+                    output_index,
+                    call_id,
+                    &name,
+                    arguments,
+                    reasoning_content,
+                    namespace.as_deref(),
+                ),
+            )
+            .await;
+            let mut item = json!({
+                "id": item_id,
+                "type": "function_call",
+                "status": "completed",
+                "call_id": call_id,
+                "name": name,
+                "arguments": arguments,
+            });
+            if let Some(rc) = reasoning_content {
+                item["reasoning_content"] = json!(rc);
+            }
+            if let Some(ns) = namespace {
+                item["namespace"] = json!(ns);
+            }
+            item
+        }
+        crate::transform::tool_calls::ToolCallResponseKind::Custom { name } => {
+            let input = crate::transform::tool_calls::custom_tool_input_from_arguments(arguments);
+            if !input.is_empty() {
+                send(
+                    tx,
+                    &ev::custom_tool_call_input_delta(item_id, output_index, &input),
+                )
+                .await;
+            }
+            send(
+                tx,
+                &ev::custom_tool_call_input_done(item_id, output_index, &input),
+            )
+            .await;
+            send(
+                tx,
+                &ev::custom_tool_call_done(
+                    item_id,
+                    output_index,
+                    call_id,
+                    &name,
+                    &input,
+                    reasoning_content,
+                ),
+            )
+            .await;
+            let mut item = json!({
+                "id": item_id,
+                "type": "custom_tool_call",
+                "status": "completed",
+                "call_id": call_id,
+                "name": name,
+                "input": input,
+            });
+            if let Some(rc) = reasoning_content {
+                item["reasoning_content"] = json!(rc);
+            }
+            item
+        }
+        crate::transform::tool_calls::ToolCallResponseKind::ToolSearch => {
+            let arguments_value =
+                crate::transform::tool_calls::tool_search_arguments_from_arguments(arguments);
+            send(
+                tx,
+                &ev::tool_search_call_done(
+                    output_index,
+                    call_id,
+                    &arguments_value,
+                    reasoning_content,
+                ),
+            )
+            .await;
+            let mut item = json!({
+                "type": "tool_search_call",
+                "status": "completed",
+                "call_id": call_id,
+                "execution": "client",
+                "arguments": arguments_value,
+            });
+            if let Some(rc) = reasoning_content {
+                item["reasoning_content"] = json!(rc);
+            }
+            item
+        }
+    }
 }
 
 async fn start_message_item(tx: &mpsc::Sender<String>, acc: &mut SseAccumulator) -> usize {
@@ -660,24 +891,50 @@ async fn stream_reasoning_delta(tx: &mpsc::Sender<String>, acc: &mut SseAccumula
             let oi = acc.next_output_index;
             acc.next_output_index += 1;
             acc.reasoning_output_index = Some(oi);
-            send(tx, &ev::output_item_added_reasoning(&acc.reasoning_item_id, oi)).await;
-            send(tx, &ev::reasoning_summary_part_added(&acc.reasoning_item_id, oi, 0)).await;
+            send(
+                tx,
+                &ev::output_item_added_reasoning(&acc.reasoning_item_id, oi),
+            )
+            .await;
+            send(
+                tx,
+                &ev::reasoning_summary_part_added(&acc.reasoning_item_id, oi, 0),
+            )
+            .await;
             oi
         }
     };
-    send(tx, &ev::reasoning_summary_text_delta(&acc.reasoning_item_id, oi, 0, delta)).await;
+    send(
+        tx,
+        &ev::reasoning_summary_text_delta(&acc.reasoning_item_id, oi, 0, delta),
+    )
+    .await;
 }
 
 /// Normalize upstream usage to Responses API format.
 fn normalize_usage(u: &serde_json::Value) -> serde_json::Value {
-    let input = u.get("prompt_tokens").or(u.get("input_tokens")).and_then(|v| v.as_i64()).unwrap_or(0);
-    let output = u.get("completion_tokens").or(u.get("output_tokens")).and_then(|v| v.as_i64()).unwrap_or(0);
-    let cached = u.get("prompt_cache_hit_tokens")
-        .or(u.get("prompt_tokens_details").and_then(|d| d.get("cached_tokens")))
-        .and_then(|v| v.as_i64()).unwrap_or(0);
-    let reasoning = u.get("completion_tokens_details")
+    let input = u
+        .get("prompt_tokens")
+        .or(u.get("input_tokens"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let output = u
+        .get("completion_tokens")
+        .or(u.get("output_tokens"))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let cached = u
+        .get("prompt_cache_hit_tokens")
+        .or(u
+            .get("prompt_tokens_details")
+            .and_then(|d| d.get("cached_tokens")))
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let reasoning = u
+        .get("completion_tokens_details")
         .and_then(|d| d.get("reasoning_tokens"))
-        .and_then(|v| v.as_i64()).unwrap_or(0);
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
 
     serde_json::json!({
         "input_tokens": input,
@@ -812,11 +1069,20 @@ mod tests {
         assert!(first.contains("\"type\":\"reasoning\""), "got: {first}");
         assert!(first.contains("\"output_index\":0"), "got: {first}");
         assert!(first.contains("rs_xyz"), "got: {first}");
-        assert!(second.contains("response.reasoning_summary_part.added"), "got: {second}");
+        assert!(
+            second.contains("response.reasoning_summary_part.added"),
+            "got: {second}"
+        );
         assert!(second.contains("\"output_index\":0"), "got: {second}");
-        assert!(third.contains("response.reasoning_summary_text.delta"), "got: {third}");
+        assert!(
+            third.contains("response.reasoning_summary_text.delta"),
+            "got: {third}"
+        );
         assert!(third.contains("\"delta\":\"Hello\""), "got: {third}");
-        assert!(rx.recv().await.is_none(), "only added + part + delta on first chunk");
+        assert!(
+            rx.recv().await.is_none(),
+            "only added + part + delta on first chunk"
+        );
         assert_eq!(acc.reasoning_output_index, Some(0));
         // next_output_index advanced so tool calls won't reuse the reasoning slot.
         assert_eq!(acc.next_output_index, 1);
@@ -848,7 +1114,10 @@ mod tests {
         stream_reasoning_delta(&tx, &mut acc, "").await;
         drop(tx);
 
-        assert!(rx.recv().await.is_none(), "empty delta must not emit events");
+        assert!(
+            rx.recv().await.is_none(),
+            "empty delta must not emit events"
+        );
         assert!(acc.reasoning_output_index.is_none());
     }
 
@@ -899,8 +1168,14 @@ mod tests {
         let annotation_added = position(&events, "response.output_text.annotation.added");
         let msg_done = position(&events, "response.output_item.done");
         assert!(msg_added < annotation_added, "message item must open first");
-        assert!(content_added < annotation_added, "content part must open first");
-        assert!(annotation_added < msg_done, "message item must close after annotation");
+        assert!(
+            content_added < annotation_added,
+            "content part must open first"
+        );
+        assert!(
+            annotation_added < msg_done,
+            "message item must close after annotation"
+        );
         assert!(events[annotation_added].contains("\"output_index\":0"));
         assert!(events[annotation_added].contains("\"snippet\":\"S\""));
         assert!(!events[annotation_added].contains("\"summary\""));
@@ -919,14 +1194,26 @@ mod tests {
         let (events, acc) = collect_stream_events(prefix).await;
         let reasoning_added = events
             .iter()
-            .find(|event| event.contains("response.output_item.added") && event.contains("\"type\":\"reasoning\""))
+            .find(|event| {
+                event.contains("response.output_item.added")
+                    && event.contains("\"type\":\"reasoning\"")
+            })
             .expect("reasoning added event");
         let message_added = events
             .iter()
-            .find(|event| event.contains("response.output_item.added") && event.contains("\"type\":\"message\""))
+            .find(|event| {
+                event.contains("response.output_item.added")
+                    && event.contains("\"type\":\"message\"")
+            })
             .expect("message added event");
-        assert!(reasoning_added.contains("\"output_index\":0"), "got: {reasoning_added}");
-        assert!(message_added.contains("\"output_index\":1"), "got: {message_added}");
+        assert!(
+            reasoning_added.contains("\"output_index\":0"),
+            "got: {reasoning_added}"
+        );
+        assert!(
+            message_added.contains("\"output_index\":1"),
+            "got: {message_added}"
+        );
         assert_eq!(acc.reasoning_output_index, Some(0));
         assert_eq!(acc.msg_output_index, Some(1));
         assert_eq!(acc.next_output_index, 2);

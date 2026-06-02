@@ -12,7 +12,10 @@ pub fn config_path() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_default();
-    PathBuf::from(home).join(".config").join("opencode").join("opencode.json")
+    PathBuf::from(home)
+        .join(".config")
+        .join("opencode")
+        .join("opencode.json")
 }
 
 pub fn snapshot_paths() -> Vec<(&'static str, PathBuf)> {
@@ -85,7 +88,10 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     // Ensure parent dir
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
-            AppError::new("OPENCODE_CONFIG_WRITE_FAILED", format!("Cannot create directory: {e}"))
+            AppError::new(
+                "OPENCODE_CONFIG_WRITE_FAILED",
+                format!("Cannot create directory: {e}"),
+            )
         })?;
     }
 
@@ -97,7 +103,10 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     };
 
     let mut doc: serde_json::Value = serde_json::from_str(&existing).map_err(|e| {
-        AppError::new("OPENCODE_CONFIG_PARSE_ERROR", format!("Cannot parse opencode.json: {e}"))
+        AppError::new(
+            "OPENCODE_CONFIG_PARSE_ERROR",
+            format!("Cannot parse opencode.json: {e}"),
+        )
     })?;
 
     // Set model
@@ -115,22 +124,28 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
 
     // Write
     let new_content = serde_json::to_string_pretty(&doc).map_err(|e| {
-        AppError::new("OPENCODE_CONFIG_WRITE_FAILED", format!("Cannot serialize: {e}"))
+        AppError::new(
+            "OPENCODE_CONFIG_WRITE_FAILED",
+            format!("Cannot serialize: {e}"),
+        )
     })?;
 
     let tmp = path.with_extension("json.tmp");
     fs::write(&tmp, format!("{new_content}\n")).map_err(|e| {
-        AppError::new("OPENCODE_CONFIG_WRITE_FAILED", format!("Failed to write: {e}"))
+        AppError::new(
+            "OPENCODE_CONFIG_WRITE_FAILED",
+            format!("Failed to write: {e}"),
+        )
     })?;
     fs::rename(&tmp, &path).map_err(|e| {
         let _ = fs::remove_file(&tmp);
-        AppError::new("OPENCODE_CONFIG_WRITE_FAILED", format!("Failed to replace: {e}"))
+        AppError::new(
+            "OPENCODE_CONFIG_WRITE_FAILED",
+            format!("Failed to replace: {e}"),
+        )
     })?;
 
-    let changed_keys = vec![
-        "model".to_string(),
-        "provider.openai".to_string(),
-    ];
+    let changed_keys = vec!["model".to_string(), "provider.openai".to_string()];
 
     Ok(ApplyConfigResult {
         success: true,
@@ -143,17 +158,23 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
 pub fn open_config() -> Result<(), AppError> {
     let path = config_path();
     if !path.exists() {
-        return Err(AppError::new("OPENCODE_CONFIG_NOT_FOUND", "OpenCode config file does not exist"));
+        return Err(AppError::new(
+            "OPENCODE_CONFIG_NOT_FOUND",
+            "OpenCode config file does not exist",
+        ));
     }
     open::that(&path).map_err(|e| {
-        AppError::new("OPENCODE_CONFIG_OPEN_FAILED", format!("Failed to open: {e}"))
+        AppError::new(
+            "OPENCODE_CONFIG_OPEN_FAILED",
+            format!("Failed to open: {e}"),
+        )
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{FS_LOCK, setup_temp_home, cleanup};
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
 
     #[test]
     fn test_detect_no_config() {
@@ -184,7 +205,11 @@ mod tests {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
-        std::fs::write(config_path(), r#"{"autoupdate":true,"tools":{"bash":true}}"#).unwrap();
+        std::fs::write(
+            config_path(),
+            r#"{"autoupdate":true,"tools":{"bash":true}}"#,
+        )
+        .unwrap();
         let result = apply("127.0.0.1", 9090).unwrap();
         assert!(result.success);
         let content = std::fs::read_to_string(config_path()).unwrap();

@@ -82,7 +82,9 @@ mod tests {
     #[test]
     fn kimi_disables_thinking_with_web_search() {
         let mut r = req();
-        let tools = Some(vec![json!({"type": "builtin_function", "function": {"name": "$web_search"}})]);
+        let tools = Some(vec![
+            json!({"type": "builtin_function", "function": {"name": "$web_search"}}),
+        ]);
         r.tools = tools.clone();
         KimiProvider.finalize_request(&mut r, &tools);
         assert_eq!(r.thinking, Some(json!({"type": "disabled"})));
@@ -92,7 +94,9 @@ mod tests {
     fn kimi_keeps_thinking_without_web_search() {
         let mut r = req();
         r.thinking = Some(json!({"type": "enabled"}));
-        let tools = Some(vec![json!({"type": "function", "function": {"name": "get_weather"}})]);
+        let tools = Some(vec![
+            json!({"type": "function", "function": {"name": "get_weather"}}),
+        ]);
         r.tools = tools.clone();
         KimiProvider.finalize_request(&mut r, &tools);
         assert_eq!(r.thinking, Some(json!({"type": "enabled"})));

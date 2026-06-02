@@ -51,9 +51,8 @@ fn saved_auth_path() -> PathBuf {
 /// the OAuth tokens to just `{"OPENAI_API_KEY":"ag_local_..."}`).
 fn save_official_files() -> Result<(), AppError> {
     let dir = saved_dir();
-    fs::create_dir_all(&dir).map_err(|e| {
-        AppError::new("CODEX_SAVE_FAILED", format!("Cannot create dir: {e}"))
-    })?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| AppError::new("CODEX_SAVE_FAILED", format!("Cannot create dir: {e}")))?;
 
     let cfg = config_path();
     if cfg.exists() {
@@ -81,11 +80,17 @@ fn save_official_files() -> Result<(), AppError> {
 }
 
 fn auth_is_polluted(path: &PathBuf) -> bool {
-    let Ok(content) = fs::read_to_string(path) else { return false; };
-    let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content) else {
+    let Ok(content) = fs::read_to_string(path) else {
         return false;
     };
-    let current_key = map.get("OPENAI_API_KEY").and_then(|v| v.as_str()).unwrap_or("");
+    let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content)
+    else {
+        return false;
+    };
+    let current_key = map
+        .get("OPENAI_API_KEY")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     current_key.starts_with("ag_local_") && !map.contains_key("tokens")
 }
 
@@ -103,21 +108,29 @@ fn has_saved_official() -> bool {
 fn restore_official_files() -> Result<(), AppError> {
     let dir = saved_dir();
     if !dir.exists() {
-        return Err(AppError::new("CODEX_NO_SAVED_FILES",
-            "No saved official config found. Please log in to Codex again with `codex --login`."));
+        return Err(AppError::new(
+            "CODEX_NO_SAVED_FILES",
+            "No saved official config found. Please log in to Codex again with `codex --login`.",
+        ));
     }
 
     let saved_cfg = saved_config_path();
     if saved_cfg.exists() {
         fs::copy(&saved_cfg, config_path()).map_err(|e| {
-            AppError::new("CODEX_RESTORE_FAILED", format!("Cannot restore config.toml: {e}"))
+            AppError::new(
+                "CODEX_RESTORE_FAILED",
+                format!("Cannot restore config.toml: {e}"),
+            )
         })?;
     }
 
     let saved_auth = saved_auth_path();
     if saved_auth.exists() {
         fs::copy(&saved_auth, auth_json_path()).map_err(|e| {
-            AppError::new("CODEX_RESTORE_FAILED", format!("Cannot restore auth.json: {e}"))
+            AppError::new(
+                "CODEX_RESTORE_FAILED",
+                format!("Cannot restore auth.json: {e}"),
+            )
         })?;
     }
 
@@ -136,11 +149,17 @@ fn restore_official_files() -> Result<(), AppError> {
 /// there's no saved backup to restore from.
 fn repair_polluted_auth_json() -> bool {
     let auth_path = auth_json_path();
-    let Ok(content) = fs::read_to_string(&auth_path) else { return false; };
-    let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content) else {
+    let Ok(content) = fs::read_to_string(&auth_path) else {
         return false;
     };
-    let current_key = map.get("OPENAI_API_KEY").and_then(|v| v.as_str()).unwrap_or("");
+    let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content)
+    else {
+        return false;
+    };
+    let current_key = map
+        .get("OPENAI_API_KEY")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     let is_ag_stripped = current_key.starts_with("ag_local_") && !map.contains_key("tokens");
     if !is_ag_stripped {
         return false;
@@ -216,8 +235,13 @@ pub fn detect() -> CodexConfigStatus {
 
     let (has_agentgate_auth, openai_key_polluted) = if auth_json_exists {
         let content = fs::read_to_string(&auth_path).unwrap_or_default();
-        if let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content) {
-            let current_key = map.get("OPENAI_API_KEY").and_then(|v| v.as_str()).unwrap_or("");
+        if let Ok(map) =
+            serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&content)
+        {
+            let current_key = map
+                .get("OPENAI_API_KEY")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
             let is_ag = current_key.starts_with("ag_local_");
             // Polluted = has ag_local_ but ALSO has OAuth tokens (old version mess)
             // OR is the clean ag-only form (legacy stripped state).
@@ -240,16 +264,28 @@ pub fn detect() -> CodexConfigStatus {
     // (we can tell from the ag_local_ bearer token). The model_provider
     // string itself reads "OpenAI" so we can't distinguish from real OpenAI
     // by that field alone — the bearer token presence is the true marker.
-    let content_for_active = if exists { fs::read_to_string(&path).unwrap_or_default() } else { String::new() };
-    let is_agentgate_active = content_for_active.contains("experimental_bearer_token = \"ag_local_")
+    let content_for_active = if exists {
+        fs::read_to_string(&path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let is_agentgate_active = content_for_active
+        .contains("experimental_bearer_token = \"ag_local_")
         || current_provider.as_deref() == Some("agentgate"); // legacy
 
     CodexConfigStatus {
-        config_path: path_str, auth_json_path: auth_str,
-        exists, auth_json_exists, has_agentgate, has_agentgate_auth,
-        current_provider, current_model,
-        auth_mode: "key_swap".to_string(), token_path: tp,
-        is_agentgate_active, openai_key_polluted,
+        config_path: path_str,
+        auth_json_path: auth_str,
+        exists,
+        auth_json_exists,
+        has_agentgate,
+        has_agentgate_auth,
+        current_provider,
+        current_model,
+        auth_mode: "key_swap".to_string(),
+        token_path: tp,
+        is_agentgate_active,
+        openai_key_polluted,
         has_saved_official: has_saved_official(),
     }
 }
@@ -310,7 +346,10 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     // Ensure parent dir
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
-            AppError::new("CODEX_CONFIG_WRITE_FAILED", format!("Cannot create directory: {e}"))
+            AppError::new(
+                "CODEX_CONFIG_WRITE_FAILED",
+                format!("Cannot create directory: {e}"),
+            )
         })?;
     }
 
@@ -352,19 +391,27 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
         String::new()
     };
     let mut merged = existing;
-    merged = crate::tools::toml_merge::upsert_top_level_key(&merged, "model_provider", "\"OpenAI\"");
+    merged =
+        crate::tools::toml_merge::upsert_top_level_key(&merged, "model_provider", "\"OpenAI\"");
     let section_body = format!(
         "name = \"OpenAI\"\nbase_url = \"http://{host}:{port}/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"{token}\"\nrequires_openai_auth = true\n"
     );
-    merged = crate::tools::toml_merge::upsert_section(&merged, "model_providers.OpenAI", &section_body);
+    merged =
+        crate::tools::toml_merge::upsert_section(&merged, "model_providers.OpenAI", &section_body);
 
     let tmp_path = path.with_extension("toml.tmp");
     fs::write(&tmp_path, &merged).map_err(|e| {
-        AppError::new("CODEX_CONFIG_WRITE_FAILED", format!("Failed to write temp file: {e}"))
+        AppError::new(
+            "CODEX_CONFIG_WRITE_FAILED",
+            format!("Failed to write temp file: {e}"),
+        )
     })?;
     fs::rename(&tmp_path, &path).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
-        AppError::new("CODEX_CONFIG_WRITE_FAILED", format!("Failed to replace config: {e}"))
+        AppError::new(
+            "CODEX_CONFIG_WRITE_FAILED",
+            format!("Failed to replace config: {e}"),
+        )
     })?;
 
     if has_saved_official() {
@@ -386,9 +433,14 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     );
 
     Ok(ApplyConfigResult {
-        success: true, config_path: path_str, auth_json_path: auth_str,
-        backup_path: None, auth_backup_path: None,
-        token_path: tp, changed_keys, warnings,
+        success: true,
+        config_path: path_str,
+        auth_json_path: auth_str,
+        backup_path: None,
+        auth_backup_path: None,
+        token_path: tp,
+        changed_keys,
+        warnings,
     })
 }
 
@@ -418,9 +470,14 @@ pub fn toggle_provider(host: &str, port: i64) -> Result<ToggleResult, AppError> 
             ));
         }
         fs::copy(&saved_cfg, config_path()).map_err(|e| {
-            AppError::new("CODEX_RESTORE_FAILED", format!("Cannot restore config.toml: {e}"))
+            AppError::new(
+                "CODEX_RESTORE_FAILED",
+                format!("Cannot restore config.toml: {e}"),
+            )
         })?;
-        let new_provider = detect().current_provider.unwrap_or_else(|| "openai".to_string());
+        let new_provider = detect()
+            .current_provider
+            .unwrap_or_else(|| "openai".to_string());
         Ok(ToggleResult {
             success: true,
             new_provider,
@@ -466,7 +523,10 @@ pub fn disable() -> Result<ApplyConfigResult, AppError> {
     }
 
     fs::copy(&saved_cfg, &path).map_err(|e| {
-        AppError::new("CODEX_RESTORE_FAILED", format!("Cannot restore config.toml: {e}"))
+        AppError::new(
+            "CODEX_RESTORE_FAILED",
+            format!("Cannot restore config.toml: {e}"),
+        )
     })?;
     changed_keys.push("config.toml (restored)".to_string());
 
@@ -475,8 +535,7 @@ pub fn disable() -> Result<ApplyConfigResult, AppError> {
     // and a healthy backup is available.
     if repair_polluted_auth_json() {
         warnings.push(
-            "auth.json 被旧版 AgentGate 清空过的部分已恢复，Codex IDE 插件应可用。"
-                .to_string(),
+            "auth.json 被旧版 AgentGate 清空过的部分已恢复，Codex IDE 插件应可用。".to_string(),
         );
         changed_keys.push("auth.json (restored)".to_string());
     }
@@ -502,11 +561,13 @@ pub fn disable() -> Result<ApplyConfigResult, AppError> {
 pub fn open_config() -> Result<(), AppError> {
     let path = config_path();
     if !path.exists() {
-        return Err(AppError::new("CODEX_CONFIG_NOT_FOUND", "Codex config file does not exist"));
+        return Err(AppError::new(
+            "CODEX_CONFIG_NOT_FOUND",
+            "Codex config file does not exist",
+        ));
     }
-    open::that(&path).map_err(|e| {
-        AppError::new("CODEX_CONFIG_OPEN_FAILED", format!("Failed to open: {e}"))
-    })
+    open::that(&path)
+        .map_err(|e| AppError::new("CODEX_CONFIG_OPEN_FAILED", format!("Failed to open: {e}")))
 }
 
 pub(crate) fn extract_toml_value(content: &str, key: &str) -> Option<String> {
@@ -526,7 +587,7 @@ pub(crate) fn extract_toml_value(content: &str, key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{FS_LOCK, setup_temp_home, cleanup};
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
 
     #[test]
     fn test_generate_snippet() {
@@ -571,8 +632,14 @@ mod tests {
     #[test]
     fn test_extract_toml_value() {
         let content = "model = \"gpt-4\"\nmodel_provider = \"agentgate\"\n";
-        assert_eq!(extract_toml_value(content, "model"), Some("gpt-4".to_string()));
-        assert_eq!(extract_toml_value(content, "model_provider"), Some("agentgate".to_string()));
+        assert_eq!(
+            extract_toml_value(content, "model"),
+            Some("gpt-4".to_string())
+        );
+        assert_eq!(
+            extract_toml_value(content, "model_provider"),
+            Some("agentgate".to_string())
+        );
         assert_eq!(extract_toml_value(content, "missing"), None);
     }
 
@@ -585,9 +652,15 @@ mod tests {
         assert!(config_path().exists());
         // No pre-existing auth.json + nothing to repair → auth.json should
         // NOT be created by apply. Bearer travels in config.toml.
-        assert!(!auth_json_path().exists(), "apply must not create auth.json");
+        assert!(
+            !auth_json_path().exists(),
+            "apply must not create auth.json"
+        );
         let cfg = std::fs::read_to_string(config_path()).unwrap();
-        assert!(cfg.contains("model_provider = \"OpenAI\""), "new hijack-OpenAI format");
+        assert!(
+            cfg.contains("model_provider = \"OpenAI\""),
+            "new hijack-OpenAI format"
+        );
         assert!(cfg.contains("requires_openai_auth = true"));
         assert!(cfg.contains("experimental_bearer_token = \"ag_local_"));
         cleanup(&temp);
@@ -653,16 +726,27 @@ args = ["--port", "1234"]
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
-        std::fs::write(config_path(), "model = \"gpt-4\"\nmodel_provider = \"openai\"\n").unwrap();
-        let original_auth = r#"{"OPENAI_API_KEY":"sk-real","auth_mode":"chatgpt","tokens":{"access_token":"jwt"}}"#;
+        std::fs::write(
+            config_path(),
+            "model = \"gpt-4\"\nmodel_provider = \"openai\"\n",
+        )
+        .unwrap();
+        let original_auth =
+            r#"{"OPENAI_API_KEY":"sk-real","auth_mode":"chatgpt","tokens":{"access_token":"jwt"}}"#;
         std::fs::write(auth_json_path(), original_auth).unwrap();
         let result = apply("127.0.0.1", 9090).unwrap();
         assert!(result.success);
         let auth = std::fs::read_to_string(auth_json_path()).unwrap();
         assert!(auth.contains("chatgpt"), "auth_mode must survive apply");
         assert!(auth.contains("access_token"), "tokens must survive apply");
-        assert!(auth.contains("sk-real"), "original OPENAI_API_KEY must survive apply");
-        assert!(has_saved_official(), "config.toml backup still saved for restore");
+        assert!(
+            auth.contains("sk-real"),
+            "original OPENAI_API_KEY must survive apply"
+        );
+        assert!(
+            has_saved_official(),
+            "config.toml backup still saved for restore"
+        );
         cleanup(&temp);
     }
 
@@ -675,7 +759,8 @@ args = ["--port", "1234"]
         let temp = setup_temp_home();
         std::fs::create_dir_all(saved_dir()).unwrap();
         std::fs::create_dir_all(auth_json_path().parent().unwrap()).unwrap();
-        let original_auth = r#"{"OPENAI_API_KEY":"sk-real","auth_mode":"chatgpt","tokens":{"access_token":"jwt"}}"#;
+        let original_auth =
+            r#"{"OPENAI_API_KEY":"sk-real","auth_mode":"chatgpt","tokens":{"access_token":"jwt"}}"#;
         // Saved backup from the time AgentGate first ran.
         std::fs::write(saved_auth_path(), original_auth).unwrap();
         // Currently-polluted live auth.json (no tokens, no auth_mode).
@@ -694,8 +779,13 @@ args = ["--port", "1234"]
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
-        std::fs::write(config_path(), "model = \"gpt-4\"\nmodel_provider = \"openai\"\n").unwrap();
-        let original_auth = r#"{"OPENAI_API_KEY":"sk-real","auth_mode":"chatgpt","tokens":{"access_token":"jwt"}}"#;
+        std::fs::write(
+            config_path(),
+            "model = \"gpt-4\"\nmodel_provider = \"openai\"\n",
+        )
+        .unwrap();
+        let original_auth =
+            r#"{"OPENAI_API_KEY":"sk-real","auth_mode":"chatgpt","tokens":{"access_token":"jwt"}}"#;
         std::fs::write(auth_json_path(), original_auth).unwrap();
         apply("127.0.0.1", 9090).unwrap();
         assert!(detect().is_agentgate_active);
@@ -703,7 +793,10 @@ args = ["--port", "1234"]
         let result = toggle_provider("127.0.0.1", 9090).unwrap();
         assert!(result.success);
         let auth = std::fs::read_to_string(auth_json_path()).unwrap();
-        assert!(auth.contains("chatgpt"), "auth.json still untouched on toggle");
+        assert!(
+            auth.contains("chatgpt"),
+            "auth.json still untouched on toggle"
+        );
         assert!(auth.contains("access_token"));
         let cfg = std::fs::read_to_string(config_path()).unwrap();
         assert!(cfg.contains("model_provider = \"openai\""));
@@ -713,7 +806,10 @@ args = ["--port", "1234"]
         assert_eq!(result.new_provider, "agentgate");
         // auth.json is STILL the original OAuth — never touched by toggle.
         let auth = std::fs::read_to_string(auth_json_path()).unwrap();
-        assert!(auth.contains("access_token"), "auth.json survives round-trip");
+        assert!(
+            auth.contains("access_token"),
+            "auth.json survives round-trip"
+        );
         assert!(auth.contains("chatgpt"));
         // config.toml has agentgate's bearer token, not auth.json.
         let cfg = std::fs::read_to_string(config_path()).unwrap();
@@ -727,9 +823,11 @@ args = ["--port", "1234"]
         let temp = setup_temp_home();
         std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
         // Start with an official-style config (what a fresh Codex login produces).
-        let original_cfg = "model_provider = \"openai\"\n[plugins.\"browser@openai-bundled\"]\nenabled = true\n";
+        let original_cfg =
+            "model_provider = \"openai\"\n[plugins.\"browser@openai-bundled\"]\nenabled = true\n";
         std::fs::write(config_path(), original_cfg).unwrap();
-        let oauth_auth = r#"{"OPENAI_API_KEY":null,"auth_mode":"chatgpt","tokens":{"access_token":"jwt"}}"#;
+        let oauth_auth =
+            r#"{"OPENAI_API_KEY":null,"auth_mode":"chatgpt","tokens":{"access_token":"jwt"}}"#;
         std::fs::write(auth_json_path(), oauth_auth).unwrap();
 
         // Apply AgentGate config (compat mode).
@@ -740,8 +838,14 @@ args = ["--port", "1234"]
         let result = disable().unwrap();
         assert!(result.success);
         let cfg = std::fs::read_to_string(config_path()).unwrap();
-        assert!(cfg.contains("model_provider = \"openai\""), "official model_provider restored");
-        assert!(cfg.contains("browser@openai-bundled"), "official plugin block restored");
+        assert!(
+            cfg.contains("model_provider = \"openai\""),
+            "official model_provider restored"
+        );
+        assert!(
+            cfg.contains("browser@openai-bundled"),
+            "official plugin block restored"
+        );
         assert!(!cfg.contains("agentgate"), "agentgate block should be gone");
 
         // auth.json must still be the OAuth one — disable never touches it
@@ -783,7 +887,10 @@ args = ["--port", "1234"]
         std::fs::write(config_path(), snippet).unwrap();
         let status = detect();
         assert!(status.exists);
-        assert!(status.has_agentgate, "ag_local_ bearer token marks our hijack snippet");
+        assert!(
+            status.has_agentgate,
+            "ag_local_ bearer token marks our hijack snippet"
+        );
         assert!(status.is_agentgate_active);
         assert_eq!(status.current_provider, Some("OpenAI".to_string()));
         cleanup(&temp);

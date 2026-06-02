@@ -19,7 +19,7 @@
 
 use crate::app::state::AppState;
 use crate::storage;
-use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder, CheckMenuItemBuilder};
+use tauri::menu::{CheckMenuItemBuilder, Menu, MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::TrayIconId;
 use tauri::{AppHandle, Manager};
 
@@ -76,10 +76,7 @@ struct Snapshot {
 
 fn read_snapshot(app: &AppHandle) -> Result<Snapshot, Box<dyn std::error::Error>> {
     let state: tauri::State<'_, AppState> = app.state();
-    let conn = state
-        .db
-        .lock()
-        .map_err(|_| "DB lock failed")?;
+    let conn = state.db.lock().map_err(|_| "DB lock failed")?;
 
     let zh = crate::is_chinese_locale_pub();
 
@@ -119,14 +116,29 @@ fn read_snapshot(app: &AppHandle) -> Result<Snapshot, Box<dyn std::error::Error>
     })
 }
 
-fn build_menu(app: &AppHandle, snap: &Snapshot) -> Result<Menu<tauri::Wry>, Box<dyn std::error::Error>> {
+fn build_menu(
+    app: &AppHandle,
+    snap: &Snapshot,
+) -> Result<Menu<tauri::Wry>, Box<dyn std::error::Error>> {
     let zh = snap.zh;
 
     let active_label = snap
         .active_provider_name
         .as_deref()
-        .map(|n| if zh { format!("当前供应商：{n}") } else { format!("Active: {n}") })
-        .unwrap_or_else(|| if zh { "未选择供应商".into() } else { "No active provider".into() });
+        .map(|n| {
+            if zh {
+                format!("当前供应商：{n}")
+            } else {
+                format!("Active: {n}")
+            }
+        })
+        .unwrap_or_else(|| {
+            if zh {
+                "未选择供应商".into()
+            } else {
+                "No active provider".into()
+            }
+        });
     let active_item = MenuItemBuilder::with_id("info_active", active_label)
         .enabled(false)
         .build(app)?;
@@ -158,39 +170,74 @@ fn build_menu(app: &AppHandle, snap: &Snapshot) -> Result<Menu<tauri::Wry>, Box<
     // ── Switch active submenu ──
     let mut switch_builder = SubmenuBuilder::new(
         app,
-        if zh { "切换供应商" } else { "Switch active provider" },
+        if zh {
+            "切换供应商"
+        } else {
+            "Switch active provider"
+        },
     );
     if snap.providers.is_empty() {
-        let empty = MenuItemBuilder::with_id("switch_empty", if zh { "（暂无供应商）" } else { "(none configured)" })
-            .enabled(false)
-            .build(app)?;
+        let empty = MenuItemBuilder::with_id(
+            "switch_empty",
+            if zh {
+                "（暂无供应商）"
+            } else {
+                "(none configured)"
+            },
+        )
+        .enabled(false)
+        .build(app)?;
         switch_builder = switch_builder.item(&empty);
     } else {
         for (id, name) in &snap.providers {
             let is_active = snap.active_provider_id.as_deref() == Some(id.as_str());
-            let item = CheckMenuItemBuilder::with_id(
-                format!("switch_active:{id}"),
-                name,
-            )
-            .checked(is_active)
-            .build(app)?;
+            let item = CheckMenuItemBuilder::with_id(format!("switch_active:{id}"), name)
+                .checked(is_active)
+                .build(app)?;
             switch_builder = switch_builder.item(&item);
         }
     }
     let switch_submenu = switch_builder.build()?;
 
     // ── Existing static items ──
-    let show = MenuItemBuilder::with_id("show", if zh { "显示 AgentGate" } else { "Show AgentGate" }).build(app)?;
-    let start_gw = MenuItemBuilder::with_id("start_gateway", if zh { "启动网关" } else { "Start Gateway" })
-        .enabled(!snap.gateway_running)
-        .build(app)?;
-    let stop_gw = MenuItemBuilder::with_id("stop_gateway", if zh { "停止网关" } else { "Stop Gateway" })
-        .enabled(snap.gateway_running)
-        .build(app)?;
-    let restart_gw = MenuItemBuilder::with_id("restart_gateway", if zh { "重启网关" } else { "Restart Gateway" })
-        .enabled(snap.gateway_running)
-        .build(app)?;
-    let toggle_pet = MenuItemBuilder::with_id("toggle_pet", if zh { "显示/隐藏宠物" } else { "Toggle Pet" }).build(app)?;
+    let show = MenuItemBuilder::with_id(
+        "show",
+        if zh {
+            "显示 AgentGate"
+        } else {
+            "Show AgentGate"
+        },
+    )
+    .build(app)?;
+    let start_gw = MenuItemBuilder::with_id(
+        "start_gateway",
+        if zh { "启动网关" } else { "Start Gateway" },
+    )
+    .enabled(!snap.gateway_running)
+    .build(app)?;
+    let stop_gw =
+        MenuItemBuilder::with_id("stop_gateway", if zh { "停止网关" } else { "Stop Gateway" })
+            .enabled(snap.gateway_running)
+            .build(app)?;
+    let restart_gw = MenuItemBuilder::with_id(
+        "restart_gateway",
+        if zh {
+            "重启网关"
+        } else {
+            "Restart Gateway"
+        },
+    )
+    .enabled(snap.gateway_running)
+    .build(app)?;
+    let toggle_pet = MenuItemBuilder::with_id(
+        "toggle_pet",
+        if zh {
+            "显示/隐藏宠物"
+        } else {
+            "Toggle Pet"
+        },
+    )
+    .build(app)?;
     let quit = MenuItemBuilder::with_id("quit", if zh { "退出" } else { "Quit" }).build(app)?;
 
     let menu = MenuBuilder::new(app)
@@ -219,7 +266,11 @@ fn build_tooltip(snap: &Snapshot) -> String {
     if snap.gateway_running {
         parts.push(format!(":{}", snap.gateway_port));
     } else {
-        parts.push(if snap.zh { "网关已停止".into() } else { "Stopped".into() });
+        parts.push(if snap.zh {
+            "网关已停止".into()
+        } else {
+            "Stopped".into()
+        });
     }
     if let Some(ref n) = snap.active_provider_name {
         parts.push(n.clone());
@@ -317,7 +368,10 @@ mod tests {
             ..Default::default()
         };
         let t = build_tooltip(&snap);
-        assert!(!t.contains("reqs"), "zero-req day shouldn't show — got: {t}");
+        assert!(
+            !t.contains("reqs"),
+            "zero-req day shouldn't show — got: {t}"
+        );
     }
 
     #[test]

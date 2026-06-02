@@ -84,7 +84,15 @@ pub async fn start(
     port: u16,
     db: Arc<Mutex<Connection>>,
     tls: Option<TlsConfig>,
-) -> Result<(oneshot::Sender<()>, tokio::task::JoinHandle<()>, Arc<AtomicU64>, u16), AppError> {
+) -> Result<
+    (
+        oneshot::Sender<()>,
+        tokio::task::JoinHandle<()>,
+        Arc<AtomicU64>,
+        u16,
+    ),
+    AppError,
+> {
     let http_client = reqwest::Client::builder()
         // 不设 .timeout() —— 那是"整请求总时限"，对 streaming AI 请求语义错配：
         // 模型只要还在持续吐 token 就不该被打断，长 prompt + thinking + 长输出
@@ -121,45 +129,63 @@ pub async fn start(
     let counter = active_requests.clone();
     let app = Router::new()
         .route("/health", get(routes::health))
-        .route("/metrics", get({
-            // 渲染前同步当前 active_requests gauge —— gauge 平时由 SSE 流入流出
-            // 的 CountingBody 增减，但 metrics 系统不直接访问 AtomicU64，渲染前
-            // 镜像一次。
-            let counter = active_requests.clone();
-            move || {
-                let n = counter.load(Ordering::Relaxed);
-                crate::gateway::metrics::set_active_requests(n);
-                crate::gateway::metrics::render()
-            }
-        }))
+        .route(
+            "/metrics",
+            get({
+                // 渲染前同步当前 active_requests gauge —— gauge 平时由 SSE 流入流出
+                // 的 CountingBody 增减，但 metrics 系统不直接访问 AtomicU64，渲染前
+                // 镜像一次。
+                let counter = active_requests.clone();
+                move || {
+                    let n = counter.load(Ordering::Relaxed);
+                    crate::gateway::metrics::set_active_requests(n);
+                    crate::gateway::metrics::render()
+                }
+            }),
+        )
         .route("/v1/models", get(routes::list_models))
         .route("/v1/responses", post(routes::handle_responses))
         .route("/responses", post(routes::handle_responses))
-        .route("/v1/chat/completions", post(routes::handle_chat_completions))
+        .route(
+            "/v1/chat/completions",
+            post(routes::handle_chat_completions),
+        )
         .route("/chat/completions", post(routes::handle_chat_completions))
         .route("/v1/messages", post(routes::handle_messages))
         .route("/messages", post(routes::handle_messages))
-        .route("/v1/messages/count_tokens", post(routes::handle_count_tokens))
+        .route(
+            "/v1/messages/count_tokens",
+            post(routes::handle_count_tokens),
+        )
         .route("/messages/count_tokens", post(routes::handle_count_tokens))
         .route("/v1beta/models", get(routes::list_gemini_models))
-        .route("/v1beta/models/:model_action", post(routes::handle_gemini_generate))
-        .layer(axum::middleware::from_fn(move |req, next: axum::middleware::Next| {
-            let counter = counter.clone();
-            async move {
-                counter.fetch_add(1, Ordering::Relaxed);
-                let response = next.run(req).await;
-                // 不在这 decrement —— next.run 对 streaming 响应几毫秒就返回，
-                // body 还没流给 client。包一层 CountingBody，body Drop 时才减。
-                let (parts, body) = response.into_parts();
-                let wrapped = CountingBody { inner: body, counter, decremented: false };
-                axum::http::Response::from_parts(parts, Body::new(wrapped))
-            }
-        }))
+        .route(
+            "/v1beta/models/:model_action",
+            post(routes::handle_gemini_generate),
+        )
+        .layer(axum::middleware::from_fn(
+            move |req, next: axum::middleware::Next| {
+                let counter = counter.clone();
+                async move {
+                    counter.fetch_add(1, Ordering::Relaxed);
+                    let response = next.run(req).await;
+                    // 不在这 decrement —— next.run 对 streaming 响应几毫秒就返回，
+                    // body 还没流给 client。包一层 CountingBody，body Drop 时才减。
+                    let (parts, body) = response.into_parts();
+                    let wrapped = CountingBody {
+                        inner: body,
+                        counter,
+                        decremented: false,
+                    };
+                    axum::http::Response::from_parts(parts, Body::new(wrapped))
+                }
+            },
+        ))
         .with_state(state);
 
-    let addr: SocketAddr = format!("{host}:{port}").parse().map_err(|e| {
-        AppError::new("GATEWAY_BIND_ERROR", format!("Invalid address: {e}"))
-    })?;
+    let addr: SocketAddr = format!("{host}:{port}")
+        .parse()
+        .map_err(|e| AppError::new("GATEWAY_BIND_ERROR", format!("Invalid address: {e}")))?;
 
     // axum_server 接受 std::net::TcpListener。先用 std bind 拿到 bound_port（port=0
     // 时 OS 才分配），set_nonblocking 让 tokio runtime 能 poll。
@@ -174,14 +200,11 @@ pub async fn start(
             AppError::new("GATEWAY_BIND_ERROR", format!("Failed to bind: {e}"))
         }
     })?;
-    std_listener.set_nonblocking(true).map_err(|e| {
-        AppError::new("GATEWAY_BIND_ERROR", format!("set_nonblocking failed: {e}"))
-    })?;
+    std_listener
+        .set_nonblocking(true)
+        .map_err(|e| AppError::new("GATEWAY_BIND_ERROR", format!("set_nonblocking failed: {e}")))?;
 
-    let bound_port = std_listener
-        .local_addr()
-        .map(|a| a.port())
-        .unwrap_or(port);
+    let bound_port = std_listener.local_addr().map(|a| a.port()).unwrap_or(port);
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     let server_handle = axum_server::Handle::new();

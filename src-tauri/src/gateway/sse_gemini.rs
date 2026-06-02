@@ -1,6 +1,6 @@
+use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use tokio::sync::mpsc;
-use serde_json::{json, Value};
 
 use crate::protocol::responses_events as ev;
 
@@ -34,7 +34,8 @@ impl GeminiSseAccumulator {
     pub fn new(response_id: String, model: String) -> Self {
         let msg_item_id = format!("msg_{}", response_id.replace("resp_", ""));
         Self {
-            response_id, model,
+            response_id,
+            model,
             full_text: String::new(),
             tool_calls: BTreeMap::new(),
             reasoning_content: String::new(),
@@ -83,7 +84,11 @@ pub async fn process_gemini_stream(
                 Some(Ok(b)) => b,
                 Some(Err(e)) => {
                     let err_msg = crate::gateway::sse_bootstrap::describe_stream_error(&e);
-                    send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &err_msg)).await;
+                    send(
+                        &tx,
+                        &ev::response_failed(&acc.response_id, &acc.model, &err_msg),
+                    )
+                    .await;
                     return Err(err_msg);
                 }
                 None => break,
@@ -106,7 +111,9 @@ pub async fn process_gemini_stream(
                 }
             }
 
-            if data_str.is_empty() { continue; }
+            if data_str.is_empty() {
+                continue;
+            }
 
             // Log
             if acc.events_size < MAX_EVENTS_LOG_SIZE {
@@ -122,16 +129,25 @@ pub async fn process_gemini_stream(
 
             // Check for error
             if let Some(err) = data.get("error") {
-                let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("Gemini API error");
+                let msg = err
+                    .get("message")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("Gemini API error");
                 let full_err = format!("Gemini API error: {msg}");
-                send(&tx, &ev::response_failed(&acc.response_id, &acc.model, &full_err)).await;
+                send(
+                    &tx,
+                    &ev::response_failed(&acc.response_id, &acc.model, &full_err),
+                )
+                .await;
                 return Err(full_err);
             }
 
             // Extract candidates[0]
-            let candidate = match data.get("candidates")
+            let candidate = match data
+                .get("candidates")
                 .and_then(|c| c.as_array())
-                .and_then(|a| a.first()) {
+                .and_then(|a| a.first())
+            {
                 Some(c) => c,
                 None => {
                     // May be a usage-only event at the end
@@ -154,9 +170,11 @@ pub async fn process_gemini_stream(
             }
 
             // Process parts
-            if let Some(parts) = candidate.get("content")
+            if let Some(parts) = candidate
+                .get("content")
                 .and_then(|c| c.get("parts"))
-                .and_then(|p| p.as_array()) {
+                .and_then(|p| p.as_array())
+            {
                 for part in parts {
                     // Text part
                     if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
@@ -174,7 +192,10 @@ pub async fn process_gemini_stream(
                     // Function call part (Gemini sends complete functionCall, not streamed)
                     if let Some(fc) = part.get("functionCall") {
                         let name = fc.get("name").and_then(|n| n.as_str()).unwrap_or("unknown");
-                        let args = fc.get("args").map(|a| a.to_string()).unwrap_or("{}".to_string());
+                        let args = fc
+                            .get("args")
+                            .map(|a| a.to_string())
+                            .unwrap_or("{}".to_string());
                         let call_id = format!("call_gemini_{}", acc.tool_call_counter);
                         acc.tool_call_counter += 1;
 
@@ -182,11 +203,14 @@ pub async fn process_gemini_stream(
                         acc.next_output_index += 1;
                         let item_id = format!("fc_{call_id}");
 
-                        acc.tool_calls.insert(oi, AccumulatedToolCall {
-                            name: name.to_string(),
-                            arguments: args.clone(),
-                            output_index: oi,
-                        });
+                        acc.tool_calls.insert(
+                            oi,
+                            AccumulatedToolCall {
+                                name: name.to_string(),
+                                arguments: args.clone(),
+                                output_index: oi,
+                            },
+                        );
 
                         send(&tx, &ev::function_call_added(&item_id, oi, &call_id, name)).await;
                         send(&tx, &ev::function_call_arguments_delta(&item_id, oi, &args)).await;
@@ -210,7 +234,9 @@ pub async fn process_gemini_stream(
 async fn finalize(acc: &mut GeminiSseAccumulator, tx: &mpsc::Sender<String>) {
     // Store reasoning for multi-turn
     if !acc.reasoning_content.is_empty() {
-        let tc_ids: Vec<String> = acc.tool_calls.values()
+        let tc_ids: Vec<String> = acc
+            .tool_calls
+            .values()
             .map(|tc| format!("call_gemini_{}", tc.output_index))
             .collect();
         crate::transform::reasoning_store::store(&acc.full_text, &acc.reasoning_content, &tc_ids);
@@ -218,23 +244,62 @@ async fn finalize(acc: &mut GeminiSseAccumulator, tx: &mpsc::Sender<String>) {
 
     // Text done events
     if acc.text_item_emitted {
-        send(tx, &ev::output_text_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
-        send(tx, &ev::content_part_done(&acc.msg_item_id, 0, 0, &acc.full_text)).await;
-        let rc = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.as_str()) };
-        send(tx, &ev::output_item_done_message(&acc.msg_item_id, 0, &acc.full_text, rc)).await;
+        send(
+            tx,
+            &ev::output_text_done(&acc.msg_item_id, 0, 0, &acc.full_text),
+        )
+        .await;
+        send(
+            tx,
+            &ev::content_part_done(&acc.msg_item_id, 0, 0, &acc.full_text),
+        )
+        .await;
+        let rc = if acc.reasoning_content.is_empty() {
+            None
+        } else {
+            Some(acc.reasoning_content.as_str())
+        };
+        send(
+            tx,
+            &ev::output_item_done_message(&acc.msg_item_id, 0, &acc.full_text, rc),
+        )
+        .await;
     }
 
     // Tool call done events
     for (idx, tc) in &acc.tool_calls {
         let call_id = format!("call_gemini_{idx}");
         let item_id = format!("fc_{call_id}");
-        let rc = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.as_str()) };
-        send(tx, &ev::function_call_arguments_done(&item_id, tc.output_index, &tc.arguments)).await;
-        send(tx, &ev::function_call_done(&item_id, tc.output_index, &call_id, &tc.name, &tc.arguments, rc)).await;
+        let rc = if acc.reasoning_content.is_empty() {
+            None
+        } else {
+            Some(acc.reasoning_content.as_str())
+        };
+        send(
+            tx,
+            &ev::function_call_arguments_done(&item_id, tc.output_index, &tc.arguments),
+        )
+        .await;
+        send(
+            tx,
+            &ev::function_call_done(
+                &item_id,
+                tc.output_index,
+                &call_id,
+                &tc.name,
+                &tc.arguments,
+                rc,
+            ),
+        )
+        .await;
     }
 
     // response.completed
-    send(tx, &ev::response_completed(&acc.response_id, &acc.model, acc.usage.as_ref())).await;
+    send(
+        tx,
+        &ev::response_completed(&acc.response_id, &acc.model, acc.usage.as_ref()),
+    )
+    .await;
 }
 
 async fn send(tx: &mpsc::Sender<String>, event: &str) {

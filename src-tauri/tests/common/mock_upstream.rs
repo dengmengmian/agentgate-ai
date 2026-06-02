@@ -16,7 +16,9 @@ pub struct MockUpstream {
 
 impl MockUpstream {
     pub async fn start() -> Self {
-        Self { server: MockServer::start().await }
+        Self {
+            server: MockServer::start().await,
+        }
     }
 
     /// Base URL the gateway should use as the provider's `base_url` /

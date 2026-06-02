@@ -36,18 +36,25 @@ pub struct ProviderConfig {
 impl ProviderConfig {
     pub fn from_provider(p: &Provider) -> Result<Self, AppError> {
         let raw = p.api_key.clone().filter(|k| !k.is_empty()).ok_or_else(|| {
-            AppError::new("PROVIDER_API_KEY_MISSING", "Active provider has no API key configured")
-                .with_suggestion("Set an API key in the Providers page")
+            AppError::new(
+                "PROVIDER_API_KEY_MISSING",
+                "Active provider has no API key configured",
+            )
+            .with_suggestion("Set an API key in the Providers page")
         })?;
 
         // Parse api_key: JSON array → multiple keys, plain string → single key
         let api_keys = parse_api_keys(&raw);
         if api_keys.is_empty() {
-            return Err(AppError::new("PROVIDER_API_KEY_MISSING", "No valid API keys configured")
-                .with_suggestion("Set at least one API key in the Providers page"));
+            return Err(
+                AppError::new("PROVIDER_API_KEY_MISSING", "No valid API keys configured")
+                    .with_suggestion("Set at least one API key in the Providers page"),
+            );
         }
 
-        let extra_headers = p.extra_headers.as_ref()
+        let extra_headers = p
+            .extra_headers
+            .as_ref()
             .and_then(|h| serde_json::from_str::<std::collections::HashMap<String, String>>(h).ok())
             .unwrap_or_default();
 
@@ -172,7 +179,8 @@ fn is_retryable(status: u16) -> bool {
 
 /// Parse Retry-After header (seconds).
 fn parse_retry_after(resp: &reqwest::Response) -> Option<u64> {
-    resp.headers().get("retry-after")
+    resp.headers()
+        .get("retry-after")
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.parse::<u64>().ok())
 }
@@ -270,11 +278,17 @@ fn summarize_html_gateway_error(body: &str) -> Option<String> {
         "上游网关"
     };
     // 从 HTML 里取 502/503/504/500 这几个常见状态码（按优先级，502 最常见）。
-    let upstream_status = ["502 Bad Gateway", "504 Gateway Time-out", "504 Gateway Timeout", "503 Service Unavailable", "500 Internal Server Error"]
-        .iter()
-        .find(|s| body.contains(*s))
-        .copied()
-        .unwrap_or("5xx 错误");
+    let upstream_status = [
+        "502 Bad Gateway",
+        "504 Gateway Time-out",
+        "504 Gateway Timeout",
+        "503 Service Unavailable",
+        "500 Internal Server Error",
+    ]
+    .iter()
+    .find(|s| body.contains(*s))
+    .copied()
+    .unwrap_or("5xx 错误");
     Some(format!(
         "{upstream_kind} 返回 HTML 错误页：{upstream_status}。\
          通常是上游网关到其后端 origin 的连接出问题（origin 抖动/重启/超时），\
@@ -296,8 +310,12 @@ pub async fn send_non_stream(
         let api_key = config.select_api_key().to_string();
         let mut effective_request = request.clone();
         maybe_strip_mimo_web_search_for_account(config, &api_key, &mut effective_request);
-        let mut body = serde_json::to_value(&effective_request)
-            .map_err(|e| AppError::new("TRANSFORM_ERROR", format!("Failed to serialize request: {e}")))?;
+        let mut body = serde_json::to_value(&effective_request).map_err(|e| {
+            AppError::new(
+                "TRANSFORM_ERROR",
+                format!("Failed to serialize request: {e}"),
+            )
+        })?;
         let mut degraded_web_search = false;
 
         'send_attempt: loop {
@@ -314,14 +332,21 @@ pub async fn send_non_stream(
                 Ok(r) => r,
                 Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
                     tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
-                    tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
-                    last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
-                        format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        200 * (attempt as u64 + 1),
+                    ))
+                    .await;
+                    last_err = Some(AppError::new(
+                        "PROVIDER_REQUEST_FAILED",
+                        format!("Transient connect failure attempt {}: {e}", attempt + 1),
+                    ));
                     continue 'retry;
                 }
                 Err(e) => {
-                    return Err(AppError::new("PROVIDER_REQUEST_FAILED",
-                        format!("Failed to connect to provider: {e}")));
+                    return Err(AppError::new(
+                        "PROVIDER_REQUEST_FAILED",
+                        format!("Failed to connect to provider: {e}"),
+                    ));
                 }
             };
 
@@ -332,8 +357,11 @@ pub async fn send_non_stream(
                 let sanitized = config.sanitize(&body_text);
                 *request = effective_request;
                 return serde_json::from_str(&sanitized).map_err(|e| {
-                    AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse provider response: {e}"))
-                        .with_detail(truncate(&sanitized, 500))
+                    AppError::new(
+                        "UPSTREAM_NON_STREAM_ERROR",
+                        format!("Failed to parse provider response: {e}"),
+                    )
+                    .with_detail(truncate(&sanitized, 500))
                 });
             }
 
@@ -356,31 +384,43 @@ pub async fn send_non_stream(
                     "MiMo Web Search Plugin unavailable; stripped web_search and retrying once"
                 );
                 body = serde_json::to_value(&effective_request).map_err(|e| {
-                    AppError::new("TRANSFORM_ERROR", format!("Failed to serialize degraded request: {e}"))
+                    AppError::new(
+                        "TRANSFORM_ERROR",
+                        format!("Failed to serialize degraded request: {e}"),
+                    )
                 })?;
                 degraded_web_search = true;
                 continue 'send_attempt;
             }
 
             if is_retryable(status_code) && attempt < MAX_RETRIES {
-                let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+                let wait = retry_after
+                    .unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000)
+                    .max(1);
                 tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
                 tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
                 last_err = Some(build_upstream_error(
-                    config, "UPSTREAM_NON_STREAM_ERROR",
-                    format!("Provider returned HTTP {status}"), status_code, &sanitized,
+                    config,
+                    "UPSTREAM_NON_STREAM_ERROR",
+                    format!("Provider returned HTTP {status}"),
+                    status_code,
+                    &sanitized,
                 ));
                 continue 'retry;
             }
 
             return Err(build_upstream_error(
-                config, "UPSTREAM_NON_STREAM_ERROR",
-                format!("Provider returned HTTP {status}"), status_code, &sanitized,
+                config,
+                "UPSTREAM_NON_STREAM_ERROR",
+                format!("Provider returned HTTP {status}"),
+                status_code,
+                &sanitized,
             ));
         }
     }
 
-    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
+    Err(last_err
+        .unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
 }
 
 /// Send a streaming chat completions request with automatic retry.
@@ -397,8 +437,12 @@ pub async fn send_stream(
         let api_key = config.select_api_key().to_string();
         let mut effective_request = request.clone();
         maybe_strip_mimo_web_search_for_account(config, &api_key, &mut effective_request);
-        let mut body = serde_json::to_value(&effective_request)
-            .map_err(|e| AppError::new("TRANSFORM_ERROR", format!("Failed to serialize request: {e}")))?;
+        let mut body = serde_json::to_value(&effective_request).map_err(|e| {
+            AppError::new(
+                "TRANSFORM_ERROR",
+                format!("Failed to serialize request: {e}"),
+            )
+        })?;
         let mut degraded_web_search = false;
 
         'send_attempt: loop {
@@ -416,14 +460,21 @@ pub async fn send_stream(
                 Ok(r) => r,
                 Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
                     tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
-                    tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
-                    last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
-                        format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                    tokio::time::sleep(std::time::Duration::from_millis(
+                        200 * (attempt as u64 + 1),
+                    ))
+                    .await;
+                    last_err = Some(AppError::new(
+                        "PROVIDER_REQUEST_FAILED",
+                        format!("Transient connect failure attempt {}: {e}", attempt + 1),
+                    ));
                     continue 'retry;
                 }
                 Err(e) => {
-                    return Err(AppError::new("PROVIDER_REQUEST_FAILED",
-                        format!("Failed to connect to provider: {e}")));
+                    return Err(AppError::new(
+                        "PROVIDER_REQUEST_FAILED",
+                        format!("Failed to connect to provider: {e}"),
+                    ));
                 }
             };
 
@@ -452,26 +503,37 @@ pub async fn send_stream(
                     "MiMo Web Search Plugin unavailable; stripped web_search and retrying stream once"
                 );
                 body = serde_json::to_value(&effective_request).map_err(|e| {
-                    AppError::new("TRANSFORM_ERROR", format!("Failed to serialize degraded request: {e}"))
+                    AppError::new(
+                        "TRANSFORM_ERROR",
+                        format!("Failed to serialize degraded request: {e}"),
+                    )
                 })?;
                 degraded_web_search = true;
                 continue 'send_attempt;
             }
 
             if is_retryable(status_code) && attempt < MAX_RETRIES {
-                let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+                let wait = retry_after
+                    .unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000)
+                    .max(1);
                 tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
                 tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
                 last_err = Some(build_upstream_error(
-                    config, "UPSTREAM_STREAM_ERROR",
-                    format!("Provider returned HTTP {status}"), status_code, &sanitized,
+                    config,
+                    "UPSTREAM_STREAM_ERROR",
+                    format!("Provider returned HTTP {status}"),
+                    status_code,
+                    &sanitized,
                 ));
                 continue 'retry;
             }
 
             return Err(build_upstream_error(
-                config, "UPSTREAM_STREAM_ERROR",
-                format!("Provider returned HTTP {status}"), status_code, &sanitized,
+                config,
+                "UPSTREAM_STREAM_ERROR",
+                format!("Provider returned HTTP {status}"),
+                status_code,
+                &sanitized,
             ));
         }
     }
@@ -500,11 +562,13 @@ pub fn strip_mimo_web_search_tool(request: &mut ChatCompletionsRequest) -> bool 
 
 fn record_mimo_web_search_degradation(request: &mut ChatCompletionsRequest, reason: &str) {
     let model = request.model.clone();
-    request.diagnostic_events.push(degradation::web_search_degraded_event(
-        "mimo",
-        Some(model.as_str()),
-        reason,
-    ));
+    request
+        .diagnostic_events
+        .push(degradation::web_search_degraded_event(
+            "mimo",
+            Some(model.as_str()),
+            reason,
+        ));
 }
 
 pub fn remember_mimo_web_search_disabled(config: &ProviderConfig) {
@@ -524,10 +588,7 @@ fn maybe_strip_mimo_web_search_for_account(
     if is_mimo_token_plan(config, api_key) || is_mimo_web_search_disabled_cached(config, api_key) {
         let stripped = strip_mimo_web_search_tool(request);
         if stripped {
-            record_mimo_web_search_degradation(
-                request,
-                "token_plan_or_cached_web_search_disabled",
-            );
+            record_mimo_web_search_degradation(request, "token_plan_or_cached_web_search_disabled");
         }
         return stripped;
     }
@@ -544,7 +605,9 @@ fn contains_mimo_web_search_disabled_marker(text: &str) -> bool {
 
 fn chat_request_has_mimo_web_search(request: &ChatCompletionsRequest) -> bool {
     request.tools.as_ref().is_some_and(|tools| {
-        tools.iter().any(|tool| tool.get("type").and_then(|t| t.as_str()) == Some("web_search"))
+        tools
+            .iter()
+            .any(|tool| tool.get("type").and_then(|t| t.as_str()) == Some("web_search"))
     })
 }
 
@@ -564,7 +627,10 @@ fn is_mimo_web_search_disabled_cached(config: &ProviderConfig, api_key: &str) ->
         return false;
     };
     let key = mimo_web_search_account_key(config, api_key);
-    cache.lock().map(|guard| guard.contains(&key)).unwrap_or(false)
+    cache
+        .lock()
+        .map(|guard| guard.contains(&key))
+        .unwrap_or(false)
 }
 
 fn mimo_web_search_account_key(config: &ProviderConfig, api_key: &str) -> String {
@@ -615,14 +681,19 @@ pub async fn send_anthropic_non_stream(
             Ok(r) => r,
             Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
                 tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
-                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
-                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1)))
+                    .await;
+                last_err = Some(AppError::new(
+                    "PROVIDER_REQUEST_FAILED",
+                    format!("Transient connect failure attempt {}: {e}", attempt + 1),
+                ));
                 continue;
             }
             Err(e) => {
-                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Failed to connect to Claude: {e}")));
+                return Err(AppError::new(
+                    "PROVIDER_REQUEST_FAILED",
+                    format!("Failed to connect to Claude: {e}"),
+                ));
             }
         };
 
@@ -631,8 +702,11 @@ pub async fn send_anthropic_non_stream(
             let body_text = resp.text().await.unwrap_or_default();
             let sanitized = config.sanitize(&body_text);
             return serde_json::from_str(&sanitized).map_err(|e| {
-                AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse Claude response: {e}"))
-                    .with_detail(truncate(&sanitized, 500))
+                AppError::new(
+                    "UPSTREAM_NON_STREAM_ERROR",
+                    format!("Failed to parse Claude response: {e}"),
+                )
+                .with_detail(truncate(&sanitized, 500))
             });
         }
 
@@ -642,21 +716,30 @@ pub async fn send_anthropic_non_stream(
         let sanitized = config.sanitize(&body_text);
 
         if is_retryable(status_code) && attempt < MAX_RETRIES {
-            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+            let wait = retry_after
+                .unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000)
+                .max(1);
             tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-            last_err = Some(AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Claude returned HTTP {status}"))
-                .with_detail(truncate(&sanitized, 2000)));
+            last_err = Some(
+                AppError::new(
+                    "UPSTREAM_NON_STREAM_ERROR",
+                    format!("Claude returned HTTP {status}"),
+                )
+                .with_detail(truncate(&sanitized, 2000)),
+            );
             continue;
         }
 
-        return Err(
-            AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Claude returned HTTP {status}"))
-                .with_detail(truncate(&sanitized, 2000)),
-        );
+        return Err(AppError::new(
+            "UPSTREAM_NON_STREAM_ERROR",
+            format!("Claude returned HTTP {status}"),
+        )
+        .with_detail(truncate(&sanitized, 2000)));
     }
 
-    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
+    Err(last_err
+        .unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
 }
 
 /// Send a streaming request to Claude Messages API with automatic retry.
@@ -688,14 +771,19 @@ pub async fn send_anthropic_stream(
             Ok(r) => r,
             Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
                 tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
-                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
-                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1)))
+                    .await;
+                last_err = Some(AppError::new(
+                    "PROVIDER_REQUEST_FAILED",
+                    format!("Transient connect failure attempt {}: {e}", attempt + 1),
+                ));
                 continue;
             }
             Err(e) => {
-                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Failed to connect to Claude: {e}")));
+                return Err(AppError::new(
+                    "PROVIDER_REQUEST_FAILED",
+                    format!("Failed to connect to Claude: {e}"),
+                ));
             }
         };
 
@@ -710,18 +798,26 @@ pub async fn send_anthropic_stream(
         let sanitized = config.sanitize(&body_text);
 
         if is_retryable(status_code) && attempt < MAX_RETRIES {
-            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+            let wait = retry_after
+                .unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000)
+                .max(1);
             tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-            last_err = Some(AppError::new("UPSTREAM_STREAM_ERROR", format!("Claude returned HTTP {status}"))
-                .with_detail(truncate(&sanitized, 2000)));
+            last_err = Some(
+                AppError::new(
+                    "UPSTREAM_STREAM_ERROR",
+                    format!("Claude returned HTTP {status}"),
+                )
+                .with_detail(truncate(&sanitized, 2000)),
+            );
             continue;
         }
 
-        return Err(
-            AppError::new("UPSTREAM_STREAM_ERROR", format!("Claude returned HTTP {status}"))
-                .with_detail(truncate(&sanitized, 2000)),
-        );
+        return Err(AppError::new(
+            "UPSTREAM_STREAM_ERROR",
+            format!("Claude returned HTTP {status}"),
+        )
+        .with_detail(truncate(&sanitized, 2000)));
     }
 
     Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))
@@ -738,8 +834,12 @@ pub async fn send_gemini_non_stream(
     let mut last_err = None;
 
     for attempt in 0..=MAX_RETRIES {
-        let resp = match client.post(&url)
-            .header("Authorization", format!("Bearer {}", config.select_api_key()))
+        let resp = match client
+            .post(&url)
+            .header(
+                "Authorization",
+                format!("Bearer {}", config.select_api_key()),
+            )
             .header("Content-Type", "application/json")
             .json(body)
             .send()
@@ -748,14 +848,19 @@ pub async fn send_gemini_non_stream(
             Ok(r) => r,
             Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
                 tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
-                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
-                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1)))
+                    .await;
+                last_err = Some(AppError::new(
+                    "PROVIDER_REQUEST_FAILED",
+                    format!("Transient connect failure attempt {}: {e}", attempt + 1),
+                ));
                 continue;
             }
             Err(e) => {
-                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Failed to connect to Gemini: {e}")));
+                return Err(AppError::new(
+                    "PROVIDER_REQUEST_FAILED",
+                    format!("Failed to connect to Gemini: {e}"),
+                ));
             }
         };
 
@@ -764,8 +869,11 @@ pub async fn send_gemini_non_stream(
             let body_text = resp.text().await.unwrap_or_default();
             let sanitized = config.sanitize(&body_text);
             return serde_json::from_str(&sanitized).map_err(|e| {
-                AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Failed to parse Gemini response: {e}"))
-                    .with_detail(truncate(&sanitized, 500))
+                AppError::new(
+                    "UPSTREAM_NON_STREAM_ERROR",
+                    format!("Failed to parse Gemini response: {e}"),
+                )
+                .with_detail(truncate(&sanitized, 500))
             });
         }
 
@@ -775,19 +883,30 @@ pub async fn send_gemini_non_stream(
         let sanitized = config.sanitize(&body_text);
 
         if is_retryable(status_code) && attempt < MAX_RETRIES {
-            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+            let wait = retry_after
+                .unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000)
+                .max(1);
             tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-            last_err = Some(AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Gemini returned HTTP {status}"))
-                .with_detail(truncate(&sanitized, 2000)));
+            last_err = Some(
+                AppError::new(
+                    "UPSTREAM_NON_STREAM_ERROR",
+                    format!("Gemini returned HTTP {status}"),
+                )
+                .with_detail(truncate(&sanitized, 2000)),
+            );
             continue;
         }
 
-        return Err(AppError::new("UPSTREAM_NON_STREAM_ERROR", format!("Gemini returned HTTP {status}"))
-            .with_detail(truncate(&sanitized, 2000)));
+        return Err(AppError::new(
+            "UPSTREAM_NON_STREAM_ERROR",
+            format!("Gemini returned HTTP {status}"),
+        )
+        .with_detail(truncate(&sanitized, 2000)));
     }
 
-    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
+    Err(last_err
+        .unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
 }
 
 /// Send a streaming request to Gemini API with retry.
@@ -801,8 +920,12 @@ pub async fn send_gemini_stream(
     let mut last_err = None;
 
     for attempt in 0..=MAX_RETRIES {
-        let resp = match client.post(&url)
-            .header("Authorization", format!("Bearer {}", config.select_api_key()))
+        let resp = match client
+            .post(&url)
+            .header(
+                "Authorization",
+                format!("Bearer {}", config.select_api_key()),
+            )
             .header("Content-Type", "application/json")
             .header("Accept", "text/event-stream")
             .json(body)
@@ -812,14 +935,19 @@ pub async fn send_gemini_stream(
             Ok(r) => r,
             Err(e) if is_transient_net_err(&e) && attempt < MAX_RETRIES => {
                 tracing::warn!(%url, attempt = attempt + 1, max = MAX_RETRIES, error = %e, "net-retry: connect failure");
-                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1))).await;
-                last_err = Some(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Transient connect failure attempt {}: {e}", attempt + 1)));
+                tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1)))
+                    .await;
+                last_err = Some(AppError::new(
+                    "PROVIDER_REQUEST_FAILED",
+                    format!("Transient connect failure attempt {}: {e}", attempt + 1),
+                ));
                 continue;
             }
             Err(e) => {
-                return Err(AppError::new("PROVIDER_REQUEST_FAILED",
-                    format!("Failed to connect to Gemini: {e}")));
+                return Err(AppError::new(
+                    "PROVIDER_REQUEST_FAILED",
+                    format!("Failed to connect to Gemini: {e}"),
+                ));
             }
         };
 
@@ -834,16 +962,26 @@ pub async fn send_gemini_stream(
         let sanitized = config.sanitize(&body_text);
 
         if is_retryable(status_code) && attempt < MAX_RETRIES {
-            let wait = retry_after.unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000).max(1);
+            let wait = retry_after
+                .unwrap_or(RETRY_BASE_MS * (1 << attempt) / 1000)
+                .max(1);
             tracing::warn!(%url, status = status_code, attempt = attempt + 1, max = MAX_RETRIES, wait_s = wait, "retry: upstream error");
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
-            last_err = Some(AppError::new("UPSTREAM_STREAM_ERROR", format!("Gemini returned HTTP {status}"))
-                .with_detail(truncate(&sanitized, 2000)));
+            last_err = Some(
+                AppError::new(
+                    "UPSTREAM_STREAM_ERROR",
+                    format!("Gemini returned HTTP {status}"),
+                )
+                .with_detail(truncate(&sanitized, 2000)),
+            );
             continue;
         }
 
-        return Err(AppError::new("UPSTREAM_STREAM_ERROR", format!("Gemini returned HTTP {status}"))
-            .with_detail(truncate(&sanitized, 2000)));
+        return Err(AppError::new(
+            "UPSTREAM_STREAM_ERROR",
+            format!("Gemini returned HTTP {status}"),
+        )
+        .with_detail(truncate(&sanitized, 2000)));
     }
 
     Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))
@@ -1003,7 +1141,10 @@ mod tests {
         assert_eq!(config.default_model, "gpt-4");
         assert_eq!(config.reasoning_model, Some("o1".to_string()));
         assert_eq!(config.timeout_seconds, 60);
-        assert_eq!(config.extra_headers.get("User-Agent"), Some(&"TestAgent/1.0".to_string()));
+        assert_eq!(
+            config.extra_headers.get("User-Agent"),
+            Some(&"TestAgent/1.0".to_string())
+        );
     }
 
     #[test]
@@ -1051,7 +1192,10 @@ mod tests {
         let mut p = test_provider();
         p.base_url = "https://api.openai.com".to_string();
         let config = ProviderConfig::from_provider(&p).unwrap();
-        assert_eq!(config.chat_completions_url(), "https://api.openai.com/v1/chat/completions");
+        assert_eq!(
+            config.chat_completions_url(),
+            "https://api.openai.com/v1/chat/completions"
+        );
     }
 
     #[test]
@@ -1059,7 +1203,10 @@ mod tests {
         let mut p = test_provider();
         p.base_url = "https://api.openai.com/v1".to_string();
         let config = ProviderConfig::from_provider(&p).unwrap();
-        assert_eq!(config.chat_completions_url(), "https://api.openai.com/v1/chat/completions");
+        assert_eq!(
+            config.chat_completions_url(),
+            "https://api.openai.com/v1/chat/completions"
+        );
     }
 
     #[test]
@@ -1067,7 +1214,10 @@ mod tests {
         let mut p = test_provider();
         p.base_url = "https://api.openai.com/".to_string();
         let config = ProviderConfig::from_provider(&p).unwrap();
-        assert_eq!(config.chat_completions_url(), "https://api.openai.com/v1/chat/completions");
+        assert_eq!(
+            config.chat_completions_url(),
+            "https://api.openai.com/v1/chat/completions"
+        );
     }
 
     #[test]
@@ -1149,7 +1299,11 @@ mod tests {
         let config = ProviderConfig::from_provider(&p).unwrap();
         let mut req = chat_req_with_tools(vec![json!({"type": "web_search"})]);
 
-        assert!(maybe_strip_mimo_web_search_for_account(&config, "tp-plan-key", &mut req));
+        assert!(maybe_strip_mimo_web_search_for_account(
+            &config,
+            "tp-plan-key",
+            &mut req
+        ));
         assert!(req.tools.is_none());
         assert_eq!(req.diagnostic_events.len(), 1);
         assert_eq!(req.diagnostic_events[0].capability, "web_search");
@@ -1172,7 +1326,10 @@ mod tests {
         ));
         assert!(req.tools.is_none());
         assert_eq!(req.diagnostic_events.len(), 1);
-        assert_eq!(req.diagnostic_events[0].reason.as_deref(), Some("token_plan_or_cached_web_search_disabled"));
+        assert_eq!(
+            req.diagnostic_events[0].reason.as_deref(),
+            Some("token_plan_or_cached_web_search_disabled")
+        );
     }
 
     #[test]

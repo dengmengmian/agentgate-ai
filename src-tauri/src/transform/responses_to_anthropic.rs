@@ -32,9 +32,7 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
                     }
                     "tool" => {
                         // Tool messages become user messages with tool_result
-                        let content = msg.content.as_ref()
-                            .and_then(|c| c.as_str())
-                            .unwrap_or("");
+                        let content = msg.content.as_ref().and_then(|c| c.as_str()).unwrap_or("");
                         let tool_use_id = crate::transform::tool_calls::sanitize_call_id(
                             msg.tool_call_id.as_deref().unwrap_or(""),
                         );
@@ -61,8 +59,8 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
                 // Tool calls → tool_use blocks
                 if let Some(ref tcs) = msg.tool_calls {
                     for tc in tcs {
-                        let input: Value = serde_json::from_str(&tc.function.arguments)
-                            .unwrap_or(json!({}));
+                        let input: Value =
+                            serde_json::from_str(&tc.function.arguments).unwrap_or(json!({}));
                         let tu_id = crate::transform::tool_calls::sanitize_call_id(&tc.id);
                         content_blocks.push(json!({
                             "type": "tool_use",
@@ -227,25 +225,30 @@ fn inject_cache_control(body: &mut Value) {
 /// Convert the Responses API `input` field to Claude messages.
 fn convert_input(input: &Value, system_blocks: &mut Vec<Value>) -> Result<Vec<Value>, AppError> {
     match input {
-        Value::String(s) => {
-            Ok(vec![json!({"role": "user", "content": [{"type": "text", "text": s}]})])
-        }
+        Value::String(s) => Ok(vec![
+            json!({"role": "user", "content": [{"type": "text", "text": s}]}),
+        ]),
         Value::Array(items) => convert_input_array(items, system_blocks),
         Value::Object(_) => {
             let blocks = extract_content_blocks(Some(input));
             if blocks.is_empty() {
-                Ok(vec![json!({"role": "user", "content": [{"type": "text", "text": ""}]})])
+                Ok(vec![
+                    json!({"role": "user", "content": [{"type": "text", "text": ""}]}),
+                ])
             } else {
                 Ok(vec![json!({"role": "user", "content": blocks})])
             }
         }
-        _ => {
-            Ok(vec![json!({"role": "user", "content": [{"type": "text", "text": input.to_string()}]})])
-        }
+        _ => Ok(vec![
+            json!({"role": "user", "content": [{"type": "text", "text": input.to_string()}]}),
+        ]),
     }
 }
 
-fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Result<Vec<Value>, AppError> {
+fn convert_input_array(
+    items: &[Value],
+    system_blocks: &mut Vec<Value>,
+) -> Result<Vec<Value>, AppError> {
     let mut messages: Vec<Value> = Vec::new();
     let mut pending_tool_uses: Vec<Value> = Vec::new();
     // 从 reasoning 项里解码出来的 thinking 块，等到下一个 assistant 输出
@@ -260,7 +263,11 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
         match item_type {
             "message" => {
                 // Flush pending tool calls
-                flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
+                flush_tool_uses(
+                    &mut messages,
+                    &mut pending_tool_uses,
+                    &mut pending_thinking_blocks,
+                );
 
                 let role = item.get("role").and_then(|r| r.as_str()).unwrap_or("user");
 
@@ -273,7 +280,8 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                     }
                     "assistant" => {
                         // thinking 块必须在 text/tool_use 之前——先 drain。
-                        let mut content_blocks: Vec<Value> = std::mem::take(&mut pending_thinking_blocks);
+                        let mut content_blocks: Vec<Value> =
+                            std::mem::take(&mut pending_thinking_blocks);
                         let text = extract_text(item.get("content"));
                         if !text.is_empty() {
                             content_blocks.push(json!({"type": "text", "text": text}));
@@ -283,14 +291,26 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                         if let Some(Value::Array(parts)) = item.get("content") {
                             for part in parts {
                                 if part.get("type").and_then(|t| t.as_str()) == Some("tool_call") {
-                                    let raw_id = part.get("id").and_then(|i| i.as_str()).unwrap_or("");
+                                    let raw_id =
+                                        part.get("id").and_then(|i| i.as_str()).unwrap_or("");
                                     let id = crate::transform::tool_calls::sanitize_call_id(raw_id);
-                                    let name = part.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-                                    let args = part.get("arguments").map(|a| {
-                                        if a.is_string() { a.as_str().unwrap().to_string() }
-                                        else { a.to_string() }
-                                    }).unwrap_or_default();
-                                    let input: Value = serde_json::from_str(&args).unwrap_or(json!({}));
+                                    let name = part
+                                        .get("name")
+                                        .and_then(|n| n.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    let args = part
+                                        .get("arguments")
+                                        .map(|a| {
+                                            if a.is_string() {
+                                                a.as_str().unwrap().to_string()
+                                            } else {
+                                                a.to_string()
+                                            }
+                                        })
+                                        .unwrap_or_default();
+                                    let input: Value =
+                                        serde_json::from_str(&args).unwrap_or(json!({}));
                                     content_blocks.push(json!({
                                         "type": "tool_use", "id": id.as_ref(), "name": name, "input": input
                                     }));
@@ -312,13 +332,22 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                 }
             }
             "function_call" => {
-                let raw_call_id = item.get("call_id").and_then(|c| c.as_str()).unwrap_or("call_unknown");
+                let raw_call_id = item
+                    .get("call_id")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("call_unknown");
                 let call_id = crate::transform::tool_calls::sanitize_call_id(raw_call_id);
                 let name = item.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                let arguments = item.get("arguments").map(|a| {
-                    if a.is_string() { a.as_str().unwrap().to_string() }
-                    else { a.to_string() }
-                }).unwrap_or_default();
+                let arguments = item
+                    .get("arguments")
+                    .map(|a| {
+                        if a.is_string() {
+                            a.as_str().unwrap().to_string()
+                        } else {
+                            a.to_string()
+                        }
+                    })
+                    .unwrap_or_default();
                 let input: Value = serde_json::from_str(&arguments).unwrap_or(json!({}));
 
                 pending_tool_uses.push(json!({
@@ -330,7 +359,11 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
             }
             "function_call_output" => {
                 // Flush pending tool calls first
-                flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
+                flush_tool_uses(
+                    &mut messages,
+                    &mut pending_tool_uses,
+                    &mut pending_thinking_blocks,
+                );
 
                 let call_id = item.get("call_id").and_then(|c| c.as_str());
                 if call_id.is_none() || call_id == Some("") {
@@ -340,15 +373,19 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                     ).with_suggestion("Each function_call_output must have a call_id matching a previous function_call"));
                 }
 
-                let output = item.get("output").map(|o| {
-                    if o.is_string() { o.as_str().unwrap().to_string() }
-                    else if o.is_array() {
-                        // Flatten ContentPart array
-                        crate::transform::responses_to_chat::flatten_tool_output(o)
-                    } else {
-                        o.to_string()
-                    }
-                }).unwrap_or_default();
+                let output = item
+                    .get("output")
+                    .map(|o| {
+                        if o.is_string() {
+                            o.as_str().unwrap().to_string()
+                        } else if o.is_array() {
+                            // Flatten ContentPart array
+                            crate::transform::responses_to_chat::flatten_tool_output(o)
+                        } else {
+                            o.to_string()
+                        }
+                    })
+                    .unwrap_or_default();
 
                 let sanitized = crate::transform::tool_calls::sanitize_call_id(call_id.unwrap());
                 messages.push(json!({
@@ -363,24 +400,40 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
                 // 结束都没遇到 assistant 输出，pending_thinking_blocks 会被
                 // 丢弃，对 Anthropic 无影响（孤立的 thinking 块没意义）。
                 if let Some(s) = item.get("encrypted_content").and_then(|v| v.as_str()) {
-                    let blocks = crate::transform::thinking_blocks::decode_from_encrypted_content(s);
-                    let anth = crate::transform::thinking_blocks::to_anthropic_content_blocks(&blocks);
+                    let blocks =
+                        crate::transform::thinking_blocks::decode_from_encrypted_content(s);
+                    let anth =
+                        crate::transform::thinking_blocks::to_anthropic_content_blocks(&blocks);
                     pending_thinking_blocks.extend(anth);
                 }
             }
             "compaction" | "context_compaction" | "compaction_summary" => {
-                flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
-                let summary = item.get("summary")
+                flush_tool_uses(
+                    &mut messages,
+                    &mut pending_tool_uses,
+                    &mut pending_thinking_blocks,
+                );
+                let summary = item
+                    .get("summary")
                     .or(item.get("content"))
                     .map(|v| extract_text(Some(v)))
                     .unwrap_or_else(|| "[context compacted]".to_string());
-                messages.push(json!({"role": "user", "content": [{"type": "text", "text": summary}]}));
+                messages
+                    .push(json!({"role": "user", "content": [{"type": "text", "text": summary}]}));
             }
             _ => {
                 // Unknown item: try to extract as message if it has role/content
                 if let Some(role) = item.get("role").and_then(|r| r.as_str()) {
-                    flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
-                    let mapped_role = if role == "assistant" { "assistant" } else { "user" };
+                    flush_tool_uses(
+                        &mut messages,
+                        &mut pending_tool_uses,
+                        &mut pending_thinking_blocks,
+                    );
+                    let mapped_role = if role == "assistant" {
+                        "assistant"
+                    } else {
+                        "user"
+                    };
                     let text = extract_text(item.get("content"));
                     if !text.is_empty() {
                         messages.push(json!({"role": mapped_role, "content": [{"type": "text", "text": text}]}));
@@ -390,7 +443,11 @@ fn convert_input_array(items: &[Value], system_blocks: &mut Vec<Value>) -> Resul
         }
     }
 
-    flush_tool_uses(&mut messages, &mut pending_tool_uses, &mut pending_thinking_blocks);
+    flush_tool_uses(
+        &mut messages,
+        &mut pending_tool_uses,
+        &mut pending_thinking_blocks,
+    );
     Ok(messages)
 }
 
@@ -416,15 +473,16 @@ fn extract_text(content: Option<&Value>) -> String {
     match content {
         None => String::new(),
         Some(Value::String(s)) => s.clone(),
-        Some(Value::Array(arr)) => {
-            arr.iter()
-                .filter_map(|p| p.get("text").and_then(|t| t.as_str()).map(String::from))
-                .collect::<Vec<_>>()
-                .join("")
-        }
-        Some(Value::Object(obj)) => {
-            obj.get("text").and_then(|t| t.as_str()).unwrap_or("").to_string()
-        }
+        Some(Value::Array(arr)) => arr
+            .iter()
+            .filter_map(|p| p.get("text").and_then(|t| t.as_str()).map(String::from))
+            .collect::<Vec<_>>()
+            .join(""),
+        Some(Value::Object(obj)) => obj
+            .get("text")
+            .and_then(|t| t.as_str())
+            .unwrap_or("")
+            .to_string(),
         Some(other) => other.to_string(),
     }
 }
@@ -435,7 +493,11 @@ fn extract_content_blocks(content: Option<&Value>) -> Vec<Value> {
     match content {
         None => vec![],
         Some(Value::String(s)) => {
-            if s.is_empty() { vec![] } else { vec![json!({"type": "text", "text": s})] }
+            if s.is_empty() {
+                vec![]
+            } else {
+                vec![json!({"type": "text", "text": s})]
+            }
         }
         Some(Value::Array(arr)) => {
             let mut blocks = Vec::new();
@@ -451,8 +513,12 @@ fn extract_content_blocks(content: Option<&Value>) -> Vec<Value> {
                     }
                     "input_image" => {
                         // Convert to Claude image block format
-                        if let Some(url) = part.get("image_url").and_then(|u| u.as_str())
-                            .or_else(|| part.get("image_url").and_then(|u| u.get("url")).and_then(|u| u.as_str()))
+                        if let Some(url) =
+                            part.get("image_url").and_then(|u| u.as_str()).or_else(|| {
+                                part.get("image_url")
+                                    .and_then(|u| u.get("url"))
+                                    .and_then(|u| u.as_str())
+                            })
                         {
                             if let Some(b64_data) = url.strip_prefix("data:") {
                                 // Parse data URI: data:image/png;base64,<data>
@@ -478,7 +544,11 @@ fn extract_content_blocks(content: Option<&Value>) -> Vec<Value> {
                     }
                     "image_url" => {
                         // OpenAI Chat Completions format image_url
-                        if let Some(url) = part.get("image_url").and_then(|u| u.get("url")).and_then(|u| u.as_str()) {
+                        if let Some(url) = part
+                            .get("image_url")
+                            .and_then(|u| u.get("url"))
+                            .and_then(|u| u.as_str())
+                        {
                             if let Some(b64_data) = url.strip_prefix("data:") {
                                 if let Some((media_info, data)) = b64_data.split_once(',') {
                                     let media_type = media_info.replace(";base64", "");
@@ -561,8 +631,14 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                     // Structure B: {type: "function", function: {name, description, parameters}}
                     let raw_name = func.get("name").and_then(|n| n.as_str()).unwrap_or("");
                     let name = crate::transform::tool_calls::sanitize_tool_name(raw_name);
-                    let desc = func.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                    let mut params = func.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
+                    let desc = func
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("");
+                    let mut params = func
+                        .get("parameters")
+                        .cloned()
+                        .unwrap_or(json!({"type": "object", "properties": {}}));
                     crate::transform::schema_cleaner::clean_schema_for_deepseek(&mut params);
                     result.push(json!({
                         "name": name.as_ref(),
@@ -573,8 +649,14 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                     // Structure A: flat {type: "function", name, description, parameters}
                     let raw_name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("");
                     let name = crate::transform::tool_calls::sanitize_tool_name(raw_name);
-                    let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                    let mut params = tool.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
+                    let desc = tool
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("");
+                    let mut params = tool
+                        .get("parameters")
+                        .cloned()
+                        .unwrap_or(json!({"type": "object", "properties": {}}));
                     crate::transform::schema_cleaner::clean_schema_for_deepseek(&mut params);
                     result.push(json!({
                         "name": name.as_ref(),
@@ -589,13 +671,26 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                     for sub in sub_tools {
                         if sub.get("type").and_then(|t| t.as_str()) == Some("function") {
                             let name = sub.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                            let desc = sub.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                            let mut params = sub.get("parameters").cloned().unwrap_or(json!({"type": "object", "properties": {}}));
-                            crate::transform::schema_cleaner::clean_schema_for_deepseek(&mut params);
-                            let prefixed = if ns_name.is_empty() { name.to_string() } else { format!("{ns_name}__{name}") };
+                            let desc = sub
+                                .get("description")
+                                .and_then(|d| d.as_str())
+                                .unwrap_or("");
+                            let mut params = sub
+                                .get("parameters")
+                                .cloned()
+                                .unwrap_or(json!({"type": "object", "properties": {}}));
+                            crate::transform::schema_cleaner::clean_schema_for_deepseek(
+                                &mut params,
+                            );
+                            let prefixed = if ns_name.is_empty() {
+                                name.to_string()
+                            } else {
+                                format!("{ns_name}__{name}")
+                            };
                             // sanitize 在 prefix 拼接之后做——namespace 名+`__`+sub 名
                             // 整体可能超 128 或含非法字符。
-                            let sanitized = crate::transform::tool_calls::sanitize_tool_name(&prefixed);
+                            let sanitized =
+                                crate::transform::tool_calls::sanitize_tool_name(&prefixed);
                             result.push(json!({
                                 "name": sanitized.as_ref(),
                                 "description": desc,
@@ -606,9 +701,15 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
                 }
             }
             "custom" => {
-                let raw_name = tool.get("name").and_then(|n| n.as_str()).unwrap_or("custom_tool");
+                let raw_name = tool
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("custom_tool");
                 let name = crate::transform::tool_calls::sanitize_tool_name(raw_name);
-                let desc = tool.get("description").and_then(|d| d.as_str()).unwrap_or("");
+                let desc = tool
+                    .get("description")
+                    .and_then(|d| d.as_str())
+                    .unwrap_or("");
                 result.push(json!({
                     "name": name.as_ref(),
                     "description": desc,
@@ -649,8 +750,11 @@ fn convert_tool_choice(tc: &Value) -> Value {
         },
         Value::Object(obj) => {
             // {name: "X"} or {function: {name: "X"}}
-            let name = obj.get("name").and_then(|n| n.as_str())
-                .or_else(|| obj.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()));
+            let name = obj.get("name").and_then(|n| n.as_str()).or_else(|| {
+                obj.get("function")
+                    .and_then(|f| f.get("name"))
+                    .and_then(|n| n.as_str())
+            });
             if let Some(name) = name {
                 json!({"type": "tool", "name": name})
             } else {
@@ -663,7 +767,8 @@ fn convert_tool_choice(tc: &Value) -> Value {
 
 /// Convert reasoning effort to Claude thinking configuration.
 fn convert_thinking(reasoning: &Option<Value>) -> Option<Value> {
-    let effort = reasoning.as_ref()
+    let effort = reasoning
+        .as_ref()
         .and_then(|r| r.get("effort"))
         .and_then(|e| e.as_str())?;
 
@@ -712,18 +817,28 @@ mod tests {
             signature: "sig_abc".into(),
             data: String::new(),
         }];
-        let encrypted = crate::transform::thinking_blocks::encode_for_encrypted_content(&blocks).unwrap();
+        let encrypted =
+            crate::transform::thinking_blocks::encode_for_encrypted_content(&blocks).unwrap();
         let req = make_req(json!([
             {"type": "message", "role": "user", "content": "hello"},
             {"type": "reasoning", "id": "rs_1", "encrypted_content": encrypted},
             {"type": "function_call", "call_id": "c1", "name": "search", "arguments": "{}"}
         ]));
         let mut system_blocks: Vec<Value> = vec![];
-        let messages = convert_input_array(&req.input.as_array().unwrap(), &mut system_blocks).unwrap();
+        let messages =
+            convert_input_array(&req.input.as_array().unwrap(), &mut system_blocks).unwrap();
         // 倒数第二条应该是 assistant，含 thinking + tool_use 两个块
-        let assistant = messages.iter().rev().find(|m| m["role"] == "assistant").unwrap();
+        let assistant = messages
+            .iter()
+            .rev()
+            .find(|m| m["role"] == "assistant")
+            .unwrap();
         let content = assistant["content"].as_array().unwrap();
-        assert_eq!(content.len(), 2, "expected thinking + tool_use, got {content:?}");
+        assert_eq!(
+            content.len(),
+            2,
+            "expected thinking + tool_use, got {content:?}"
+        );
         assert_eq!(content[0]["type"], "thinking");
         assert_eq!(content[0]["signature"], "sig_abc");
         assert_eq!(content[1]["type"], "tool_use");
@@ -737,14 +852,20 @@ mod tests {
             signature: "sig1".into(),
             data: String::new(),
         }];
-        let encrypted = crate::transform::thinking_blocks::encode_for_encrypted_content(&blocks).unwrap();
+        let encrypted =
+            crate::transform::thinking_blocks::encode_for_encrypted_content(&blocks).unwrap();
         let req = make_req(json!([
             {"type": "reasoning", "id": "rs_1", "encrypted_content": encrypted},
             {"type": "message", "role": "assistant", "content": "the answer is 42"}
         ]));
         let mut system_blocks: Vec<Value> = vec![];
-        let messages = convert_input_array(&req.input.as_array().unwrap(), &mut system_blocks).unwrap();
-        let assistant = messages.iter().rev().find(|m| m["role"] == "assistant").unwrap();
+        let messages =
+            convert_input_array(&req.input.as_array().unwrap(), &mut system_blocks).unwrap();
+        let assistant = messages
+            .iter()
+            .rev()
+            .find(|m| m["role"] == "assistant")
+            .unwrap();
         let content = assistant["content"].as_array().unwrap();
         assert_eq!(content.len(), 2);
         assert_eq!(content[0]["type"], "thinking");
@@ -760,8 +881,13 @@ mod tests {
             {"type": "function_call", "call_id": "c1", "name": "x", "arguments": "{}"}
         ]));
         let mut system_blocks: Vec<Value> = vec![];
-        let messages = convert_input_array(&req.input.as_array().unwrap(), &mut system_blocks).unwrap();
-        let assistant = messages.iter().rev().find(|m| m["role"] == "assistant").unwrap();
+        let messages =
+            convert_input_array(&req.input.as_array().unwrap(), &mut system_blocks).unwrap();
+        let assistant = messages
+            .iter()
+            .rev()
+            .find(|m| m["role"] == "assistant")
+            .unwrap();
         let content = assistant["content"].as_array().unwrap();
         // 只有 tool_use，没有 thinking
         assert_eq!(content.len(), 1);
@@ -813,8 +939,14 @@ mod tests {
     #[test]
     fn test_convert_tool_choice() {
         assert_eq!(convert_tool_choice(&json!("auto")), json!({"type": "auto"}));
-        assert_eq!(convert_tool_choice(&json!("required")), json!({"type": "any"}));
-        assert_eq!(convert_tool_choice(&json!({"name": "search"})), json!({"type": "tool", "name": "search"}));
+        assert_eq!(
+            convert_tool_choice(&json!("required")),
+            json!({"type": "any"})
+        );
+        assert_eq!(
+            convert_tool_choice(&json!({"name": "search"})),
+            json!({"type": "tool", "name": "search"})
+        );
     }
 
     #[test]
@@ -862,9 +994,18 @@ mod tests {
 
     #[test]
     fn test_convert_thinking() {
-        assert_eq!(convert_thinking(&Some(json!({"effort": "low"}))), Some(json!({"type": "enabled", "budget_tokens": 4096})));
-        assert_eq!(convert_thinking(&Some(json!({"effort": "medium"}))), Some(json!({"type": "enabled", "budget_tokens": 8192})));
-        assert_eq!(convert_thinking(&Some(json!({"effort": "high"}))), Some(json!({"type": "enabled", "budget_tokens": 16384})));
+        assert_eq!(
+            convert_thinking(&Some(json!({"effort": "low"}))),
+            Some(json!({"type": "enabled", "budget_tokens": 4096}))
+        );
+        assert_eq!(
+            convert_thinking(&Some(json!({"effort": "medium"}))),
+            Some(json!({"type": "enabled", "budget_tokens": 8192}))
+        );
+        assert_eq!(
+            convert_thinking(&Some(json!({"effort": "high"}))),
+            Some(json!({"type": "enabled", "budget_tokens": 16384}))
+        );
         assert_eq!(convert_thinking(&Some(json!({"effort": "auto"}))), None);
         assert_eq!(convert_thinking(&None), None);
     }
@@ -998,9 +1139,14 @@ mod tests {
         });
         inject_cache_control(&mut body);
         // Last assistant message's text block gets cache_control
-        assert_eq!(body["messages"][1]["content"][0]["cache_control"]["type"], "ephemeral");
+        assert_eq!(
+            body["messages"][1]["content"][0]["cache_control"]["type"],
+            "ephemeral"
+        );
         // User messages don't get cache_control
-        assert!(body["messages"][2]["content"][0].get("cache_control").is_none());
+        assert!(body["messages"][2]["content"][0]
+            .get("cache_control")
+            .is_none());
     }
 
     #[test]
@@ -1016,8 +1162,13 @@ mod tests {
         });
         inject_cache_control(&mut body);
         // Should mark the text block, not the thinking block
-        assert_eq!(body["messages"][1]["content"][0]["cache_control"]["type"], "ephemeral");
-        assert!(body["messages"][1]["content"][1].get("cache_control").is_none());
+        assert_eq!(
+            body["messages"][1]["content"][0]["cache_control"]["type"],
+            "ephemeral"
+        );
+        assert!(body["messages"][1]["content"][1]
+            .get("cache_control")
+            .is_none());
     }
 
     #[test]
@@ -1029,7 +1180,9 @@ mod tests {
         inject_cache_control(&mut body);
         // System still gets marked, no assistant to mark
         assert_eq!(body["system"][0]["cache_control"]["type"], "ephemeral");
-        assert!(body["messages"][0]["content"][0].get("cache_control").is_none());
+        assert!(body["messages"][0]["content"][0]
+            .get("cache_control")
+            .is_none());
     }
 
     #[test]

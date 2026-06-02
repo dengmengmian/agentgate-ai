@@ -17,17 +17,12 @@ pub fn get(conn: &Connection) -> Result<PetSettings, AppError> {
         },
     )
     .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => {
-            AppError::internal("Pet settings not initialized")
-        }
+        rusqlite::Error::QueryReturnedNoRows => AppError::internal("Pet settings not initialized"),
         other => AppError::database(other),
     })
 }
 
-pub fn update(
-    conn: &Connection,
-    input: UpdatePetSettingsInput,
-) -> Result<PetSettings, AppError> {
+pub fn update(conn: &Connection, input: UpdatePetSettingsInput) -> Result<PetSettings, AppError> {
     let existing = get(conn)?;
 
     let pet_type = input.pet_type.unwrap_or(existing.pet_type);
@@ -65,12 +60,16 @@ mod tests {
     fn test_update_partial() {
         let conn = setup_db();
         let original = get(&conn).unwrap();
-        let updated = update(&conn, UpdatePetSettingsInput {
-            pet_type: Some("dog".into()),
-            visible: None,
-            pos_x: None,
-            pos_y: None,
-        }).unwrap();
+        let updated = update(
+            &conn,
+            UpdatePetSettingsInput {
+                pet_type: Some("dog".into()),
+                visible: None,
+                pos_x: None,
+                pos_y: None,
+            },
+        )
+        .unwrap();
         assert_eq!(updated.pet_type, "dog");
         assert_eq!(updated.visible, original.visible);
         assert_eq!(updated.pos_x, original.pos_x);
@@ -79,12 +78,16 @@ mod tests {
     #[test]
     fn test_update_all_fields() {
         let conn = setup_db();
-        let updated = update(&conn, UpdatePetSettingsInput {
-            pet_type: Some("cat".into()),
-            visible: Some(false),
-            pos_x: Some(123.0),
-            pos_y: Some(456.0),
-        }).unwrap();
+        let updated = update(
+            &conn,
+            UpdatePetSettingsInput {
+                pet_type: Some("cat".into()),
+                visible: Some(false),
+                pos_x: Some(123.0),
+                pos_y: Some(456.0),
+            },
+        )
+        .unwrap();
         assert_eq!(updated.pet_type, "cat");
         assert_eq!(updated.visible, false);
         assert_eq!(updated.pos_x, 123.0);

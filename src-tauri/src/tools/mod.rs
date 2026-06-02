@@ -1,10 +1,10 @@
+pub mod atomcode;
+pub mod claude_code;
 pub mod codex;
 pub mod codex_restart;
-pub mod toml_merge;
-pub mod claude_code;
-pub mod opencode;
 pub mod gemini_cli;
-pub mod atomcode;
-pub mod process_detect;
 pub mod instructions;
 pub mod instructions_templates;
+pub mod opencode;
+pub mod process_detect;
+pub mod toml_merge;

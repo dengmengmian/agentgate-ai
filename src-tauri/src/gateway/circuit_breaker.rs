@@ -68,7 +68,10 @@ pub fn check_state(conn: &Connection, provider_id: &str) -> Result<CircuitState,
 /// Should the failover loop attempt this provider on the current request?
 /// `Closed` and `HalfOpen` say yes; `Open` says no.
 pub fn should_attempt(conn: &Connection, provider_id: &str) -> Result<bool, AppError> {
-    Ok(!matches!(check_state(conn, provider_id)?, CircuitState::Open { .. }))
+    Ok(!matches!(
+        check_state(conn, provider_id)?,
+        CircuitState::Open { .. }
+    ))
 }
 
 fn parse_rfc3339(s: &str) -> Option<DateTime<Utc>> {
@@ -102,7 +105,10 @@ mod tests {
         match check_state(&conn, "p1").unwrap() {
             CircuitState::Open { until } => {
                 let until_dt = parse_rfc3339(&until).unwrap();
-                assert!(until_dt > Utc::now(), "cooldown should still be in the future");
+                assert!(
+                    until_dt > Utc::now(),
+                    "cooldown should still be in the future"
+                );
             }
             other => panic!("expected Open, got {other:?}"),
         }

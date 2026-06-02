@@ -222,10 +222,7 @@ impl ChatToAnthropicStream {
                                 }
                             }),
                         ));
-                        self.tool_blocks.insert(
-                            tc_idx,
-                            OpenBlock { anthropic_idx },
-                        );
+                        self.tool_blocks.insert(tc_idx, OpenBlock { anthropic_idx });
                     }
 
                     // arguments 增量 → input_json_delta
@@ -309,7 +306,10 @@ impl ChatToAnthropicStream {
         let output_tokens = self
             .final_usage
             .as_ref()
-            .and_then(|u| u.get("completion_tokens").or_else(|| u.get("output_tokens")))
+            .and_then(|u| {
+                u.get("completion_tokens")
+                    .or_else(|| u.get("output_tokens"))
+            })
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
         events.push(sse_event(
@@ -322,10 +322,7 @@ impl ChatToAnthropicStream {
         ));
 
         // message_stop
-        events.push(sse_event(
-            "message_stop",
-            json!({"type": "message_stop"}),
-        ));
+        events.push(sse_event("message_stop", json!({"type": "message_stop"})));
 
         events
     }
@@ -396,7 +393,9 @@ mod tests {
     #[test]
     fn emits_message_start_on_first_chunk() {
         let mut s = ChatToAnthropicStream::new("claude-3");
-        let chunk = parse(r#"{"id":"x","choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}"#);
+        let chunk = parse(
+            r#"{"id":"x","choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}"#,
+        );
         let events = s.process_chunk(&chunk);
         assert!(events[0].contains("event: message_start"));
         assert!(events[0].contains("\"output_tokens\":1"));
@@ -405,8 +404,12 @@ mod tests {
     #[test]
     fn text_content_emits_text_block_lifecycle() {
         let mut s = ChatToAnthropicStream::new("claude-3");
-        let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}"#));
-        let events = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"content":"Hello"}}]}"#));
+        let _ = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"role":"assistant","content":""}}]}"#,
+        ));
+        let events = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"content":"Hello"}}]}"#,
+        ));
         let joined = events.join("");
         assert!(joined.contains("event: content_block_start"));
         assert!(joined.contains("\"type\":\"text\""));
@@ -418,8 +421,12 @@ mod tests {
     #[test]
     fn subsequent_text_chunks_only_emit_delta() {
         let mut s = ChatToAnthropicStream::new("claude-3");
-        let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"content":"a"}}]}"#));
-        let events = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"content":"b"}}]}"#));
+        let _ = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"content":"a"}}]}"#,
+        ));
+        let events = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"content":"b"}}]}"#,
+        ));
         // 仅 1 个 delta，不再 emit content_block_start
         assert_eq!(events.len(), 1);
         assert!(events[0].contains("content_block_delta"));
@@ -429,8 +436,12 @@ mod tests {
     #[test]
     fn reasoning_content_emits_thinking_block() {
         let mut s = ChatToAnthropicStream::new("claude-3");
-        let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"role":"assistant"}}]}"#));
-        let events = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"reasoning_content":"think..."}}]}"#));
+        let _ = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"role":"assistant"}}]}"#,
+        ));
+        let events = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"reasoning_content":"think..."}}]}"#,
+        ));
         let joined = events.join("");
         assert!(joined.contains("\"type\":\"thinking\""));
         assert!(joined.contains("\"thinking_delta\""));
@@ -440,7 +451,9 @@ mod tests {
     #[test]
     fn tool_call_first_delta_opens_block_with_id_and_name() {
         let mut s = ChatToAnthropicStream::new("claude-3");
-        let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"role":"assistant"}}]}"#));
+        let _ = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"role":"assistant"}}]}"#,
+        ));
         let events = s.process_chunk(&parse(
             r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_x","function":{"name":"search","arguments":""}}]}}]}"#,
         ));
@@ -454,7 +467,9 @@ mod tests {
     #[test]
     fn tool_call_argument_deltas_emit_input_json_delta() {
         let mut s = ChatToAnthropicStream::new("claude-3");
-        let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"role":"assistant"}}]}"#));
+        let _ = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"role":"assistant"}}]}"#,
+        ));
         let _ = s.process_chunk(&parse(
             r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_x","function":{"name":"search","arguments":""}}]}}]}"#,
         ));
@@ -470,7 +485,9 @@ mod tests {
     #[test]
     fn finalize_closes_open_blocks_and_emits_terminal_events() {
         let mut s = ChatToAnthropicStream::new("claude-3");
-        let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"role":"assistant","content":"hi"}}]}"#));
+        let _ = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"role":"assistant","content":"hi"}}]}"#,
+        ));
         let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"completion_tokens":5}}"#));
         let events = s.finalize();
         let joined = events.join("");
@@ -484,8 +501,12 @@ mod tests {
     #[test]
     fn finish_reason_length_maps_to_max_tokens() {
         let mut s = ChatToAnthropicStream::new("claude-3");
-        let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"content":"trunc"}}]}"#));
-        let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{},"finish_reason":"length"}]}"#));
+        let _ = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"content":"trunc"}}]}"#,
+        ));
+        let _ = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{},"finish_reason":"length"}]}"#,
+        ));
         let events = s.finalize();
         let joined = events.join("");
         assert!(joined.contains("\"stop_reason\":\"max_tokens\""));
@@ -494,7 +515,9 @@ mod tests {
     #[test]
     fn parallel_tool_calls_get_distinct_anthropic_indices() {
         let mut s = ChatToAnthropicStream::new("claude-3");
-        let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"role":"assistant"}}]}"#));
+        let _ = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"role":"assistant"}}]}"#,
+        ));
         let events1 = s.process_chunk(&parse(
             r#"{"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"a","arguments":""}}]}}]}"#,
         ));
@@ -512,7 +535,9 @@ mod tests {
     #[test]
     fn finalize_is_idempotent() {
         let mut s = ChatToAnthropicStream::new("claude-3");
-        let _ = s.process_chunk(&parse(r#"{"choices":[{"index":0,"delta":{"content":"hi"},"finish_reason":"stop"}]}"#));
+        let _ = s.process_chunk(&parse(
+            r#"{"choices":[{"index":0,"delta":{"content":"hi"},"finish_reason":"stop"}]}"#,
+        ));
         let first = s.finalize();
         let second = s.finalize();
         assert!(!first.is_empty());

@@ -881,6 +881,8 @@ fn cmd_logs(
             None
         },
         keyword: keyword.map(String::from),
+        source: None,
+        session_id: None,
         limit: Some(limit),
         offset: None,
     };

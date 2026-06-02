@@ -86,7 +86,10 @@ fn probe_request(provider: &Provider) -> (String, serde_json::Value, &'static st
         return (url, body, "openai_responses");
     }
     // Default to OpenAI chat completions.
-    let url = format!("{}/v1/chat/completions", trim_trailing_slash(&provider.base_url));
+    let url = format!(
+        "{}/v1/chat/completions",
+        trim_trailing_slash(&provider.base_url)
+    );
     let body = serde_json::json!({
         "model": provider.default_model,
         "max_tokens": PROBE_MAX_TOKENS,
@@ -127,12 +130,11 @@ pub async fn probe(provider: &Provider) -> ProviderSpeedReport {
     }
 
     let timeout = Duration::from_secs(provider.timeout_seconds as u64).min(DEFAULT_TIMEOUT);
-    let client = match reqwest::Client::builder()
-        .timeout(timeout)
-        .build()
-    {
+    let client = match reqwest::Client::builder().timeout(timeout).build() {
         Ok(c) => c,
-        Err(e) => return ProviderSpeedReport::failure(provider, url, start.elapsed(), e.to_string()),
+        Err(e) => {
+            return ProviderSpeedReport::failure(provider, url, start.elapsed(), e.to_string())
+        }
     };
 
     let mut req = client.post(&url).json(&body);
@@ -157,7 +159,9 @@ pub async fn probe(provider: &Provider) -> ProviderSpeedReport {
     let connect_start = Instant::now();
     let response = match req.send().await {
         Ok(r) => r,
-        Err(e) => return ProviderSpeedReport::failure(provider, url, start.elapsed(), e.to_string()),
+        Err(e) => {
+            return ProviderSpeedReport::failure(provider, url, start.elapsed(), e.to_string())
+        }
     };
     let connect_ms = connect_start.elapsed().as_millis() as u64;
     let status = response.status().as_u16();
@@ -177,7 +181,11 @@ pub async fn probe(provider: &Provider) -> ProviderSpeedReport {
                     // Truncate noisy upstream bodies so the report stays
                     // readable in the GUI. 200 chars is enough to spot
                     // the error class.
-                    if s.len() > 200 { format!("{}…", &s[..200]) } else { s }
+                    if s.len() > 200 {
+                        format!("{}…", &s[..200])
+                    } else {
+                        s
+                    }
                 })
                 .unwrap_or_else(|| format!("HTTP {status}")),
         )
@@ -229,22 +237,34 @@ mod tests {
 
     fn make_provider(provider_type: &str, protocols: &str) -> Provider {
         Provider {
-            id: "p".into(), name: "P".into(), provider_type: provider_type.into(),
-            base_url: "https://example.test".into(), api_key: Some("sk-key".into()),
-            default_model: "m1".into(), reasoning_model: None,
-            supported_models: None, model_mapping: None, extra_headers: None,
-            anthropic_base_url: None, responses_base_url: None,
+            id: "p".into(),
+            name: "P".into(),
+            provider_type: provider_type.into(),
+            base_url: "https://example.test".into(),
+            api_key: Some("sk-key".into()),
+            default_model: "m1".into(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
             protocol: protocols.into(),
-            timeout_seconds: 30, status: "ok".into(),
-            supports_vision: None, auto_cache_control: None, supports_cache: None,
+            timeout_seconds: 30,
+            status: "ok".into(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
             model_capabilities: None,
             provider_quirks: None,
             body_filter_enabled: None,
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
-            enabled: true, is_active: true,
-            created_at: "now".into(), updated_at: "now".into(),
+            enabled: true,
+            is_active: true,
+            created_at: "now".into(),
+            updated_at: "now".into(),
         }
     }
 
@@ -274,7 +294,10 @@ mod tests {
 
     #[test]
     fn probe_request_uses_anthropic_base_url_when_set() {
-        let mut p = make_provider("deepseek", r#"["anthropic_messages","openai_chat_completions"]"#);
+        let mut p = make_provider(
+            "deepseek",
+            r#"["anthropic_messages","openai_chat_completions"]"#,
+        );
         p.anthropic_base_url = Some("https://api.deepseek.com/anthropic".into());
         let (url, _, _) = probe_request(&p);
         assert_eq!(url, "https://api.deepseek.com/anthropic/v1/messages");

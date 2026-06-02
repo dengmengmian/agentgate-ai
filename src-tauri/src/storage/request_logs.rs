@@ -13,14 +13,22 @@ pub fn count(conn: &Connection, filter: &RequestLogFilter) -> Result<i64, AppErr
 
     apply_log_filter(filter, &mut sql, &mut param_values, &mut idx);
 
-    let params: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|b| &**b as &dyn rusqlite::types::ToSql).collect();
+    let params: Vec<&dyn rusqlite::types::ToSql> = param_values
+        .iter()
+        .map(|b| &**b as &dyn rusqlite::types::ToSql)
+        .collect();
     let total: i64 = conn
-        .query_row(&sql, rusqlite::params_from_iter(params.iter()), |r| r.get(0))
+        .query_row(&sql, rusqlite::params_from_iter(params.iter()), |r| {
+            r.get(0)
+        })
         .map_err(|e| AppError::from(e))?;
     Ok(total)
 }
 
-pub fn list(conn: &Connection, filter: RequestLogFilter) -> Result<Vec<RequestLogListItem>, AppError> {
+pub fn list(
+    conn: &Connection,
+    filter: RequestLogFilter,
+) -> Result<Vec<RequestLogListItem>, AppError> {
     let mut sql = String::from(
         "SELECT id, request_id, timestamp, client, provider, model, route, status_code, latency_ms, error_message, source, session_id
          FROM request_logs WHERE 1=1",
@@ -39,7 +47,8 @@ pub fn list(conn: &Connection, filter: RequestLogFilter) -> Result<Vec<RequestLo
     param_values.push(Box::new(offset));
 
     let mut stmt = conn.prepare(&sql)?;
-    let params_ref: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+    let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+        param_values.iter().map(|p| p.as_ref()).collect();
 
     let rows = stmt.query_map(params_ref.as_slice(), |row| {
         Ok(RequestLogListItem {
@@ -101,13 +110,21 @@ fn apply_log_filter(
     if let Some(ref status) = filter.status {
         match status.as_str() {
             "success" => {
-                sql.push_str(&format!(" AND status_code >= ?{} AND status_code < ?{}", idx, *idx + 1));
+                sql.push_str(&format!(
+                    " AND status_code >= ?{} AND status_code < ?{}",
+                    idx,
+                    *idx + 1
+                ));
                 param_values.push(Box::new(200i64));
                 param_values.push(Box::new(300i64));
                 *idx += 2;
             }
             "error" => {
-                sql.push_str(&format!(" AND (status_code >= ?{} OR status_code < ?{})", idx, *idx + 1));
+                sql.push_str(&format!(
+                    " AND (status_code >= ?{} OR status_code < ?{})",
+                    idx,
+                    *idx + 1
+                ));
                 param_values.push(Box::new(400i64));
                 param_values.push(Box::new(200i64));
                 *idx += 2;
@@ -256,9 +273,21 @@ pub fn insert_session_log(
                 source, session_id, external_id)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 200, 0, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
         rusqlite::params![
-            &id, external_id, timestamp, client, provider, model, route,
-            input_tokens, output_tokens, cost, cache_write_tokens, cache_read_tokens,
-            source, session_id, external_id,
+            &id,
+            external_id,
+            timestamp,
+            client,
+            provider,
+            model,
+            route,
+            input_tokens,
+            output_tokens,
+            cost,
+            cache_write_tokens,
+            cache_read_tokens,
+            source,
+            session_id,
+            external_id,
         ],
     )?;
     Ok(())
@@ -277,13 +306,17 @@ pub fn external_ids_for_source(
     // SQLite 单语句最多约 32k 个 placeholder；这里取 800 为一批，留足余量。
     let mut found = std::collections::HashSet::new();
     for chunk in candidates.chunks(800) {
-        let placeholders = (1..=chunk.len()).map(|i| format!("?{}", i + 1)).collect::<Vec<_>>().join(",");
+        let placeholders = (1..=chunk.len())
+            .map(|i| format!("?{}", i + 1))
+            .collect::<Vec<_>>()
+            .join(",");
         let sql = format!(
             "SELECT external_id FROM request_logs
              WHERE source = ?1 AND external_id IN ({placeholders})"
         );
         let mut stmt = conn.prepare(&sql)?;
-        let mut params: Vec<&dyn rusqlite::types::ToSql> = vec![&source as &dyn rusqlite::types::ToSql];
+        let mut params: Vec<&dyn rusqlite::types::ToSql> =
+            vec![&source as &dyn rusqlite::types::ToSql];
         for c in chunk {
             params.push(c as &dyn rusqlite::types::ToSql);
         }
@@ -333,7 +366,11 @@ pub fn aggregate_by_session(
         let single_source = !sources.contains(',');
         Ok(crate::models::request_log::SessionUsageSummary {
             session_id: r.get(0)?,
-            source: if single_source { sources } else { "mixed".to_string() },
+            source: if single_source {
+                sources
+            } else {
+                "mixed".to_string()
+            },
             provider: r.get(2)?,
             model: r.get(3)?,
             first_seen: r.get(4)?,
@@ -404,7 +441,11 @@ pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<Reque
     let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let today_prefix = format!("{today}%");
 
-    // Single query for all global + today aggregates (now incl. cache W/R)
+    // Request quality metrics are gateway-only. Client-local session imports
+    // are usage records, not live proxy requests; they carry synthetic
+    // status_code=200 and latency_ms=0, so including them would distort
+    // success rate and latency. Token/cost/cache aggregates still include all
+    // sources so session sync can fill the user's usage picture.
     let (
         total,
         success,
@@ -424,14 +465,14 @@ pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<Reque
         today_cache_read,
     ): (i64, i64, i64, f64, i64, i64, i64, i64, i64, i64, f64, f64, i64, i64, i64, i64) = conn.query_row(
         "SELECT
-            COUNT(*),
-            COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN status_code >= 400 OR status_code < 200 THEN 1 ELSE 0 END), 0),
-            COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0),
+            COALESCE(SUM(CASE WHEN source = 'gateway' THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN source = 'gateway' AND status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN source = 'gateway' AND (status_code >= 400 OR status_code < 200) THEN 1 ELSE 0 END), 0),
+            COALESCE(AVG(CASE WHEN source = 'gateway' AND status_code >= 200 AND status_code < 300 THEN latency_ms END), 0),
             COALESCE(SUM(input_tokens), 0),
             COALESCE(SUM(output_tokens), 0),
-            COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN 1 ELSE 0 END), 0),
-            COALESCE(SUM(CASE WHEN timestamp LIKE ?1 AND (status_code >= 400 OR status_code < 200) THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN source = 'gateway' AND timestamp LIKE ?1 THEN 1 ELSE 0 END), 0),
+            COALESCE(SUM(CASE WHEN source = 'gateway' AND timestamp LIKE ?1 AND (status_code >= 400 OR status_code < 200) THEN 1 ELSE 0 END), 0),
             COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN input_tokens ELSE 0 END), 0),
             COALESCE(SUM(CASE WHEN timestamp LIKE ?1 THEN output_tokens ELSE 0 END), 0),
             COALESCE(SUM(cost), 0.0),
@@ -459,8 +500,8 @@ pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<Reque
         std::collections::HashMap::new();
     let mut stmt = conn.prepare(
         "SELECT substr(timestamp, 1, 10) as day,
-                COUNT(*),
-                SUM(CASE WHEN status_code >= 400 OR status_code < 200 THEN 1 ELSE 0 END),
+                COALESCE(SUM(CASE WHEN source = 'gateway' THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN source = 'gateway' AND (status_code >= 400 OR status_code < 200) THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(input_tokens), 0),
                 COALESCE(SUM(output_tokens), 0),
                 COALESCE(SUM(cost), 0.0),
@@ -492,8 +533,10 @@ pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<Reque
         let day = (chrono::Utc::now() - chrono::Duration::days(i))
             .format("%Y-%m-%d")
             .to_string();
-        let (count, errs, inp, outp, cost, cw, cr) =
-            daily_map.get(&day).copied().unwrap_or((0, 0, 0, 0, 0.0, 0, 0));
+        let (count, errs, inp, outp, cost, cw, cr) = daily_map
+            .get(&day)
+            .copied()
+            .unwrap_or((0, 0, 0, 0, 0.0, 0, 0));
         daily.push(DailyStat {
             date: day,
             total: count,
@@ -507,12 +550,17 @@ pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<Reque
         });
     }
 
-    // Top providers — lifetime, unchanged
+    // Top providers describes live gateway routing, not local session imports.
     let mut stmt = conn.prepare(
-        "SELECT provider, COUNT(*) as cnt FROM request_logs WHERE provider IS NOT NULL GROUP BY provider ORDER BY cnt DESC LIMIT 5",
+        "SELECT provider, COUNT(*) as cnt FROM request_logs WHERE source = 'gateway' AND provider IS NOT NULL GROUP BY provider ORDER BY cnt DESC LIMIT 5",
     )?;
     let providers: Vec<ProviderStat> = stmt
-        .query_map([], |r| Ok(ProviderStat { name: r.get(0)?, count: r.get(1)? }))?
+        .query_map([], |r| {
+            Ok(ProviderStat {
+                name: r.get(0)?,
+                count: r.get(1)?,
+            })
+        })?
         .filter_map(|r| r.ok())
         .collect();
 
@@ -520,7 +568,11 @@ pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<Reque
         total,
         success,
         errors,
-        success_rate: if total > 0 { (success as f64 / total as f64 * 100.0).round() } else { 0.0 },
+        success_rate: if total > 0 {
+            (success as f64 / total as f64 * 100.0).round()
+        } else {
+            0.0
+        },
         avg_latency_ms: avg_latency.round() as i64,
         today_total,
         today_errors,
@@ -584,7 +636,10 @@ pub struct ProviderStat {
 }
 
 /// Get health stats for a specific provider.
-pub fn get_provider_health(conn: &Connection, provider_name: &str) -> Result<ProviderHealth, AppError> {
+pub fn get_provider_health(
+    conn: &Connection,
+    provider_name: &str,
+) -> Result<ProviderHealth, AppError> {
     let now = chrono::Utc::now();
     let one_hour_ago = (now - chrono::Duration::hours(1)).to_rfc3339();
     let one_day_ago = (now - chrono::Duration::hours(24)).to_rfc3339();
@@ -596,12 +651,12 @@ pub fn get_provider_health(conn: &Connection, provider_name: &str) -> Result<Pro
             COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END), 0),
             COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0),
             COALESCE((SELECT latency_ms FROM request_logs
-                WHERE provider = ?1 AND timestamp >= ?2 AND status_code >= 200 AND status_code < 300
+                WHERE source = 'gateway' AND provider = ?1 AND timestamp >= ?2 AND status_code >= 200 AND status_code < 300
                 ORDER BY latency_ms DESC LIMIT 1 OFFSET (
                     SELECT MAX(0, CAST(COUNT(*) * 0.05 AS INTEGER)) FROM request_logs
-                    WHERE provider = ?1 AND timestamp >= ?2 AND status_code >= 200 AND status_code < 300
+                    WHERE source = 'gateway' AND provider = ?1 AND timestamp >= ?2 AND status_code >= 200 AND status_code < 300
                 )), 0)
-         FROM request_logs WHERE provider = ?1 AND timestamp >= ?2",
+         FROM request_logs WHERE source = 'gateway' AND provider = ?1 AND timestamp >= ?2",
         rusqlite::params![provider_name, &one_hour_ago],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
     )?;
@@ -612,7 +667,7 @@ pub fn get_provider_health(conn: &Connection, provider_name: &str) -> Result<Pro
             COUNT(*),
             COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END), 0),
             COALESCE(AVG(CASE WHEN status_code >= 200 AND status_code < 300 THEN latency_ms END), 0)
-         FROM request_logs WHERE provider = ?1 AND timestamp >= ?2",
+         FROM request_logs WHERE source = 'gateway' AND provider = ?1 AND timestamp >= ?2",
         rusqlite::params![provider_name, &one_day_ago],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
     )?;
@@ -620,25 +675,38 @@ pub fn get_provider_health(conn: &Connection, provider_name: &str) -> Result<Pro
     // Recent errors (last 10)
     let mut stmt = conn.prepare(
         "SELECT timestamp, status_code, error_message FROM request_logs
-         WHERE provider = ?1 AND (status_code >= 400 OR status_code < 200) AND error_message IS NOT NULL
+         WHERE source = 'gateway' AND provider = ?1 AND (status_code >= 400 OR status_code < 200) AND error_message IS NOT NULL
          ORDER BY timestamp DESC LIMIT 10"
     )?;
-    let recent_errors: Vec<RecentError> = stmt.query_map(rusqlite::params![provider_name], |r| {
-        Ok(RecentError {
-            timestamp: r.get(0)?,
-            status_code: r.get(1)?,
-            message: r.get::<_, String>(2).unwrap_or_default(),
-        })
-    })?.filter_map(|r| r.ok()).collect();
+    let recent_errors: Vec<RecentError> = stmt
+        .query_map(rusqlite::params![provider_name], |r| {
+            Ok(RecentError {
+                timestamp: r.get(0)?,
+                status_code: r.get(1)?,
+                message: r.get::<_, String>(2).unwrap_or_default(),
+            })
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
 
     Ok(ProviderHealth {
         provider: provider_name.to_string(),
-        h1_total, h1_success,
-        h1_success_rate: if h1_total > 0 { (h1_success as f64 / h1_total as f64 * 100.0).round() } else { 0.0 },
+        h1_total,
+        h1_success,
+        h1_success_rate: if h1_total > 0 {
+            (h1_success as f64 / h1_total as f64 * 100.0).round()
+        } else {
+            0.0
+        },
         h1_avg_latency_ms: h1_avg_latency.round() as i64,
         h1_p95_latency_ms: h1_p95_latency.round() as i64,
-        h24_total, h24_success,
-        h24_success_rate: if h24_total > 0 { (h24_success as f64 / h24_total as f64 * 100.0).round() } else { 0.0 },
+        h24_total,
+        h24_success,
+        h24_success_rate: if h24_total > 0 {
+            (h24_success as f64 / h24_total as f64 * 100.0).round()
+        } else {
+            0.0
+        },
         h24_avg_latency_ms: h24_avg_latency.round() as i64,
         recent_errors,
     })
@@ -669,10 +737,7 @@ pub struct RecentError {
 /// Delete logs older than `retention_days`. Returns the number of deleted rows.
 pub fn cleanup_older_than(conn: &Connection, retention_days: i64) -> Result<usize, AppError> {
     let cutoff = (chrono::Utc::now() - chrono::Duration::days(retention_days)).to_rfc3339();
-    let deleted = conn.execute(
-        "DELETE FROM request_logs WHERE timestamp < ?1",
-        [&cutoff],
-    )?;
+    let deleted = conn.execute("DELETE FROM request_logs WHERE timestamp < ?1", [&cutoff])?;
     Ok(deleted)
 }
 
@@ -705,7 +770,10 @@ mod tests {
                 cost REAL,
                 trace_json TEXT,
                 cache_write_tokens INTEGER,
-                cache_read_tokens INTEGER
+                cache_read_tokens INTEGER,
+                source TEXT,
+                session_id TEXT,
+                external_id TEXT
             );",
         )
         .unwrap();
@@ -748,6 +816,70 @@ mod tests {
         assert_eq!(get_stats_for_range(&conn, 0).unwrap().daily.len(), 1);
         assert_eq!(get_stats_for_range(&conn, -5).unwrap().daily.len(), 1);
         assert_eq!(get_stats_for_range(&conn, 999).unwrap().daily.len(), 365);
+    }
+
+    #[test]
+    fn stats_keep_session_imports_out_of_gateway_quality_metrics() {
+        let conn = empty_logs_db();
+        insert(
+            &conn,
+            "req_gateway",
+            "Codex",
+            "LiveProvider",
+            "gpt-live",
+            "/v1/responses",
+            200,
+            123,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(10),
+            Some(5),
+            Some(0.01),
+            None,
+            None,
+            Some("gateway"),
+            Some("session_live"),
+            Some("req_gateway"),
+        )
+        .unwrap();
+        insert_session_log(
+            &conn,
+            &chrono::Utc::now().to_rfc3339(),
+            "Codex",
+            "openai_official",
+            "gpt-history",
+            "/v1/responses",
+            "codex_session",
+            "session_history",
+            "session_history:1",
+            Some(1000),
+            Some(100),
+            None,
+            Some(50),
+            Some(0.25),
+        )
+        .unwrap();
+
+        let stats = get_stats_for_range(&conn, 1).unwrap();
+        assert_eq!(stats.total, 1);
+        assert_eq!(stats.success, 1);
+        assert_eq!(stats.errors, 0);
+        assert_eq!(stats.avg_latency_ms, 123);
+        assert_eq!(stats.today_total, 1);
+        assert_eq!(stats.total_input_tokens, 1010);
+        assert_eq!(stats.total_output_tokens, 105);
+        assert_eq!(stats.total_cache_read_tokens, 50);
+        assert!((stats.total_cost - 0.26).abs() < f64::EPSILON);
+        assert_eq!(stats.providers.len(), 1);
+        assert_eq!(stats.providers[0].name, "LiveProvider");
+        assert_eq!(stats.daily[0].total, 1);
+        assert_eq!(stats.daily[0].input_tokens, 1010);
     }
 
     #[test]
@@ -814,7 +946,11 @@ mod tests {
         });
         let (w, r) = extract_cache_tokens(&usage);
         assert_eq!(w, Some(50));
-        assert_eq!(r, Some(25), "anthropic cache_read takes priority over openai cached_tokens");
+        assert_eq!(
+            r,
+            Some(25),
+            "anthropic cache_read takes priority over openai cached_tokens"
+        );
     }
 
     #[test]

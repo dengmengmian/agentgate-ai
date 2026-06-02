@@ -40,7 +40,8 @@ fn map_provider_row(row: &rusqlite::Row) -> rusqlite::Result<Provider> {
 }
 
 pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
-    let sql = format!("SELECT {PROVIDER_COLUMNS} FROM providers ORDER BY is_active DESC, created_at ASC");
+    let sql =
+        format!("SELECT {PROVIDER_COLUMNS} FROM providers ORDER BY is_active DESC, created_at ASC");
     let mut stmt = conn.prepare(&sql)?;
     let rows = stmt.query_map([], map_provider_row)?;
     let mut providers = Vec::new();

@@ -140,7 +140,10 @@ pub fn import(conn: &mut Connection, payload: &ConfigExport) -> Result<ImportSum
     tx.execute("DELETE FROM route_profile_providers", [])?;
     tx.execute("DELETE FROM route_profiles", [])?;
     tx.execute("DELETE FROM provider_runtime_status", [])?;
-    tx.execute("UPDATE gateway_settings SET active_provider_id = NULL WHERE id = 1", [])?;
+    tx.execute(
+        "UPDATE gateway_settings SET active_provider_id = NULL WHERE id = 1",
+        [],
+    )?;
     tx.execute("DELETE FROM providers", [])?;
 
     // Providers first (route_profile_providers depends on them via provider_id).
@@ -225,10 +228,15 @@ mod tests {
         crate::storage::migrations::run_migrations(&conn).unwrap();
         // 清掉迁移种子（默认 2 个 provider + 3 个 route profile），让每个测试
         // 都从空白状态开始——配置导入语义就是 replace，断言期待空数据起步。
-        conn.execute("DELETE FROM route_profile_providers", []).unwrap();
+        conn.execute("DELETE FROM route_profile_providers", [])
+            .unwrap();
         conn.execute("DELETE FROM route_profiles", []).unwrap();
         conn.execute("DELETE FROM providers", []).unwrap();
-        conn.execute("UPDATE gateway_settings SET active_provider_id = NULL WHERE id = 1", []).unwrap();
+        conn.execute(
+            "UPDATE gateway_settings SET active_provider_id = NULL WHERE id = 1",
+            [],
+        )
+        .unwrap();
         conn
     }
 
@@ -296,7 +304,9 @@ mod tests {
         )
         .unwrap();
         crate::storage::route_profiles::add_provider(
-            &conn, &rp.id, &pid,
+            &conn,
+            &rp.id,
+            &pid,
             AddProviderToRouteInput {
                 priority: Some(1),
                 model_override: None,
@@ -305,7 +315,8 @@ mod tests {
                 failover_on_error_keywords: None,
                 routing_conditions: None,
             },
-        ).unwrap();
+        )
+        .unwrap();
 
         let dump = export(&conn, false).unwrap();
         assert_eq!(dump.route_profiles.len(), 1);
@@ -327,13 +338,19 @@ mod tests {
         )
         .unwrap();
         crate::storage::route_profiles::add_provider(
-            &conn, &rp.id, &pid,
+            &conn,
+            &rp.id,
+            &pid,
             AddProviderToRouteInput {
-                priority: Some(1), model_override: None, cooldown_seconds: Some(600),
-                failover_on_status_codes: None, failover_on_error_keywords: None,
+                priority: Some(1),
+                model_override: None,
+                cooldown_seconds: Some(600),
+                failover_on_status_codes: None,
+                failover_on_error_keywords: None,
                 routing_conditions: None,
             },
-        ).unwrap();
+        )
+        .unwrap();
         let dump = export(&conn, true).unwrap();
 
         let mut fresh = setup_db();
@@ -374,7 +391,10 @@ mod tests {
 
         let mut target = setup_db();
         create_provider(&target, "polluted", "sk-leftover");
-        assert_eq!(crate::storage::providers::list_all(&target).unwrap().len(), 1);
+        assert_eq!(
+            crate::storage::providers::list_all(&target).unwrap().len(),
+            1
+        );
 
         import(&mut target, &dump).unwrap();
         let after = crate::storage::providers::list_all(&target).unwrap();

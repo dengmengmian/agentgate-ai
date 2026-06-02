@@ -107,32 +107,47 @@ mod tests {
 
     fn make_provider(provider_type: &str, quirks_json: Option<&str>) -> Provider {
         Provider {
-            id: "p".into(), name: "P".into(), provider_type: provider_type.into(),
-            base_url: "https://x".into(), api_key: Some("sk".into()),
-            default_model: "m".into(), reasoning_model: None,
-            supported_models: None, model_mapping: None, extra_headers: None,
-            anthropic_base_url: None, responses_base_url: None,
+            id: "p".into(),
+            name: "P".into(),
+            provider_type: provider_type.into(),
+            base_url: "https://x".into(),
+            api_key: Some("sk".into()),
+            default_model: "m".into(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_chat_completions".into(),
-            timeout_seconds: 60, status: "ok".into(),
-            supports_vision: None, auto_cache_control: None, supports_cache: None,
+            timeout_seconds: 60,
+            status: "ok".into(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
             model_capabilities: None,
             provider_quirks: quirks_json.map(|s| s.to_string()),
             body_filter_enabled: None,
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
-            enabled: true, is_active: true,
-            created_at: "now".into(), updated_at: "now".into(),
+            enabled: true,
+            is_active: true,
+            created_at: "now".into(),
+            updated_at: "now".into(),
         }
     }
 
     fn make_settings(bf: bool, tr: bool, em: bool) -> GatewaySettings {
         GatewaySettings {
-            id: 1, host: "127.0.0.1".into(), port: 9090,
+            id: 1,
+            host: "127.0.0.1".into(),
+            port: 9090,
             active_provider_id: None,
             input_protocol: "openai_responses".into(),
             output_protocol: "openai_chat_completions".into(),
-            auto_start: false, log_retention_days: 14,
+            auto_start: false,
+            log_retention_days: 14,
             body_filter_global: bf,
             thinking_rectifier_global: tr,
             error_mapper_global: em,
@@ -164,7 +179,10 @@ mod tests {
         p.body_filter_enabled = Some(0); // explicit off
         let s = make_settings(true, true, true);
         let sw = EffectiveSwitches::for_request(&p, &s);
-        assert!(!sw.body_filter, "per-provider Some(0) must override global on");
+        assert!(
+            !sw.body_filter,
+            "per-provider Some(0) must override global on"
+        );
         assert!(sw.thinking_rectifier);
         assert!(sw.error_mapper);
     }
@@ -180,10 +198,7 @@ mod tests {
 
     #[test]
     fn resolve_quirks_merges_user_fields_onto_defaults() {
-        let p = make_provider(
-            "deepseek",
-            Some(r#"{"unsupported_fields":["my_extra"]}"#),
-        );
+        let p = make_provider("deepseek", Some(r#"{"unsupported_fields":["my_extra"]}"#));
         let q = resolve_quirks(&p);
         // Default for DeepSeek includes web_search
         assert!(q.unsupported_fields.contains(&"web_search".to_string()));

@@ -88,10 +88,22 @@ struct AssistantMessage {
 }
 
 fn parse_usage(usage: &Value) -> (i64, i64, i64, i64) {
-    let input = usage.get("input_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
-    let output = usage.get("output_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
-    let cache_read = usage.get("cache_read_input_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
-    let cache_write = usage.get("cache_creation_input_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
+    let input = usage
+        .get("input_tokens")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let output = usage
+        .get("output_tokens")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let cache_read = usage
+        .get("cache_read_input_tokens")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
+    let cache_write = usage
+        .get("cache_creation_input_tokens")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0);
     (input, output, cache_read, cache_write)
 }
 
@@ -132,8 +144,12 @@ fn parse_file(path: &Path, result: &mut SyncResult) -> Vec<ParsedRow> {
         };
         let model = msg.model.unwrap_or_else(|| "unknown".to_string());
         let session_id = event.session_id.unwrap_or_default();
-        let timestamp = event.timestamp.unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
-        let usage = msg.usage.unwrap_or_else(|| Value::Object(serde_json::Map::new()));
+        let timestamp = event
+            .timestamp
+            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+        let usage = msg
+            .usage
+            .unwrap_or_else(|| Value::Object(serde_json::Map::new()));
         let (input, output, cache_read, cache_write) = parse_usage(&usage);
         out.push(ParsedRow {
             message_id,
@@ -201,7 +217,9 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
 
     // Phase 2: filter out external_ids we've already imported.
     let candidate_ids: Vec<String> = all_rows.iter().map(|r| r.message_id.clone()).collect();
-    let conn = db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let already = storage::request_logs::external_ids_for_source(&conn, SOURCE, &candidate_ids)?;
 
     // Phase 3: write new rows.
@@ -211,8 +229,11 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
             continue;
         }
         let cost = storage::pricing::calculate_cost_for_request(
-            &conn, PROVIDER_LABEL, &row.model,
-            Some(row.input_tokens), Some(row.output_tokens),
+            &conn,
+            PROVIDER_LABEL,
+            &row.model,
+            Some(row.input_tokens),
+            Some(row.output_tokens),
         );
         match storage::request_logs::insert_session_log(
             &conn,
@@ -226,12 +247,22 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
             &row.message_id,
             Some(row.input_tokens),
             Some(row.output_tokens),
-            if row.cache_write_tokens > 0 { Some(row.cache_write_tokens) } else { None },
-            if row.cache_read_tokens > 0 { Some(row.cache_read_tokens) } else { None },
+            if row.cache_write_tokens > 0 {
+                Some(row.cache_write_tokens)
+            } else {
+                None
+            },
+            if row.cache_read_tokens > 0 {
+                Some(row.cache_read_tokens)
+            } else {
+                None
+            },
             cost,
         ) {
             Ok(()) => result.imported += 1,
-            Err(e) => result.errors.push(format!("insert msg {}: {}", row.message_id, e.message)),
+            Err(e) => result
+                .errors
+                .push(format!("insert msg {}: {}", row.message_id, e.message)),
         }
     }
     Ok(result)
@@ -289,7 +320,10 @@ mod tests {
         let mut result = SyncResult::default();
         let rows = parse_file(tmp.path(), &mut result);
         assert_eq!(rows.len(), 1, "good line survives bad neighbours");
-        assert!(result.errors.is_empty(), "malformed lines don't accumulate errors");
+        assert!(
+            result.errors.is_empty(),
+            "malformed lines don't accumulate errors"
+        );
     }
 
     #[test]
@@ -329,13 +363,28 @@ mod tests {
         storage::migrations::run_migrations(&conn).unwrap();
         // 直接构造一条已存在的条目
         storage::request_logs::insert_session_log(
-            &conn, "2026-01-01T00:00:00Z", CLIENT, PROVIDER_LABEL, "claude-x",
-            ROUTE, SOURCE, "s1", "msg_existing",
-            Some(10), Some(20), None, None, None,
-        ).unwrap();
+            &conn,
+            "2026-01-01T00:00:00Z",
+            CLIENT,
+            PROVIDER_LABEL,
+            "claude-x",
+            ROUTE,
+            SOURCE,
+            "s1",
+            "msg_existing",
+            Some(10),
+            Some(20),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
         let already = storage::request_logs::external_ids_for_source(
-            &conn, SOURCE, &["msg_existing".to_string(), "msg_new".to_string()],
-        ).unwrap();
+            &conn,
+            SOURCE,
+            &["msg_existing".to_string(), "msg_new".to_string()],
+        )
+        .unwrap();
         assert!(already.contains("msg_existing"));
         assert!(!already.contains("msg_new"));
     }

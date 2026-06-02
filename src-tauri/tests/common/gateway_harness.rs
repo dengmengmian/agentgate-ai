@@ -95,7 +95,8 @@ impl GatewayHarness {
         // is the only candidate the gateway can route to.
         conn.execute("DELETE FROM route_profile_providers", [])
             .expect("clear route_profile_providers");
-        conn.execute("DELETE FROM providers", []).expect("clear seeded providers");
+        conn.execute("DELETE FROM providers", [])
+            .expect("clear seeded providers");
 
         let provider_id = uuid::Uuid::new_v4().to_string();
         let base_url = mock.url();

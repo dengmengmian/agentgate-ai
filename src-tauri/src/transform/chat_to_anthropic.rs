@@ -42,8 +42,8 @@ pub fn convert(req: &ChatCompletionsRequest) -> Result<Value, AppError> {
                 }
                 if let Some(ref tcs) = msg.tool_calls {
                     for tc in tcs {
-                        let input: Value = serde_json::from_str(&tc.function.arguments)
-                            .unwrap_or(json!({}));
+                        let input: Value =
+                            serde_json::from_str(&tc.function.arguments).unwrap_or(json!({}));
                         content_blocks.push(json!({
                             "type": "tool_use",
                             "id": tc.id,
@@ -141,7 +141,8 @@ fn extract_string_content(content: Option<&Value>) -> Option<String> {
     match c {
         Value::String(s) => Some(s.clone()),
         Value::Array(arr) => {
-            let text = arr.iter()
+            let text = arr
+                .iter()
                 .filter_map(|p| {
                     let t = p.get("type").and_then(|t| t.as_str()).unwrap_or("");
                     if t == "text" || t == "input_text" {
@@ -152,7 +153,11 @@ fn extract_string_content(content: Option<&Value>) -> Option<String> {
                 })
                 .collect::<Vec<_>>()
                 .join("");
-            if text.is_empty() { None } else { Some(text) }
+            if text.is_empty() {
+                None
+            } else {
+                Some(text)
+            }
         }
         _ => None,
     }
@@ -185,7 +190,8 @@ fn user_content_to_blocks(content: Option<&Value>) -> Vec<Value> {
                         }
                     }
                     "image_url" => {
-                        let url = part.get("image_url")
+                        let url = part
+                            .get("image_url")
                             .and_then(|u| u.get("url"))
                             .and_then(|u| u.as_str())
                             .unwrap_or("");
@@ -233,7 +239,11 @@ fn parse_data_url(url: &str) -> Option<(String, String)> {
 fn merge_consecutive_same_role(messages: Vec<Value>) -> Vec<Value> {
     let mut out: Vec<Value> = Vec::with_capacity(messages.len());
     for msg in messages {
-        let role = msg.get("role").and_then(|r| r.as_str()).unwrap_or("").to_string();
+        let role = msg
+            .get("role")
+            .and_then(|r| r.as_str())
+            .unwrap_or("")
+            .to_string();
         if let Some(last) = out.last_mut() {
             let last_role = last.get("role").and_then(|r| r.as_str()).unwrap_or("");
             if last_role == role {
@@ -263,8 +273,13 @@ fn convert_tools(tools: &[Value]) -> Vec<Value> {
         if name.is_empty() {
             continue;
         }
-        let desc = function.get("description").and_then(|d| d.as_str()).unwrap_or("");
-        let input_schema = function.get("parameters").cloned()
+        let desc = function
+            .get("description")
+            .and_then(|d| d.as_str())
+            .unwrap_or("");
+        let input_schema = function
+            .get("parameters")
+            .cloned()
             .unwrap_or(json!({"type": "object"}));
         out.push(json!({
             "name": name,
@@ -296,11 +311,16 @@ fn convert_tool_choice(tc: &Value) -> Option<Value> {
     let kind = obj.get("type").and_then(|t| t.as_str()).unwrap_or("");
     match kind {
         "function" => {
-            let name = obj.get("function")
+            let name = obj
+                .get("function")
                 .and_then(|f| f.get("name"))
                 .and_then(|n| n.as_str())
                 .unwrap_or("");
-            if name.is_empty() { None } else { Some(json!({"type": "tool", "name": name})) }
+            if name.is_empty() {
+                None
+            } else {
+                Some(json!({"type": "tool", "name": name}))
+            }
         }
         // 已经是 Anthropic 形态原样透传
         "auto" | "any" | "tool" => Some(tc.clone()),
@@ -370,7 +390,14 @@ mod tests {
     fn system_messages_promoted_to_top_level() {
         let mut req = base_req();
         req.messages = vec![
-            ChatMessage { role: "system".into(), content: Some(json!("You are helpful")), reasoning_content: None, tool_calls: None, tool_call_id: None, name: None },
+            ChatMessage {
+                role: "system".into(),
+                content: Some(json!("You are helpful")),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
             user_msg("hi"),
         ];
         let body = convert(&req).unwrap();
@@ -383,8 +410,22 @@ mod tests {
     fn multiple_system_messages_concatenated() {
         let mut req = base_req();
         req.messages = vec![
-            ChatMessage { role: "system".into(), content: Some(json!("A")), reasoning_content: None, tool_calls: None, tool_call_id: None, name: None },
-            ChatMessage { role: "system".into(), content: Some(json!("B")), reasoning_content: None, tool_calls: None, tool_call_id: None, name: None },
+            ChatMessage {
+                role: "system".into(),
+                content: Some(json!("A")),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+            ChatMessage {
+                role: "system".into(),
+                content: Some(json!("B")),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
             user_msg("hi"),
         ];
         let body = convert(&req).unwrap();
@@ -403,7 +444,10 @@ mod tests {
                 tool_calls: Some(vec![ToolCall {
                     id: "tc1".into(),
                     call_type: "function".into(),
-                    function: ToolCallFunction { name: "search".into(), arguments: r#"{"q":"x"}"#.into() },
+                    function: ToolCallFunction {
+                        name: "search".into(),
+                        arguments: r#"{"q":"x"}"#.into(),
+                    },
                 }]),
                 tool_call_id: None,
                 name: None,
@@ -425,16 +469,14 @@ mod tests {
     #[test]
     fn tool_message_becomes_user_tool_result() {
         let mut req = base_req();
-        req.messages = vec![
-            ChatMessage {
-                role: "tool".into(),
-                content: Some(json!("result data")),
-                reasoning_content: None,
-                tool_calls: None,
-                tool_call_id: Some("tc1".into()),
-                name: None,
-            },
-        ];
+        req.messages = vec![ChatMessage {
+            role: "tool".into(),
+            content: Some(json!("result data")),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: Some("tc1".into()),
+            name: None,
+        }];
         let body = convert(&req).unwrap();
         let msg = &body["messages"][0];
         assert_eq!(msg["role"], "user");
@@ -484,7 +526,10 @@ mod tests {
         assert_eq!(tools.len(), 1);
         assert_eq!(tools[0]["name"], "search");
         assert_eq!(tools[0]["description"], "Search the web");
-        assert_eq!(tools[0]["input_schema"]["properties"]["q"]["type"], "string");
+        assert_eq!(
+            tools[0]["input_schema"]["properties"]["q"]["type"],
+            "string"
+        );
         // 不应残留 type/function 包裹层
         assert!(tools[0].get("type").is_none());
     }
@@ -495,17 +540,26 @@ mod tests {
         req.messages = vec![user_msg("hi")];
 
         req.tool_choice = Some(json!("auto"));
-        assert_eq!(convert(&req).unwrap()["tool_choice"], json!({"type": "auto"}));
+        assert_eq!(
+            convert(&req).unwrap()["tool_choice"],
+            json!({"type": "auto"})
+        );
 
         req.tool_choice = Some(json!("required"));
-        assert_eq!(convert(&req).unwrap()["tool_choice"], json!({"type": "any"}));
+        assert_eq!(
+            convert(&req).unwrap()["tool_choice"],
+            json!({"type": "any"})
+        );
 
         req.tool_choice = Some(json!("none"));
         // none → 不发 tool_choice 字段
         assert!(convert(&req).unwrap().get("tool_choice").is_none());
 
         req.tool_choice = Some(json!({"type": "function", "function": {"name": "search"}}));
-        assert_eq!(convert(&req).unwrap()["tool_choice"], json!({"type": "tool", "name": "search"}));
+        assert_eq!(
+            convert(&req).unwrap()["tool_choice"],
+            json!({"type": "tool", "name": "search"})
+        );
     }
 
     #[test]
@@ -561,10 +615,7 @@ mod tests {
     #[test]
     fn consecutive_same_role_messages_merged() {
         let mut req = base_req();
-        req.messages = vec![
-            user_msg("part 1"),
-            user_msg("part 2"),
-        ];
+        req.messages = vec![user_msg("part 1"), user_msg("part 2")];
         let body = convert(&req).unwrap();
         let messages = body["messages"].as_array().unwrap();
         assert_eq!(messages.len(), 1);

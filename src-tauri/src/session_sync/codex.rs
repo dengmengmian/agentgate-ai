@@ -151,16 +151,28 @@ fn parse_file(path: &Path, result: &mut SyncResult) -> Vec<ParsedRow> {
                     Some(l) if !l.is_null() => l,
                     _ => continue,
                 };
-                let input = last.get("input_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
-                let output = last.get("output_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
-                let cached = last.get("cached_input_tokens").and_then(|v| v.as_i64()).unwrap_or(0);
+                let input = last
+                    .get("input_tokens")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let output = last
+                    .get("output_tokens")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
+                let cached = last
+                    .get("cached_input_tokens")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0);
                 if input == 0 && output == 0 {
                     continue; // 全零事件，估计是 rate_limits-only ping，跳过
                 }
                 if session_id.is_empty() {
                     continue; // session_meta 没解析到（异常文件），跳过
                 }
-                let timestamp = event.timestamp.clone().unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+                let timestamp = event
+                    .timestamp
+                    .clone()
+                    .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
                 rows.push(ParsedRow {
                     external_id: format!("{session_id}:{idx}"),
                     session_id: session_id.clone(),
@@ -199,7 +211,9 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
     }
 
     let candidate_ids: Vec<String> = all_rows.iter().map(|r| r.external_id.clone()).collect();
-    let conn = db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let already = storage::request_logs::external_ids_for_source(&conn, SOURCE, &candidate_ids)?;
 
     for row in all_rows {
@@ -208,8 +222,11 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
             continue;
         }
         let cost = storage::pricing::calculate_cost_for_request(
-            &conn, PROVIDER_LABEL, &row.model,
-            Some(row.input_tokens), Some(row.output_tokens),
+            &conn,
+            PROVIDER_LABEL,
+            &row.model,
+            Some(row.input_tokens),
+            Some(row.output_tokens),
         );
         // Codex 的 cached_input_tokens 在 OpenAI Responses 协议里属于「读缓存」语义，
         // 没有单独的 cache_creation；映射到 cache_read_tokens。
@@ -226,11 +243,17 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
             Some(row.input_tokens),
             Some(row.output_tokens),
             None,
-            if row.cached_input_tokens > 0 { Some(row.cached_input_tokens) } else { None },
+            if row.cached_input_tokens > 0 {
+                Some(row.cached_input_tokens)
+            } else {
+                None
+            },
             cost,
         ) {
             Ok(()) => result.imported += 1,
-            Err(e) => result.errors.push(format!("insert {}: {}", row.external_id, e.message)),
+            Err(e) => result
+                .errors
+                .push(format!("insert {}: {}", row.external_id, e.message)),
         }
     }
     Ok(result)
@@ -271,7 +294,11 @@ mod tests {
         // token_count 经常以 rate_limits-only 形式出现（info=null）；不该计费。
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let mut f = tmp.reopen().unwrap();
-        writeln!(f, r#"{{"timestamp":"x","type":"session_meta","payload":{{"id":"s1"}}}}"#).unwrap();
+        writeln!(
+            f,
+            r#"{{"timestamp":"x","type":"session_meta","payload":{{"id":"s1"}}}}"#
+        )
+        .unwrap();
         writeln!(f, r#"{{"timestamp":"x","type":"event_msg","payload":{{"type":"token_count","info":null}}}}"#).unwrap();
         writeln!(f, r#"{{"timestamp":"x","type":"event_msg","payload":{{"type":"token_count","info":{{"last_token_usage":{{"input_tokens":0,"output_tokens":0}}}}}}}}"#).unwrap();
         let mut result = SyncResult::default();
@@ -283,10 +310,22 @@ mod tests {
     fn parse_file_handles_model_switch_mid_session() {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let mut f = tmp.reopen().unwrap();
-        writeln!(f, r#"{{"timestamp":"x","type":"session_meta","payload":{{"id":"s1"}}}}"#).unwrap();
-        writeln!(f, r#"{{"timestamp":"x","type":"turn_context","payload":{{"model":"gpt-5"}}}}"#).unwrap();
+        writeln!(
+            f,
+            r#"{{"timestamp":"x","type":"session_meta","payload":{{"id":"s1"}}}}"#
+        )
+        .unwrap();
+        writeln!(
+            f,
+            r#"{{"timestamp":"x","type":"turn_context","payload":{{"model":"gpt-5"}}}}"#
+        )
+        .unwrap();
         writeln!(f, r#"{{"timestamp":"x","type":"event_msg","payload":{{"type":"token_count","info":{{"last_token_usage":{{"input_tokens":10,"output_tokens":5}}}}}}}}"#).unwrap();
-        writeln!(f, r#"{{"timestamp":"x","type":"turn_context","payload":{{"model":"gpt-5-codex"}}}}"#).unwrap();
+        writeln!(
+            f,
+            r#"{{"timestamp":"x","type":"turn_context","payload":{{"model":"gpt-5-codex"}}}}"#
+        )
+        .unwrap();
         writeln!(f, r#"{{"timestamp":"x","type":"event_msg","payload":{{"type":"token_count","info":{{"last_token_usage":{{"input_tokens":20,"output_tokens":15}}}}}}}}"#).unwrap();
         let mut result = SyncResult::default();
         let rows = parse_file(tmp.path(), &mut result);
@@ -299,12 +338,19 @@ mod tests {
     fn parse_file_uses_default_model_when_no_turn_context() {
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let mut f = tmp.reopen().unwrap();
-        writeln!(f, r#"{{"timestamp":"x","type":"session_meta","payload":{{"id":"s1"}}}}"#).unwrap();
+        writeln!(
+            f,
+            r#"{{"timestamp":"x","type":"session_meta","payload":{{"id":"s1"}}}}"#
+        )
+        .unwrap();
         writeln!(f, r#"{{"timestamp":"x","type":"event_msg","payload":{{"type":"token_count","info":{{"last_token_usage":{{"input_tokens":1,"output_tokens":2}}}}}}}}"#).unwrap();
         let mut result = SyncResult::default();
         let rows = parse_file(tmp.path(), &mut result);
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].model, "codex", "default model when turn_context absent");
+        assert_eq!(
+            rows[0].model, "codex",
+            "default model when turn_context absent"
+        );
     }
 
     #[test]
@@ -334,7 +380,11 @@ mod tests {
         // 同一 session 多个 token_count 事件 → external_id 各不相同
         let tmp = tempfile::NamedTempFile::new().unwrap();
         let mut f = tmp.reopen().unwrap();
-        writeln!(f, r#"{{"timestamp":"x","type":"session_meta","payload":{{"id":"s1"}}}}"#).unwrap();
+        writeln!(
+            f,
+            r#"{{"timestamp":"x","type":"session_meta","payload":{{"id":"s1"}}}}"#
+        )
+        .unwrap();
         writeln!(f, r#"{{"timestamp":"x","type":"event_msg","payload":{{"type":"token_count","info":{{"last_token_usage":{{"input_tokens":10,"output_tokens":5}}}}}}}}"#).unwrap();
         writeln!(f, r#"{{"timestamp":"x","type":"event_msg","payload":{{"type":"token_count","info":{{"last_token_usage":{{"input_tokens":20,"output_tokens":7}}}}}}}}"#).unwrap();
         let mut result = SyncResult::default();

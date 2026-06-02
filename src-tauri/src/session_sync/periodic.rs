@@ -56,7 +56,10 @@ pub fn spawn(db: Arc<Mutex<Connection>>) {
             if result.imported > 0 {
                 eprintln!(
                     "[session-sync] imported {} (scanned {} files, skipped {}, errors {})",
-                    result.imported, result.files_scanned, result.skipped, result.errors.len(),
+                    result.imported,
+                    result.files_scanned,
+                    result.skipped,
+                    result.errors.len(),
                 );
             }
             tokio::time::sleep(INTERVAL).await;

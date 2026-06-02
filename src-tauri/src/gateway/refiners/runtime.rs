@@ -122,32 +122,47 @@ mod tests {
 
     fn provider(provider_type: &str) -> Provider {
         Provider {
-            id: "p".into(), name: "P".into(), provider_type: provider_type.into(),
-            base_url: "https://x".into(), api_key: Some("sk".into()),
-            default_model: "m".into(), reasoning_model: None,
-            supported_models: None, model_mapping: None, extra_headers: None,
-            anthropic_base_url: None, responses_base_url: None,
+            id: "p".into(),
+            name: "P".into(),
+            provider_type: provider_type.into(),
+            base_url: "https://x".into(),
+            api_key: Some("sk".into()),
+            default_model: "m".into(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_chat_completions".into(),
-            timeout_seconds: 60, status: "ok".into(),
-            supports_vision: None, auto_cache_control: None, supports_cache: None,
+            timeout_seconds: 60,
+            status: "ok".into(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
             model_capabilities: None,
             provider_quirks: None,
             body_filter_enabled: None,
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
-            enabled: true, is_active: true,
-            created_at: "now".into(), updated_at: "now".into(),
+            enabled: true,
+            is_active: true,
+            created_at: "now".into(),
+            updated_at: "now".into(),
         }
     }
 
     fn settings(bf: bool, tr: bool, em: bool) -> GatewaySettings {
         GatewaySettings {
-            id: 1, host: "127.0.0.1".into(), port: 9090,
+            id: 1,
+            host: "127.0.0.1".into(),
+            port: 9090,
             active_provider_id: None,
             input_protocol: "openai_responses".into(),
             output_protocol: "openai_chat_completions".into(),
-            auto_start: false, log_retention_days: 14,
+            auto_start: false,
+            log_retention_days: 14,
             body_filter_global: bf,
             thinking_rectifier_global: tr,
             error_mapper_global: em,
@@ -213,8 +228,10 @@ mod tests {
         });
         let mut resp_log = RefinerLog::default();
         resp_log.error_mapper = Some(crate::gateway::refiner_log::ErrorMapperAction {
-            upstream_code: Some("x".into()), upstream_message: None,
-            mapped_code: "rate_limit".into(), mapped_message: "boom".into(),
+            upstream_code: Some("x".into()),
+            upstream_message: None,
+            mapped_code: "rate_limit".into(),
+            mapped_message: "boom".into(),
         });
         merge_logs(&mut req_log, resp_log);
         assert!(req_log.body_filter.is_some());

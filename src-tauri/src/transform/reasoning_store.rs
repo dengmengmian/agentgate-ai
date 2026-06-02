@@ -8,8 +8,8 @@
 //! are evicted first when the store exceeds MAX_ENTRIES.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
 
 /// (reasoning_content, last_access_counter)
 static STORE: Mutex<Option<HashMap<String, (String, u64)>>> = Mutex::new(None);
@@ -56,7 +56,8 @@ pub fn store(text: &str, reasoning: &str, tool_call_ids: &[String]) {
     with_store(|map| {
         // LRU eviction: remove entries with lowest access counter
         if map.len() > MAX_ENTRIES {
-            let mut entries: Vec<(String, u64)> = map.iter().map(|(k, (_, c))| (k.clone(), *c)).collect();
+            let mut entries: Vec<(String, u64)> =
+                map.iter().map(|(k, (_, c))| (k.clone(), *c)).collect();
             entries.sort_by_key(|(_, c)| *c);
             let to_remove = entries.len() / 4;
             for (k, _) in entries.into_iter().take(to_remove) {
@@ -126,7 +127,10 @@ mod tests {
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         clear_store();
         store("hello", "thinking...", &["tc1".to_string()]);
-        assert_eq!(lookup_by_tool_call_id("tc1"), Some("thinking...".to_string()));
+        assert_eq!(
+            lookup_by_tool_call_id("tc1"),
+            Some("thinking...".to_string())
+        );
     }
 
     #[test]

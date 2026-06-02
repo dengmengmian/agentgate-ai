@@ -31,6 +31,7 @@ export function Logs() {
   const [clientFilter, setClientFilter] = useState("");
   // 'all' / 'gateway' / 'session_log'（聚合所有客户端日志）/ 单一来源（'claude_session' 等）
   const [sourceFilter, setSourceFilter] = useState<string>("");
+  const [sessionIdFilter, setSessionIdFilter] = useState("");
   // 'list'（按时间逐条）/ 'session'（按会话聚合）
   const [viewMode, setViewMode] = useState<"list" | "session">("list");
   const [providerOptions, setProviderOptions] = useState<ProviderView[]>([]);
@@ -48,7 +49,7 @@ export function Logs() {
   // Reset to page 1 whenever filters change.
   useEffect(() => {
     setPage(1);
-  }, [keyword, statusFilter, providerFilter, clientFilter, sourceFilter]);
+  }, [keyword, statusFilter, providerFilter, clientFilter, sourceFilter, sessionIdFilter]);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -59,6 +60,7 @@ export function Logs() {
         provider: providerFilter || undefined,
         client: clientFilter || undefined,
         source: sourceFilter || undefined,
+        session_id: sessionIdFilter || undefined,
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
       };
@@ -73,7 +75,7 @@ export function Logs() {
     } finally {
       setLoading(false);
     }
-  }, [keyword, statusFilter, providerFilter, clientFilter, sourceFilter, page]);
+  }, [keyword, statusFilter, providerFilter, clientFilter, sourceFilter, sessionIdFilter, page]);
 
   useEffect(() => {
     loadLogs();
@@ -187,6 +189,16 @@ export function Logs() {
             <option value="codex_session">{sourceLabel("codex_session")}</option>
             <option value="gemini_session">{sourceLabel("gemini_session")}</option>
           </select>
+          {sessionIdFilter && (
+            <button
+              type="button"
+              onClick={() => setSessionIdFilter("")}
+              className="max-w-[260px] truncate rounded-md bg-card-secondary px-2.5 py-1.5 font-mono text-[11px] text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+              title={sessionIdFilter}
+            >
+              session:{sessionIdFilter}
+            </button>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* 列表/会话两种视图切换——列表按时间逐条，会话按 session_id 聚合 */}
@@ -255,11 +267,8 @@ export function Logs() {
       {viewMode === "session" ? (
         <SessionGroupView
           onPickSession={(sid) => {
-            // 点击某会话 → 切回列表视图并 filter 到该 session_id
             setViewMode("list");
-            // session_id filter 在 RequestLogFilter 里，但目前 UI 没有 input；
-            // 简化：点会话直接显示 keyword 过滤，让用户看到属于这个 session 的所有条目
-            setKeyword(sid.slice(0, 16));
+            setSessionIdFilter(sid);
           }}
         />
       ) : loading ? (

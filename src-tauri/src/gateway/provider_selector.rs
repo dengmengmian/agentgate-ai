@@ -60,14 +60,17 @@ pub fn analyze_request(req: &ResponsesRequest) -> RequestAnalysis {
     let has_tools = req.tools.as_ref().map_or(false, |t| !t.is_empty());
     let tool_count = req.tools.as_ref().map_or(0, |t| t.len());
 
-    let system_text = req.instructions.clone()
+    let system_text = req
+        .instructions
+        .clone()
         .or_else(|| req.system.clone())
         .unwrap_or_default();
 
     let message_count = match &req.input {
-        Value::Array(items) => items.iter().filter(|i| {
-            i.get("type").and_then(|t| t.as_str()) == Some("message")
-        }).count(),
+        Value::Array(items) => items
+            .iter()
+            .filter(|i| i.get("type").and_then(|t| t.as_str()) == Some("message"))
+            .count(),
         _ => 1,
     };
 
@@ -95,16 +98,24 @@ pub struct RoutingConditions {
 /// Check if all non-null conditions match the request analysis.
 fn matches_conditions(conditions: &RoutingConditions, analysis: &RequestAnalysis) -> bool {
     if let Some(min) = conditions.min_input_chars {
-        if analysis.input_char_count < min { return false; }
+        if analysis.input_char_count < min {
+            return false;
+        }
     }
     if let Some(max) = conditions.max_input_chars {
-        if analysis.input_char_count > max { return false; }
+        if analysis.input_char_count > max {
+            return false;
+        }
     }
     if let Some(img) = conditions.has_images {
-        if analysis.has_images != img { return false; }
+        if analysis.has_images != img {
+            return false;
+        }
     }
     if let Some(tools) = conditions.has_tools {
-        if analysis.has_tools != tools { return false; }
+        if analysis.has_tools != tools {
+            return false;
+        }
     }
     if let Some(ref keywords) = conditions.system_keywords {
         if !keywords.is_empty() {
@@ -132,7 +143,8 @@ fn build_candidates(
 
         // Check routing conditions (if analysis available and conditions configured)
         let mut condition_model_override: Option<String> = None;
-        if let (Some(ref cond_json), Some(ref req_analysis)) = (&rpp.routing_conditions, &analysis) {
+        if let (Some(ref cond_json), Some(ref req_analysis)) = (&rpp.routing_conditions, &analysis)
+        {
             if let Ok(conditions) = serde_json::from_str::<RoutingConditions>(cond_json) {
                 if !matches_conditions(&conditions, req_analysis) {
                     continue; // Skip this provider — conditions not met
@@ -144,16 +156,18 @@ fn build_candidates(
         // Model resolution: condition_model_override → model_override → model_mapping → supported_models → default_model
         let provider_info = storage::providers::get_by_id(conn, &rpp.provider_id).ok();
 
-        let model = condition_model_override.or_else(|| rpp.model_override.clone()).unwrap_or_else(|| {
-            if let Some(ref p) = provider_info {
-                if let Some(req) = requested_model {
-                    return p.resolve_model(req);
+        let model = condition_model_override
+            .or_else(|| rpp.model_override.clone())
+            .unwrap_or_else(|| {
+                if let Some(ref p) = provider_info {
+                    if let Some(req) = requested_model {
+                        return p.resolve_model(req);
+                    }
+                    p.default_model.clone()
+                } else {
+                    String::new()
                 }
-                p.default_model.clone()
-            } else {
-                String::new()
-            }
-        });
+            });
 
         // Capability-aware model promotion: if request demands a capability
         // (e.g. vision) the resolved model lacks but another model on the same
@@ -171,11 +185,15 @@ fn build_candidates(
                 .unwrap_or(false)
         });
 
-        let status_codes: Vec<i64> = rpp.failover_on_status_codes.as_ref()
+        let status_codes: Vec<i64> = rpp
+            .failover_on_status_codes
+            .as_ref()
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or_else(|| vec![402, 429, 500, 502, 503, 504]);
 
-        let keywords: Vec<String> = rpp.failover_on_error_keywords.as_ref()
+        let keywords: Vec<String> = rpp
+            .failover_on_error_keywords
+            .as_ref()
             .and_then(|s| serde_json::from_str(s).ok())
             .unwrap_or_default();
 
@@ -190,14 +208,20 @@ fn build_candidates(
         // be skipped from image requests entirely — even though the matrix declared
         // mimo-v2.5 / mimo-v2-omni as vision-capable. The promotion step (below) would
         // never run because the provider was filtered out in routes.rs:114 first.
-        let supports_vision = provider_info.as_ref().and_then(|p| {
-            let caps = p.parse_capabilities();
-            if caps.is_empty() {
-                None
-            } else {
-                Some(caps.values().any(|c| c.iter().any(|x| x == crate::providers::capabilities::CAP_VISION)))
-            }
-        }).or_else(|| provider_info.as_ref().and_then(|p| p.supports_vision));
+        let supports_vision = provider_info
+            .as_ref()
+            .and_then(|p| {
+                let caps = p.parse_capabilities();
+                if caps.is_empty() {
+                    None
+                } else {
+                    Some(caps.values().any(|c| {
+                        c.iter()
+                            .any(|x| x == crate::providers::capabilities::CAP_VISION)
+                    }))
+                }
+            })
+            .or_else(|| provider_info.as_ref().and_then(|p| p.supports_vision));
 
         candidates.push(ProviderCandidate {
             provider_id: rpp.provider_id.clone(),
@@ -258,20 +282,29 @@ pub fn select_for_failover(
     requested_model: Option<&str>,
     request: Option<&ResponsesRequest>,
 ) -> Result<ProviderSelection, AppError> {
-    let conn = db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
 
     let profile = storage::route_profiles::get_default_for_protocol(&conn, input_protocol)?;
 
     if let Some(profile) = profile {
         let rp_providers = storage::route_profiles::list_providers(&conn, &profile.id)?;
         if rp_providers.is_empty() {
-            return Err(AppError::new("ROUTE_PROFILE_EMPTY", "Route profile has no providers"));
+            return Err(AppError::new(
+                "ROUTE_PROFILE_EMPTY",
+                "Route profile has no providers",
+            ));
         }
 
         let analysis = request.map(analyze_request);
-        let candidates = build_candidates(&conn, &rp_providers, requested_model, analysis.as_ref())?;
+        let candidates =
+            build_candidates(&conn, &rp_providers, requested_model, analysis.as_ref())?;
         if candidates.is_empty() {
-            return Err(AppError::new("NO_PROVIDER_CANDIDATE", "No available provider candidate"));
+            return Err(AppError::new(
+                "NO_PROVIDER_CANDIDATE",
+                "No available provider candidate",
+            ));
         }
 
         // Manual mode: use active_provider_id; Failover mode: first non-cooldown
@@ -280,13 +313,19 @@ pub fn select_for_failover(
                 if let Some(c) = candidates.iter().find(|c| c.provider_id == *active_id) {
                     (c, "Manual: active provider")
                 } else {
-                    (&candidates[0], "Manual: active not in candidates, using first")
+                    (
+                        &candidates[0],
+                        "Manual: active not in candidates, using first",
+                    )
                 }
             } else {
                 (&candidates[0], "Manual: no active set, using first")
             }
         } else {
-            let c = candidates.iter().find(|c| !c.in_cooldown).unwrap_or(&candidates[0]);
+            let c = candidates
+                .iter()
+                .find(|c| !c.in_cooldown)
+                .unwrap_or(&candidates[0]);
             (c, "Failover: first available")
         };
 
@@ -362,7 +401,8 @@ fn pick_best_substitute(
     if candidates.is_empty() {
         return None;
     }
-    let original: std::collections::HashSet<&str> = original_caps.iter().map(|s| s.as_str()).collect();
+    let original: std::collections::HashSet<&str> =
+        original_caps.iter().map(|s| s.as_str()).collect();
 
     // Iterate in supported_models order so ties favor the user's listed priority.
     let mut best: Option<(String, usize)> = None;
@@ -418,7 +458,11 @@ pub fn degradation_chain_for_model(provider: &Provider, requested_model: &str) -
 }
 
 /// Check if we should failover based on error status/message and the candidate's config.
-pub fn should_failover(status_code: Option<u16>, error_msg: &str, candidate: &ProviderCandidate) -> bool {
+pub fn should_failover(
+    status_code: Option<u16>,
+    error_msg: &str,
+    candidate: &ProviderCandidate,
+) -> bool {
     // Check status code
     if let Some(code) = status_code {
         if candidate.failover_on_status_codes.contains(&(code as i64)) {
@@ -521,8 +565,12 @@ mod tests {
 
     fn test_analysis(chars: usize, images: bool, tools: bool, system: &str) -> RequestAnalysis {
         RequestAnalysis {
-            input_char_count: chars, has_images: images, has_tools: tools,
-            tool_count: 0, system_text: system.to_string(), message_count: 1,
+            input_char_count: chars,
+            has_images: images,
+            has_tools: tools,
+            tool_count: 0,
+            system_text: system.to_string(),
+            message_count: 1,
         }
     }
 
@@ -530,29 +578,44 @@ mod tests {
 
     fn mimo_provider_with_matrix(default: &str) -> Provider {
         Provider {
-            id: "p".into(), name: "MiMo".into(), provider_type: "mimo".into(),
-            base_url: "https://api.xiaomimimo.com/v1".into(), api_key: Some("sk-x".into()),
+            id: "p".into(),
+            name: "MiMo".into(),
+            provider_type: "mimo".into(),
+            base_url: "https://api.xiaomimimo.com/v1".into(),
+            api_key: Some("sk-x".into()),
             default_model: default.into(),
             reasoning_model: None,
-            supported_models: Some(r#"["mimo-v2.5-pro","mimo-v2.5","mimo-v2-omni","mimo-v2-flash"]"#.into()),
-            model_mapping: None, extra_headers: None,
-            anthropic_base_url: None, responses_base_url: None,
+            supported_models: Some(
+                r#"["mimo-v2.5-pro","mimo-v2.5","mimo-v2-omni","mimo-v2-flash"]"#.into(),
+            ),
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_chat_completions".into(),
-            timeout_seconds: 120, status: "ok".into(),
-            supports_vision: None, auto_cache_control: None, supports_cache: None,
-            model_capabilities: Some(r#"{
+            timeout_seconds: 120,
+            status: "ok".into(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
+            model_capabilities: Some(
+                r#"{
                 "mimo-v2.5-pro":["text","reasoning","tools","web_search"],
                 "mimo-v2.5":["text","vision","reasoning","tools","web_search"],
                 "mimo-v2-omni":["text","vision","audio_in","video_in","tools"],
                 "mimo-v2-flash":["text","reasoning","tools","web_search"]
-            }"#.into()),
+            }"#
+                .into(),
+            ),
             provider_quirks: None,
             body_filter_enabled: None,
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
-            enabled: true, is_active: true,
-            created_at: "2024-01-01".into(), updated_at: "2024-01-01".into(),
+            enabled: true,
+            is_active: true,
+            created_at: "2024-01-01".into(),
+            updated_at: "2024-01-01".into(),
         }
     }
 
@@ -565,7 +628,10 @@ mod tests {
         let p = mimo_provider_with_matrix("mimo-v2.5-pro");
         let analysis = test_analysis(100, /* images */ true, false, "");
         let promoted = promote_for_capabilities(&p, "mimo-v2.5-pro", &analysis);
-        assert_eq!(promoted, "mimo-v2.5", "should pick v2.5 — preserves reasoning + web_search of original");
+        assert_eq!(
+            promoted, "mimo-v2.5",
+            "should pick v2.5 — preserves reasoning + web_search of original"
+        );
     }
 
     #[test]
@@ -573,10 +639,14 @@ mod tests {
         // Sanity check: even if v2-omni is listed FIRST in supported_models,
         // the ranking should still pick v2.5 because of higher overlap.
         let mut p = mimo_provider_with_matrix("mimo-v2.5-pro");
-        p.supported_models = Some(r#"["mimo-v2-omni","mimo-v2.5","mimo-v2.5-pro","mimo-v2-flash"]"#.into());
+        p.supported_models =
+            Some(r#"["mimo-v2-omni","mimo-v2.5","mimo-v2.5-pro","mimo-v2-flash"]"#.into());
         let analysis = test_analysis(100, true, false, "");
         let promoted = promote_for_capabilities(&p, "mimo-v2.5-pro", &analysis);
-        assert_eq!(promoted, "mimo-v2.5", "list order doesn't override overlap score");
+        assert_eq!(
+            promoted, "mimo-v2.5",
+            "list order doesn't override overlap score"
+        );
     }
 
     #[test]
@@ -585,11 +655,14 @@ mod tests {
         // Build a matrix where two models have identical caps.
         let mut p = mimo_provider_with_matrix("mimo-v2.5-pro");
         p.supported_models = Some(r#"["mimo-v2-omni","mimo-v2.5","mimo-v2.5-pro"]"#.into());
-        p.model_capabilities = Some(r#"{
+        p.model_capabilities = Some(
+            r#"{
             "mimo-v2.5-pro":["text","reasoning"],
             "mimo-v2.5":["text","vision","reasoning"],
             "mimo-v2-omni":["text","vision","reasoning"]
-        }"#.into());
+        }"#
+            .into(),
+        );
         let analysis = test_analysis(100, true, false, "");
         let promoted = promote_for_capabilities(&p, "mimo-v2.5-pro", &analysis);
         assert_eq!(promoted, "mimo-v2-omni", "ties → first in supported_models");
@@ -625,7 +698,10 @@ mod tests {
         let p = mimo_provider_with_matrix("mimo-v2.5-pro[1m]");
         let analysis = test_analysis(100, true, false, "");
         let promoted = promote_for_capabilities(&p, "mimo-v2.5-pro[1m]", &analysis);
-        assert_eq!(promoted, "mimo-v2.5", "[1m] qualifier should be stripped before lookup");
+        assert_eq!(
+            promoted, "mimo-v2.5",
+            "[1m] qualifier should be stripped before lookup"
+        );
     }
 
     // Verify the supports_vision derivation precedence: matrix must WIN
@@ -642,10 +718,17 @@ mod tests {
         let caps = p.parse_capabilities();
         let from_matrix = caps.values().any(|c| c.iter().any(|x| x == "vision"));
         // The matrix says: yes, *some* model has vision.
-        assert!(from_matrix, "matrix should report vision-capable model present");
+        assert!(
+            from_matrix,
+            "matrix should report vision-capable model present"
+        );
         // After the fix, the derived flag for the candidate must trust the matrix.
         // (This mirrors the production code's chain of .and_then().or_else())
-        let derived = if !caps.is_empty() { Some(from_matrix) } else { p.supports_vision };
+        let derived = if !caps.is_empty() {
+            Some(from_matrix)
+        } else {
+            p.supports_vision
+        };
         assert_eq!(derived, Some(true));
     }
 
@@ -654,13 +737,19 @@ mod tests {
         let mut p = mimo_provider_with_matrix("deepseek-v4-pro");
         p.provider_type = "deepseek".into();
         p.supported_models = Some(r#"["deepseek-v4-pro","deepseek-v4-flash"]"#.into());
-        p.model_capabilities = Some(r#"{
+        p.model_capabilities = Some(
+            r#"{
             "deepseek-v4-pro":["text","reasoning","tools","web_search"],
             "deepseek-v4-flash":["text","tools"]
-        }"#.into());
+        }"#
+            .into(),
+        );
         let analysis = test_analysis(100, true, false, "");
         let promoted = promote_for_capabilities(&p, "deepseek-v4-pro", &analysis);
-        assert_eq!(promoted, "deepseek-v4-pro", "no vision model → leave alone, let upstream surface error");
+        assert_eq!(
+            promoted, "deepseek-v4-pro",
+            "no vision model → leave alone, let upstream surface error"
+        );
     }
 
     #[test]
@@ -672,32 +761,74 @@ mod tests {
 
     #[test]
     fn test_matches_conditions_min_chars() {
-        let cond = RoutingConditions { min_input_chars: Some(1000), ..Default::default() };
-        assert!(!matches_conditions(&cond, &test_analysis(500, false, false, "")));
-        assert!(matches_conditions(&cond, &test_analysis(1000, false, false, "")));
-        assert!(matches_conditions(&cond, &test_analysis(5000, false, false, "")));
+        let cond = RoutingConditions {
+            min_input_chars: Some(1000),
+            ..Default::default()
+        };
+        assert!(!matches_conditions(
+            &cond,
+            &test_analysis(500, false, false, "")
+        ));
+        assert!(matches_conditions(
+            &cond,
+            &test_analysis(1000, false, false, "")
+        ));
+        assert!(matches_conditions(
+            &cond,
+            &test_analysis(5000, false, false, "")
+        ));
     }
 
     #[test]
     fn test_matches_conditions_max_chars() {
-        let cond = RoutingConditions { max_input_chars: Some(1000), ..Default::default() };
-        assert!(matches_conditions(&cond, &test_analysis(500, false, false, "")));
-        assert!(matches_conditions(&cond, &test_analysis(1000, false, false, "")));
-        assert!(!matches_conditions(&cond, &test_analysis(5000, false, false, "")));
+        let cond = RoutingConditions {
+            max_input_chars: Some(1000),
+            ..Default::default()
+        };
+        assert!(matches_conditions(
+            &cond,
+            &test_analysis(500, false, false, "")
+        ));
+        assert!(matches_conditions(
+            &cond,
+            &test_analysis(1000, false, false, "")
+        ));
+        assert!(!matches_conditions(
+            &cond,
+            &test_analysis(5000, false, false, "")
+        ));
     }
 
     #[test]
     fn test_matches_conditions_has_images() {
-        let cond = RoutingConditions { has_images: Some(true), ..Default::default() };
-        assert!(!matches_conditions(&cond, &test_analysis(100, false, false, "")));
-        assert!(matches_conditions(&cond, &test_analysis(100, true, false, "")));
+        let cond = RoutingConditions {
+            has_images: Some(true),
+            ..Default::default()
+        };
+        assert!(!matches_conditions(
+            &cond,
+            &test_analysis(100, false, false, "")
+        ));
+        assert!(matches_conditions(
+            &cond,
+            &test_analysis(100, true, false, "")
+        ));
     }
 
     #[test]
     fn test_matches_conditions_has_tools() {
-        let cond = RoutingConditions { has_tools: Some(true), ..Default::default() };
-        assert!(!matches_conditions(&cond, &test_analysis(100, false, false, "")));
-        assert!(matches_conditions(&cond, &test_analysis(100, false, true, "")));
+        let cond = RoutingConditions {
+            has_tools: Some(true),
+            ..Default::default()
+        };
+        assert!(!matches_conditions(
+            &cond,
+            &test_analysis(100, false, false, "")
+        ));
+        assert!(matches_conditions(
+            &cond,
+            &test_analysis(100, false, true, "")
+        ));
     }
 
     #[test]
@@ -706,9 +837,18 @@ mod tests {
             system_keywords: Some(vec!["background".to_string(), "subagent".to_string()]),
             ..Default::default()
         };
-        assert!(!matches_conditions(&cond, &test_analysis(100, false, false, "You are a helpful assistant")));
-        assert!(matches_conditions(&cond, &test_analysis(100, false, false, "Run this in background mode")));
-        assert!(matches_conditions(&cond, &test_analysis(100, false, false, "This is a SUBAGENT task")));
+        assert!(!matches_conditions(
+            &cond,
+            &test_analysis(100, false, false, "You are a helpful assistant")
+        ));
+        assert!(matches_conditions(
+            &cond,
+            &test_analysis(100, false, false, "Run this in background mode")
+        ));
+        assert!(matches_conditions(
+            &cond,
+            &test_analysis(100, false, false, "This is a SUBAGENT task")
+        ));
     }
 
     #[test]
@@ -718,17 +858,32 @@ mod tests {
             has_images: Some(true),
             ..Default::default()
         };
-        assert!(!matches_conditions(&cond, &test_analysis(500, true, false, ""))); // chars too low
-        assert!(!matches_conditions(&cond, &test_analysis(2000, false, false, ""))); // no images
-        assert!(matches_conditions(&cond, &test_analysis(2000, true, false, ""))); // both match
+        assert!(!matches_conditions(
+            &cond,
+            &test_analysis(500, true, false, "")
+        )); // chars too low
+        assert!(!matches_conditions(
+            &cond,
+            &test_analysis(2000, false, false, "")
+        )); // no images
+        assert!(matches_conditions(
+            &cond,
+            &test_analysis(2000, true, false, "")
+        )); // both match
     }
 
     #[test]
     fn test_matches_conditions_parse_json() {
         let json = r#"{"has_images": true, "system_keywords": ["background"]}"#;
         let cond: RoutingConditions = serde_json::from_str(json).unwrap();
-        assert!(matches_conditions(&cond, &test_analysis(100, true, false, "background task")));
-        assert!(!matches_conditions(&cond, &test_analysis(100, false, false, "background task")));
+        assert!(matches_conditions(
+            &cond,
+            &test_analysis(100, true, false, "background task")
+        ));
+        assert!(!matches_conditions(
+            &cond,
+            &test_analysis(100, false, false, "background task")
+        ));
     }
 
     #[test]
@@ -743,23 +898,34 @@ mod tests {
 
     fn provider_with_chain(chain_json: Option<&str>) -> Provider {
         Provider {
-            id: "p".into(), name: "P".into(), provider_type: "openai".into(),
-            base_url: "https://api.openai.com".into(), api_key: Some("sk-x".into()),
+            id: "p".into(),
+            name: "P".into(),
+            provider_type: "openai".into(),
+            base_url: "https://api.openai.com".into(),
+            api_key: Some("sk-x".into()),
             default_model: "gpt-5-codex".into(),
-            reasoning_model: None, supported_models: None,
-            model_mapping: None, extra_headers: None,
-            anthropic_base_url: None, responses_base_url: None,
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_responses".into(),
-            timeout_seconds: 120, status: "ok".into(),
-            supports_vision: None, auto_cache_control: None, supports_cache: None,
+            timeout_seconds: 120,
+            status: "ok".into(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
             model_capabilities: None,
             provider_quirks: None,
             body_filter_enabled: None,
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: chain_json.map(|s| s.to_string()),
-            enabled: true, is_active: true,
-            created_at: "2024".into(), updated_at: "2024".into(),
+            enabled: true,
+            is_active: true,
+            created_at: "2024".into(),
+            updated_at: "2024".into(),
         }
     }
 

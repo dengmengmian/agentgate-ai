@@ -49,7 +49,10 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<RouteProfile, AppError> 
     })
 }
 
-pub fn get_default_for_protocol(conn: &Connection, input_protocol: &str) -> Result<Option<RouteProfile>, AppError> {
+pub fn get_default_for_protocol(
+    conn: &Connection,
+    input_protocol: &str,
+) -> Result<Option<RouteProfile>, AppError> {
     let result = conn.query_row(
         "SELECT id, name, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at
          FROM route_profiles WHERE is_default = 1 AND input_protocol = ?1 AND enabled = 1 LIMIT 1",
@@ -80,7 +83,11 @@ pub fn create(conn: &Connection, input: CreateRouteProfileInput) -> Result<Route
     get_by_id(conn, &id)
 }
 
-pub fn update(conn: &Connection, id: &str, input: UpdateRouteProfileInput) -> Result<RouteProfile, AppError> {
+pub fn update(
+    conn: &Connection,
+    id: &str,
+    input: UpdateRouteProfileInput,
+) -> Result<RouteProfile, AppError> {
     let existing = get_by_id(conn, id)?;
     let now = chrono::Utc::now().to_rfc3339();
     let name = input.name.unwrap_or(existing.name);
@@ -97,9 +104,15 @@ pub fn update(conn: &Connection, id: &str, input: UpdateRouteProfileInput) -> Re
 pub fn delete(conn: &Connection, id: &str) -> Result<bool, AppError> {
     let profile = get_by_id(conn, id)?;
     if profile.is_default {
-        return Err(AppError::new("ROUTE_PROFILE_DELETE_DEFAULT_FORBIDDEN", "Cannot delete the default route profile"));
+        return Err(AppError::new(
+            "ROUTE_PROFILE_DELETE_DEFAULT_FORBIDDEN",
+            "Cannot delete the default route profile",
+        ));
     }
-    conn.execute("DELETE FROM route_profile_providers WHERE route_profile_id = ?1", [id])?;
+    conn.execute(
+        "DELETE FROM route_profile_providers WHERE route_profile_id = ?1",
+        [id],
+    )?;
     conn.execute("DELETE FROM route_profiles WHERE id = ?1", [id])?;
     Ok(true)
 }
@@ -119,7 +132,11 @@ pub fn set_default(conn: &Connection, id: &str) -> Result<RouteProfile, AppError
     get_by_id(conn, id)
 }
 
-pub fn set_active_provider(conn: &Connection, profile_id: &str, provider_id: &str) -> Result<RouteProfile, AppError> {
+pub fn set_active_provider(
+    conn: &Connection,
+    profile_id: &str,
+    provider_id: &str,
+) -> Result<RouteProfile, AppError> {
     let now = chrono::Utc::now().to_rfc3339();
     conn.execute(
         "UPDATE route_profiles SET active_provider_id = ?1, updated_at = ?2 WHERE id = ?3",
@@ -127,16 +144,28 @@ pub fn set_active_provider(conn: &Connection, profile_id: &str, provider_id: &st
     )?;
 
     // Sync providers.is_active + gateway_settings
-    conn.execute("UPDATE providers SET is_active = 0, updated_at = ?1 WHERE is_active = 1", [&now])?;
-    conn.execute("UPDATE providers SET is_active = 1, updated_at = ?1 WHERE id = ?2", params![&now, provider_id])?;
-    conn.execute("UPDATE gateway_settings SET active_provider_id = ?1, updated_at = ?2 WHERE id = 1", params![provider_id, &now])?;
+    conn.execute(
+        "UPDATE providers SET is_active = 0, updated_at = ?1 WHERE is_active = 1",
+        [&now],
+    )?;
+    conn.execute(
+        "UPDATE providers SET is_active = 1, updated_at = ?1 WHERE id = ?2",
+        params![&now, provider_id],
+    )?;
+    conn.execute(
+        "UPDATE gateway_settings SET active_provider_id = ?1, updated_at = ?2 WHERE id = 1",
+        params![provider_id, &now],
+    )?;
 
     get_by_id(conn, profile_id)
 }
 
 // ── Route Profile Providers ──
 
-pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RouteProfileProviderView>, AppError> {
+pub fn list_providers(
+    conn: &Connection,
+    profile_id: &str,
+) -> Result<Vec<RouteProfileProviderView>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT rpp.id, rpp.provider_id, p.name, p.provider_type, p.protocol,
                 CASE WHEN p.anthropic_base_url IS NOT NULL AND p.anthropic_base_url != '' THEN 1 ELSE 0 END,
@@ -154,29 +183,46 @@ pub fn list_providers(conn: &Connection, profile_id: &str) -> Result<Vec<RoutePr
 
     let rows = stmt.query_map([profile_id], |row| {
         Ok(RouteProfileProviderView {
-            id: row.get(0)?, provider_id: row.get(1)?, provider_name: row.get(2)?,
-            provider_type: row.get(3)?, provider_protocol: row.get(4)?,
+            id: row.get(0)?,
+            provider_id: row.get(1)?,
+            provider_name: row.get(2)?,
+            provider_type: row.get(3)?,
+            provider_protocol: row.get(4)?,
             has_anthropic_url: row.get(5)?,
             supports_vision: row.get(6)?,
             model_capabilities: row.get(7)?,
-            priority: row.get(8)?, enabled: row.get(9)?,
-            model_override: row.get(10)?, cooldown_seconds: row.get(11)?,
-            failover_on_status_codes: row.get(12)?, failover_on_error_keywords: row.get(13)?,
+            priority: row.get(8)?,
+            enabled: row.get(9)?,
+            model_override: row.get(10)?,
+            cooldown_seconds: row.get(11)?,
+            failover_on_status_codes: row.get(12)?,
+            failover_on_error_keywords: row.get(13)?,
             routing_conditions: row.get(14)?,
-            runtime_available: row.get(15)?, cooldown_until: row.get(16)?, consecutive_failures: row.get(17)?,
+            runtime_available: row.get(15)?,
+            cooldown_until: row.get(16)?,
+            consecutive_failures: row.get(17)?,
         })
     })?;
 
     rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
-pub fn add_provider(conn: &Connection, profile_id: &str, provider_id: &str, input: AddProviderToRouteInput) -> Result<(), AppError> {
+pub fn add_provider(
+    conn: &Connection,
+    profile_id: &str,
+    provider_id: &str,
+    input: AddProviderToRouteInput,
+) -> Result<(), AppError> {
     let dup: i64 = conn.query_row(
         "SELECT COUNT(*) FROM route_profile_providers WHERE route_profile_id=?1 AND provider_id=?2",
-        params![profile_id, provider_id], |row| row.get(0),
+        params![profile_id, provider_id],
+        |row| row.get(0),
     )?;
     if dup > 0 {
-        return Err(AppError::new("ROUTE_PROVIDER_DUPLICATED", "Provider is already in this route profile"));
+        return Err(AppError::new(
+            "ROUTE_PROVIDER_DUPLICATED",
+            "Provider is already in this route profile",
+        ));
     }
 
     let now = chrono::Utc::now().to_rfc3339();
@@ -189,7 +235,14 @@ pub fn add_provider(conn: &Connection, profile_id: &str, provider_id: &str, inpu
     });
 
     let default_codes = serde_json::json!([402, 429, 500, 502, 503, 504]).to_string();
-    let default_kw = serde_json::json!(["quota", "insufficient balance", "rate limit", "too many requests", "timeout"]).to_string();
+    let default_kw = serde_json::json!([
+        "quota",
+        "insufficient balance",
+        "rate limit",
+        "too many requests",
+        "timeout"
+    ])
+    .to_string();
 
     conn.execute(
         "INSERT INTO route_profile_providers (id, route_profile_id, provider_id, priority, enabled, model_override, cooldown_seconds, failover_on_status_codes, failover_on_error_keywords, routing_conditions, created_at, updated_at)
@@ -212,7 +265,11 @@ pub fn add_provider(conn: &Connection, profile_id: &str, provider_id: &str, inpu
     Ok(())
 }
 
-pub fn remove_provider(conn: &Connection, profile_id: &str, provider_id: &str) -> Result<(), AppError> {
+pub fn remove_provider(
+    conn: &Connection,
+    profile_id: &str,
+    provider_id: &str,
+) -> Result<(), AppError> {
     conn.execute(
         "DELETE FROM route_profile_providers WHERE route_profile_id=?1 AND provider_id=?2",
         params![profile_id, provider_id],
@@ -220,7 +277,11 @@ pub fn remove_provider(conn: &Connection, profile_id: &str, provider_id: &str) -
     Ok(())
 }
 
-pub fn reorder_providers(conn: &Connection, profile_id: &str, provider_ids: &[String]) -> Result<(), AppError> {
+pub fn reorder_providers(
+    conn: &Connection,
+    profile_id: &str,
+    provider_ids: &[String],
+) -> Result<(), AppError> {
     let now = chrono::Utc::now().to_rfc3339();
     for (i, pid) in provider_ids.iter().enumerate() {
         conn.execute(
@@ -248,9 +309,11 @@ pub fn update_provider_conditions(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::route_profile::{CreateRouteProfileInput, UpdateRouteProfileInput, AddProviderToRouteInput};
-    use crate::storage::providers;
     use crate::models::provider::CreateProviderInput;
+    use crate::models::route_profile::{
+        AddProviderToRouteInput, CreateRouteProfileInput, UpdateRouteProfileInput,
+    };
+    use crate::storage::providers;
 
     fn setup_db() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
@@ -259,40 +322,48 @@ mod tests {
     }
 
     fn create_test_provider(conn: &Connection) -> String {
-        let p = providers::create(conn, CreateProviderInput {
-            name: "TestProvider".to_string(),
-            provider_type: "openai".to_string(),
-            base_url: "https://api.openai.com".to_string(),
-            api_key: Some("sk-test".to_string()),
-            default_model: "gpt-4".to_string(),
-            reasoning_model: None,
-            supported_models: None,
-            model_mapping: None,
-            extra_headers: None,
-            anthropic_base_url: None,
-            responses_base_url: None,
-            protocol: r#"["openai_chat_completions"]"#.to_string(),
-            timeout_seconds: Some(120),
-            auto_cache_control: None,
-            model_capabilities: None,
-            provider_quirks: None,
-            body_filter_enabled: None,
-            thinking_rectifier_enabled: None,
-            error_mapper_enabled: None,
-            model_degradation_chain: None,
-            enabled: Some(true),
-        }).unwrap();
+        let p = providers::create(
+            conn,
+            CreateProviderInput {
+                name: "TestProvider".to_string(),
+                provider_type: "openai".to_string(),
+                base_url: "https://api.openai.com".to_string(),
+                api_key: Some("sk-test".to_string()),
+                default_model: "gpt-4".to_string(),
+                reasoning_model: None,
+                supported_models: None,
+                model_mapping: None,
+                extra_headers: None,
+                anthropic_base_url: None,
+                responses_base_url: None,
+                protocol: r#"["openai_chat_completions"]"#.to_string(),
+                timeout_seconds: Some(120),
+                auto_cache_control: None,
+                model_capabilities: None,
+                provider_quirks: None,
+                body_filter_enabled: None,
+                thinking_rectifier_enabled: None,
+                error_mapper_enabled: None,
+                model_degradation_chain: None,
+                enabled: Some(true),
+            },
+        )
+        .unwrap();
         p.id
     }
 
     #[test]
     fn test_create_and_get_route_profile() {
         let conn = setup_db();
-        let profile = create(&conn, CreateRouteProfileInput {
-            name: "TestProfile".to_string(),
-            input_protocol: "openai_responses".to_string(),
-            mode: Some("manual".to_string()),
-        }).unwrap();
+        let profile = create(
+            &conn,
+            CreateRouteProfileInput {
+                name: "TestProfile".to_string(),
+                input_protocol: "openai_responses".to_string(),
+                mode: Some("manual".to_string()),
+            },
+        )
+        .unwrap();
         assert_eq!(profile.name, "TestProfile");
         assert_eq!(profile.input_protocol, "openai_responses");
         assert_eq!(profile.mode, "manual");
@@ -304,27 +375,40 @@ mod tests {
     #[test]
     fn test_update_route_profile() {
         let conn = setup_db();
-        let profile = create(&conn, CreateRouteProfileInput {
-            name: "Original".to_string(),
-            input_protocol: "openai_responses".to_string(),
-            mode: None,
-        }).unwrap();
-        let updated = update(&conn, &profile.id, UpdateRouteProfileInput {
-            name: Some("Updated".to_string()),
-            mode: None,
-            enabled: None,
-        }).unwrap();
+        let profile = create(
+            &conn,
+            CreateRouteProfileInput {
+                name: "Original".to_string(),
+                input_protocol: "openai_responses".to_string(),
+                mode: None,
+            },
+        )
+        .unwrap();
+        let updated = update(
+            &conn,
+            &profile.id,
+            UpdateRouteProfileInput {
+                name: Some("Updated".to_string()),
+                mode: None,
+                enabled: None,
+            },
+        )
+        .unwrap();
         assert_eq!(updated.name, "Updated");
     }
 
     #[test]
     fn test_set_default_route_profile() {
         let conn = setup_db();
-        let p1 = create(&conn, CreateRouteProfileInput {
-            name: "P1".to_string(),
-            input_protocol: "openai_responses".to_string(),
-            mode: None,
-        }).unwrap();
+        let p1 = create(
+            &conn,
+            CreateRouteProfileInput {
+                name: "P1".to_string(),
+                input_protocol: "openai_responses".to_string(),
+                mode: None,
+            },
+        )
+        .unwrap();
         let default = set_default(&conn, &p1.id).unwrap();
         assert!(default.is_default);
     }
@@ -332,11 +416,15 @@ mod tests {
     #[test]
     fn test_delete_route_profile_prevents_default() {
         let conn = setup_db();
-        let profile = create(&conn, CreateRouteProfileInput {
-            name: "ToDelete".to_string(),
-            input_protocol: "openai_responses".to_string(),
-            mode: None,
-        }).unwrap();
+        let profile = create(
+            &conn,
+            CreateRouteProfileInput {
+                name: "ToDelete".to_string(),
+                input_protocol: "openai_responses".to_string(),
+                mode: None,
+            },
+        )
+        .unwrap();
         let _ = set_default(&conn, &profile.id);
         let err = delete(&conn, &profile.id).unwrap_err();
         assert_eq!(err.code, "ROUTE_PROFILE_DELETE_DEFAULT_FORBIDDEN");
@@ -346,20 +434,30 @@ mod tests {
     fn test_add_and_remove_provider_from_route() {
         let conn = setup_db();
         let provider_id = create_test_provider(&conn);
-        let profile = create(&conn, CreateRouteProfileInput {
-            name: "WithProvider".to_string(),
-            input_protocol: "openai_responses".to_string(),
-            mode: None,
-        }).unwrap();
+        let profile = create(
+            &conn,
+            CreateRouteProfileInput {
+                name: "WithProvider".to_string(),
+                input_protocol: "openai_responses".to_string(),
+                mode: None,
+            },
+        )
+        .unwrap();
 
-        add_provider(&conn, &profile.id, &provider_id, AddProviderToRouteInput {
-            priority: Some(1),
-            model_override: None,
-            cooldown_seconds: None,
-            failover_on_status_codes: None,
-            failover_on_error_keywords: None,
-            routing_conditions: None,
-        }).unwrap();
+        add_provider(
+            &conn,
+            &profile.id,
+            &provider_id,
+            AddProviderToRouteInput {
+                priority: Some(1),
+                model_override: None,
+                cooldown_seconds: None,
+                failover_on_status_codes: None,
+                failover_on_error_keywords: None,
+                routing_conditions: None,
+            },
+        )
+        .unwrap();
 
         let providers = list_providers(&conn, &profile.id).unwrap();
         assert_eq!(providers.len(), 1);
@@ -374,29 +472,45 @@ mod tests {
     fn test_add_provider_duplicate_fails() {
         let conn = setup_db();
         let provider_id = create_test_provider(&conn);
-        let profile = create(&conn, CreateRouteProfileInput {
-            name: "DupTest".to_string(),
-            input_protocol: "openai_responses".to_string(),
-            mode: None,
-        }).unwrap();
+        let profile = create(
+            &conn,
+            CreateRouteProfileInput {
+                name: "DupTest".to_string(),
+                input_protocol: "openai_responses".to_string(),
+                mode: None,
+            },
+        )
+        .unwrap();
 
-        add_provider(&conn, &profile.id, &provider_id, AddProviderToRouteInput {
-            priority: Some(1),
-            model_override: None,
-            cooldown_seconds: None,
-            failover_on_status_codes: None,
-            failover_on_error_keywords: None,
-            routing_conditions: None,
-        }).unwrap();
+        add_provider(
+            &conn,
+            &profile.id,
+            &provider_id,
+            AddProviderToRouteInput {
+                priority: Some(1),
+                model_override: None,
+                cooldown_seconds: None,
+                failover_on_status_codes: None,
+                failover_on_error_keywords: None,
+                routing_conditions: None,
+            },
+        )
+        .unwrap();
 
-        let err = add_provider(&conn, &profile.id, &provider_id, AddProviderToRouteInput {
-            priority: Some(2),
-            model_override: None,
-            cooldown_seconds: None,
-            failover_on_status_codes: None,
-            failover_on_error_keywords: None,
-            routing_conditions: None,
-        }).unwrap_err();
+        let err = add_provider(
+            &conn,
+            &profile.id,
+            &provider_id,
+            AddProviderToRouteInput {
+                priority: Some(2),
+                model_override: None,
+                cooldown_seconds: None,
+                failover_on_status_codes: None,
+                failover_on_error_keywords: None,
+                routing_conditions: None,
+            },
+        )
+        .unwrap_err();
         assert_eq!(err.code, "ROUTE_PROVIDER_DUPLICATED");
     }
 
@@ -405,20 +519,44 @@ mod tests {
         let conn = setup_db();
         let pid1 = create_test_provider(&conn);
         let pid2 = create_test_provider(&conn);
-        let profile = create(&conn, CreateRouteProfileInput {
-            name: "Reorder".to_string(),
-            input_protocol: "openai_responses".to_string(),
-            mode: None,
-        }).unwrap();
+        let profile = create(
+            &conn,
+            CreateRouteProfileInput {
+                name: "Reorder".to_string(),
+                input_protocol: "openai_responses".to_string(),
+                mode: None,
+            },
+        )
+        .unwrap();
 
-        add_provider(&conn, &profile.id, &pid1, AddProviderToRouteInput {
-            priority: Some(1), model_override: None, cooldown_seconds: None,
-            failover_on_status_codes: None, failover_on_error_keywords: None, routing_conditions: None,
-        }).unwrap();
-        add_provider(&conn, &profile.id, &pid2, AddProviderToRouteInput {
-            priority: Some(2), model_override: None, cooldown_seconds: None,
-            failover_on_status_codes: None, failover_on_error_keywords: None, routing_conditions: None,
-        }).unwrap();
+        add_provider(
+            &conn,
+            &profile.id,
+            &pid1,
+            AddProviderToRouteInput {
+                priority: Some(1),
+                model_override: None,
+                cooldown_seconds: None,
+                failover_on_status_codes: None,
+                failover_on_error_keywords: None,
+                routing_conditions: None,
+            },
+        )
+        .unwrap();
+        add_provider(
+            &conn,
+            &profile.id,
+            &pid2,
+            AddProviderToRouteInput {
+                priority: Some(2),
+                model_override: None,
+                cooldown_seconds: None,
+                failover_on_status_codes: None,
+                failover_on_error_keywords: None,
+                routing_conditions: None,
+            },
+        )
+        .unwrap();
 
         reorder_providers(&conn, &profile.id, &[pid2.clone(), pid1.clone()]).unwrap();
         let providers = list_providers(&conn, &profile.id).unwrap();
@@ -430,16 +568,30 @@ mod tests {
     fn test_update_provider_conditions() {
         let conn = setup_db();
         let provider_id = create_test_provider(&conn);
-        let profile = create(&conn, CreateRouteProfileInput {
-            name: "Conditions".to_string(),
-            input_protocol: "openai_responses".to_string(),
-            mode: None,
-        }).unwrap();
+        let profile = create(
+            &conn,
+            CreateRouteProfileInput {
+                name: "Conditions".to_string(),
+                input_protocol: "openai_responses".to_string(),
+                mode: None,
+            },
+        )
+        .unwrap();
 
-        add_provider(&conn, &profile.id, &provider_id, AddProviderToRouteInput {
-            priority: Some(1), model_override: None, cooldown_seconds: None,
-            failover_on_status_codes: None, failover_on_error_keywords: None, routing_conditions: None,
-        }).unwrap();
+        add_provider(
+            &conn,
+            &profile.id,
+            &provider_id,
+            AddProviderToRouteInput {
+                priority: Some(1),
+                model_override: None,
+                cooldown_seconds: None,
+                failover_on_status_codes: None,
+                failover_on_error_keywords: None,
+                routing_conditions: None,
+            },
+        )
+        .unwrap();
 
         let cond = r#"{"has_images":true}"#;
         update_provider_conditions(&conn, &profile.id, &provider_id, Some(cond)).unwrap();
@@ -455,4 +607,3 @@ mod tests {
         assert!(default.is_some());
     }
 }
-

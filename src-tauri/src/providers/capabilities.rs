@@ -31,8 +31,14 @@ pub const CAP_WEB_SEARCH: &str = "web_search";
 /// All canonical capability strings, for UI rendering. Order matters — this is
 /// also the column order shown in the matrix editor.
 pub const ALL_CAPABILITIES: &[&str] = &[
-    CAP_TEXT, CAP_VISION, CAP_AUDIO_IN, CAP_TTS, CAP_VIDEO_IN,
-    CAP_REASONING, CAP_TOOLS, CAP_WEB_SEARCH,
+    CAP_TEXT,
+    CAP_VISION,
+    CAP_AUDIO_IN,
+    CAP_TTS,
+    CAP_VIDEO_IN,
+    CAP_REASONING,
+    CAP_TOOLS,
+    CAP_WEB_SEARCH,
 ];
 
 /// Auto-derive a model's capabilities given its provider type and id.
@@ -73,17 +79,26 @@ fn seed_kimi(mid: &str) -> Vec<String> {
         // kimi-for-coding accepts image input (confirmed by users). Coding-tuned
         // model, supports function calling + web_search builtin.
         "kimi-for-coding" => vec![
-            CAP_TEXT.into(), CAP_VISION.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+            CAP_TEXT.into(),
+            CAP_VISION.into(),
+            CAP_TOOLS.into(),
+            CAP_WEB_SEARCH.into(),
         ],
         // Moonshot's explicit vision models.
         m if m.contains("vision") => vec![
-            CAP_TEXT.into(), CAP_VISION.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+            CAP_TEXT.into(),
+            CAP_VISION.into(),
+            CAP_TOOLS.into(),
+            CAP_WEB_SEARCH.into(),
         ],
         // Kimi K-series + standard Moonshot chat models. Recent K2 supports
         // vision; conservative default keeps web_search + tools, leaves vision
         // off for the user to opt into per model.
         "kimi-k2" => vec![
-            CAP_TEXT.into(), CAP_VISION.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into(),
+            CAP_TEXT.into(),
+            CAP_VISION.into(),
+            CAP_TOOLS.into(),
+            CAP_WEB_SEARCH.into(),
         ],
         _ => vec![CAP_TEXT.into(), CAP_TOOLS.into(), CAP_WEB_SEARCH.into()],
     }
@@ -121,7 +136,12 @@ fn seed_generic(mid: &str) -> Vec<String> {
     if mid.contains("tts") || mid.contains("speech") {
         return vec![CAP_TTS.into()];
     }
-    if mid.contains("reason") || mid.contains("think") || mid.contains("-r1") || mid.contains("o1") || mid.contains("o3") {
+    if mid.contains("reason")
+        || mid.contains("think")
+        || mid.contains("-r1")
+        || mid.contains("o1")
+        || mid.contains("o3")
+    {
         caps.push(CAP_REASONING.into());
     }
     caps
@@ -145,7 +165,10 @@ fn dedup_sort(mut v: Vec<String>) -> Vec<String> {
 
 /// Auto-derive capabilities for a whole list of models. Returns a map suitable
 /// for serializing into the `model_capabilities` JSON column.
-pub fn seed_for_models(provider_type: &str, model_ids: &[String]) -> std::collections::HashMap<String, Vec<String>> {
+pub fn seed_for_models(
+    provider_type: &str,
+    model_ids: &[String],
+) -> std::collections::HashMap<String, Vec<String>> {
     model_ids
         .iter()
         .map(|m| (m.clone(), seed_for_model(provider_type, m)))
@@ -160,9 +183,7 @@ pub fn seed_for_models(provider_type: &str, model_ids: &[String]) -> std::collec
 /// Keep this list narrow on purpose: incorrectly listing a field as unsupported
 /// silently drops it when body_filter is on, which breaks features. Only add a
 /// field once we've confirmed the provider 400s on it.
-pub fn default_quirks_for_provider(
-    provider_type: &str,
-) -> crate::models::provider::ProviderQuirks {
+pub fn default_quirks_for_provider(provider_type: &str) -> crate::models::provider::ProviderQuirks {
     use crate::models::provider::{ProviderQuirks, RangeI64};
     let pt = provider_type.to_ascii_lowercase();
     let mut q = ProviderQuirks::default();
@@ -180,13 +201,19 @@ pub fn default_quirks_for_provider(
         // (Server-side `$web_search` works via the Plugin path — see
         // adapter.rs MIMO_WEB_SEARCH_DISABLED cache.)
         "mimo" | "xiaomi" => {
-            q.thinking_budget = Some(RangeI64 { min: 1024, max: 32_768 });
+            q.thinking_budget = Some(RangeI64 {
+                min: 1024,
+                max: 32_768,
+            });
         }
         // Anthropic Messages: reasoning effort is via `thinking.budget_tokens`
         // (Sonnet/Haiku >= 1024, Opus >= 2048). Clamp upper bound to avoid
         // wasting credits.
         "anthropic" => {
-            q.thinking_budget = Some(RangeI64 { min: 1024, max: 64_000 });
+            q.thinking_budget = Some(RangeI64 {
+                min: 1024,
+                max: 64_000,
+            });
         }
         // OpenAI Responses: reasoning.effort takes "minimal" / "low" / "medium" / "high".
         "openai" | "azure_openai" => {
@@ -220,7 +247,9 @@ mod quirks_tests {
     #[test]
     fn mimo_default_has_thinking_budget_range() {
         let q = default_quirks_for_provider("mimo");
-        let r = q.thinking_budget.expect("MiMo should advertise thinking range");
+        let r = q
+            .thinking_budget
+            .expect("MiMo should advertise thinking range");
         assert_eq!(r.min, 1024);
         assert!(r.max >= r.min);
     }
@@ -278,7 +307,10 @@ mod tests {
         assert!(contains(&c, CAP_VISION));
         assert!(contains(&c, CAP_AUDIO_IN));
         assert!(contains(&c, CAP_VIDEO_IN));
-        assert!(!contains(&c, CAP_REASONING), "omni doesn't have thinking mode per docs");
+        assert!(
+            !contains(&c, CAP_REASONING),
+            "omni doesn't have thinking mode per docs"
+        );
     }
 
     #[test]
@@ -290,7 +322,12 @@ mod tests {
 
     #[test]
     fn mimo_tts_models_are_tts_only() {
-        for tts in ["mimo-v2.5-tts", "mimo-v2.5-tts-voiceclone", "mimo-v2.5-tts-voicedesign", "mimo-v2-tts"] {
+        for tts in [
+            "mimo-v2.5-tts",
+            "mimo-v2.5-tts-voiceclone",
+            "mimo-v2.5-tts-voicedesign",
+            "mimo-v2-tts",
+        ] {
             let c = caps_for("mimo", tts);
             assert_eq!(c, vec![CAP_TTS], "{tts} should be tts-only, got {c:?}");
         }
@@ -298,7 +335,10 @@ mod tests {
 
     #[test]
     fn mimo_with_1m_qualifier_resolves_same_as_base() {
-        assert_eq!(caps_for("mimo", "mimo-v2.5-pro[1m]"), caps_for("mimo", "mimo-v2.5-pro"));
+        assert_eq!(
+            caps_for("mimo", "mimo-v2.5-pro[1m]"),
+            caps_for("mimo", "mimo-v2.5-pro")
+        );
     }
 
     #[test]
@@ -312,7 +352,10 @@ mod tests {
     fn deepseek_v4_pro_has_reasoning_no_vision() {
         let c = caps_for("deepseek", "deepseek-v4-pro");
         assert!(contains(&c, CAP_REASONING));
-        assert!(!contains(&c, CAP_WEB_SEARCH), "DeepSeek has no native web_search builtin");
+        assert!(
+            !contains(&c, CAP_WEB_SEARCH),
+            "DeepSeek has no native web_search builtin"
+        );
         assert!(!contains(&c, CAP_VISION));
     }
 
@@ -322,12 +365,18 @@ mod tests {
         assert!(contains(&c, CAP_TEXT));
         assert!(contains(&c, CAP_TOOLS));
         assert!(contains(&c, CAP_REASONING));
-        assert!(!contains(&c, CAP_WEB_SEARCH), "DeepSeek has no native web_search builtin");
+        assert!(
+            !contains(&c, CAP_WEB_SEARCH),
+            "DeepSeek has no native web_search builtin"
+        );
     }
 
     #[test]
     fn deepseek_with_1m_qualifier() {
-        assert_eq!(caps_for("deepseek", "deepseek-v4-pro[1m]"), caps_for("deepseek", "deepseek-v4-pro"));
+        assert_eq!(
+            caps_for("deepseek", "deepseek-v4-pro[1m]"),
+            caps_for("deepseek", "deepseek-v4-pro")
+        );
     }
 
     #[test]
@@ -341,8 +390,14 @@ mod tests {
     #[test]
     fn kimi_for_coding_has_vision_and_web_search() {
         let c = caps_for("kimi", "kimi-for-coding");
-        assert!(contains(&c, CAP_VISION), "kimi-for-coding accepts image input per upstream confirmation");
-        assert!(contains(&c, CAP_WEB_SEARCH), "Kimi $web_search builtin is universally translated");
+        assert!(
+            contains(&c, CAP_VISION),
+            "kimi-for-coding accepts image input per upstream confirmation"
+        );
+        assert!(
+            contains(&c, CAP_WEB_SEARCH),
+            "Kimi $web_search builtin is universally translated"
+        );
         assert!(contains(&c, CAP_TOOLS));
     }
 
@@ -362,7 +417,10 @@ mod tests {
     fn kimi_generic_chat_has_web_search_no_vision() {
         let c = caps_for("kimi", "moonshot-v1-32k");
         assert!(contains(&c, CAP_WEB_SEARCH));
-        assert!(!contains(&c, CAP_VISION), "conservative default — user opts in per model");
+        assert!(
+            !contains(&c, CAP_VISION),
+            "conservative default — user opts in per model"
+        );
     }
 
     // ── Generic ──
@@ -397,11 +455,24 @@ mod tests {
 
     #[test]
     fn seed_for_models_returns_full_matrix() {
-        let models = vec!["mimo-v2.5-pro".to_string(), "mimo-v2.5".to_string(), "mimo-v2.5-tts".to_string()];
+        let models = vec![
+            "mimo-v2.5-pro".to_string(),
+            "mimo-v2.5".to_string(),
+            "mimo-v2.5-tts".to_string(),
+        ];
         let matrix = seed_for_models("mimo", &models);
         assert_eq!(matrix.len(), 3);
-        assert!(matrix.get("mimo-v2.5-pro").unwrap().contains(&CAP_REASONING.to_string()));
-        assert!(matrix.get("mimo-v2.5").unwrap().contains(&CAP_VISION.to_string()));
-        assert_eq!(matrix.get("mimo-v2.5-tts").unwrap(), &vec![CAP_TTS.to_string()]);
+        assert!(matrix
+            .get("mimo-v2.5-pro")
+            .unwrap()
+            .contains(&CAP_REASONING.to_string()));
+        assert!(matrix
+            .get("mimo-v2.5")
+            .unwrap()
+            .contains(&CAP_VISION.to_string()));
+        assert_eq!(
+            matrix.get("mimo-v2.5-tts").unwrap(),
+            &vec![CAP_TTS.to_string()]
+        );
     }
 }

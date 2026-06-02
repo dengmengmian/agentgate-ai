@@ -42,7 +42,11 @@ async fn kimi_web_search_rewrites_to_builtin_and_disables_thinking() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);
@@ -85,7 +89,8 @@ async fn kimi_multi_turn_tool_call_roundtrip() {
     // its previous tool call" upstream — if the order or id linking breaks,
     // the model loses context.
     let mock = MockUpstream::start().await;
-    mock.stub_chat_completions_ok("kimi-k2", "Sunny, 22°C.").await;
+    mock.stub_chat_completions_ok("kimi-k2", "Sunny, 22°C.")
+        .await;
 
     let harness = GatewayHarness::start(kimi_provider(), &mock).await;
     let client = harness.client();
@@ -125,7 +130,11 @@ async fn kimi_multi_turn_tool_call_roundtrip() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);

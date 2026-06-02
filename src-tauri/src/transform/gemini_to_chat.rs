@@ -1,7 +1,9 @@
 use serde_json::{json, Value};
 
 use crate::errors::AppError;
-use crate::protocol::chat_completions::{ChatCompletionsRequest, ChatMessage, ToolCall, ToolCallFunction};
+use crate::protocol::chat_completions::{
+    ChatCompletionsRequest, ChatMessage, ToolCall, ToolCallFunction,
+};
 
 /// Convert a Gemini API request body to Chat Completions format.
 pub fn convert(gemini_body: &Value, model: &str) -> Result<ChatCompletionsRequest, AppError> {
@@ -25,11 +27,16 @@ pub fn convert(gemini_body: &Value, model: &str) -> Result<ChatCompletionsReques
     // 2. Contents → messages
     if let Some(contents) = gemini_body.get("contents").and_then(|c| c.as_array()) {
         for content in contents {
-            let role = content.get("role").and_then(|r| r.as_str()).unwrap_or("user");
+            let role = content
+                .get("role")
+                .and_then(|r| r.as_str())
+                .unwrap_or("user");
             let chat_role = if role == "model" { "assistant" } else { "user" };
 
             let parts = content.get("parts").and_then(|p| p.as_array());
-            if parts.is_none() { continue; }
+            if parts.is_none() {
+                continue;
+            }
             let parts = parts.unwrap();
 
             let mut text_parts: Vec<String> = Vec::new();
@@ -44,23 +51,46 @@ pub fn convert(gemini_body: &Value, model: &str) -> Result<ChatCompletionsReques
 
                 // Function call (model calling a tool)
                 if let Some(fc) = part.get("functionCall") {
-                    let name = fc.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-                    let args = fc.get("args").map(|a| a.to_string()).unwrap_or("{}".to_string());
-                    let id = fc.get("id").and_then(|i| i.as_str())
+                    let name = fc
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let args = fc
+                        .get("args")
+                        .map(|a| a.to_string())
+                        .unwrap_or("{}".to_string());
+                    let id = fc
+                        .get("id")
+                        .and_then(|i| i.as_str())
                         .map(String::from)
                         .unwrap_or_else(|| format!("call_{}", tool_calls.len()));
                     tool_calls.push(ToolCall {
                         id,
                         call_type: "function".to_string(),
-                        function: ToolCallFunction { name, arguments: args },
+                        function: ToolCallFunction {
+                            name,
+                            arguments: args,
+                        },
                     });
                 }
 
                 // Function response (tool result)
                 if let Some(fr) = part.get("functionResponse") {
-                    let name = fr.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string();
-                    let response = fr.get("response")
-                        .map(|r| if r.is_string() { r.as_str().unwrap().to_string() } else { r.to_string() })
+                    let name = fr
+                        .get("name")
+                        .and_then(|n| n.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let response = fr
+                        .get("response")
+                        .map(|r| {
+                            if r.is_string() {
+                                r.as_str().unwrap().to_string()
+                            } else {
+                                r.to_string()
+                            }
+                        })
                         .unwrap_or_default();
                     function_responses.push((name, response));
                 }
@@ -85,9 +115,17 @@ pub fn convert(gemini_body: &Value, model: &str) -> Result<ChatCompletionsReques
             let text = text_parts.join("");
             messages.push(ChatMessage {
                 role: chat_role.to_string(),
-                content: if text.is_empty() { None } else { Some(Value::String(text)) },
+                content: if text.is_empty() {
+                    None
+                } else {
+                    Some(Value::String(text))
+                },
                 reasoning_content: None,
-                tool_calls: if tool_calls.is_empty() { None } else { Some(tool_calls) },
+                tool_calls: if tool_calls.is_empty() {
+                    None
+                } else {
+                    Some(tool_calls)
+                },
                 tool_call_id: None,
                 name: None,
             });
@@ -95,7 +133,8 @@ pub fn convert(gemini_body: &Value, model: &str) -> Result<ChatCompletionsReques
     }
 
     // 3. Tools → Chat Completions tools
-    let tools = gemini_body.get("tools")
+    let tools = gemini_body
+        .get("tools")
         .and_then(|t| t.as_array())
         .map(|tools_arr| {
             let mut result = Vec::new();
@@ -103,8 +142,14 @@ pub fn convert(gemini_body: &Value, model: &str) -> Result<ChatCompletionsReques
                 if let Some(decls) = tool.get("functionDeclarations").and_then(|d| d.as_array()) {
                     for decl in decls {
                         let name = decl.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                        let desc = decl.get("description").and_then(|d| d.as_str()).unwrap_or("");
-                        let params = decl.get("parameters").cloned().unwrap_or(json!({"type": "object"}));
+                        let desc = decl
+                            .get("description")
+                            .and_then(|d| d.as_str())
+                            .unwrap_or("");
+                        let params = decl
+                            .get("parameters")
+                            .cloned()
+                            .unwrap_or(json!({"type": "object"}));
                         result.push(json!({
                             "type": "function",
                             "function": {"name": name, "description": desc, "parameters": params}
@@ -118,9 +163,13 @@ pub fn convert(gemini_body: &Value, model: &str) -> Result<ChatCompletionsReques
 
     // 4. Generation config
     let gen = gemini_body.get("generationConfig");
-    let temperature = gen.and_then(|g| g.get("temperature")).and_then(|v| v.as_f64());
+    let temperature = gen
+        .and_then(|g| g.get("temperature"))
+        .and_then(|v| v.as_f64());
     let top_p = gen.and_then(|g| g.get("topP")).and_then(|v| v.as_f64());
-    let max_tokens = gen.and_then(|g| g.get("maxOutputTokens")).and_then(|v| v.as_i64());
+    let max_tokens = gen
+        .and_then(|g| g.get("maxOutputTokens"))
+        .and_then(|v| v.as_i64());
     let stop = gen.and_then(|g| g.get("stopSequences")).cloned();
 
     // 5. Stream options
@@ -150,11 +199,14 @@ pub fn convert(gemini_body: &Value, model: &str) -> Result<ChatCompletionsReques
 }
 
 fn extract_parts_text(parts: Option<&Value>) -> String {
-    parts.and_then(|p| p.as_array())
-        .map(|arr| arr.iter()
-            .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
-            .collect::<Vec<_>>()
-            .join(""))
+    parts
+        .and_then(|p| p.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
+                .collect::<Vec<_>>()
+                .join("")
+        })
         .unwrap_or_default()
 }
 
@@ -172,8 +224,16 @@ pub fn response_to_gemini(chat_resp: &Value, model: &str) -> Value {
                 }
                 if let Some(tcs) = msg.get("tool_calls").and_then(|t| t.as_array()) {
                     for tc in tcs {
-                        let name = tc.get("function").and_then(|f| f.get("name")).and_then(|n| n.as_str()).unwrap_or("");
-                        let args_str = tc.get("function").and_then(|f| f.get("arguments")).and_then(|a| a.as_str()).unwrap_or("{}");
+                        let name = tc
+                            .get("function")
+                            .and_then(|f| f.get("name"))
+                            .and_then(|n| n.as_str())
+                            .unwrap_or("");
+                        let args_str = tc
+                            .get("function")
+                            .and_then(|f| f.get("arguments"))
+                            .and_then(|a| a.as_str())
+                            .unwrap_or("{}");
                         let args: Value = serde_json::from_str(args_str).unwrap_or(json!({}));
                         parts.push(json!({"functionCall": {"name": name, "args": args}}));
                     }
@@ -182,7 +242,8 @@ pub fn response_to_gemini(chat_resp: &Value, model: &str) -> Value {
         }
     }
 
-    let finish_reason = chat_resp.get("choices")
+    let finish_reason = chat_resp
+        .get("choices")
         .and_then(|c| c.as_array())
         .and_then(|a| a.first())
         .and_then(|c| c.get("finish_reason"))
@@ -236,7 +297,9 @@ pub fn chunk_to_gemini(chunk: &Value) -> Option<String> {
                 let name = func.get("name").and_then(|n| n.as_str());
                 let args = func.get("arguments").and_then(|a| a.as_str());
                 if let Some(name) = name {
-                    let args_val: Value = args.and_then(|a| serde_json::from_str(a).ok()).unwrap_or(json!({}));
+                    let args_val: Value = args
+                        .and_then(|a| serde_json::from_str(a).ok())
+                        .unwrap_or(json!({}));
                     parts.push(json!({"functionCall": {"name": name, "args": args_val}}));
                 }
             }
@@ -287,7 +350,10 @@ mod tests {
         let result = convert(&body, "gemini-2.5-flash").unwrap();
         assert_eq!(result.messages.len(), 1);
         assert_eq!(result.messages[0].role, "user");
-        assert_eq!(result.messages[0].content, Some(Value::String("hello".to_string())));
+        assert_eq!(
+            result.messages[0].content,
+            Some(Value::String("hello".to_string()))
+        );
     }
 
     #[test]
@@ -298,7 +364,10 @@ mod tests {
         });
         let result = convert(&body, "test").unwrap();
         assert_eq!(result.messages[0].role, "system");
-        assert_eq!(result.messages[0].content, Some(Value::String("Be helpful".to_string())));
+        assert_eq!(
+            result.messages[0].content,
+            Some(Value::String("Be helpful".to_string()))
+        );
         assert_eq!(result.messages[1].role, "user");
     }
 
@@ -346,7 +415,10 @@ mod tests {
             "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
         });
         let result = response_to_gemini(&chat_resp, "gemini-2.5-flash");
-        assert_eq!(result["candidates"][0]["content"]["parts"][0]["text"], "hello");
+        assert_eq!(
+            result["candidates"][0]["content"]["parts"][0]["text"],
+            "hello"
+        );
         assert_eq!(result["candidates"][0]["finishReason"], "STOP");
         assert_eq!(result["usageMetadata"]["promptTokenCount"], 10);
     }

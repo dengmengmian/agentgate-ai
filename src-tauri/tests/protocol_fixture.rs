@@ -18,7 +18,8 @@ async fn l1_responses_to_anthropic_transform() {
     // Codex (/v1/responses) → Anthropic-typed provider with anthropic_base_url.
     // The gateway must convert to Anthropic Messages shape and hit /v1/messages.
     let mock = MockUpstream::start().await;
-    mock.stub_anthropic_messages_ok("claude-sonnet-4-6", "ok").await;
+    mock.stub_anthropic_messages_ok("claude-sonnet-4-6", "ok")
+        .await;
 
     let mut spec = ProviderSpec::chat_only("anthropic", "claude-sonnet-4-6");
     spec.protocol = r#"["anthropic_messages"]"#.to_string();
@@ -39,11 +40,18 @@ async fn l1_responses_to_anthropic_transform() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);
-    assert_eq!(received[0].path, "/v1/messages", "must hit Anthropic Messages path");
+    assert_eq!(
+        received[0].path, "/v1/messages",
+        "must hit Anthropic Messages path"
+    );
     // Anthropic shape requires a `messages` array, not Responses-style `input`.
     assert!(
         received[0].body.get("messages").is_some(),
@@ -59,7 +67,8 @@ async fn l1_chat_to_anthropic_non_stream_transform() {
     // Generic Chat client → Anthropic-typed provider with anthropic_base_url.
     // Goes through client_chat_to_anthropic_handle.
     let mock = MockUpstream::start().await;
-    mock.stub_anthropic_messages_ok("claude-sonnet-4-6", "ok").await;
+    mock.stub_anthropic_messages_ok("claude-sonnet-4-6", "ok")
+        .await;
 
     let mut spec = ProviderSpec::chat_only("anthropic", "claude-sonnet-4-6");
     spec.protocol = r#"["anthropic_messages"]"#.to_string();
@@ -80,7 +89,11 @@ async fn l1_chat_to_anthropic_non_stream_transform() {
         .send()
         .await
         .expect("send /v1/chat/completions");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);
@@ -121,7 +134,11 @@ async fn l1_messages_to_chat_fallback_transform() {
         .send()
         .await
         .expect("send /v1/messages");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);
@@ -161,7 +178,11 @@ async fn l2_responses_endpoint_applies_model_mapping() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);
@@ -194,7 +215,11 @@ async fn l2_chat_endpoint_applies_model_mapping() {
         .send()
         .await
         .expect("send /v1/chat/completions");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);
@@ -209,7 +234,8 @@ async fn l2_messages_endpoint_applies_model_mapping() {
     // on the Anthropic passthrough path. The mock /v1/messages must observe
     // the post-mapping name (and not a [1m] qualifier we didn't ask for).
     let mock = MockUpstream::start().await;
-    mock.stub_anthropic_messages_ok("deepseek-v4-pro", "ok").await;
+    mock.stub_anthropic_messages_ok("deepseek-v4-pro", "ok")
+        .await;
 
     let spec = ProviderSpec::chat_only("deepseek", "deepseek-v4-pro")
         .with_anthropic(mock.url())
@@ -229,7 +255,11 @@ async fn l2_messages_endpoint_applies_model_mapping() {
         .send()
         .await
         .expect("send /v1/messages");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);
@@ -264,7 +294,11 @@ async fn l2_agentgate_virtual_model_resolves_to_real_model() {
         .send()
         .await
         .expect("send /v1/chat/completions");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);

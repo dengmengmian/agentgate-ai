@@ -166,9 +166,8 @@ fn parse_file(path: &Path, result: &mut SyncResult) -> Vec<ParsedRow> {
         }
         let input = tokens.input.unwrap_or(0);
         // Gemini 把 output 拆成 3 桶：可见输出 + 思考 + 工具调用，全部按 output 计费。
-        let output = tokens.output.unwrap_or(0)
-            + tokens.thoughts.unwrap_or(0)
-            + tokens.tool.unwrap_or(0);
+        let output =
+            tokens.output.unwrap_or(0) + tokens.thoughts.unwrap_or(0) + tokens.tool.unwrap_or(0);
         let cached = tokens.cached.unwrap_or(0);
         if input == 0 && output == 0 {
             continue;
@@ -176,7 +175,9 @@ fn parse_file(path: &Path, result: &mut SyncResult) -> Vec<ParsedRow> {
         rows.push(ParsedRow {
             external_id: event_id,
             session_id: session_id.clone(),
-            timestamp: event.timestamp.unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+            timestamp: event
+                .timestamp
+                .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
             model: event.model.unwrap_or_else(|| "gemini".to_string()),
             input_tokens: input,
             output_tokens: output,
@@ -208,7 +209,9 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
     }
 
     let candidate_ids: Vec<String> = all_rows.iter().map(|r| r.external_id.clone()).collect();
-    let conn = db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let already = storage::request_logs::external_ids_for_source(&conn, SOURCE, &candidate_ids)?;
 
     for row in all_rows {
@@ -217,8 +220,11 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
             continue;
         }
         let cost = storage::pricing::calculate_cost_for_request(
-            &conn, PROVIDER_LABEL, &row.model,
-            Some(row.input_tokens), Some(row.output_tokens),
+            &conn,
+            PROVIDER_LABEL,
+            &row.model,
+            Some(row.input_tokens),
+            Some(row.output_tokens),
         );
         match storage::request_logs::insert_session_log(
             &conn,
@@ -233,11 +239,17 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
             Some(row.input_tokens),
             Some(row.output_tokens),
             None,
-            if row.cached_tokens > 0 { Some(row.cached_tokens) } else { None },
+            if row.cached_tokens > 0 {
+                Some(row.cached_tokens)
+            } else {
+                None
+            },
             cost,
         ) {
             Ok(()) => result.imported += 1,
-            Err(e) => result.errors.push(format!("insert {}: {}", row.external_id, e.message)),
+            Err(e) => result
+                .errors
+                .push(format!("insert {}: {}", row.external_id, e.message)),
         }
     }
     Ok(result)

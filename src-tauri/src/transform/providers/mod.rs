@@ -1,23 +1,23 @@
-use crate::providers::adapter::ProviderConfig;
-use crate::protocol::chat_completions::{ChatCompletionsRequest, ChatMessage};
 use crate::errors::AppError;
+use crate::protocol::chat_completions::{ChatCompletionsRequest, ChatMessage};
+use crate::providers::adapter::ProviderConfig;
 use serde_json::Value;
 
-mod deepseek;
-mod kimi;
-mod minimax;
-mod default;
 mod anthropic;
+mod deepseek;
+mod default;
 mod gemini;
+mod kimi;
 mod mimo;
+mod minimax;
 
-pub use deepseek::DeepSeekProvider;
-pub use kimi::KimiProvider;
-pub use minimax::MiniMaxProvider;
-pub use default::DefaultProvider;
 pub use anthropic::AnthropicProvider;
+pub use deepseek::DeepSeekProvider;
+pub use default::DefaultProvider;
 pub use gemini::GeminiProvider;
+pub use kimi::KimiProvider;
 pub use mimo::MimoProvider;
+pub use minimax::MiniMaxProvider;
 
 /// Per-provider hooks for transforming Responses API → Chat Completions API.
 ///
@@ -260,8 +260,10 @@ mod detector_tests {
             (400, "credit_balance is too low"),
             (400, "billing_hard_limit_reached"),
         ] {
-            assert!(detect_insufficient_balance(status, snippet),
-                "should detect: {status} / {snippet}");
+            assert!(
+                detect_insufficient_balance(status, snippet),
+                "should detect: {status} / {snippet}"
+            );
         }
     }
 
@@ -269,7 +271,10 @@ mod detector_tests {
     fn balance_skips_unrelated_status() {
         assert!(!detect_insufficient_balance(200, "Insufficient Balance"));
         assert!(!detect_insufficient_balance(500, "余额不足"));
-        assert!(!detect_insufficient_balance(400, "completely unrelated error"));
+        assert!(!detect_insufficient_balance(
+            400,
+            "completely unrelated error"
+        ));
     }
 
     #[test]
@@ -282,7 +287,10 @@ mod detector_tests {
             (403, "未授权访问"),
             (401, "鉴权失败"),
         ] {
-            assert!(detect_auth_error(status, snippet), "should detect: {status} / {snippet}");
+            assert!(
+                detect_auth_error(status, snippet),
+                "should detect: {status} / {snippet}"
+            );
         }
     }
 

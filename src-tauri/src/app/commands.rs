@@ -1,8 +1,9 @@
-use tauri::{Emitter, Manager, State};
 use std::time::Instant;
+use tauri::{Emitter, Manager, State};
 
 use crate::app::state::AppState;
 use crate::errors::AppError;
+use crate::gateway;
 use crate::models::gateway::{GatewaySettings, GatewayStatus, UpdateGatewaySettingsInput};
 use crate::models::provider::{
     CreateProviderInput, ProviderTestResult, ProviderView, UpdateProviderInput,
@@ -10,7 +11,6 @@ use crate::models::provider::{
 use crate::models::request_log::{RequestLogDetail, RequestLogFilter, RequestLogListItem};
 use crate::models::settings::ToolConfigView;
 use crate::storage;
-use crate::gateway;
 
 // ── Provider Commands ──────────────────────────────────────────
 
@@ -22,7 +22,10 @@ pub fn seed_model_capabilities(
     provider_type: String,
     model_ids: Vec<String>,
 ) -> Result<std::collections::HashMap<String, Vec<String>>, AppError> {
-    Ok(crate::providers::capabilities::seed_for_models(&provider_type, &model_ids))
+    Ok(crate::providers::capabilities::seed_for_models(
+        &provider_type,
+        &model_ids,
+    ))
 }
 
 /// Seed-fill the model_capabilities matrix for a provider and persist it.
@@ -35,12 +38,16 @@ pub fn autofill_provider_capabilities(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<usize, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::get_by_id(&conn, &id)?;
 
     // Existing matrix — preserve user edits.
     let mut matrix: std::collections::HashMap<String, Vec<String>> = provider
-        .model_capabilities.as_deref()
+        .model_capabilities
+        .as_deref()
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or_default();
 
@@ -48,18 +55,25 @@ pub fn autofill_provider_capabilities(
     let mut targets: std::collections::BTreeSet<String> = Default::default();
     if let Some(ref sm) = provider.supported_models {
         if let Ok(list) = serde_json::from_str::<Vec<String>>(sm) {
-            for m in list { targets.insert(m); }
+            for m in list {
+                targets.insert(m);
+            }
         }
     }
-    if !provider.default_model.is_empty() { targets.insert(provider.default_model.clone()); }
+    if !provider.default_model.is_empty() {
+        targets.insert(provider.default_model.clone());
+    }
     if let Some(ref rm) = provider.reasoning_model {
-        if !rm.is_empty() { targets.insert(rm.clone()); }
+        if !rm.is_empty() {
+            targets.insert(rm.clone());
+        }
     }
 
     let mut filled = 0usize;
     for model in targets {
         if !matrix.contains_key(&model) {
-            let caps = crate::providers::capabilities::seed_for_model(&provider.provider_type, &model);
+            let caps =
+                crate::providers::capabilities::seed_for_model(&provider.provider_type, &model);
             if !caps.is_empty() {
                 matrix.insert(model, caps);
                 filled += 1;
@@ -78,14 +92,20 @@ pub fn autofill_provider_capabilities(
 
 #[tauri::command]
 pub fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderView>, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let providers = storage::providers::list_all(&conn)?;
     Ok(providers.into_iter().map(|p| p.to_view()).collect())
 }
 
 #[tauri::command]
 pub fn get_provider(id: String, state: State<'_, AppState>) -> Result<ProviderView, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::get_by_id(&conn, &id)?;
     Ok(provider.to_view())
 }
@@ -98,7 +118,10 @@ pub fn get_provider(id: String, state: State<'_, AppState>) -> Result<ProviderVi
 /// they're not redacted in any subsequent log path.
 #[tauri::command]
 pub fn get_provider_keys(id: String, state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::get_by_id(&conn, &id)?;
     let raw = match provider.api_key {
         Some(k) if !k.trim().is_empty() => k,
@@ -134,7 +157,10 @@ pub fn create_provider(
     }
     storage::recommended_mappings::apply_to_create_input(&mut input);
 
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::create(&conn, input)?;
 
     // Auto-add new provider to all existing route profiles
@@ -145,11 +171,16 @@ pub fn create_provider(
         .collect();
     for pid in &profile_ids {
         let _ = storage::route_profiles::add_provider(
-            &conn, pid, &provider.id,
+            &conn,
+            pid,
+            &provider.id,
             crate::models::route_profile::AddProviderToRouteInput {
-                priority: None, model_override: None,
-                cooldown_seconds: None, failover_on_status_codes: None,
-                failover_on_error_keywords: None, routing_conditions: None,
+                priority: None,
+                model_override: None,
+                cooldown_seconds: None,
+                failover_on_status_codes: None,
+                failover_on_error_keywords: None,
+                routing_conditions: None,
             },
         );
     }
@@ -184,14 +215,20 @@ pub fn update_provider(
         }
     }
 
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::update(&conn, &id, input)?;
     Ok(provider.to_view())
 }
 
 #[tauri::command]
 pub fn delete_provider(id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::providers::delete(&conn, &id)
 }
 
@@ -202,7 +239,10 @@ pub fn set_active_provider(
     state: State<'_, AppState>,
 ) -> Result<ProviderView, AppError> {
     let provider = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::set_active(&conn, &id)?
     };
     crate::app::tray::refresh_tray(&app_handle);
@@ -215,14 +255,26 @@ pub async fn fetch_provider_models(
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, AppError> {
     let (base_url, api_key, timeout_seconds) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let provider = storage::providers::get_by_id(&conn, &id)?;
-        (provider.base_url, provider.api_key, provider.timeout_seconds)
+        (
+            provider.base_url,
+            provider.api_key,
+            provider.timeout_seconds,
+        )
     };
 
     let api_key = match api_key {
         Some(k) if !k.is_empty() => k,
-        _ => return Err(AppError::new("PROVIDER_API_KEY_MISSING", "API key is not set")),
+        _ => {
+            return Err(AppError::new(
+                "PROVIDER_API_KEY_MISSING",
+                "API key is not set",
+            ))
+        }
     };
 
     let client = reqwest::Client::builder()
@@ -235,18 +287,25 @@ pub async fn fetch_provider_models(
     let urls = vec![format!("{base}/models"), format!("{base}/v1/models")];
 
     for url in &urls {
-        let resp = client.get(url)
+        let resp = client
+            .get(url)
             .header("Authorization", format!("Bearer {api_key}"))
-            .send().await;
+            .send()
+            .await;
 
         if let Ok(resp) = resp {
             if resp.status().is_success() {
                 if let Ok(body) = resp.json::<serde_json::Value>().await {
-                    let models: Vec<String> = body.get("data")
+                    let models: Vec<String> = body
+                        .get("data")
                         .and_then(|d| d.as_array())
-                        .map(|arr| arr.iter()
-                            .filter_map(|m| m.get("id").and_then(|id| id.as_str()).map(String::from))
-                            .collect())
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|m| {
+                                    m.get("id").and_then(|id| id.as_str()).map(String::from)
+                                })
+                                .collect()
+                        })
                         .unwrap_or_default();
                     if !models.is_empty() {
                         // Auto-save to provider
@@ -268,7 +327,10 @@ pub async fn fetch_provider_models(
         }
     }
 
-    Err(AppError::new("PROVIDER_REQUEST_FAILED", "Could not fetch models from provider"))
+    Err(AppError::new(
+        "PROVIDER_REQUEST_FAILED",
+        "Could not fetch models from provider",
+    ))
 }
 
 /// Speedtest a single provider — sends a 1-token probe request and reports
@@ -280,7 +342,10 @@ pub async fn provider_speedtest(
     state: State<'_, AppState>,
 ) -> Result<crate::diagnostics::speedtest::ProviderSpeedReport, AppError> {
     let provider = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::get_by_id(&conn, &id)?
     };
     Ok(crate::diagnostics::speedtest::probe(&provider).await)
@@ -293,7 +358,10 @@ pub async fn provider_speedtest_all(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::diagnostics::speedtest::ProviderSpeedReport>, AppError> {
     let providers = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::list_all(&conn)?
             .into_iter()
             .filter(|p| p.enabled)
@@ -308,13 +376,23 @@ pub async fn test_provider(
     state: State<'_, AppState>,
 ) -> Result<ProviderTestResult, AppError> {
     let (base_url, api_key, timeout_seconds) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let provider = storage::providers::get_by_id(&conn, &id)?;
-        (provider.base_url, provider.api_key, provider.timeout_seconds)
+        (
+            provider.base_url,
+            provider.api_key,
+            provider.timeout_seconds,
+        )
     };
 
     let (provider_type, extra_headers) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let p = storage::providers::get_by_id(&conn, &id)?;
         (p.provider_type, p.extra_headers)
     };
@@ -378,7 +456,9 @@ pub async fn test_provider(
             .get(url)
             .header("Authorization", format!("Bearer {api_key}"));
         if let Some(ref eh) = extra_headers {
-            if let Ok(headers) = serde_json::from_str::<std::collections::HashMap<String, String>>(eh) {
+            if let Ok(headers) =
+                serde_json::from_str::<std::collections::HashMap<String, String>>(eh)
+            {
                 for (k, v) in headers {
                     if let (Ok(name), Ok(val)) = (
                         reqwest::header::HeaderName::from_bytes(k.as_bytes()),
@@ -395,7 +475,10 @@ pub async fn test_provider(
             Ok(resp) if resp.status().is_success() => {
                 let latency = start.elapsed().as_millis() as u64;
                 {
-                    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+                    let conn = state
+                        .db
+                        .lock()
+                        .map_err(|_| AppError::internal("DB lock failed"))?;
                     storage::providers::update_status(&conn, &id, "connected")?;
                     let _ = storage::recommended_mappings::supplement_provider(
                         &conn,
@@ -429,7 +512,10 @@ pub async fn test_provider(
     }
 
     {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::update_status(&conn, &id, "failed")?;
     }
 
@@ -456,7 +542,10 @@ pub async fn detect_provider_vision(
     state: State<'_, AppState>,
 ) -> Result<ProviderTestResult, AppError> {
     let provider = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::get_by_id(&conn, &id)?
     };
 
@@ -475,7 +564,9 @@ pub async fn detect_provider_vision(
     };
 
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(provider.timeout_seconds as u64))
+        .timeout(std::time::Duration::from_secs(
+            provider.timeout_seconds as u64,
+        ))
         .build()
         .map_err(|e| AppError::internal(format!("HTTP client error: {e}")))?;
 
@@ -507,7 +598,8 @@ pub async fn detect_provider_vision(
 
     let start = Instant::now();
 
-    let mut req_builder = client.post(&url)
+    let mut req_builder = client
+        .post(&url)
         .header("Authorization", format!("Bearer {api_key}"))
         .header("Content-Type", "application/json");
 
@@ -557,14 +649,20 @@ pub async fn detect_provider_vision(
     // Persist only when conclusive — keep stale state out of the DB on
     // auth/server errors so the user retries with a fresh signal.
     if let Some(v) = supports_vision {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::update_supports_vision(&conn, &id, v)?;
     }
 
     let (status_str, message) = match supports_vision {
         Some(true) => ("detected", "Vision supported".to_string()),
         Some(false) => ("detected", "Vision not supported".to_string()),
-        None => ("inconclusive", "Vision detection inconclusive (auth / server error / network)".to_string()),
+        None => (
+            "inconclusive",
+            "Vision detection inconclusive (auth / server error / network)".to_string(),
+        ),
     };
 
     Ok(ProviderTestResult {
@@ -577,30 +675,39 @@ pub async fn detect_provider_vision(
     })
 }
 
-
 #[tauri::command]
 pub async fn detect_provider_cache(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<ProviderTestResult, AppError> {
     let provider = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::get_by_id(&conn, &id)?
     };
 
     // Cache probe only works for providers with anthropic_base_url or anthropic type
-    let anthropic_url = if provider.provider_type == "anthropic" || provider.provider_type == "claude" {
-        let base = provider.base_url.trim_end_matches('/');
-        Some(crate::providers::adapter::smart_append_path(base, "/messages"))
-    } else if let Some(ref abu) = provider.anthropic_base_url {
-        if !abu.is_empty() {
-            Some(crate::providers::adapter::smart_append_path(abu, "/messages"))
+    let anthropic_url =
+        if provider.provider_type == "anthropic" || provider.provider_type == "claude" {
+            let base = provider.base_url.trim_end_matches('/');
+            Some(crate::providers::adapter::smart_append_path(
+                base,
+                "/messages",
+            ))
+        } else if let Some(ref abu) = provider.anthropic_base_url {
+            if !abu.is_empty() {
+                Some(crate::providers::adapter::smart_append_path(
+                    abu,
+                    "/messages",
+                ))
+            } else {
+                None
+            }
         } else {
             None
-        }
-    } else {
-        None
-    };
+        };
 
     let url = match anthropic_url {
         Some(u) => u,
@@ -608,7 +715,9 @@ pub async fn detect_provider_cache(
             return Ok(ProviderTestResult {
                 success: false,
                 status: "skipped".to_string(),
-                message: "Cache probe only works for Anthropic or providers with Anthropic endpoint".to_string(),
+                message:
+                    "Cache probe only works for Anthropic or providers with Anthropic endpoint"
+                        .to_string(),
                 latency_ms: None,
                 supports_vision: None,
                 diagnostic: None,
@@ -631,9 +740,11 @@ pub async fn detect_provider_cache(
         }
         _ => {
             return Ok(ProviderTestResult {
-                success: false, status: "failed".to_string(),
+                success: false,
+                status: "failed".to_string(),
                 message: "API key is not set".to_string(),
-                latency_ms: None, supports_vision: None,
+                latency_ms: None,
+                supports_vision: None,
                 diagnostic: None,
             });
         }
@@ -657,19 +768,22 @@ pub async fn detect_provider_cache(
         "max_tokens": 1
     });
 
-    let is_anthropic_type = provider.provider_type == "anthropic" || provider.provider_type == "claude";
+    let is_anthropic_type =
+        provider.provider_type == "anthropic" || provider.provider_type == "claude";
 
     let build_req = |client: &reqwest::Client| {
-        let mut rb = client.post(&url)
-            .header("Content-Type", "application/json");
+        let mut rb = client.post(&url).header("Content-Type", "application/json");
         if is_anthropic_type {
-            rb = rb.header("x-api-key", &api_key)
+            rb = rb
+                .header("x-api-key", &api_key)
                 .header("anthropic-version", "2023-06-01");
         } else {
             rb = rb.header("Authorization", format!("Bearer {api_key}"));
         }
         if let Some(ref eh) = provider.extra_headers {
-            if let Ok(headers) = serde_json::from_str::<std::collections::HashMap<String, String>>(eh) {
+            if let Ok(headers) =
+                serde_json::from_str::<std::collections::HashMap<String, String>>(eh)
+            {
                 for (k, v) in headers {
                     if let (Ok(name), Ok(val)) = (
                         reqwest::header::HeaderName::from_bytes(k.as_bytes()),
@@ -689,9 +803,11 @@ pub async fn detect_provider_cache(
     let resp1 = build_req(&client).send().await;
     if let Err(e) = resp1 {
         return Ok(ProviderTestResult {
-            success: false, status: "failed".to_string(),
+            success: false,
+            status: "failed".to_string(),
             message: format!("Cache probe request 1 failed: {e}"),
-            latency_ms: Some(start.elapsed().as_millis() as u64), supports_vision: None,
+            latency_ms: Some(start.elapsed().as_millis() as u64),
+            supports_vision: None,
             diagnostic: None,
         });
     }
@@ -700,9 +816,14 @@ pub async fn detect_provider_cache(
         let body = resp1.text().await.unwrap_or_default();
         let sanitized = body.replace(&api_key, "sk-***REDACTED***");
         return Ok(ProviderTestResult {
-            success: false, status: "failed".to_string(),
-            message: format!("Cache probe request 1 HTTP error: {}", &sanitized[..sanitized.len().min(500)]),
-            latency_ms: Some(start.elapsed().as_millis() as u64), supports_vision: None,
+            success: false,
+            status: "failed".to_string(),
+            message: format!(
+                "Cache probe request 1 HTTP error: {}",
+                &sanitized[..sanitized.len().min(500)]
+            ),
+            latency_ms: Some(start.elapsed().as_millis() as u64),
+            supports_vision: None,
             diagnostic: None,
         });
     }
@@ -718,7 +839,8 @@ pub async fn detect_provider_cache(
             let body = resp.text().await.unwrap_or_default();
             // Check for cache_read_input_tokens > 0
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body) {
-                let cache_read = json.get("usage")
+                let cache_read = json
+                    .get("usage")
                     .and_then(|u| u.get("cache_read_input_tokens"))
                     .and_then(|v| v.as_i64())
                     .unwrap_or(0);
@@ -732,7 +854,10 @@ pub async fn detect_provider_cache(
 
     // Save result
     {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::update_supports_cache(&conn, &id, supports_cache)?;
     }
 
@@ -756,7 +881,10 @@ pub async fn detect_provider_cache(
 
 #[tauri::command]
 pub fn get_gateway_status(state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
     let runtime = state
         .gateway_runtime
@@ -773,8 +901,16 @@ pub fn get_gateway_status(state: State<'_, AppState>) -> Result<GatewayStatus, A
 
     Ok(GatewayStatus {
         running: runtime.running,
-        host: if runtime.running { runtime.host.clone() } else { settings.host },
-        port: if runtime.running { runtime.port as i64 } else { settings.port },
+        host: if runtime.running {
+            runtime.host.clone()
+        } else {
+            settings.host
+        },
+        port: if runtime.running {
+            runtime.port as i64
+        } else {
+            settings.port
+        },
         active_provider,
         input_protocol: settings.input_protocol,
         output_protocol: settings.output_protocol,
@@ -784,7 +920,10 @@ pub fn get_gateway_status(state: State<'_, AppState>) -> Result<GatewayStatus, A
 
 #[tauri::command]
 pub fn get_gateway_settings(state: State<'_, AppState>) -> Result<GatewaySettings, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::gateway_settings::get(&conn)
 }
 
@@ -793,24 +932,38 @@ pub fn update_gateway_settings(
     input: UpdateGatewaySettingsInput,
     state: State<'_, AppState>,
 ) -> Result<GatewaySettings, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::gateway_settings::update(&conn, input)
 }
 
 #[tauri::command]
-pub async fn start_gateway(app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
+pub async fn start_gateway(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<GatewayStatus, AppError> {
     // Check if already running
     {
-        let runtime = state.gateway_runtime.lock()
+        let runtime = state
+            .gateway_runtime
+            .lock()
             .map_err(|_| AppError::internal("Runtime lock failed"))?;
         if runtime.running {
-            return Err(AppError::new("GATEWAY_ALREADY_RUNNING", "Gateway is already running"));
+            return Err(AppError::new(
+                "GATEWAY_ALREADY_RUNNING",
+                "Gateway is already running",
+            ));
         }
     }
 
     // Read settings
     let (host, port) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port as u16)
     };
@@ -821,7 +974,9 @@ pub async fn start_gateway(app_handle: tauri::AppHandle, state: State<'_, AppSta
 
     // Update runtime state
     {
-        let mut runtime = state.gateway_runtime.lock()
+        let mut runtime = state
+            .gateway_runtime
+            .lock()
             .map_err(|_| AppError::internal("Runtime lock failed"))?;
         runtime.running = true;
         runtime.host = host;
@@ -838,12 +993,20 @@ pub async fn start_gateway(app_handle: tauri::AppHandle, state: State<'_, AppSta
 }
 
 #[tauri::command]
-pub async fn stop_gateway(app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
+pub async fn stop_gateway(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<GatewayStatus, AppError> {
     let (shutdown_tx, server_handle) = {
-        let mut runtime = state.gateway_runtime.lock()
+        let mut runtime = state
+            .gateway_runtime
+            .lock()
             .map_err(|_| AppError::internal("Runtime lock failed"))?;
         if !runtime.running {
-            return Err(AppError::new("GATEWAY_NOT_RUNNING", "Gateway is not running"));
+            return Err(AppError::new(
+                "GATEWAY_NOT_RUNNING",
+                "Gateway is not running",
+            ));
         }
         runtime.running = false;
         runtime.started_at = None;
@@ -860,23 +1023,33 @@ pub async fn stop_gateway(app_handle: tauri::AppHandle, state: State<'_, AppStat
         let _ = tokio::time::timeout(std::time::Duration::from_secs(5), handle).await;
     }
 
-    let _ = app_handle.emit("pet-bubble", serde_json::json!({ "text": "Gateway stopped", "text_zh": "网关已停止", "type": "info" }));
+    let _ = app_handle.emit(
+        "pet-bubble",
+        serde_json::json!({ "text": "Gateway stopped", "text_zh": "网关已停止", "type": "info" }),
+    );
     crate::app::tray::refresh_tray(&app_handle);
     get_gateway_status(state)
 }
 
 #[tauri::command]
-pub async fn restart_gateway(app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
+pub async fn restart_gateway(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<GatewayStatus, AppError> {
     // Stop if running
     {
         let is_running = {
-            let runtime = state.gateway_runtime.lock()
+            let runtime = state
+                .gateway_runtime
+                .lock()
                 .map_err(|_| AppError::internal("Runtime lock failed"))?;
             runtime.running
         };
         if is_running {
             let (shutdown_tx, server_handle) = {
-                let mut runtime = state.gateway_runtime.lock()
+                let mut runtime = state
+                    .gateway_runtime
+                    .lock()
                     .map_err(|_| AppError::internal("Runtime lock failed"))?;
                 runtime.running = false;
                 runtime.started_at = None;
@@ -905,7 +1078,10 @@ pub fn list_request_logs(
     filter: RequestLogFilter,
     state: State<'_, AppState>,
 ) -> Result<Vec<RequestLogListItem>, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::list(&conn, filter)
 }
 
@@ -914,7 +1090,10 @@ pub fn count_request_logs(
     filter: RequestLogFilter,
     state: State<'_, AppState>,
 ) -> Result<i64, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::count(&conn, &filter)
 }
 
@@ -923,13 +1102,19 @@ pub fn get_request_log_detail(
     id: String,
     state: State<'_, AppState>,
 ) -> Result<RequestLogDetail, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::get_detail(&conn, &id)
 }
 
 #[tauri::command]
 pub fn clear_request_logs(state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::clear(&conn)
 }
 
@@ -940,7 +1125,10 @@ pub fn aggregate_request_logs_by_session(
     limit: Option<i64>,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::models::request_log::SessionUsageSummary>, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::aggregate_by_session(&conn, limit.unwrap_or(100))
 }
 
@@ -984,8 +1172,11 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
             slug: "claude-code".to_string(),
             icon: "terminal".to_string(),
             config_path: format!("{}/.claude/settings.json", home),
-            description: "Anthropic's CLI for Claude. Agentic coding tool with terminal integration.".to_string(),
-            config_exists: std::path::Path::new(&format!("{}/.claude/settings.json", home)).exists(),
+            description:
+                "Anthropic's CLI for Claude. Agentic coding tool with terminal integration."
+                    .to_string(),
+            config_exists: std::path::Path::new(&format!("{}/.claude/settings.json", home))
+                .exists(),
         },
         ToolConfigView {
             id: "codex".to_string(),
@@ -993,7 +1184,9 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
             slug: "codex".to_string(),
             icon: "code".to_string(),
             config_path: format!("{}/.codex/config.toml", home),
-            description: "OpenAI's CLI coding agent. Supports OpenAI Responses API and chat completions.".to_string(),
+            description:
+                "OpenAI's CLI coding agent. Supports OpenAI Responses API and chat completions."
+                    .to_string(),
             config_exists: std::path::Path::new(&format!("{}/.codex/config.toml", home)).exists(),
         },
         ToolConfigView {
@@ -1002,8 +1195,13 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
             slug: "opencode".to_string(),
             icon: "braces".to_string(),
             config_path: format!("{}/.config/opencode/opencode.json", home),
-            description: "Open-source terminal AI coding assistant. Supports multiple providers.".to_string(),
-            config_exists: std::path::Path::new(&format!("{}/.config/opencode/opencode.json", home)).exists(),
+            description: "Open-source terminal AI coding assistant. Supports multiple providers."
+                .to_string(),
+            config_exists: std::path::Path::new(&format!(
+                "{}/.config/opencode/opencode.json",
+                home
+            ))
+            .exists(),
         },
         ToolConfigView {
             id: "atomcode".to_string(),
@@ -1011,8 +1209,11 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
             slug: "atomcode".to_string(),
             icon: "atom".to_string(),
             config_path: format!("{}/.atomcode/config.toml", home),
-            description: "Open-source AI coding agent in your terminal. Uses OpenAI-compatible API.".to_string(),
-            config_exists: std::path::Path::new(&format!("{}/.atomcode/config.toml", home)).exists(),
+            description:
+                "Open-source AI coding agent in your terminal. Uses OpenAI-compatible API."
+                    .to_string(),
+            config_exists: std::path::Path::new(&format!("{}/.atomcode/config.toml", home))
+                .exists(),
         },
         ToolConfigView {
             id: "gemini_cli".to_string(),
@@ -1020,8 +1221,11 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
             slug: "gemini-cli".to_string(),
             icon: "sparkles".to_string(),
             config_path: format!("{}/.gemini/settings.json", home),
-            description: "Google's AI coding CLI. Uses Gemini API with OpenAI-compatible endpoint support.".to_string(),
-            config_exists: std::path::Path::new(&format!("{}/.gemini/settings.json", home)).exists(),
+            description:
+                "Google's AI coding CLI. Uses Gemini API with OpenAI-compatible endpoint support."
+                    .to_string(),
+            config_exists: std::path::Path::new(&format!("{}/.gemini/settings.json", home))
+                .exists(),
         },
     ];
 
@@ -1030,111 +1234,219 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
 
 #[tauri::command]
 pub fn generate_codex_config(state: State<'_, AppState>) -> Result<String, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
     let token = crate::security::local_token::ensure_token()?;
-    Ok(crate::tools::codex::generate_snippet(&settings.host, settings.port, &token))
+    Ok(crate::tools::codex::generate_snippet(
+        &settings.host,
+        settings.port,
+        &token,
+    ))
 }
 
 // ── Route Profile Commands ─────────────────────────────────────
 
 #[tauri::command]
-pub fn list_route_profiles(state: State<'_, AppState>) -> Result<Vec<crate::models::route_profile::RouteProfileView>, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn list_route_profiles(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::models::route_profile::RouteProfileView>, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::list_all(&conn)
 }
 
 #[tauri::command]
-pub fn get_route_profile(id: String, state: State<'_, AppState>) -> Result<crate::models::route_profile::RouteProfileDetail, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn get_route_profile(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::models::route_profile::RouteProfileDetail, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let profile = storage::route_profiles::get_by_id(&conn, &id)?;
     let providers = storage::route_profiles::list_providers(&conn, &id)?;
     let view = {
         let active_name: Option<String> = profile.active_provider_id.as_ref().and_then(|pid| {
-            storage::providers::get_by_id(&conn, pid).ok().map(|p| p.name)
+            storage::providers::get_by_id(&conn, pid)
+                .ok()
+                .map(|p| p.name)
         });
         crate::models::route_profile::RouteProfileView {
-            id: profile.id.clone(), name: profile.name,             input_protocol: profile.input_protocol, mode: profile.mode,
-            active_provider_id: profile.active_provider_id, active_provider_name: active_name,
-            enabled: profile.enabled, is_default: profile.is_default,
+            id: profile.id.clone(),
+            name: profile.name,
+            input_protocol: profile.input_protocol,
+            mode: profile.mode,
+            active_provider_id: profile.active_provider_id,
+            active_provider_name: active_name,
+            enabled: profile.enabled,
+            is_default: profile.is_default,
             providers_count: providers.len() as i64,
-            created_at: profile.created_at, updated_at: profile.updated_at,
+            created_at: profile.created_at,
+            updated_at: profile.updated_at,
         }
     };
-    Ok(crate::models::route_profile::RouteProfileDetail { profile: view, providers })
-}
-
-#[tauri::command]
-pub fn create_route_profile(input: crate::models::route_profile::CreateRouteProfileInput, state: State<'_, AppState>) -> Result<crate::models::route_profile::RouteProfileView, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    let profile = storage::route_profiles::create(&conn, input)?;
-    Ok(crate::models::route_profile::RouteProfileView {
-        id: profile.id, name: profile.name,         input_protocol: profile.input_protocol, mode: profile.mode,
-        active_provider_id: profile.active_provider_id, active_provider_name: None,
-        enabled: profile.enabled, is_default: profile.is_default, providers_count: 0,
-        created_at: profile.created_at, updated_at: profile.updated_at,
+    Ok(crate::models::route_profile::RouteProfileDetail {
+        profile: view,
+        providers,
     })
 }
 
 #[tauri::command]
-pub fn update_route_profile(id: String, input: crate::models::route_profile::UpdateRouteProfileInput, state: State<'_, AppState>) -> Result<crate::models::route_profile::RouteProfileView, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    let profile = storage::route_profiles::update(&conn, &id, input)?;
-    let cnt: i64 = conn.query_row("SELECT COUNT(*) FROM route_profile_providers WHERE route_profile_id=?1", [&id], |r| r.get(0))?;
+pub fn create_route_profile(
+    input: crate::models::route_profile::CreateRouteProfileInput,
+    state: State<'_, AppState>,
+) -> Result<crate::models::route_profile::RouteProfileView, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    let profile = storage::route_profiles::create(&conn, input)?;
     Ok(crate::models::route_profile::RouteProfileView {
-        id: profile.id, name: profile.name,         input_protocol: profile.input_protocol, mode: profile.mode,
-        active_provider_id: profile.active_provider_id, active_provider_name: None,
-        enabled: profile.enabled, is_default: profile.is_default, providers_count: cnt,
-        created_at: profile.created_at, updated_at: profile.updated_at,
+        id: profile.id,
+        name: profile.name,
+        input_protocol: profile.input_protocol,
+        mode: profile.mode,
+        active_provider_id: profile.active_provider_id,
+        active_provider_name: None,
+        enabled: profile.enabled,
+        is_default: profile.is_default,
+        providers_count: 0,
+        created_at: profile.created_at,
+        updated_at: profile.updated_at,
+    })
+}
+
+#[tauri::command]
+pub fn update_route_profile(
+    id: String,
+    input: crate::models::route_profile::UpdateRouteProfileInput,
+    state: State<'_, AppState>,
+) -> Result<crate::models::route_profile::RouteProfileView, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    let profile = storage::route_profiles::update(&conn, &id, input)?;
+    let cnt: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM route_profile_providers WHERE route_profile_id=?1",
+        [&id],
+        |r| r.get(0),
+    )?;
+    Ok(crate::models::route_profile::RouteProfileView {
+        id: profile.id,
+        name: profile.name,
+        input_protocol: profile.input_protocol,
+        mode: profile.mode,
+        active_provider_id: profile.active_provider_id,
+        active_provider_name: None,
+        enabled: profile.enabled,
+        is_default: profile.is_default,
+        providers_count: cnt,
+        created_at: profile.created_at,
+        updated_at: profile.updated_at,
     })
 }
 
 #[tauri::command]
 pub fn delete_route_profile(id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::delete(&conn, &id)
 }
 
 #[tauri::command]
 pub fn set_default_route_profile(id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::set_default(&conn, &id)?;
     Ok(true)
 }
 
 #[tauri::command]
-pub fn set_route_profile_mode(id: String, mode: String, state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    storage::route_profiles::update(&conn, &id, crate::models::route_profile::UpdateRouteProfileInput {
-        name: None, mode: Some(mode), enabled: None,
-    })?;
+pub fn set_route_profile_mode(
+    id: String,
+    mode: String,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::route_profiles::update(
+        &conn,
+        &id,
+        crate::models::route_profile::UpdateRouteProfileInput {
+            name: None,
+            mode: Some(mode),
+            enabled: None,
+        },
+    )?;
     Ok(true)
 }
 
 #[tauri::command]
-pub fn set_route_active_provider(route_profile_id: String, provider_id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn set_route_active_provider(
+    route_profile_id: String,
+    provider_id: String,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::set_active_provider(&conn, &route_profile_id, &provider_id)?;
     Ok(true)
 }
 
 #[tauri::command]
-pub fn add_provider_to_route(route_profile_id: String, provider_id: String, input: crate::models::route_profile::AddProviderToRouteInput, state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn add_provider_to_route(
+    route_profile_id: String,
+    provider_id: String,
+    input: crate::models::route_profile::AddProviderToRouteInput,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::add_provider(&conn, &route_profile_id, &provider_id, input)?;
     Ok(true)
 }
 
 #[tauri::command]
-pub fn remove_provider_from_route(route_profile_id: String, provider_id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn remove_provider_from_route(
+    route_profile_id: String,
+    provider_id: String,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::remove_provider(&conn, &route_profile_id, &provider_id)?;
     Ok(true)
 }
 
 #[tauri::command]
-pub fn reorder_route_providers(route_profile_id: String, provider_ids: Vec<String>, state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn reorder_route_providers(
+    route_profile_id: String,
+    provider_ids: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::reorder_providers(&conn, &route_profile_id, &provider_ids)?;
     Ok(true)
 }
@@ -1146,26 +1458,48 @@ pub fn update_route_provider_conditions(
     routing_conditions: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    storage::route_profiles::update_provider_conditions(&conn, &route_profile_id, &provider_id, routing_conditions.as_deref())?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::route_profiles::update_provider_conditions(
+        &conn,
+        &route_profile_id,
+        &provider_id,
+        routing_conditions.as_deref(),
+    )?;
     Ok(true)
 }
 
 #[tauri::command]
-pub fn list_provider_runtime_status(state: State<'_, AppState>) -> Result<Vec<crate::models::route_profile::ProviderRuntimeStatus>, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn list_provider_runtime_status(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::models::route_profile::ProviderRuntimeStatus>, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::provider_runtime_status::list_all(&conn)
 }
 
 #[tauri::command]
-pub fn reset_provider_runtime_status(provider_id: String, state: State<'_, AppState>) -> Result<crate::models::route_profile::ProviderRuntimeStatus, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn reset_provider_runtime_status(
+    provider_id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::models::route_profile::ProviderRuntimeStatus, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::provider_runtime_status::reset(&conn, &provider_id)
 }
 
 #[tauri::command]
 pub fn reset_all_provider_runtime_status(state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::provider_runtime_status::reset_all(&conn)?;
     Ok(true)
 }
@@ -1173,18 +1507,21 @@ pub fn reset_all_provider_runtime_status(state: State<'_, AppState>) -> Result<b
 // ── Gateway Auth Commands ──────────────────────────────────────
 
 #[tauri::command]
-pub fn get_gateway_auth_settings() -> Result<crate::security::local_token::GatewayAuthSettings, AppError> {
+pub fn get_gateway_auth_settings(
+) -> Result<crate::security::local_token::GatewayAuthSettings, AppError> {
     Ok(crate::security::local_token::get_auth_settings())
 }
 
 #[tauri::command]
-pub fn regenerate_local_access_token() -> Result<crate::security::local_token::GatewayAuthSettings, AppError> {
+pub fn regenerate_local_access_token(
+) -> Result<crate::security::local_token::GatewayAuthSettings, AppError> {
     crate::security::local_token::regenerate_token()?;
     Ok(crate::security::local_token::get_auth_settings())
 }
 
 #[tauri::command]
-pub fn ensure_local_access_token() -> Result<crate::security::local_token::GatewayAuthSettings, AppError> {
+pub fn ensure_local_access_token(
+) -> Result<crate::security::local_token::GatewayAuthSettings, AppError> {
     crate::security::local_token::ensure_token()?;
     Ok(crate::security::local_token::get_auth_settings())
 }
@@ -1228,9 +1565,14 @@ pub fn detect_codex_config() -> Result<crate::tools::codex::CodexConfigStatus, A
 }
 
 #[tauri::command]
-pub fn apply_codex_config(state: State<'_, AppState>) -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
+pub fn apply_codex_config(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
     let (host, port) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let _ = storage::recommended_mappings::supplement_active_provider(
             &conn,
             storage::recommended_mappings::MappingProfile::Codex,
@@ -1239,14 +1581,25 @@ pub fn apply_codex_config(state: State<'_, AppState>) -> Result<crate::tools::co
         (settings.host, settings.port)
     };
 
-    record_pre_apply(&state, "codex", "apply", crate::tools::codex::snapshot_paths(), "apply");
+    record_pre_apply(
+        &state,
+        "codex",
+        "apply",
+        crate::tools::codex::snapshot_paths(),
+        "apply",
+    );
     crate::tools::codex::apply(&host, port)
 }
 
 #[tauri::command]
-pub fn toggle_codex_provider(state: State<'_, AppState>) -> Result<crate::tools::codex::ToggleResult, AppError> {
+pub fn toggle_codex_provider(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::codex::ToggleResult, AppError> {
     let (host, port) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let _ = storage::recommended_mappings::supplement_active_provider(
             &conn,
             storage::recommended_mappings::MappingProfile::Codex,
@@ -1254,7 +1607,13 @@ pub fn toggle_codex_provider(state: State<'_, AppState>) -> Result<crate::tools:
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
     };
-    record_pre_apply(&state, "codex", "toggle", crate::tools::codex::snapshot_paths(), "toggle");
+    record_pre_apply(
+        &state,
+        "codex",
+        "toggle",
+        crate::tools::codex::snapshot_paths(),
+        "toggle",
+    );
     crate::tools::codex::toggle_provider(&host, port)
 }
 
@@ -1262,8 +1621,16 @@ pub fn toggle_codex_provider(state: State<'_, AppState>) -> Result<crate::tools:
 /// copied back so the user gets the official `[plugins.*]` / `[mcp_servers.*]`
 /// blocks alive again. Used by the UI's "Switch to native mode" button.
 #[tauri::command]
-pub fn disable_codex_agentgate(state: State<'_, AppState>) -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
-    record_pre_apply(&state, "codex", "disable", crate::tools::codex::snapshot_paths(), "disable");
+pub fn disable_codex_agentgate(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
+    record_pre_apply(
+        &state,
+        "codex",
+        "disable",
+        crate::tools::codex::snapshot_paths(),
+        "disable",
+    );
     crate::tools::codex::disable()
 }
 
@@ -1276,14 +1643,20 @@ pub fn open_codex_config() -> Result<bool, AppError> {
 // ── Claude Code Commands ──────────────────────────────────────
 
 #[tauri::command]
-pub fn detect_claude_code_env() -> Result<crate::tools::claude_code::ClaudeCodeEnvStatus, AppError> {
+pub fn detect_claude_code_env() -> Result<crate::tools::claude_code::ClaudeCodeEnvStatus, AppError>
+{
     Ok(crate::tools::claude_code::detect_env())
 }
 
 #[tauri::command]
-pub fn apply_claude_code_config(state: State<'_, AppState>) -> Result<crate::tools::claude_code::ApplyConfigResult, AppError> {
+pub fn apply_claude_code_config(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::claude_code::ApplyConfigResult, AppError> {
     let (host, port) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let _ = storage::recommended_mappings::supplement_active_provider(
             &conn,
             storage::recommended_mappings::MappingProfile::ClaudeCode,
@@ -1291,14 +1664,25 @@ pub fn apply_claude_code_config(state: State<'_, AppState>) -> Result<crate::too
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
     };
-    record_pre_apply(&state, "claude_code", "apply", crate::tools::claude_code::snapshot_paths(), "apply");
+    record_pre_apply(
+        &state,
+        "claude_code",
+        "apply",
+        crate::tools::claude_code::snapshot_paths(),
+        "apply",
+    );
     crate::tools::claude_code::apply_config(&host, port, "claude-sonnet-4-7")
 }
 
 #[tauri::command]
-pub fn toggle_claude_code_provider(state: State<'_, AppState>) -> Result<crate::tools::claude_code::ToggleResult, AppError> {
+pub fn toggle_claude_code_provider(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::claude_code::ToggleResult, AppError> {
     let (host, port) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let _ = storage::recommended_mappings::supplement_active_provider(
             &conn,
             storage::recommended_mappings::MappingProfile::ClaudeCode,
@@ -1306,7 +1690,13 @@ pub fn toggle_claude_code_provider(state: State<'_, AppState>) -> Result<crate::
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
     };
-    record_pre_apply(&state, "claude_code", "toggle", crate::tools::claude_code::snapshot_paths(), "toggle");
+    record_pre_apply(
+        &state,
+        "claude_code",
+        "toggle",
+        crate::tools::claude_code::snapshot_paths(),
+        "toggle",
+    );
     crate::tools::claude_code::toggle_provider(&host, port, "claude-sonnet-4-7")
 }
 
@@ -1318,9 +1708,16 @@ pub fn open_claude_code_config() -> Result<bool, AppError> {
 
 #[tauri::command]
 pub fn generate_claude_code_env(state: State<'_, AppState>) -> Result<String, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
-    Ok(crate::tools::claude_code::generate_env_snippet(&settings.host, settings.port, "claude-sonnet-4-7"))
+    Ok(crate::tools::claude_code::generate_env_snippet(
+        &settings.host,
+        settings.port,
+        "claude-sonnet-4-7",
+    ))
 }
 
 // ── OpenCode Commands ─────────────────────────────────────────
@@ -1331,21 +1728,38 @@ pub fn detect_opencode_config() -> Result<crate::tools::opencode::OpenCodeConfig
 }
 
 #[tauri::command]
-pub fn apply_opencode_config(state: State<'_, AppState>) -> Result<crate::tools::opencode::ApplyConfigResult, AppError> {
+pub fn apply_opencode_config(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::opencode::ApplyConfigResult, AppError> {
     let (host, port) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
     };
-    record_pre_apply(&state, "opencode", "apply", crate::tools::opencode::snapshot_paths(), "apply");
+    record_pre_apply(
+        &state,
+        "opencode",
+        "apply",
+        crate::tools::opencode::snapshot_paths(),
+        "apply",
+    );
     crate::tools::opencode::apply(&host, port)
 }
 
 #[tauri::command]
 pub fn generate_opencode_config(state: State<'_, AppState>) -> Result<String, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
-    Ok(crate::tools::opencode::generate_snippet(&settings.host, settings.port))
+    Ok(crate::tools::opencode::generate_snippet(
+        &settings.host,
+        settings.port,
+    ))
 }
 
 #[tauri::command]
@@ -1362,37 +1776,70 @@ pub fn detect_gemini_config() -> Result<crate::tools::gemini_cli::GeminiCliConfi
 }
 
 #[tauri::command]
-pub fn apply_gemini_config(state: State<'_, AppState>) -> Result<crate::tools::gemini_cli::ApplyConfigResult, AppError> {
+pub fn apply_gemini_config(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::gemini_cli::ApplyConfigResult, AppError> {
     let (host, port, model) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         let provider_id = settings.active_provider_id.clone().unwrap_or_default();
         let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
-        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gemini-2.5-flash".to_string());
+        let model = provider
+            .map(|p| p.default_model)
+            .unwrap_or_else(|| "gemini-2.5-flash".to_string());
         (settings.host, settings.port, model)
     };
-    record_pre_apply(&state, "gemini", "apply", crate::tools::gemini_cli::snapshot_paths(), "apply");
+    record_pre_apply(
+        &state,
+        "gemini",
+        "apply",
+        crate::tools::gemini_cli::snapshot_paths(),
+        "apply",
+    );
     crate::tools::gemini_cli::apply(&host, port, &model)
 }
 
 #[tauri::command]
 pub fn generate_gemini_config(state: State<'_, AppState>) -> Result<String, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
-    Ok(crate::tools::gemini_cli::generate_snippet(&settings.host, settings.port, "gemini-2.5-flash"))
+    Ok(crate::tools::gemini_cli::generate_snippet(
+        &settings.host,
+        settings.port,
+        "gemini-2.5-flash",
+    ))
 }
 
 #[tauri::command]
-pub fn toggle_gemini_provider(state: State<'_, AppState>) -> Result<crate::tools::gemini_cli::ToggleResult, AppError> {
+pub fn toggle_gemini_provider(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::gemini_cli::ToggleResult, AppError> {
     let (host, port, model) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         let provider_id = settings.active_provider_id.clone().unwrap_or_default();
         let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
-        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gemini-2.5-flash".to_string());
+        let model = provider
+            .map(|p| p.default_model)
+            .unwrap_or_else(|| "gemini-2.5-flash".to_string());
         (settings.host, settings.port, model)
     };
-    record_pre_apply(&state, "gemini", "toggle", crate::tools::gemini_cli::snapshot_paths(), "toggle");
+    record_pre_apply(
+        &state,
+        "gemini",
+        "toggle",
+        crate::tools::gemini_cli::snapshot_paths(),
+        "toggle",
+    );
     crate::tools::gemini_cli::toggle(&host, port, &model)
 }
 
@@ -1410,27 +1857,49 @@ pub fn detect_atomcode_config() -> Result<crate::tools::atomcode::AtomCodeConfig
 }
 
 #[tauri::command]
-pub fn apply_atomcode_config(state: State<'_, AppState>) -> Result<crate::tools::atomcode::ApplyConfigResult, AppError> {
+pub fn apply_atomcode_config(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::atomcode::ApplyConfigResult, AppError> {
     let (host, port, model) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         let provider_id = settings.active_provider_id.clone().unwrap_or_default();
         let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
-        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gpt-5.5".to_string());
+        let model = provider
+            .map(|p| p.default_model)
+            .unwrap_or_else(|| "gpt-5.5".to_string());
         (settings.host, settings.port, model)
     };
-    record_pre_apply(&state, "atomcode", "apply", crate::tools::atomcode::snapshot_paths(), "apply");
+    record_pre_apply(
+        &state,
+        "atomcode",
+        "apply",
+        crate::tools::atomcode::snapshot_paths(),
+        "apply",
+    );
     crate::tools::atomcode::apply(&host, port, &model)
 }
 
 #[tauri::command]
 pub fn generate_atomcode_config(state: State<'_, AppState>) -> Result<String, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
     let provider_id = settings.active_provider_id.clone().unwrap_or_default();
     let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
-    let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gpt-5.5".to_string());
-    Ok(crate::tools::atomcode::generate_snippet(&settings.host, settings.port, &model))
+    let model = provider
+        .map(|p| p.default_model)
+        .unwrap_or_else(|| "gpt-5.5".to_string());
+    Ok(crate::tools::atomcode::generate_snippet(
+        &settings.host,
+        settings.port,
+        &model,
+    ))
 }
 
 /// After a client's config is rewritten, look up matching live processes
@@ -1460,7 +1929,8 @@ pub fn detect_client_running(
 /// Never called automatically; only fires when the user clicks the button in
 /// PostApplyDialog.
 #[tauri::command]
-pub fn restart_codex_desktop() -> Result<crate::tools::codex_restart::CodexRestartResult, AppError> {
+pub fn restart_codex_desktop() -> Result<crate::tools::codex_restart::CodexRestartResult, AppError>
+{
     crate::tools::codex_restart::restart()
 }
 
@@ -1471,7 +1941,10 @@ pub fn list_client_apply_history(
     state: State<'_, AppState>,
     client_id: String,
 ) -> Result<Vec<storage::apply_history::HistoryEntry>, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::apply_history::list(&conn, &client_id)
 }
 
@@ -1484,7 +1957,10 @@ pub fn rollback_client_apply(
     history_id: String,
 ) -> Result<storage::apply_history::HistoryEntry, AppError> {
     let entry = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::apply_history::get(&conn, &history_id)?
     };
     let snapshot: storage::apply_history::ClientSnapshot =
@@ -1495,16 +1971,29 @@ pub fn rollback_client_apply(
 }
 
 #[tauri::command]
-pub fn toggle_atomcode_provider(state: State<'_, AppState>) -> Result<crate::tools::atomcode::ToggleResult, AppError> {
+pub fn toggle_atomcode_provider(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::atomcode::ToggleResult, AppError> {
     let (host, port, model) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         let provider_id = settings.active_provider_id.clone().unwrap_or_default();
         let provider = storage::providers::get_by_id(&conn, &provider_id).ok();
-        let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gpt-5.5".to_string());
+        let model = provider
+            .map(|p| p.default_model)
+            .unwrap_or_else(|| "gpt-5.5".to_string());
         (settings.host, settings.port, model)
     };
-    record_pre_apply(&state, "atomcode", "toggle", crate::tools::atomcode::snapshot_paths(), "toggle");
+    record_pre_apply(
+        &state,
+        "atomcode",
+        "toggle",
+        crate::tools::atomcode::snapshot_paths(),
+        "toggle",
+    );
     crate::tools::atomcode::toggle(&host, port, &model)
 }
 
@@ -1518,19 +2007,24 @@ pub fn open_atomcode_config() -> Result<bool, AppError> {
 
 /// 列出内置模板。模板是只读静态资源，不需要参数也不消耗 DB。
 #[tauri::command]
-pub fn list_instructions_templates()
-    -> Result<Vec<crate::tools::instructions_templates::InstructionsTemplate>, AppError> {
+pub fn list_instructions_templates(
+) -> Result<Vec<crate::tools::instructions_templates::InstructionsTemplate>, AppError> {
     // 静态 slice → Vec 让 Tauri 能序列化。
-    Ok(crate::tools::instructions_templates::TEMPLATES.iter().cloned().collect())
+    Ok(crate::tools::instructions_templates::TEMPLATES
+        .iter()
+        .cloned()
+        .collect())
 }
 
 /// 读取某 scope（claude_global / codex_global）的全局指令文件原文。
 /// 文件不存在时返回 `exists=false, content=""`，让前端 textarea 仍可编辑。
 #[tauri::command]
-pub fn read_global_instructions(scope: String)
-    -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
-    let s = crate::tools::instructions::InstructionsScope::from_str(&scope)
-        .ok_or_else(|| AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}")))?;
+pub fn read_global_instructions(
+    scope: String,
+) -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
+    let s = crate::tools::instructions::InstructionsScope::from_str(&scope).ok_or_else(|| {
+        AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}"))
+    })?;
     Ok(crate::tools::instructions::read(s))
 }
 
@@ -1542,8 +2036,9 @@ pub fn write_global_instructions(
     scope: String,
     content: String,
 ) -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
-    let s = crate::tools::instructions::InstructionsScope::from_str(&scope)
-        .ok_or_else(|| AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}")))?;
+    let s = crate::tools::instructions::InstructionsScope::from_str(&scope).ok_or_else(|| {
+        AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}"))
+    })?;
     record_pre_apply(
         &state,
         s.history_client_id(),
@@ -1562,8 +2057,9 @@ pub fn apply_instructions_template(
     template_id: String,
     mode: String,
 ) -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
-    let s = crate::tools::instructions::InstructionsScope::from_str(&scope)
-        .ok_or_else(|| AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}")))?;
+    let s = crate::tools::instructions::InstructionsScope::from_str(&scope).ok_or_else(|| {
+        AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}"))
+    })?;
     let m = crate::tools::instructions::ApplyMode::from_str(&mode)
         .ok_or_else(|| AppError::new("INSTRUCTIONS_BAD_MODE", format!("unknown mode: {mode}")))?;
     let summary = format!("template {template_id} ({mode})");
@@ -1580,36 +2076,70 @@ pub fn apply_instructions_template(
 // ── Provider Health Commands ──────────────────────────────────
 
 #[tauri::command]
-pub fn get_provider_health(state: State<'_, AppState>, provider: String) -> Result<crate::storage::request_logs::ProviderHealth, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn get_provider_health(
+    state: State<'_, AppState>,
+    provider: String,
+) -> Result<crate::storage::request_logs::ProviderHealth, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     crate::storage::request_logs::get_provider_health(&conn, &provider)
 }
 
 // ── Pricing Commands ──────────────────────────────────────────
 
 #[tauri::command]
-pub fn list_model_pricing(state: State<'_, AppState>) -> Result<Vec<crate::storage::pricing::ModelPricing>, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn list_model_pricing(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::storage::pricing::ModelPricing>, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     crate::storage::pricing::list_all(&conn)
 }
 
 #[tauri::command]
-pub fn upsert_model_pricing(state: State<'_, AppState>, provider: String, model_pattern: String, input_price: f64, output_price: f64) -> Result<crate::storage::pricing::ModelPricing, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    crate::storage::pricing::upsert_custom(&conn, &provider, &model_pattern, input_price, output_price)
+pub fn upsert_model_pricing(
+    state: State<'_, AppState>,
+    provider: String,
+    model_pattern: String,
+    input_price: f64,
+    output_price: f64,
+) -> Result<crate::storage::pricing::ModelPricing, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    crate::storage::pricing::upsert_custom(
+        &conn,
+        &provider,
+        &model_pattern,
+        input_price,
+        output_price,
+    )
 }
 
 #[tauri::command]
 pub fn delete_model_pricing(state: State<'_, AppState>, id: String) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     crate::storage::pricing::delete_custom(&conn, &id)
 }
 
 // ── Stats Commands ─────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_request_stats(state: State<'_, AppState>) -> Result<crate::storage::request_logs::RequestStats, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn get_request_stats(
+    state: State<'_, AppState>,
+) -> Result<crate::storage::request_logs::RequestStats, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::get_stats(&conn)
 }
 
@@ -1620,7 +2150,10 @@ pub fn get_request_stats_range(
     days: i64,
     state: State<'_, AppState>,
 ) -> Result<crate::storage::request_logs::RequestStats, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::get_stats_for_range(&conn, days)
 }
 
@@ -1647,20 +2180,29 @@ pub struct RuntimeKpis {
 
 #[tauri::command]
 pub fn get_runtime_kpis(state: State<'_, AppState>) -> Result<RuntimeKpis, AppError> {
-    let runtime = state.gateway_runtime.lock()
+    let runtime = state
+        .gateway_runtime
+        .lock()
         .map_err(|_| AppError::internal("Runtime lock failed"))?;
-    let active_requests = runtime.active_requests.as_ref()
+    let active_requests = runtime
+        .active_requests
+        .as_ref()
         .map(|c| c.load(std::sync::atomic::Ordering::Relaxed))
         .unwrap_or(0);
     let gateway_running = runtime.running;
     let gateway_port = runtime.port;
-    let uptime_seconds = runtime.started_at.as_deref()
+    let uptime_seconds = runtime
+        .started_at
+        .as_deref()
         .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
         .map(|started| (chrono::Utc::now() - started.with_timezone(&chrono::Utc)).num_seconds())
         .unwrap_or(0);
     drop(runtime);
 
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let stats = storage::request_logs::get_stats(&conn)?;
     Ok(RuntimeKpis {
         active_requests,
@@ -1677,42 +2219,60 @@ pub fn get_runtime_kpis(state: State<'_, AppState>) -> Result<RuntimeKpis, AppEr
 // ── Diagnostics Commands ───────────────────────────────────────
 
 #[tauri::command]
-pub fn run_health_check(state: State<'_, AppState>) -> Result<crate::diagnostics::report::CheckReport, AppError> {
+pub fn run_health_check(
+    state: State<'_, AppState>,
+) -> Result<crate::diagnostics::report::CheckReport, AppError> {
     Ok(crate::diagnostics::checks::health_check(&state.db))
 }
 
 #[tauri::command]
-pub fn run_database_check(state: State<'_, AppState>) -> Result<crate::diagnostics::report::CheckReport, AppError> {
+pub fn run_database_check(
+    state: State<'_, AppState>,
+) -> Result<crate::diagnostics::report::CheckReport, AppError> {
     Ok(crate::diagnostics::checks::database_check(&state.db))
 }
 
 #[tauri::command]
-pub fn run_gateway_auth_check(state: State<'_, AppState>) -> Result<crate::diagnostics::report::CheckReport, AppError> {
+pub fn run_gateway_auth_check(
+    state: State<'_, AppState>,
+) -> Result<crate::diagnostics::report::CheckReport, AppError> {
     Ok(crate::diagnostics::checks::gateway_auth_check(&state.db))
 }
 
 #[tauri::command]
-pub fn run_provider_check(state: State<'_, AppState>) -> Result<crate::diagnostics::report::CheckReport, AppError> {
+pub fn run_provider_check(
+    state: State<'_, AppState>,
+) -> Result<crate::diagnostics::report::CheckReport, AppError> {
     Ok(crate::diagnostics::checks::provider_check(&state.db))
 }
 
 #[tauri::command]
-pub fn run_codex_config_check(state: State<'_, AppState>) -> Result<crate::diagnostics::report::CheckReport, AppError> {
+pub fn run_codex_config_check(
+    state: State<'_, AppState>,
+) -> Result<crate::diagnostics::report::CheckReport, AppError> {
     Ok(crate::diagnostics::checks::codex_config_check(&state.db))
 }
 
 #[tauri::command]
-pub fn run_claude_code_config_check(state: State<'_, AppState>) -> Result<crate::diagnostics::report::CheckReport, AppError> {
-    Ok(crate::diagnostics::checks::claude_code_config_check(&state.db))
+pub fn run_claude_code_config_check(
+    state: State<'_, AppState>,
+) -> Result<crate::diagnostics::report::CheckReport, AppError> {
+    Ok(crate::diagnostics::checks::claude_code_config_check(
+        &state.db,
+    ))
 }
 
 #[tauri::command]
-pub fn run_route_profile_check(state: State<'_, AppState>) -> Result<crate::diagnostics::report::CheckReport, AppError> {
+pub fn run_route_profile_check(
+    state: State<'_, AppState>,
+) -> Result<crate::diagnostics::report::CheckReport, AppError> {
     Ok(crate::diagnostics::checks::route_profile_check(&state.db))
 }
 
 #[tauri::command]
-pub fn run_full_self_test(state: State<'_, AppState>) -> Result<crate::diagnostics::report::FullSelfTestReport, AppError> {
+pub fn run_full_self_test(
+    state: State<'_, AppState>,
+) -> Result<crate::diagnostics::report::FullSelfTestReport, AppError> {
     Ok(crate::diagnostics::checks::full_self_test(&state.db))
 }
 
@@ -1739,10 +2299,14 @@ pub fn open_app_data_dir() -> Result<bool, AppError> {
 // ── Tool Connection Test ──────────────────────────────────────
 
 #[tauri::command]
-pub async fn test_tool_connection(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
+pub async fn test_tool_connection(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, AppError> {
     // Step 1: Check gateway is running
     let (running, host, port) = {
-        let runtime = state.gateway_runtime.lock()
+        let runtime = state
+            .gateway_runtime
+            .lock()
             .map_err(|_| AppError::internal("Runtime lock failed"))?;
         (runtime.running, runtime.host.clone(), runtime.port)
     };
@@ -1763,7 +2327,10 @@ pub async fn test_tool_connection(state: State<'_, AppState>) -> Result<serde_js
         .map_err(|e| AppError::internal(format!("HTTP client error: {e}")))?;
 
     let health_url = format!("http://{}:{}/health", host, port);
-    let gateway_ok = client.get(&health_url).send().await
+    let gateway_ok = client
+        .get(&health_url)
+        .send()
+        .await
         .map(|r| r.status().is_success())
         .unwrap_or(false);
 
@@ -1778,18 +2345,25 @@ pub async fn test_tool_connection(state: State<'_, AppState>) -> Result<serde_js
 
     // Step 3: Test provider with a minimal request
     let test_model = {
-        let conn = state.db.lock()
+        let conn = state
+            .db
+            .lock()
             .map_err(|_| AppError::internal("DB lock failed"))?;
-        let route_model = storage::route_profiles::get_default_for_protocol(&conn, "openai_chat_completions")?
-            .and_then(|profile| profile.active_provider_id)
-            .and_then(|provider_id| storage::providers::get_by_id(&conn, &provider_id).ok())
-            .map(|provider| provider.default_model);
+        let route_model =
+            storage::route_profiles::get_default_for_protocol(&conn, "openai_chat_completions")?
+                .and_then(|profile| profile.active_provider_id)
+                .and_then(|provider_id| storage::providers::get_by_id(&conn, &provider_id).ok())
+                .map(|provider| provider.default_model);
         route_model
             .or_else(|| {
-                storage::providers::list_all(&conn).ok()
-                    .and_then(|providers| providers.into_iter()
-                        .find(|provider| provider.enabled && provider.is_active)
-                        .map(|provider| provider.default_model))
+                storage::providers::list_all(&conn)
+                    .ok()
+                    .and_then(|providers| {
+                        providers
+                            .into_iter()
+                            .find(|provider| provider.enabled && provider.is_active)
+                            .map(|provider| provider.default_model)
+                    })
             })
             .unwrap_or_else(|| "test".to_string())
     };
@@ -1801,7 +2375,8 @@ pub async fn test_tool_connection(state: State<'_, AppState>) -> Result<serde_js
         "max_tokens": 1,
     });
 
-    let resp = client.post(&test_url)
+    let resp = client
+        .post(&test_url)
         .header("Authorization", format!("Bearer {}", token))
         .header("Content-Type", "application/json")
         .json(&test_body)
@@ -1819,7 +2394,14 @@ pub async fn test_tool_connection(state: State<'_, AppState>) -> Result<serde_js
                 if status.as_u16() == 400 || status.as_u16() == 404 {
                     (true, None)
                 } else {
-                    (false, Some(format!("Provider error: {} {}", status.as_u16(), body.chars().take(100).collect::<String>())))
+                    (
+                        false,
+                        Some(format!(
+                            "Provider error: {} {}",
+                            status.as_u16(),
+                            body.chars().take(100).collect::<String>()
+                        )),
+                    )
                 }
             }
         }
@@ -1838,8 +2420,13 @@ pub async fn test_tool_connection(state: State<'_, AppState>) -> Result<serde_js
 // ── Pet Commands ──────────────────────────────────────────────
 
 #[tauri::command]
-pub fn get_pet_settings(state: State<'_, AppState>) -> Result<crate::models::pet::PetSettings, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+pub fn get_pet_settings(
+    state: State<'_, AppState>,
+) -> Result<crate::models::pet::PetSettings, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::pet_settings::get(&conn)
 }
 
@@ -1849,14 +2436,21 @@ pub fn update_pet_settings(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<crate::models::pet::PetSettings, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let result = storage::pet_settings::update(&conn, input)?;
     let _ = app_handle.emit("pet-settings-changed", &result);
     Ok(result)
 }
 
 #[tauri::command]
-pub fn set_pet_visible(visible: bool, app_handle: tauri::AppHandle, state: State<'_, AppState>) -> Result<crate::models::pet::PetSettings, AppError> {
+pub fn set_pet_visible(
+    visible: bool,
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<crate::models::pet::PetSettings, AppError> {
     if let Some(pet_win) = app_handle.get_webview_window("pet") {
         if visible {
             crate::move_pet_to_visible_area(&app_handle, &pet_win);
@@ -1866,23 +2460,33 @@ pub fn set_pet_visible(visible: bool, app_handle: tauri::AppHandle, state: State
             let _ = pet_win.hide();
         }
     }
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    storage::pet_settings::update(&conn, crate::models::pet::UpdatePetSettingsInput {
-        pet_type: None,
-        visible: Some(visible),
-        pos_x: None,
-        pos_y: None,
-    })
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::pet_settings::update(
+        &conn,
+        crate::models::pet::UpdatePetSettingsInput {
+            pet_type: None,
+            visible: Some(visible),
+            pos_x: None,
+            pos_y: None,
+        },
+    )
 }
 
 #[tauri::command]
 pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
-    let runtime = state.gateway_runtime.lock()
+    let runtime = state
+        .gateway_runtime
+        .lock()
         .map_err(|_| AppError::internal("Runtime lock failed"))?;
 
     let gw_state = if !runtime.running {
         "stopped"
-    } else if runtime.active_requests.as_ref()
+    } else if runtime
+        .active_requests
+        .as_ref()
         .map(|c| c.load(std::sync::atomic::Ordering::Relaxed) > 0)
         .unwrap_or(false)
     {
@@ -1893,7 +2497,10 @@ pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::V
 
     // Query recent errors (last 5 seconds)
     let last_error = if runtime.running {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         conn.query_row(
             "SELECT error_message, provider, timestamp FROM request_logs
              WHERE error_message IS NOT NULL AND error_message != ''
@@ -1905,23 +2512,33 @@ pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::V
                 let ts: String = row.get(2)?;
                 Ok(serde_json::json!({ "message": msg, "provider": provider, "timestamp": ts }))
             },
-        ).ok()
+        )
+        .ok()
     } else {
         None
     };
 
     // Today's stats for pet bubble
     let today_stats = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM request_logs WHERE timestamp >= ?1",
-            [&today], |row| row.get(0),
-        ).unwrap_or(0);
-        let cost: f64 = conn.query_row(
-            "SELECT COALESCE(SUM(cost), 0) FROM request_logs WHERE timestamp >= ?1",
-            [&today], |row| row.get(0),
-        ).unwrap_or(0.0);
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM request_logs WHERE timestamp >= ?1",
+                [&today],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        let cost: f64 = conn
+            .query_row(
+                "SELECT COALESCE(SUM(cost), 0) FROM request_logs WHERE timestamp >= ?1",
+                [&today],
+                |row| row.get(0),
+            )
+            .unwrap_or(0.0);
         serde_json::json!({ "requests": count, "cost": cost })
     };
 
@@ -1936,13 +2553,19 @@ pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::V
 
 #[tauri::command]
 pub fn get_pet_memory(state: State<'_, AppState>) -> Result<String, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     Ok(storage::app_settings::get(&conn, "pet_memory")?.unwrap_or_else(|| "{}".to_string()))
 }
 
 #[tauri::command]
 pub fn save_pet_memory(memory: String, state: State<'_, AppState>) -> Result<bool, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::app_settings::set(&conn, "pet_memory", &memory)?;
     Ok(true)
 }
@@ -1954,12 +2577,17 @@ pub async fn pet_chat(
 ) -> Result<String, AppError> {
     // Find the active provider
     let (base_url, api_key, model, timeout) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
-        let provider_id = settings.active_provider_id
+        let provider_id = settings
+            .active_provider_id
             .ok_or_else(|| AppError::new("NO_ACTIVE_PROVIDER", "No active provider configured"))?;
         let provider = storage::providers::get_by_id(&conn, &provider_id)?;
-        let api_key = provider.api_key
+        let api_key = provider
+            .api_key
             .ok_or_else(|| AppError::new("NO_API_KEY", "Active provider has no API key"))?;
         // Parse multi-key, use first
         let key = if api_key.trim().starts_with('[') {
@@ -1970,7 +2598,12 @@ pub async fn pet_chat(
         } else {
             api_key
         };
-        (provider.base_url, key, provider.default_model, provider.timeout_seconds)
+        (
+            provider.base_url,
+            key,
+            provider.default_model,
+            provider.timeout_seconds,
+        )
     };
 
     let client = reqwest::Client::builder()
@@ -1988,7 +2621,8 @@ pub async fn pet_chat(
         "temperature": 0.8,
     });
 
-    let resp = client.post(&url)
+    let resp = client
+        .post(&url)
         .header("Authorization", format!("Bearer {api_key}"))
         .header("Content-Type", "application/json")
         .json(&body)
@@ -1999,11 +2633,14 @@ pub async fn pet_chat(
     if !resp.status().is_success() {
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
-        return Err(AppError::new("CHAT_API_ERROR", format!("API error {status}"))
-            .with_detail(text));
+        return Err(
+            AppError::new("CHAT_API_ERROR", format!("API error {status}")).with_detail(text),
+        );
     }
 
-    let json: serde_json::Value = resp.json().await
+    let json: serde_json::Value = resp
+        .json()
+        .await
         .map_err(|e| AppError::internal(format!("Parse error: {e}")))?;
 
     let content = json["choices"][0]["message"]["content"]
@@ -2037,7 +2674,10 @@ pub fn export_config_json(
     include_secrets: bool,
     state: State<'_, AppState>,
 ) -> Result<String, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     let dump = storage::config_backups::export(&conn, include_secrets)?;
     serde_json::to_string_pretty(&dump)
         .map_err(|e| AppError::internal(format!("Serialize export: {e}")))
@@ -2052,11 +2692,19 @@ pub fn import_config_json(
     json: String,
     state: State<'_, AppState>,
 ) -> Result<storage::config_backups::ImportSummary, AppError> {
-    let payload: storage::config_backups::ConfigExport = serde_json::from_str(&json)
-        .map_err(|e| {
-            AppError::new("CONFIG_IMPORT_PARSE_ERROR", format!("Invalid config JSON: {e}"))
-                .with_suggestion("Make sure the file is an AgentGate config export, not a different JSON file.")
+    let payload: storage::config_backups::ConfigExport =
+        serde_json::from_str(&json).map_err(|e| {
+            AppError::new(
+                "CONFIG_IMPORT_PARSE_ERROR",
+                format!("Invalid config JSON: {e}"),
+            )
+            .with_suggestion(
+                "Make sure the file is an AgentGate config export, not a different JSON file.",
+            )
         })?;
-    let mut conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    let mut conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::config_backups::import(&mut conn, &payload)
 }

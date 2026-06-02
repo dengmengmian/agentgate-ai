@@ -15,8 +15,8 @@
 //!
 //! Borrowed from codex-switcher's session-affinity design.
 
-use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -162,7 +162,11 @@ pub fn derive_from_responses(req: &ResponsesRequest) -> Option<String> {
     if first_user.len() < MIN_PROMPT_LEN {
         return None;
     }
-    let tools_sig = req.tools.as_ref().map(|t| tools_signature(t)).unwrap_or_default();
+    let tools_sig = req
+        .tools
+        .as_ref()
+        .map(|t| tools_signature(t))
+        .unwrap_or_default();
     Some(make_session_id(&first_user, &tools_sig))
 }
 
@@ -198,7 +202,10 @@ fn make_session_id(first_user_text: &str, tools_sig: &str) -> String {
 fn extract_first_user_text(input: &Value) -> Option<String> {
     let arr = input.as_array()?;
     for item in arr {
-        let t = item.get("type").and_then(|t| t.as_str()).unwrap_or("message");
+        let t = item
+            .get("type")
+            .and_then(|t| t.as_str())
+            .unwrap_or("message");
         let role = item.get("role").and_then(|r| r.as_str()).unwrap_or("");
         if t != "message" || role != "user" {
             continue;
@@ -429,7 +436,10 @@ mod tests {
 
         let id1 = derive_from_responses(&req1).unwrap();
         let id2 = derive_from_responses(&req2).unwrap();
-        assert_ne!(id1, id2, "different tools must produce different session ids");
+        assert_ne!(
+            id1, id2,
+            "different tools must produce different session ids"
+        );
     }
 
     #[test]

@@ -33,7 +33,9 @@ impl super::ProviderTransform for MiniMaxProvider {
             );
         }
         if p::detect_rate_limit(status, body) {
-            return Some("MiniMax 触发限流。AgentGate 已冷却该 provider，路由会自动切换候选。".to_string());
+            return Some(
+                "MiniMax 触发限流。AgentGate 已冷却该 provider，路由会自动切换候选。".to_string(),
+            );
         }
         p::detect_common_400(status, body)
     }

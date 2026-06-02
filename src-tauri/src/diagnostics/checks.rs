@@ -13,21 +13,39 @@ pub fn health_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
     // Token file
     let tp = local_token::token_path();
     if tp.exists() {
-        checks.push(CheckItem::ok("token_file", "Token file", "Token file exists"));
+        checks.push(CheckItem::ok(
+            "token_file",
+            "Token file",
+            "Token file exists",
+        ));
         match local_token::read_token() {
             Ok(t) if t.starts_with("ag_local_") => {
-                checks.push(CheckItem::ok("token_format", "Token format", "Valid ag_local_ format"));
+                checks.push(CheckItem::ok(
+                    "token_format",
+                    "Token format",
+                    "Valid ag_local_ format",
+                ));
             }
             Ok(_) => {
-                checks.push(CheckItem::warning("token_format", "Token format", "Token doesn't start with ag_local_"));
+                checks.push(CheckItem::warning(
+                    "token_format",
+                    "Token format",
+                    "Token doesn't start with ag_local_",
+                ));
             }
             Err(_) => {
-                checks.push(CheckItem::failed("token_read", "Token read", "Cannot read token file"));
+                checks.push(CheckItem::failed(
+                    "token_read",
+                    "Token read",
+                    "Cannot read token file",
+                ));
             }
         }
     } else {
-        checks.push(CheckItem::warning("token_file", "Token file", "Token file not found")
-            .with_suggestion("Restart AgentGate to auto-generate"));
+        checks.push(
+            CheckItem::warning("token_file", "Token file", "Token file not found")
+                .with_suggestion("Restart AgentGate to auto-generate"),
+        );
     }
 
     // DB accessible
@@ -35,18 +53,39 @@ pub fn health_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
         Ok(conn) => {
             checks.push(CheckItem::ok("db_lock", "Database", "Database accessible"));
             // Tables
-            let tables = ["providers", "gateway_settings", "request_logs", "route_profiles", "config_backups", "client_apply_history"];
+            let tables = [
+                "providers",
+                "gateway_settings",
+                "request_logs",
+                "route_profiles",
+                "config_backups",
+                "client_apply_history",
+            ];
             for table in &tables {
-                let exists: bool = conn.prepare(&format!("SELECT 1 FROM {table} LIMIT 0")).is_ok();
+                let exists: bool = conn
+                    .prepare(&format!("SELECT 1 FROM {table} LIMIT 0"))
+                    .is_ok();
                 if exists {
-                    checks.push(CheckItem::ok(&format!("table_{table}"), &format!("Table: {table}"), "Exists"));
+                    checks.push(CheckItem::ok(
+                        &format!("table_{table}"),
+                        &format!("Table: {table}"),
+                        "Exists",
+                    ));
                 } else {
-                    checks.push(CheckItem::failed(&format!("table_{table}"), &format!("Table: {table}"), "Missing"));
+                    checks.push(CheckItem::failed(
+                        &format!("table_{table}"),
+                        &format!("Table: {table}"),
+                        "Missing",
+                    ));
                 }
             }
         }
         Err(_) => {
-            checks.push(CheckItem::failed("db_lock", "Database", "Cannot acquire database lock"));
+            checks.push(CheckItem::failed(
+                "db_lock",
+                "Database",
+                "Cannot acquire database lock",
+            ));
         }
     }
 
@@ -71,17 +110,35 @@ pub fn database_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
         ("config_backups", "Config backups"),
         ("client_apply_history", "Client apply history"),
     ] {
-        match conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get::<_, i64>(0)) {
-            Ok(n) => checks.push(CheckItem::ok(&format!("count_{table}"), label, &format!("{n} rows"))),
-            Err(_) => checks.push(CheckItem::failed(&format!("count_{table}"), label, "Cannot query")),
+        match conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| {
+            r.get::<_, i64>(0)
+        }) {
+            Ok(n) => checks.push(CheckItem::ok(
+                &format!("count_{table}"),
+                label,
+                &format!("{n} rows"),
+            )),
+            Err(_) => checks.push(CheckItem::failed(
+                &format!("count_{table}"),
+                label,
+                "Cannot query",
+            )),
         }
     }
 
     // Log size check
-    if let Ok(n) = conn.query_row("SELECT COUNT(*) FROM request_logs", [], |r| r.get::<_, i64>(0)) {
+    if let Ok(n) = conn.query_row("SELECT COUNT(*) FROM request_logs", [], |r| {
+        r.get::<_, i64>(0)
+    }) {
         if n > 10000 {
-            checks.push(CheckItem::warning("logs_size", "Log size", &format!("{n} logs - consider cleanup"))
-                .with_suggestion("Reduce log retention in Settings"));
+            checks.push(
+                CheckItem::warning(
+                    "logs_size",
+                    "Log size",
+                    &format!("{n} logs - consider cleanup"),
+                )
+                .with_suggestion("Reduce log retention in Settings"),
+            );
         }
     }
 
@@ -91,9 +148,17 @@ pub fn database_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
         [], |r| r.get(0),
     ).unwrap_or(0);
     if orphan_rpp > 0 {
-        checks.push(CheckItem::warning("orphan_rpp", "Orphan route providers", &format!("{orphan_rpp} route provider entries reference missing providers")));
+        checks.push(CheckItem::warning(
+            "orphan_rpp",
+            "Orphan route providers",
+            &format!("{orphan_rpp} route provider entries reference missing providers"),
+        ));
     } else {
-        checks.push(CheckItem::ok("orphan_rpp", "Route provider integrity", "No orphan records"));
+        checks.push(CheckItem::ok(
+            "orphan_rpp",
+            "Route provider integrity",
+            "No orphan records",
+        ));
     }
 
     CheckReport::new("Database Check", checks)
@@ -107,21 +172,35 @@ pub fn gateway_auth_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
     // Token exists
     let token = match local_token::read_token() {
         Ok(t) => {
-            checks.push(CheckItem::ok("token_exists", "Token exists", "Local token readable"));
+            checks.push(CheckItem::ok(
+                "token_exists",
+                "Token exists",
+                "Local token readable",
+            ));
             t
         }
         Err(_) => {
-            checks.push(CheckItem::failed("token_exists", "Token exists", "Cannot read token")
-                .with_suggestion("Restart AgentGate to auto-generate"));
+            checks.push(
+                CheckItem::failed("token_exists", "Token exists", "Cannot read token")
+                    .with_suggestion("Restart AgentGate to auto-generate"),
+            );
             return CheckReport::new("Gateway Auth Check", checks);
         }
     };
 
     // Format
     if token.starts_with("ag_local_") && token.len() > 20 {
-        checks.push(CheckItem::ok("token_format", "Token format", "Valid format"));
+        checks.push(CheckItem::ok(
+            "token_format",
+            "Token format",
+            "Valid format",
+        ));
     } else {
-        checks.push(CheckItem::warning("token_format", "Token format", "Unexpected format"));
+        checks.push(CheckItem::warning(
+            "token_format",
+            "Token format",
+            "Unexpected format",
+        ));
     }
 
     // Check logs for token leakage
@@ -131,10 +210,20 @@ pub fn gateway_auth_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
             [&format!("%{token}%")], |r| r.get(0),
         ).unwrap_or(0);
         if leaked > 0 {
-            checks.push(CheckItem::failed("token_leakage", "Token leakage", &format!("Token found in {leaked} log entries!"))
-                .with_suggestion("Clear logs and check redaction logic"));
+            checks.push(
+                CheckItem::failed(
+                    "token_leakage",
+                    "Token leakage",
+                    &format!("Token found in {leaked} log entries!"),
+                )
+                .with_suggestion("Clear logs and check redaction logic"),
+            );
         } else {
-            checks.push(CheckItem::ok("token_leakage", "Token leakage", "No token found in logs"));
+            checks.push(CheckItem::ok(
+                "token_leakage",
+                "Token leakage",
+                "No token found in logs",
+            ));
         }
     }
 
@@ -154,7 +243,11 @@ pub fn provider_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
     let providers = storage::providers::list_all(&conn).unwrap_or_default();
     let enabled = providers.iter().filter(|p| p.enabled).count();
     checks.push(if enabled > 0 {
-        CheckItem::ok("enabled_count", "Enabled providers", &format!("{enabled} enabled"))
+        CheckItem::ok(
+            "enabled_count",
+            "Enabled providers",
+            &format!("{enabled} enabled"),
+        )
     } else {
         CheckItem::failed("enabled_count", "Enabled providers", "No enabled providers")
             .with_suggestion("Enable at least one provider in Providers page")
@@ -166,14 +259,24 @@ pub fn provider_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
         Some(p) => {
             checks.push(CheckItem::ok("active", "Active provider", &p.name));
             if p.api_key.as_ref().map_or(true, |k| k.is_empty()) {
-                checks.push(CheckItem::failed("active_key", "Active provider API key", "API key not set")
-                    .with_suggestion("Set API key in Providers page"));
+                checks.push(
+                    CheckItem::failed("active_key", "Active provider API key", "API key not set")
+                        .with_suggestion("Set API key in Providers page"),
+                );
             } else {
-                checks.push(CheckItem::ok("active_key", "Active provider API key", "Set"));
+                checks.push(CheckItem::ok(
+                    "active_key",
+                    "Active provider API key",
+                    "Set",
+                ));
             }
         }
         None => {
-            checks.push(CheckItem::warning("active", "Active provider", "No active provider set"));
+            checks.push(CheckItem::warning(
+                "active",
+                "Active provider",
+                "No active provider set",
+            ));
         }
     }
 
@@ -183,9 +286,17 @@ pub fn provider_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
         [chrono::Utc::now().to_rfc3339()], |r| r.get(0),
     ).unwrap_or(0);
     if cooldown_count > 0 {
-        checks.push(CheckItem::warning("cooldown", "Providers in cooldown", &format!("{cooldown_count} in cooldown")));
+        checks.push(CheckItem::warning(
+            "cooldown",
+            "Providers in cooldown",
+            &format!("{cooldown_count} in cooldown"),
+        ));
     } else {
-        checks.push(CheckItem::ok("cooldown", "Provider cooldowns", "None in cooldown"));
+        checks.push(CheckItem::ok(
+            "cooldown",
+            "Provider cooldowns",
+            "None in cooldown",
+        ));
     }
 
     CheckReport::new("Provider Check", checks)
@@ -200,12 +311,20 @@ pub fn codex_config_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
 
     // Skip check entirely if Codex is not installed or not configured for AgentGate
     if !status.exists || !status.has_agentgate {
-        checks.push(CheckItem::ok("not_configured", "Codex", "Not configured for AgentGate (skipped)"));
+        checks.push(CheckItem::ok(
+            "not_configured",
+            "Codex",
+            "Not configured for AgentGate (skipped)",
+        ));
         return CheckReport::new("Codex Config Check", checks);
     }
 
     checks.push(CheckItem::ok("config_exists", "Config file", "Exists"));
-    checks.push(CheckItem::ok("agentgate_provider", "AgentGate provider", "Configured"));
+    checks.push(CheckItem::ok(
+        "agentgate_provider",
+        "AgentGate provider",
+        "Configured",
+    ));
 
     // Codex 1.1.0+ 改成"劫持 OpenAI provider + requires_openai_auth = true"：
     //   model_provider = "OpenAI"        ← 让 IDE 插件 / 配额查询都把它当官方 OpenAI
@@ -213,12 +332,28 @@ pub fn codex_config_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
     //   requires_openai_auth = true
     // 旧设计是 model_provider = "agentgate"，两种都算正确，都不该 warn。
     match status.current_provider.as_deref() {
-        Some("OpenAI") => checks.push(CheckItem::ok("model_provider", "model_provider", "Set to OpenAI (hijack mode — IDE plugins compatible)")),
-        Some("agentgate") => checks.push(CheckItem::ok("model_provider", "model_provider", "Set to agentgate (legacy mode)")),
-        Some(other) => checks.push(CheckItem::warning("model_provider", "model_provider", &format!("Unexpected value: {other}"))
-            .with_suggestion("Re-apply Codex config from Tools page")),
-        None => checks.push(CheckItem::warning("model_provider", "model_provider", "Not set")
-            .with_suggestion("Re-apply Codex config from Tools page")),
+        Some("OpenAI") => checks.push(CheckItem::ok(
+            "model_provider",
+            "model_provider",
+            "Set to OpenAI (hijack mode — IDE plugins compatible)",
+        )),
+        Some("agentgate") => checks.push(CheckItem::ok(
+            "model_provider",
+            "model_provider",
+            "Set to agentgate (legacy mode)",
+        )),
+        Some(other) => checks.push(
+            CheckItem::warning(
+                "model_provider",
+                "model_provider",
+                &format!("Unexpected value: {other}"),
+            )
+            .with_suggestion("Re-apply Codex config from Tools page"),
+        ),
+        None => checks.push(
+            CheckItem::warning("model_provider", "model_provider", "Not set")
+                .with_suggestion("Re-apply Codex config from Tools page"),
+        ),
     }
 
     // auth.json 三种正常状态：
@@ -231,22 +366,45 @@ pub fn codex_config_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
         // auth.json 不存在不算问题——Codex 没登 ChatGPT 也能跑
         checks.push(CheckItem::ok("auth_json", "auth.json", "Not present (Codex not signed in to ChatGPT — fine, AgentGate token lives in config.toml)"));
     } else if status.openai_key_polluted {
-        checks.push(CheckItem::warning("auth_json", "auth.json", "Polluted: contains both AgentGate token and ChatGPT tokens (legacy bug)")
-            .with_suggestion("Re-apply Codex config from Tools page — AgentGate will restore from saved backup"));
+        checks.push(
+            CheckItem::warning(
+                "auth_json",
+                "auth.json",
+                "Polluted: contains both AgentGate token and ChatGPT tokens (legacy bug)",
+            )
+            .with_suggestion(
+                "Re-apply Codex config from Tools page — AgentGate will restore from saved backup",
+            ),
+        );
     } else {
-        checks.push(CheckItem::ok("auth_json", "auth.json", "Clean (ChatGPT login state preserved, AgentGate token in config.toml)"));
+        checks.push(CheckItem::ok(
+            "auth_json",
+            "auth.json",
+            "Clean (ChatGPT login state preserved, AgentGate token in config.toml)",
+        ));
     }
 
     // Base URL check
     if let Ok(conn) = db.lock() {
         if let Ok(settings) = storage::gateway_settings::get(&conn) {
             let expected_url = format!("http://{}:{}/v1", settings.host, settings.port);
-            let content = std::fs::read_to_string(crate::tools::codex::config_path()).unwrap_or_default();
+            let content =
+                std::fs::read_to_string(crate::tools::codex::config_path()).unwrap_or_default();
             if content.contains(&expected_url) {
-                checks.push(CheckItem::ok("base_url", "Base URL", &format!("Matches gateway: {expected_url}")));
+                checks.push(CheckItem::ok(
+                    "base_url",
+                    "Base URL",
+                    &format!("Matches gateway: {expected_url}"),
+                ));
             } else {
-                checks.push(CheckItem::warning("base_url", "Base URL", "May not match current gateway settings")
-                    .with_suggestion("Re-apply config if gateway host/port changed"));
+                checks.push(
+                    CheckItem::warning(
+                        "base_url",
+                        "Base URL",
+                        "May not match current gateway settings",
+                    )
+                    .with_suggestion("Re-apply config if gateway host/port changed"),
+                );
             }
         }
     }
@@ -263,21 +421,42 @@ pub fn claude_code_config_check(_db: &Arc<Mutex<Connection>>) -> CheckReport {
 
     // Skip check entirely if AgentGate is not configured for Claude Code
     if !status.has_agentgate {
-        checks.push(CheckItem::ok("not_configured", "Claude Code", "Not configured for AgentGate (skipped)"));
+        checks.push(CheckItem::ok(
+            "not_configured",
+            "Claude Code",
+            "Not configured for AgentGate (skipped)",
+        ));
         return CheckReport::new("Claude Code Config Check", checks);
     }
 
     // AgentGate is configured — verify it's correct
-    checks.push(CheckItem::ok("agentgate_token", "AgentGate token", "Found in settings"));
+    checks.push(CheckItem::ok(
+        "agentgate_token",
+        "AgentGate token",
+        "Found in settings",
+    ));
 
     // Verify token matches
     if let Ok(current_token) = local_token::read_token() {
-        let content = std::fs::read_to_string(crate::tools::claude_code::settings_path()).unwrap_or_default();
+        let content =
+            std::fs::read_to_string(crate::tools::claude_code::settings_path()).unwrap_or_default();
         if content.contains(&current_token) {
-            checks.push(CheckItem::ok("token_match", "Token match", "Settings token matches current"));
+            checks.push(CheckItem::ok(
+                "token_match",
+                "Token match",
+                "Settings token matches current",
+            ));
         } else {
-            checks.push(CheckItem::failed("token_match", "Token match", "Token in settings doesn't match current token")
-                .with_suggestion("Re-apply Claude Code config from Tools page (token was regenerated)"));
+            checks.push(
+                CheckItem::failed(
+                    "token_match",
+                    "Token match",
+                    "Token in settings doesn't match current token",
+                )
+                .with_suggestion(
+                    "Re-apply Claude Code config from Tools page (token was regenerated)",
+                ),
+            );
         }
     }
 
@@ -286,7 +465,11 @@ pub fn claude_code_config_check(_db: &Arc<Mutex<Connection>>) -> CheckReport {
         if url.contains("127.0.0.1") || url.contains("localhost") {
             checks.push(CheckItem::ok("base_url", "Base URL", url));
         } else {
-            checks.push(CheckItem::warning("base_url", "Base URL", &format!("Points to {url}, not AgentGate")));
+            checks.push(CheckItem::warning(
+                "base_url",
+                "Base URL",
+                &format!("Points to {url}, not AgentGate"),
+            ));
         }
     }
 
@@ -314,28 +497,54 @@ pub fn route_profile_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
 
     let profiles = storage::route_profiles::list_all(&conn).unwrap_or_default();
     if profiles.is_empty() {
-        checks.push(CheckItem::warning("profiles", "Route profiles", "No profiles exist"));
+        checks.push(CheckItem::warning(
+            "profiles",
+            "Route profiles",
+            "No profiles exist",
+        ));
         return CheckReport::new("Route Profile Check", checks);
     }
 
-    checks.push(CheckItem::ok("profiles", "Route profiles", &format!("{} profiles", profiles.len())));
+    checks.push(CheckItem::ok(
+        "profiles",
+        "Route profiles",
+        &format!("{} profiles", profiles.len()),
+    ));
 
     let default = profiles.iter().find(|p| p.is_default);
     match default {
         Some(d) => {
             checks.push(CheckItem::ok("default", "Default profile", &d.name));
             if d.providers_count == 0 {
-                checks.push(CheckItem::failed("default_providers", "Default providers", "No providers in default profile")
-                    .with_suggestion("Add providers in Routes page"));
+                checks.push(
+                    CheckItem::failed(
+                        "default_providers",
+                        "Default providers",
+                        "No providers in default profile",
+                    )
+                    .with_suggestion("Add providers in Routes page"),
+                );
             } else {
-                checks.push(CheckItem::ok("default_providers", "Default providers", &format!("{} providers", d.providers_count)));
+                checks.push(CheckItem::ok(
+                    "default_providers",
+                    "Default providers",
+                    &format!("{} providers", d.providers_count),
+                ));
             }
             if d.mode == "failover" && d.providers_count < 2 {
-                checks.push(CheckItem::warning("failover_count", "Failover mode", "Less than 2 providers for failover"));
+                checks.push(CheckItem::warning(
+                    "failover_count",
+                    "Failover mode",
+                    "Less than 2 providers for failover",
+                ));
             }
         }
         None => {
-            checks.push(CheckItem::warning("default", "Default profile", "No default profile set"));
+            checks.push(CheckItem::warning(
+                "default",
+                "Default profile",
+                "No default profile set",
+            ));
         }
     }
 
@@ -357,7 +566,13 @@ pub fn full_self_test(db: &Arc<Mutex<Connection>>) -> FullSelfTestReport {
 
     let has_failed = reports.iter().any(|r| r.status == "failed");
     let has_warning = reports.iter().any(|r| r.status == "warning");
-    let overall = if has_failed { "failed" } else if has_warning { "warning" } else { "ok" };
+    let overall = if has_failed {
+        "failed"
+    } else if has_warning {
+        "warning"
+    } else {
+        "ok"
+    };
 
     let ok_count = reports.iter().filter(|r| r.status == "ok").count();
     let summary = format!("{}/{} checks passed", ok_count, reports.len());
@@ -382,13 +597,19 @@ pub fn export_bundle(
 
     let export_dir = local_token::token_dir().join("diagnostics");
     fs::create_dir_all(&export_dir).map_err(|e| {
-        crate::errors::AppError::new("DIAGNOSTIC_EXPORT_FAILED", format!("Cannot create dir: {e}"))
+        crate::errors::AppError::new(
+            "DIAGNOSTIC_EXPORT_FAILED",
+            format!("Cannot create dir: {e}"),
+        )
     })?;
 
     let ts = chrono::Local::now().format("%Y%m%d_%H%M%S");
     let bundle_dir = export_dir.join(format!("agentgate-diag-{ts}"));
     fs::create_dir_all(&bundle_dir).map_err(|e| {
-        crate::errors::AppError::new("DIAGNOSTIC_EXPORT_FAILED", format!("Cannot create bundle dir: {e}"))
+        crate::errors::AppError::new(
+            "DIAGNOSTIC_EXPORT_FAILED",
+            format!("Cannot create bundle dir: {e}"),
+        )
     })?;
 
     let mut files = Vec::new();
@@ -410,29 +631,45 @@ pub fn export_bundle(
 
         // 3. Providers (redacted)
         let providers = storage::providers::list_all(&conn).unwrap_or_default();
-        let redacted: Vec<serde_json::Value> = providers.iter().map(|p| {
-            serde_json::json!({
-                "id": p.id, "name": p.name, "provider_type": p.provider_type,
-                "base_url": p.base_url, "default_model": p.default_model,
-                "protocol": p.protocol, "status": p.status,
-                "enabled": p.enabled, "is_active": p.is_active,
-                "api_key": p.api_key.as_ref().map(|k| redaction::redact_value(k)),
+        let redacted: Vec<serde_json::Value> = providers
+            .iter()
+            .map(|p| {
+                serde_json::json!({
+                    "id": p.id, "name": p.name, "provider_type": p.provider_type,
+                    "base_url": p.base_url, "default_model": p.default_model,
+                    "protocol": p.protocol, "status": p.status,
+                    "enabled": p.enabled, "is_active": p.is_active,
+                    "api_key": p.api_key.as_ref().map(|k| redaction::redact_value(k)),
+                })
             })
-        }).collect();
-        fs::write(bundle_dir.join("providers.redacted.json"), serde_json::to_string_pretty(&redacted).unwrap_or_default()).ok();
+            .collect();
+        fs::write(
+            bundle_dir.join("providers.redacted.json"),
+            serde_json::to_string_pretty(&redacted).unwrap_or_default(),
+        )
+        .ok();
         files.push("providers.redacted.json".to_string());
 
         // 4. Route profiles
         let profiles = storage::route_profiles::list_all(&conn).unwrap_or_default();
-        fs::write(bundle_dir.join("route_profiles.json"), serde_json::to_string_pretty(&profiles).unwrap_or_default()).ok();
+        fs::write(
+            bundle_dir.join("route_profiles.json"),
+            serde_json::to_string_pretty(&profiles).unwrap_or_default(),
+        )
+        .ok();
         files.push("route_profiles.json".to_string());
 
         // 5. Recent logs (redacted)
         if include_logs {
             let filter = crate::models::request_log::RequestLogFilter {
-                client: None, provider: None, status: None, keyword: None,
-                source: None, session_id: None,
-                limit: Some(max_logs as i64), offset: None,
+                client: None,
+                provider: None,
+                status: None,
+                keyword: None,
+                source: None,
+                session_id: None,
+                limit: Some(max_logs as i64),
+                offset: None,
             };
             let logs = storage::request_logs::list(&conn, filter).unwrap_or_default();
             let redacted_logs: Vec<serde_json::Value> = logs.iter().map(|l| {
@@ -443,7 +680,11 @@ pub fn export_bundle(
                     "error_message": l.error_message.as_ref().map(|m| redaction::redact_text(m)),
                 })
             }).collect();
-            fs::write(bundle_dir.join("recent_logs.redacted.json"), serde_json::to_string_pretty(&redacted_logs).unwrap_or_default()).ok();
+            fs::write(
+                bundle_dir.join("recent_logs.redacted.json"),
+                serde_json::to_string_pretty(&redacted_logs).unwrap_or_default(),
+            )
+            .ok();
             files.push("recent_logs.redacted.json".to_string());
         }
     }
@@ -455,7 +696,11 @@ pub fn export_bundle(
         "codex": { "exists": codex.exists, "has_agentgate": codex.has_agentgate, "auth_mode": codex.auth_mode },
         "claude_code": { "exists": claude.settings_exists, "has_agentgate": claude.has_agentgate, "conflicts": claude.conflicts.len() },
     });
-    fs::write(bundle_dir.join("config_summaries.json"), serde_json::to_string_pretty(&config_summary).unwrap_or_default()).ok();
+    fs::write(
+        bundle_dir.join("config_summaries.json"),
+        serde_json::to_string_pretty(&config_summary).unwrap_or_default(),
+    )
+    .ok();
     files.push("config_summaries.json".to_string());
 
     // 7. README
@@ -475,7 +720,11 @@ pub fn export_bundle(
         "files": files,
         "redaction_enabled": true,
     });
-    fs::write(bundle_dir.join("manifest.json"), serde_json::to_string_pretty(&manifest).unwrap_or_default()).ok();
+    fs::write(
+        bundle_dir.join("manifest.json"),
+        serde_json::to_string_pretty(&manifest).unwrap_or_default(),
+    )
+    .ok();
 
     let bundle_path = bundle_dir.to_string_lossy().to_string();
 

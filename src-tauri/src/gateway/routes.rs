@@ -13,25 +13,33 @@ use tokio_stream::wrappers::ReceiverStream;
 use axum::http::HeaderMap;
 
 use crate::errors::AppError;
-use crate::models::provider::Provider;
-use crate::protocol::openai_responses::ResponsesRequest;
-use crate::protocol::chat_completions::{ChatCompletionResponse, ChatMessage};
-use crate::providers::adapter::{self, ProviderConfig};
-use crate::transform::{responses_to_chat, responses_to_anthropic, responses_to_gemini, gemini_to_chat};
 use crate::gateway::sse::SseAccumulator;
 use crate::gateway::sse_anthropic::AnthropicSseAccumulator;
 use crate::gateway::sse_gemini::GeminiSseAccumulator;
+use crate::models::provider::Provider;
+use crate::protocol::chat_completions::{ChatCompletionResponse, ChatMessage};
+use crate::protocol::openai_responses::ResponsesRequest;
+use crate::providers::adapter::{self, ProviderConfig};
 use crate::security::local_token;
+use crate::transform::{
+    gemini_to_chat, responses_to_anthropic, responses_to_chat, responses_to_gemini,
+};
 
 /// Run refiner pipeline on a Value-shaped outbound request body, mutating it
 /// in place. Returns the RefinerLog (current callers ignore it pending the
 /// trace_json wiring change; once that lands, every handler should stash it
 /// into the request log). Failing to lock the DB or read settings degrades
 /// to no-op — the gateway should still forward the request transparently.
-fn refine_value_body(db: &Arc<Mutex<Connection>>, provider: &Provider, body: &mut Value)
-    -> crate::gateway::refiner_log::RefinerLog
-{
-    let settings = match db.lock().ok().and_then(|c| crate::storage::gateway_settings::get(&c).ok()) {
+fn refine_value_body(
+    db: &Arc<Mutex<Connection>>,
+    provider: &Provider,
+    body: &mut Value,
+) -> crate::gateway::refiner_log::RefinerLog {
+    let settings = match db
+        .lock()
+        .ok()
+        .and_then(|c| crate::storage::gateway_settings::get(&c).ok())
+    {
         Some(s) => s,
         None => return crate::gateway::refiner_log::RefinerLog::default(),
     };
@@ -42,8 +50,11 @@ fn refine_value_body(db: &Arc<Mutex<Connection>>, provider: &Provider, body: &mu
 /// refiner pipeline against the JSON view, then ask serde to materialise the
 /// modified struct back. If either serde leg fails the original struct is
 /// returned untouched — refiner errors must never block the request.
-fn refine_struct_body<T>(db: &Arc<Mutex<Connection>>, provider: &Provider, req: &mut T)
-    -> crate::gateway::refiner_log::RefinerLog
+fn refine_struct_body<T>(
+    db: &Arc<Mutex<Connection>>,
+    provider: &Provider,
+    req: &mut T,
+) -> crate::gateway::refiner_log::RefinerLog
 where
     T: serde::Serialize + serde::de::DeserializeOwned,
 {
@@ -81,7 +92,10 @@ pub async fn health() -> Json<Value> {
 
 // ── GET /v1/models ─────────────────────────────────────────────
 
-pub async fn list_models(headers: HeaderMap, AxumState(state): AxumState<GatewayState>) -> Result<Json<Value>, GatewayError> {
+pub async fn list_models(
+    headers: HeaderMap,
+    AxumState(state): AxumState<GatewayState>,
+) -> Result<Json<Value>, GatewayError> {
     validate_auth(&headers)?;
     let provider = get_active_provider(&state.db)?;
 
@@ -127,8 +141,12 @@ pub async fn handle_count_tokens(
 ) -> Result<Json<Value>, GatewayError> {
     validate_auth(&headers)?;
     let body = crate::gateway::body_decode::decode(&headers, body).map_err(GatewayError)?;
-    let v: Value = serde_json::from_str(&body)
-        .map_err(|e| GatewayError(AppError::new("COUNT_TOKENS_PARSE_ERROR", format!("Failed to parse: {e}"))))?;
+    let v: Value = serde_json::from_str(&body).map_err(|e| {
+        GatewayError(AppError::new(
+            "COUNT_TOKENS_PARSE_ERROR",
+            format!("Failed to parse: {e}"),
+        ))
+    })?;
 
     let estimate = estimate_anthropic_tokens(&v);
     Ok(Json(json!({"input_tokens": estimate})))
@@ -203,29 +221,66 @@ pub async fn handle_responses(
 ) -> Result<Response, GatewayError> {
     validate_auth(&headers)?;
     let start = Instant::now();
-    let request_id = format!("req_{}", uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string());
+    let request_id = format!(
+        "req_{}",
+        uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string()
+    );
     let client_type = detect_client_from_ua(&headers, "Codex");
 
     // Decompress if needed — Codex.app with `requires_openai_auth = true`
     // gzip-compresses the request body to match the production OpenAI flow.
     let body = crate::gateway::body_decode::decode(&headers, body).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1/responses", &request_id, "", None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1/responses",
+            &request_id,
+            "",
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
 
     // 1. Parse request
     let req: ResponsesRequest = serde_json::from_str(&body).map_err(|e| {
-        let err = AppError::new("RESPONSES_PARSE_ERROR", format!("Failed to parse request: {e}"));
+        let err = AppError::new(
+            "RESPONSES_PARSE_ERROR",
+            format!("Failed to parse request: {e}"),
+        );
         // Log the error
-        log_request_error(&state.db, &client_type, "/v1/responses", &request_id, &sanitize_body(&body), None, &err, start.elapsed().as_millis() as i64);
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1/responses",
+            &request_id,
+            &sanitize_body(&body),
+            None,
+            &err,
+            start.elapsed().as_millis() as i64,
+        );
         err
     })?;
 
     // 2. Select provider via route profile (with failover candidates)
     let selection = crate::gateway::provider_selector::select_for_failover(
-        &state.db, "openai_responses", req.model.as_deref(), Some(&req),
-    ).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1/responses", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        &state.db,
+        "openai_responses",
+        req.model.as_deref(),
+        Some(&req),
+    )
+    .map_err(|e| {
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1/responses",
+            &request_id,
+            &sanitize_body(&body),
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
 
@@ -245,7 +300,10 @@ pub async fn handle_responses(
     // Skip providers that don't support vision when request has images
     let mut attempt_order: Vec<&crate::gateway::provider_selector::ProviderCandidate> = Vec::new();
     // Primary
-    if let Some(primary) = candidates.iter().find(|c| c.provider_id == selection.provider.id) {
+    if let Some(primary) = candidates
+        .iter()
+        .find(|c| c.provider_id == selection.provider.id)
+    {
         if !request_has_images || primary.supports_vision != Some(false) {
             attempt_order.push(primary);
         }
@@ -263,7 +321,10 @@ pub async fn handle_responses(
     }
     // If all candidates were skipped (all lack vision), fall back to original order
     if attempt_order.is_empty() {
-        if let Some(primary) = candidates.iter().find(|c| c.provider_id == selection.provider.id) {
+        if let Some(primary) = candidates
+            .iter()
+            .find(|c| c.provider_id == selection.provider.id)
+        {
             attempt_order.push(primary);
         }
         if is_failover {
@@ -298,7 +359,10 @@ pub async fn handle_responses(
 
     for (attempt_idx, candidate) in attempt_order.iter().enumerate() {
         let provider = {
-            let conn = state.db.lock().map_err(|_| GatewayError(AppError::internal("DB lock")))?;
+            let conn = state
+                .db
+                .lock()
+                .map_err(|_| GatewayError(AppError::internal("DB lock")))?;
             match crate::storage::providers::get_by_id(&conn, &candidate.provider_id) {
                 Ok(p) => p,
                 Err(_) => continue,
@@ -319,15 +383,30 @@ pub async fn handle_responses(
         let result = if config.has_responses_url() {
             // Pass-through: provider has explicit Responses API endpoint
             let target_url = config.responses_url();
-            let model_override = native_model_override(&provider, req.model.as_deref(), Some(&model));
+            let model_override =
+                native_model_override(&provider, req.model.as_deref(), Some(&model));
             crate::gateway::pass_through::handle(
-                &state.http_client, &state.db, &config, &target_url, "/v1/responses", "openai_responses", &body, model_override.as_deref(), &request_id, start, &client_type, Some(&headers),
-            ).await.map_err(|e| GatewayError(e))
+                &state.http_client,
+                &state.db,
+                &config,
+                &target_url,
+                "/v1/responses",
+                "openai_responses",
+                &body,
+                model_override.as_deref(),
+                &request_id,
+                start,
+                &client_type,
+                Some(&headers),
+            )
+            .await
+            .map_err(|e| GatewayError(e))
         } else if config.is_anthropic() {
             // Claude Messages API conversion (only for Anthropic-type providers)
             // auto_cache_control: default true unless provider explicitly set false
             let auto_cache = provider.auto_cache_control.unwrap_or(true);
-            let mut anthropic_body = match responses_to_anthropic::convert(&req, &model, auto_cache) {
+            let mut anthropic_body = match responses_to_anthropic::convert(&req, &model, auto_cache)
+            {
                 Ok(b) => b,
                 Err(e) => {
                     attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));
@@ -339,9 +418,35 @@ pub async fn handle_responses(
             let converted_json = serde_json::to_string_pretty(&anthropic_body).unwrap_or_default();
             let is_stream = req.stream.unwrap_or(false);
             if is_stream {
-                handle_anthropic_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
+                handle_anthropic_stream_response(
+                    state.clone(),
+                    config.clone(),
+                    anthropic_body,
+                    request_id.clone(),
+                    raw_body.clone(),
+                    converted_json,
+                    model.clone(),
+                    start,
+                    client_type.clone(),
+                    session_id.clone(),
+                    candidate.provider_id.clone(),
+                )
+                .await
             } else {
-                handle_anthropic_non_stream_response(state.clone(), config.clone(), anthropic_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
+                handle_anthropic_non_stream_response(
+                    state.clone(),
+                    config.clone(),
+                    anthropic_body,
+                    request_id.clone(),
+                    raw_body.clone(),
+                    converted_json,
+                    model.clone(),
+                    start,
+                    client_type.clone(),
+                    session_id.clone(),
+                    candidate.provider_id.clone(),
+                )
+                .await
             }
         } else if config.is_gemini() {
             // Gemini API conversion
@@ -357,9 +462,35 @@ pub async fn handle_responses(
             let converted_json = serde_json::to_string_pretty(&gemini_body).unwrap_or_default();
             let is_stream = req.stream.unwrap_or(false);
             if is_stream {
-                handle_gemini_stream_response(state.clone(), config.clone(), gemini_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
+                handle_gemini_stream_response(
+                    state.clone(),
+                    config.clone(),
+                    gemini_body,
+                    request_id.clone(),
+                    raw_body.clone(),
+                    converted_json,
+                    model.clone(),
+                    start,
+                    client_type.clone(),
+                    session_id.clone(),
+                    candidate.provider_id.clone(),
+                )
+                .await
             } else {
-                handle_gemini_non_stream_response(state.clone(), config.clone(), gemini_body, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
+                handle_gemini_non_stream_response(
+                    state.clone(),
+                    config.clone(),
+                    gemini_body,
+                    request_id.clone(),
+                    raw_body.clone(),
+                    converted_json,
+                    model.clone(),
+                    start,
+                    client_type.clone(),
+                    session_id.clone(),
+                    candidate.provider_id.clone(),
+                )
+                .await
             }
         } else {
             // Chat Completions path (default: transform Responses → Chat Completions)
@@ -368,14 +499,25 @@ pub async fn handle_responses(
             // (re-fetch since ProviderConfig doesn't carry it). Empty map → fall back
             // to legacy "always emit web_search for MiMo" behavior.
             let matrix = {
-                let conn = state.db.lock().map_err(|_| GatewayError(AppError::internal("DB lock")))?;
+                let conn = state
+                    .db
+                    .lock()
+                    .map_err(|_| GatewayError(AppError::internal("DB lock")))?;
                 crate::storage::providers::get_by_id(&conn, &candidate.provider_id)
                     .ok()
                     .and_then(|p| p.model_capabilities)
-                    .and_then(|s| serde_json::from_str::<std::collections::HashMap<String, Vec<String>>>(&s).ok())
+                    .and_then(|s| {
+                        serde_json::from_str::<std::collections::HashMap<String, Vec<String>>>(&s)
+                            .ok()
+                    })
                     .unwrap_or_default()
             };
-            let mut chat_req = match responses_to_chat::convert_with_provider_matrix(&req, &model, provider_transform.as_ref(), &matrix) {
+            let mut chat_req = match responses_to_chat::convert_with_provider_matrix(
+                &req,
+                &model,
+                provider_transform.as_ref(),
+                &matrix,
+            ) {
                 Ok(r) => r,
                 Err(e) => {
                     attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));
@@ -387,9 +529,35 @@ pub async fn handle_responses(
             let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
             let is_stream = chat_req.stream;
             if is_stream {
-                handle_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
+                handle_stream_response(
+                    state.clone(),
+                    config.clone(),
+                    chat_req,
+                    request_id.clone(),
+                    raw_body.clone(),
+                    converted_json,
+                    model.clone(),
+                    start,
+                    client_type.clone(),
+                    session_id.clone(),
+                    candidate.provider_id.clone(),
+                )
+                .await
             } else {
-                handle_non_stream_response(state.clone(), config.clone(), chat_req, request_id.clone(), raw_body.clone(), converted_json, model.clone(), start, client_type.clone(), session_id.clone(), candidate.provider_id.clone()).await
+                handle_non_stream_response(
+                    state.clone(),
+                    config.clone(),
+                    chat_req,
+                    request_id.clone(),
+                    raw_body.clone(),
+                    converted_json,
+                    model.clone(),
+                    start,
+                    client_type.clone(),
+                    session_id.clone(),
+                    candidate.provider_id.clone(),
+                )
+                .await
             }
         };
 
@@ -397,7 +565,10 @@ pub async fn handle_responses(
             Ok(response) => {
                 // Success — mark provider healthy
                 if let Some(conn) = lock_db(&state.db) {
-                    let _ = crate::storage::provider_runtime_status::mark_success(&conn, &candidate.provider_id);
+                    let _ = crate::storage::provider_runtime_status::mark_success(
+                        &conn,
+                        &candidate.provider_id,
+                    );
                 }
                 return Ok(response);
             }
@@ -411,7 +582,11 @@ pub async fn handle_responses(
                 let status_code = match err.code.as_str() {
                     "UPSTREAM_NON_STREAM_ERROR" | "UPSTREAM_STREAM_ERROR" => {
                         err.message.find("HTTP ").and_then(|i| {
-                            err.message[i + 5..].split_whitespace().next()?.parse::<u16>().ok()
+                            err.message[i + 5..]
+                                .split_whitespace()
+                                .next()?
+                                .parse::<u16>()
+                                .ok()
                         })
                     }
                     "PROVIDER_REQUEST_FAILED" => Some(502),
@@ -426,14 +601,20 @@ pub async fn handle_responses(
                 // Mark failure + cooldown
                 if let Some(conn) = lock_db(&state.db) {
                     let _ = crate::storage::provider_runtime_status::mark_failure(
-                        &conn, &candidate.provider_id, &err.code, &err.message, candidate.cooldown_seconds,
+                        &conn,
+                        &candidate.provider_id,
+                        &err.code,
+                        &err.message,
+                        candidate.cooldown_seconds,
                     );
                 }
 
                 // Check if we should failover
                 if is_failover && attempt_idx < attempt_order.len() - 1 {
                     let should = crate::gateway::provider_selector::should_failover(
-                        status_code, &err.message, candidate,
+                        status_code,
+                        &err.message,
+                        candidate,
                     );
                     if should {
                         last_error = Some(err);
@@ -448,7 +629,9 @@ pub async fn handle_responses(
     }
 
     // All attempts exhausted
-    Err(GatewayError(last_error.unwrap_or_else(|| AppError::new("FAILOVER_EXHAUSTED", "All providers failed"))))
+    Err(GatewayError(last_error.unwrap_or_else(|| {
+        AppError::new("FAILOVER_EXHAUSTED", "All providers failed")
+    })))
 }
 
 async fn handle_non_stream_response(
@@ -470,10 +653,16 @@ async fn handle_non_stream_response(
         Ok(upstream_json) => {
             converted_request = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
             let resp_id = format!("resp_{}", &request_id[4..]);
+            let tool_call_resolution =
+                crate::transform::tool_calls::build_tool_call_resolution_map(&raw_request);
 
             // Parse upstream response
             let chat_resp: ChatCompletionResponse = serde_json::from_value(upstream_json.clone())
-                .unwrap_or(ChatCompletionResponse { id: None, choices: None, usage: None });
+                .unwrap_or(ChatCompletionResponse {
+                    id: None,
+                    choices: None,
+                    usage: None,
+                });
 
             // Convert to Responses format
             let mut output = Vec::new();
@@ -495,10 +684,16 @@ async fn handle_non_stream_response(
                         // Store reasoning_content for future multi-turn requests
                         if let Some(ref rc) = msg.reasoning_content {
                             if !rc.is_empty() {
-                                let tc_ids: Vec<String> = msg.tool_calls.as_ref()
+                                let tc_ids: Vec<String> = msg
+                                    .tool_calls
+                                    .as_ref()
                                     .map(|tcs| tcs.iter().map(|tc| tc.id.clone()).collect())
                                     .unwrap_or_default();
-                                crate::transform::reasoning_store::store(&text_content, rc, &tc_ids);
+                                crate::transform::reasoning_store::store(
+                                    &text_content,
+                                    rc,
+                                    &tc_ids,
+                                );
                             }
                         }
 
@@ -515,7 +710,9 @@ async fn handle_non_stream_response(
                                 .and_then(|c| c.get("message"))
                                 .and_then(|m| m.get("annotations"))
                                 .and_then(|a| a.as_array())
-                                .map(|anns| crate::protocol::responses_events::normalize_annotations(anns))
+                                .map(|anns| {
+                                    crate::protocol::responses_events::normalize_annotations(anns)
+                                })
                                 .unwrap_or_default();
                             let mut item = json!({
                                 "id": msg_id,
@@ -544,23 +741,20 @@ async fn handle_non_stream_response(
                             // 截断），原样塞给客户端 → 下轮 history 带病。
                             let finish = choice.finish_reason.as_deref();
                             for tc in tcs {
-                                let safe_args = crate::transform::tool_calls::salvage_tool_arguments(
-                                    &tc.function.arguments, &tc.function.name, &tc.id, finish,
+                                let safe_args =
+                                    crate::transform::tool_calls::salvage_tool_arguments(
+                                        &tc.function.arguments,
+                                        &tc.function.name,
+                                        &tc.id,
+                                        finish,
+                                    );
+                                let mut item = responses_tool_call_item_from_chat_name(
+                                    &format!("fc_{}", tc.id),
+                                    &tc.id,
+                                    &tc.function.name,
+                                    &safe_args,
+                                    &tool_call_resolution,
                                 );
-                                // #1 namespace 还原（split 后无 prefix 时透传原名）
-                                let (display_name, namespace) =
-                                    crate::transform::tool_calls::split_namespace_tool_name(&tc.function.name)
-                                        .map(|(ns, name)| (name, Some(ns)))
-                                        .unwrap_or_else(|| (tc.function.name.clone(), None));
-                                let mut item = json!({
-                                    "id": format!("fc_{}", tc.id),
-                                    "type": "function_call",
-                                    "status": "completed",
-                                    "call_id": tc.id,
-                                    "name": display_name,
-                                    "arguments": safe_args,
-                                });
-                                if let Some(ns) = namespace { item["namespace"] = json!(ns); }
                                 if let Some(ref rc) = msg.reasoning_content {
                                     if !rc.is_empty() {
                                         item["reasoning_content"] = json!(rc);
@@ -592,7 +786,10 @@ async fn handle_non_stream_response(
                         if let Some(msg) = &choice.message {
                             asst_msgs.push(ChatMessage {
                                 role: "assistant".to_string(),
-                                content: msg.content.as_ref().map(|c| serde_json::Value::String(c.clone())),
+                                content: msg
+                                    .content
+                                    .as_ref()
+                                    .map(|c| serde_json::Value::String(c.clone())),
                                 reasoning_content: msg.reasoning_content.clone(),
                                 tool_calls: msg.tool_calls.clone(),
                                 tool_call_id: None,
@@ -602,8 +799,13 @@ async fn handle_non_stream_response(
                     }
                 }
                 crate::gateway::session_store::store_turn(
-                    &resp_id, chat_req.messages.clone(), asst_msgs,
-                    chat_resp.choices.as_ref().and_then(|c| c.first())
+                    &resp_id,
+                    chat_req.messages.clone(),
+                    asst_msgs,
+                    chat_resp
+                        .choices
+                        .as_ref()
+                        .and_then(|c| c.first())
                         .and_then(|c| c.message.as_ref())
                         .and_then(|m| m.reasoning_content.clone()),
                 );
@@ -631,26 +833,104 @@ async fn handle_non_stream_response(
                 &chat_req.diagnostic_events,
             );
             log_request_success(
-                &state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
+                &state.db,
+                &client_type,
+                "/v1/responses",
+                &request_id,
+                &raw_request,
+                &converted_request,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&responses_resp).unwrap_or_default(),
-                if tool_calls_json.is_empty() { None } else { Some(&tool_calls_json) },
-                &config.name, &model, 200, latency, Some(&trace),
-                in_tok, out_tok, cache_w, cache_r,
+                if tool_calls_json.is_empty() {
+                    None
+                } else {
+                    Some(&tool_calls_json)
+                },
+                &config.name,
+                &model,
+                200,
+                latency,
+                Some(&trace),
+                in_tok,
+                out_tok,
+                cache_w,
+                cache_r,
             );
 
             Ok(Json(responses_resp).into_response())
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            let status = if err.code == "PROVIDER_API_KEY_MISSING" { 401 }
-                else if err.code.starts_with("UPSTREAM") { 502 }
-                else { 500 };
+            let status = if err.code == "PROVIDER_API_KEY_MISSING" {
+                401
+            } else if err.code.starts_with("UPSTREAM") {
+                502
+            } else {
+                500
+            };
 
-            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &err, status, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/responses",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &err,
+                status,
+                latency,
+            );
 
             Err(GatewayError(err))
+        }
+    }
+}
+
+fn responses_tool_call_item_from_chat_name(
+    item_id: &str,
+    call_id: &str,
+    chat_name: &str,
+    arguments: &str,
+    resolution: &crate::transform::tool_calls::ToolCallResolutionMap,
+) -> Value {
+    match crate::transform::tool_calls::resolve_tool_call_response_kind(chat_name, resolution) {
+        crate::transform::tool_calls::ToolCallResponseKind::Function { name, namespace } => {
+            let mut item = json!({
+                "id": item_id,
+                "type": "function_call",
+                "status": "completed",
+                "call_id": call_id,
+                "name": name,
+                "arguments": arguments,
+            });
+            if let Some(ns) = namespace {
+                item["namespace"] = json!(ns);
+            }
+            item
+        }
+        crate::transform::tool_calls::ToolCallResponseKind::Custom { name } => {
+            let input = crate::transform::tool_calls::custom_tool_input_from_arguments(arguments);
+            json!({
+                "id": item_id,
+                "type": "custom_tool_call",
+                "status": "completed",
+                "call_id": call_id,
+                "name": name,
+                "input": input,
+            })
+        }
+        crate::transform::tool_calls::ToolCallResponseKind::ToolSearch => {
+            let arguments =
+                crate::transform::tool_calls::tool_search_arguments_from_arguments(arguments);
+            json!({
+                "type": "tool_search_call",
+                "status": "completed",
+                "call_id": call_id,
+                "execution": "client",
+                "arguments": arguments,
+            })
         }
     }
 }
@@ -729,10 +1009,17 @@ async fn handle_stream_response(
             // Spawn task to process upstream SSE and send converted events
             tokio::spawn(async move {
                 let mut acc = SseAccumulator::new(resp_id, model_clone.clone());
+                acc.tool_call_resolution =
+                    crate::transform::tool_calls::build_tool_call_resolution_map(&raw_req);
 
                 let result = crate::gateway::sse::process_upstream_stream_inner(
-                    boot, tx.clone(), &mut acc, true, true,
-                ).await;
+                    boot,
+                    tx.clone(),
+                    &mut acc,
+                    true,
+                    true,
+                )
+                .await;
 
                 // Record session affinity when the upstream confirmed a cache
                 // hit (acc.usage was normalized to the Responses-shape during
@@ -759,28 +1046,59 @@ async fn handle_stream_response(
                             type TC = crate::protocol::chat_completions::ToolCall;
                             type TCF = crate::protocol::chat_completions::ToolCallFunction;
                             let mut asst_msgs: Vec<CM> = vec![];
-                            let rc_opt = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.clone()) };
-                            let tcs_opt = if tc_list.is_empty() { None } else {
-                                Some(tc_list.iter().map(|tc| TC {
-                                    id: tc.id.clone(), call_type: "function".to_string(),
-                                    function: TCF { name: tc.name.clone(), arguments: tc.arguments.clone() },
-                                }).collect())
+                            let rc_opt = if acc.reasoning_content.is_empty() {
+                                None
+                            } else {
+                                Some(acc.reasoning_content.clone())
+                            };
+                            let tcs_opt = if tc_list.is_empty() {
+                                None
+                            } else {
+                                Some(
+                                    tc_list
+                                        .iter()
+                                        .map(|tc| TC {
+                                            id: tc.id.clone(),
+                                            call_type: "function".to_string(),
+                                            function: TCF {
+                                                name: tc.name.clone(),
+                                                arguments: tc.arguments.clone(),
+                                            },
+                                        })
+                                        .collect(),
+                                )
                             };
                             asst_msgs.push(CM {
                                 role: "assistant".to_string(),
-                                content: if acc.full_text.is_empty() { None } else { Some(serde_json::Value::String(acc.full_text.clone())) },
+                                content: if acc.full_text.is_empty() {
+                                    None
+                                } else {
+                                    Some(serde_json::Value::String(acc.full_text.clone()))
+                                },
                                 reasoning_content: rc_opt.clone(),
                                 tool_calls: tcs_opt,
-                                tool_call_id: None, name: None,
+                                tool_call_id: None,
+                                name: None,
                             });
-                            let rc = if acc.reasoning_content.is_empty() { None } else { Some(acc.reasoning_content.clone()) };
-                            crate::gateway::session_store::store_turn(&acc.response_id, sent_messages, asst_msgs, rc);
+                            let rc = if acc.reasoning_content.is_empty() {
+                                None
+                            } else {
+                                Some(acc.reasoning_content.clone())
+                            };
+                            crate::gateway::session_store::store_turn(
+                                &acc.response_id,
+                                sent_messages,
+                                asst_msgs,
+                                rc,
+                            );
                         }
 
                         // Bug #9 修复：trace 加 finish_reason / reasoning_tokens /
                         // truncated 字段，让 `agentgate logs` 能直接看出截断原因
                         // （而不是猜是 max_tokens 还是 AgentGate 自己挂了）。
-                        let reasoning_tokens = acc.usage.as_ref()
+                        let reasoning_tokens = acc
+                            .usage
+                            .as_ref()
                             .and_then(|u| u.get("output_tokens_details"))
                             .and_then(|d| d.get("reasoning_tokens"))
                             .and_then(|v| v.as_i64());
@@ -788,47 +1106,81 @@ async fn handle_stream_response(
                             acc.finish_reason.as_deref(),
                             Some("length") | Some("max_tokens")
                         );
-                        let trace = trace_with_degradation_events(serde_json::json!({
-                            "response_id": &acc.response_id,
-                            "stream": true,
-                            "text_len": acc.full_text.len(),
-                            "tool_calls_count": tc_list.len(),
-                            "reasoning_len": acc.reasoning_content.len(),
-                            "finish_reason": acc.finish_reason.as_deref(),
-                            "reasoning_tokens": reasoning_tokens,
-                            "truncated": truncated,
-                        }), &diagnostic_events);
+                        let trace = trace_with_degradation_events(
+                            serde_json::json!({
+                                "response_id": &acc.response_id,
+                                "stream": true,
+                                "text_len": acc.full_text.len(),
+                                "tool_calls_count": tc_list.len(),
+                                "reasoning_len": acc.reasoning_content.len(),
+                                "finish_reason": acc.finish_reason.as_deref(),
+                                "reasoning_tokens": reasoning_tokens,
+                                "truncated": truncated,
+                            }),
+                            &diagnostic_events,
+                        );
                         // Extract tokens from SSE usage
-                        let (in_tok, out_tok) = acc.usage.as_ref().map(|u| {
-                            (u.get("input_tokens").and_then(|v| v.as_i64()),
-                             u.get("output_tokens").and_then(|v| v.as_i64()))
-                        }).unwrap_or((None, None));
-                        let (cache_w, cache_r) = acc.usage.as_ref()
+                        let (in_tok, out_tok) = acc
+                            .usage
+                            .as_ref()
+                            .map(|u| {
+                                (
+                                    u.get("input_tokens").and_then(|v| v.as_i64()),
+                                    u.get("output_tokens").and_then(|v| v.as_i64()),
+                                )
+                            })
+                            .unwrap_or((None, None));
+                        let (cache_w, cache_r) = acc
+                            .usage
+                            .as_ref()
                             .map(crate::storage::request_logs::extract_cache_tokens)
                             .unwrap_or((None, None));
 
                         log_request_success(
-                            &db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req,
+                            &db,
+                            &client_type,
+                            "/v1/responses",
+                            &req_id,
+                            &raw_req,
+                            &conv_req,
                             "",
                             &truncate_str(&acc.full_text, 10000),
                             tool_calls_json.as_deref(),
-                            &provider_name, &model_clone, 200, latency,
-                            Some(&trace), in_tok, out_tok, cache_w, cache_r,
+                            &provider_name,
+                            &model_clone,
+                            200,
+                            latency,
+                            Some(&trace),
+                            in_tok,
+                            out_tok,
+                            cache_w,
+                            cache_r,
                         );
                     }
                     Err(err_msg) => {
                         let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
-                        log_request_error_full(&db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req,
-                            &provider_name, &model_clone, &err, 502, latency);
+                        log_request_error_full(
+                            &db,
+                            &client_type,
+                            "/v1/responses",
+                            &req_id,
+                            &raw_req,
+                            &conv_req,
+                            &provider_name,
+                            &model_clone,
+                            &err,
+                            502,
+                            latency,
+                        );
                     }
                 }
             });
 
             // Return SSE stream response
             let stream = ReceiverStream::new(rx);
-            let body = Body::from_stream(
-                tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
-            );
+            let body = Body::from_stream(tokio_stream::StreamExt::map(stream, |s| {
+                Ok::<_, std::convert::Infallible>(s)
+            }));
 
             Ok(Response::builder()
                 .status(StatusCode::OK)
@@ -840,9 +1192,24 @@ async fn handle_stream_response(
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            let status = if err.code.starts_with("UPSTREAM") { 502 } else { 500 };
-            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &err, status, latency);
+            let status = if err.code.starts_with("UPSTREAM") {
+                502
+            } else {
+                500
+            };
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/responses",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &err,
+                status,
+                latency,
+            );
             Err(GatewayError(err))
         }
     }
@@ -890,7 +1257,8 @@ async fn handle_anthropic_non_stream_response(
                             let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
                             let empty_input = json!({});
                             let input = block.get("input").unwrap_or(&empty_input);
-                            let arguments = serde_json::to_string(input).unwrap_or("{}".to_string());
+                            let arguments =
+                                serde_json::to_string(input).unwrap_or("{}".to_string());
                             output.push(json!({
                                 "id": format!("fc_{id}"),
                                 "type": "function_call",
@@ -906,13 +1274,16 @@ async fn handle_anthropic_non_stream_response(
 
                 if !text_parts.is_empty() {
                     let full_text = text_parts.join("");
-                    output.insert(0, json!({
-                        "id": msg_id,
-                        "type": "message",
-                        "status": "completed",
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": full_text}]
-                    }));
+                    output.insert(
+                        0,
+                        json!({
+                            "id": msg_id,
+                            "type": "message",
+                            "status": "completed",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": full_text}]
+                        }),
+                    );
                 }
             }
 
@@ -926,7 +1297,8 @@ async fn handle_anthropic_non_stream_response(
             });
             let latency = start.elapsed().as_millis() as i64;
             let (in_tok, out_tok) = extract_anthropic_usage(&upstream_json);
-            let (cache_w, cache_r) = upstream_json.get("usage")
+            let (cache_w, cache_r) = upstream_json
+                .get("usage")
                 .map(crate::storage::request_logs::extract_cache_tokens)
                 .unwrap_or((None, None));
 
@@ -937,21 +1309,51 @@ async fn handle_anthropic_non_stream_response(
                 }
             }
 
-            let trace = json!({"response_id": &resp_id, "stream": false, "protocol": "anthropic_messages"}).to_string();
+            let trace =
+                json!({"response_id": &resp_id, "stream": false, "protocol": "anthropic_messages"})
+                    .to_string();
             log_request_success(
-                &state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
+                &state.db,
+                &client_type,
+                "/v1/responses",
+                &request_id,
+                &raw_request,
+                &converted_request,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&responses_resp).unwrap_or_default(),
-                if tool_calls_json.is_empty() { None } else { Some(&tool_calls_json) },
-                &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok, cache_w, cache_r,
+                if tool_calls_json.is_empty() {
+                    None
+                } else {
+                    Some(&tool_calls_json)
+                },
+                &config.name,
+                &model,
+                200,
+                latency,
+                Some(&trace),
+                in_tok,
+                out_tok,
+                cache_w,
+                cache_r,
             );
 
             Ok(Json(responses_resp).into_response())
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &err, 502, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/responses",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &err,
+                502,
+                latency,
+            );
             Err(GatewayError(err))
         }
     }
@@ -996,7 +1398,9 @@ async fn handle_anthropic_stream_response(
 
             tokio::spawn(async move {
                 let mut acc = AnthropicSseAccumulator::new(resp_id, model_clone.clone());
-                let result = crate::gateway::sse_anthropic::process_anthropic_stream(boot, tx, &mut acc).await;
+                let result =
+                    crate::gateway::sse_anthropic::process_anthropic_stream(boot, tx, &mut acc)
+                        .await;
 
                 let latency = start.elapsed().as_millis() as i64;
                 let tc_list = acc.tool_calls_list();
@@ -1020,33 +1424,66 @@ async fn handle_anthropic_stream_response(
                             "stop_reason": acc.stop_reason.as_deref(),
                             "truncated": truncated,
                         }).to_string();
-                        let (in_tok, out_tok) = acc.usage.as_ref().map(|u| {
-                            (u.get("input_tokens").and_then(|v| v.as_i64()),
-                             u.get("output_tokens").and_then(|v| v.as_i64()))
-                        }).unwrap_or((None, None));
-                        let (cache_w, cache_r) = acc.usage.as_ref()
+                        let (in_tok, out_tok) = acc
+                            .usage
+                            .as_ref()
+                            .map(|u| {
+                                (
+                                    u.get("input_tokens").and_then(|v| v.as_i64()),
+                                    u.get("output_tokens").and_then(|v| v.as_i64()),
+                                )
+                            })
+                            .unwrap_or((None, None));
+                        let (cache_w, cache_r) = acc
+                            .usage
+                            .as_ref()
                             .map(crate::storage::request_logs::extract_cache_tokens)
                             .unwrap_or((None, None));
 
                         log_request_success(
-                            &db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req, "",
+                            &db,
+                            &client_type,
+                            "/v1/responses",
+                            &req_id,
+                            &raw_req,
+                            &conv_req,
+                            "",
                             &truncate_str(&acc.full_text, 10000),
-                            None, &provider_name, &model_clone, 200, latency,
-                            Some(&trace), in_tok, out_tok, cache_w, cache_r,
+                            None,
+                            &provider_name,
+                            &model_clone,
+                            200,
+                            latency,
+                            Some(&trace),
+                            in_tok,
+                            out_tok,
+                            cache_w,
+                            cache_r,
                         );
                     }
                     Err(err_msg) => {
                         let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
-                        log_request_error_full(&db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req,
-                            &provider_name, &model_clone, &err, 502, latency);
+                        log_request_error_full(
+                            &db,
+                            &client_type,
+                            "/v1/responses",
+                            &req_id,
+                            &raw_req,
+                            &conv_req,
+                            &provider_name,
+                            &model_clone,
+                            &err,
+                            502,
+                            latency,
+                        );
                     }
                 }
             });
 
             let stream = ReceiverStream::new(rx);
-            let body = Body::from_stream(
-                tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
-            );
+            let body = Body::from_stream(tokio_stream::StreamExt::map(stream, |s| {
+                Ok::<_, std::convert::Infallible>(s)
+            }));
 
             Ok(Response::builder()
                 .status(StatusCode::OK)
@@ -1058,8 +1495,19 @@ async fn handle_anthropic_stream_response(
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &err, 502, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/responses",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &err,
+                502,
+                latency,
+            );
             Err(GatewayError(err))
         }
     }
@@ -1067,8 +1515,12 @@ async fn handle_anthropic_stream_response(
 
 fn extract_anthropic_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i64>) {
     let usage = upstream.get("usage");
-    let input = usage.and_then(|u| u.get("input_tokens")).and_then(|v| v.as_i64());
-    let output = usage.and_then(|u| u.get("output_tokens")).and_then(|v| v.as_i64());
+    let input = usage
+        .and_then(|u| u.get("input_tokens"))
+        .and_then(|v| v.as_i64());
+    let output = usage
+        .and_then(|u| u.get("output_tokens"))
+        .and_then(|v| v.as_i64());
     (input, output)
 }
 
@@ -1100,22 +1552,29 @@ async fn handle_gemini_non_stream_response(
             let mut output = Vec::new();
 
             // Parse Gemini response: candidates[0].content.parts[]
-            if let Some(candidate) = upstream_json.get("candidates")
+            if let Some(candidate) = upstream_json
+                .get("candidates")
                 .and_then(|c| c.as_array())
-                .and_then(|a| a.first()) {
+                .and_then(|a| a.first())
+            {
                 let msg_id = format!("msg_{}", &resp_id.replace("resp_", ""));
                 let mut text_parts = Vec::new();
 
-                if let Some(parts) = candidate.get("content")
+                if let Some(parts) = candidate
+                    .get("content")
                     .and_then(|c| c.get("parts"))
-                    .and_then(|p| p.as_array()) {
+                    .and_then(|p| p.as_array())
+                {
                     for part in parts {
                         if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
                             text_parts.push(text.to_string());
                         }
                         if let Some(fc) = part.get("functionCall") {
                             let name = fc.get("name").and_then(|n| n.as_str()).unwrap_or("");
-                            let args = fc.get("args").map(|a| a.to_string()).unwrap_or("{}".to_string());
+                            let args = fc
+                                .get("args")
+                                .map(|a| a.to_string())
+                                .unwrap_or("{}".to_string());
                             let call_id = format!("call_gemini_{}", output.len());
                             output.push(json!({
                                 "id": format!("fc_{call_id}"),
@@ -1131,13 +1590,16 @@ async fn handle_gemini_non_stream_response(
 
                 if !text_parts.is_empty() {
                     let full_text = text_parts.join("");
-                    output.insert(0, json!({
-                        "id": msg_id,
-                        "type": "message",
-                        "status": "completed",
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": full_text}]
-                    }));
+                    output.insert(
+                        0,
+                        json!({
+                            "id": msg_id,
+                            "type": "message",
+                            "status": "completed",
+                            "role": "assistant",
+                            "content": [{"type": "output_text", "text": full_text}]
+                        }),
+                    );
                 }
             }
 
@@ -1156,17 +1618,45 @@ async fn handle_gemini_non_stream_response(
                     crate::gateway::session_affinity::record_if_cache_hit(sid, &provider_id, usage);
                 }
             }
-            let trace = json!({"response_id": &resp_id, "stream": false, "protocol": "gemini"}).to_string();
-            log_request_success(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
+            let trace =
+                json!({"response_id": &resp_id, "stream": false, "protocol": "gemini"}).to_string();
+            log_request_success(
+                &state.db,
+                &client_type,
+                "/v1/responses",
+                &request_id,
+                &raw_request,
+                &converted_request,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&responses_resp).unwrap_or_default(),
-                None, &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok, None, None);
+                None,
+                &config.name,
+                &model,
+                200,
+                latency,
+                Some(&trace),
+                in_tok,
+                out_tok,
+                None,
+                None,
+            );
             Ok(Json(responses_resp).into_response())
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &err, 502, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/responses",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &err,
+                502,
+                latency,
+            );
             Err(GatewayError(err))
         }
     }
@@ -1187,7 +1677,8 @@ async fn handle_gemini_stream_response(
 ) -> Result<Response, GatewayError> {
     // See note in `handle_gemini_non_stream_response` — params wired for parity.
     let _ = (&session_id, &provider_id);
-    let upstream_resp = adapter::send_gemini_stream(&state.http_client, &config, &body, &model).await;
+    let upstream_resp =
+        adapter::send_gemini_stream(&state.http_client, &config, &body, &model).await;
 
     match upstream_resp {
         Ok(response) => {
@@ -1213,7 +1704,8 @@ async fn handle_gemini_stream_response(
 
             tokio::spawn(async move {
                 let mut acc = GeminiSseAccumulator::new(resp_id, model_clone.clone());
-                let result = crate::gateway::sse_gemini::process_gemini_stream(boot, tx, &mut acc).await;
+                let result =
+                    crate::gateway::sse_gemini::process_gemini_stream(boot, tx, &mut acc).await;
 
                 let latency = start.elapsed().as_millis() as i64;
                 match result {
@@ -1222,27 +1714,60 @@ async fn handle_gemini_stream_response(
                             "response_id": &acc.response_id, "stream": true, "protocol": "gemini",
                             "text_len": acc.full_text.len(), "tool_calls_count": acc.tool_calls.len(),
                         }).to_string();
-                        let (in_tok, out_tok) = acc.usage.as_ref().map(|u| {
-                            (u.get("input_tokens").and_then(|v| v.as_i64()),
-                             u.get("output_tokens").and_then(|v| v.as_i64()))
-                        }).unwrap_or((None, None));
-                        log_request_success(&db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req, "",
+                        let (in_tok, out_tok) = acc
+                            .usage
+                            .as_ref()
+                            .map(|u| {
+                                (
+                                    u.get("input_tokens").and_then(|v| v.as_i64()),
+                                    u.get("output_tokens").and_then(|v| v.as_i64()),
+                                )
+                            })
+                            .unwrap_or((None, None));
+                        log_request_success(
+                            &db,
+                            &client_type,
+                            "/v1/responses",
+                            &req_id,
+                            &raw_req,
+                            &conv_req,
+                            "",
                             &truncate_str(&acc.full_text, 10000),
-                            None, &provider_name, &model_clone, 200, latency,
-                            Some(&trace), in_tok, out_tok, None, None);
+                            None,
+                            &provider_name,
+                            &model_clone,
+                            200,
+                            latency,
+                            Some(&trace),
+                            in_tok,
+                            out_tok,
+                            None,
+                            None,
+                        );
                     }
                     Err(err_msg) => {
                         let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
-                        log_request_error_full(&db, &client_type, "/v1/responses", &req_id, &raw_req, &conv_req,
-                            &provider_name, &model_clone, &err, 502, latency);
+                        log_request_error_full(
+                            &db,
+                            &client_type,
+                            "/v1/responses",
+                            &req_id,
+                            &raw_req,
+                            &conv_req,
+                            &provider_name,
+                            &model_clone,
+                            &err,
+                            502,
+                            latency,
+                        );
                     }
                 }
             });
 
             let stream = ReceiverStream::new(rx);
-            let body = Body::from_stream(
-                tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
-            );
+            let body = Body::from_stream(tokio_stream::StreamExt::map(stream, |s| {
+                Ok::<_, std::convert::Infallible>(s)
+            }));
             Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, "text/event-stream")
@@ -1253,8 +1778,19 @@ async fn handle_gemini_stream_response(
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1/responses", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &err, 502, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/responses",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &err,
+                502,
+                latency,
+            );
             Err(GatewayError(err))
         }
     }
@@ -1262,8 +1798,12 @@ async fn handle_gemini_stream_response(
 
 fn extract_gemini_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i64>) {
     let usage = upstream.get("usageMetadata");
-    let input = usage.and_then(|u| u.get("promptTokenCount")).and_then(|v| v.as_i64());
-    let output = usage.and_then(|u| u.get("candidatesTokenCount")).and_then(|v| v.as_i64());
+    let input = usage
+        .and_then(|u| u.get("promptTokenCount"))
+        .and_then(|v| v.as_i64());
+    let output = usage
+        .and_then(|u| u.get("candidatesTokenCount"))
+        .and_then(|v| v.as_i64());
     (input, output)
 }
 
@@ -1281,8 +1821,12 @@ pub async fn handle_gemini_generate(
     // / ":countTokens"。axum 无法在 router 层按 action 分发，handler 入口分流。
     if model_path.ends_with(":countTokens") {
         let body = crate::gateway::body_decode::decode(&headers, body).map_err(GatewayError)?;
-        let v: Value = serde_json::from_str(&body)
-            .map_err(|e| GatewayError(AppError::new("COUNT_TOKENS_PARSE_ERROR", format!("Failed to parse: {e}"))))?;
+        let v: Value = serde_json::from_str(&body).map_err(|e| {
+            GatewayError(AppError::new(
+                "COUNT_TOKENS_PARSE_ERROR",
+                format!("Failed to parse: {e}"),
+            ))
+        })?;
         let mut chars: usize = 0;
         if let Some(contents) = v.get("contents").and_then(|c| c.as_array()) {
             for c in contents {
@@ -1300,36 +1844,92 @@ pub async fn handle_gemini_generate(
     }
 
     let start = Instant::now();
-    let request_id = format!("req_{}", uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string());
+    let request_id = format!(
+        "req_{}",
+        uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string()
+    );
     let client_type = detect_client_from_ua(&headers, "Gemini CLI");
 
     let body = crate::gateway::body_decode::decode(&headers, body).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1beta/generateContent", &request_id, "", None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1beta/generateContent",
+            &request_id,
+            "",
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
 
     // Extract model name from path (e.g. "gemini-2.5-flash" from "gemini-2.5-flash:generateContent")
-    let model_name = model_path.split(':').next().unwrap_or(&model_path).to_string();
+    let model_name = model_path
+        .split(':')
+        .next()
+        .unwrap_or(&model_path)
+        .to_string();
     let is_stream = model_path.contains("streamGenerateContent");
 
     let gemini_body: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
-        let err = AppError::new("GEMINI_PARSE_ERROR", format!("Failed to parse Gemini request: {e}"));
-        log_request_error(&state.db, &client_type, "/v1beta/generateContent", &request_id, &sanitize_body(&body), None, &err, start.elapsed().as_millis() as i64);
+        let err = AppError::new(
+            "GEMINI_PARSE_ERROR",
+            format!("Failed to parse Gemini request: {e}"),
+        );
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1beta/generateContent",
+            &request_id,
+            &sanitize_body(&body),
+            None,
+            &err,
+            start.elapsed().as_millis() as i64,
+        );
         err
     })?;
 
     // Select provider (use openai_responses route profile since Gemini CLI is a coding agent)
     let selection = crate::gateway::provider_selector::select_for_failover(
-        &state.db, "openai_responses", Some(&model_name), None,
-    ).or_else(|_| crate::gateway::provider_selector::select_for_failover(
-        &state.db, "openai_chat_completions", None, None,
-    )).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1beta/generateContent", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        &state.db,
+        "openai_responses",
+        Some(&model_name),
+        None,
+    )
+    .or_else(|_| {
+        crate::gateway::provider_selector::select_for_failover(
+            &state.db,
+            "openai_chat_completions",
+            None,
+            None,
+        )
+    })
+    .map_err(|e| {
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1beta/generateContent",
+            &request_id,
+            &sanitize_body(&body),
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
 
     let config = ProviderConfig::from_provider(&selection.provider).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1beta/generateContent", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1beta/generateContent",
+            &request_id,
+            &sanitize_body(&body),
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
 
@@ -1341,18 +1941,53 @@ pub async fn handle_gemini_generate(
     // 不绕 Chat 转换，避免丢 thinking / grounding / safetySettings 这些 Gemini-only 字段。
     if config.is_gemini() {
         // Override body 里的 model（如有 mapping）
-        let model_override = native_model_override(&selection.provider, Some(&model_name), Some(&resolved_model));
+        let model_override = native_model_override(
+            &selection.provider,
+            Some(&model_name),
+            Some(&resolved_model),
+        );
         let final_model = model_override.unwrap_or(resolved_model.clone());
 
         if is_stream {
-            let upstream_resp = adapter::send_gemini_stream(&state.http_client, &config, &gemini_body, &final_model).await
+            let upstream_resp = adapter::send_gemini_stream(
+                &state.http_client,
+                &config,
+                &gemini_body,
+                &final_model,
+            )
+            .await
+            .map_err(|e| {
+                log_request_error_full(
+                    &state.db,
+                    &client_type,
+                    "/v1beta/generateContent",
+                    &request_id,
+                    &raw_body,
+                    "",
+                    &config.name,
+                    &final_model,
+                    &e,
+                    502,
+                    start.elapsed().as_millis() as i64,
+                );
+                GatewayError(e)
+            })?;
+            let boot = crate::gateway::sse_bootstrap::bootstrap_detect(upstream_resp)
+                .await
                 .map_err(|e| {
-                    log_request_error_full(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, "", &config.name, &final_model, &e, 502, start.elapsed().as_millis() as i64);
-                    GatewayError(e)
-                })?;
-            let boot = crate::gateway::sse_bootstrap::bootstrap_detect(upstream_resp).await
-                .map_err(|e| {
-                    log_request_error_full(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, "", &config.name, &final_model, &e, 502, start.elapsed().as_millis() as i64);
+                    log_request_error_full(
+                        &state.db,
+                        &client_type,
+                        "/v1beta/generateContent",
+                        &request_id,
+                        &raw_body,
+                        "",
+                        &config.name,
+                        &final_model,
+                        &e,
+                        502,
+                        start.elapsed().as_millis() as i64,
+                    );
                     GatewayError(e)
                 })?;
             let (tx, rx) = mpsc::channel::<String>(256);
@@ -1372,7 +2007,11 @@ pub async fn handle_gemini_generate(
                 while let Some(chunk) = stream.next().await {
                     match chunk {
                         Ok(b) => {
-                            if tx.send(String::from_utf8_lossy(&b).into_owned()).await.is_err() {
+                            if tx
+                                .send(String::from_utf8_lossy(&b).into_owned())
+                                .await
+                                .is_err()
+                            {
                                 break;
                             }
                         }
@@ -1380,14 +2019,34 @@ pub async fn handle_gemini_generate(
                     }
                 }
                 let latency = start.elapsed().as_millis() as i64;
-                let trace = json!({"mode": "native_pass_through", "protocol": "gemini", "stream": true}).to_string();
-                log_request_success(&db, &client_type_owned, "/v1beta/generateContent", &req_id, &raw_req, "", "", "", None,
-                    &provider_name, &model_clone, 200, latency, Some(&trace), None, None, None, None);
+                let trace =
+                    json!({"mode": "native_pass_through", "protocol": "gemini", "stream": true})
+                        .to_string();
+                log_request_success(
+                    &db,
+                    &client_type_owned,
+                    "/v1beta/generateContent",
+                    &req_id,
+                    &raw_req,
+                    "",
+                    "",
+                    "",
+                    None,
+                    &provider_name,
+                    &model_clone,
+                    200,
+                    latency,
+                    Some(&trace),
+                    None,
+                    None,
+                    None,
+                    None,
+                );
             });
             let stream = ReceiverStream::new(rx);
-            let body = Body::from_stream(
-                tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
-            );
+            let body = Body::from_stream(tokio_stream::StreamExt::map(stream, |s| {
+                Ok::<_, std::convert::Infallible>(s)
+            }));
             return Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header(header::CONTENT_TYPE, "text/event-stream")
@@ -1395,22 +2054,55 @@ pub async fn handle_gemini_generate(
                 .body(body)
                 .unwrap());
         } else {
-            let result = adapter::send_gemini_non_stream(&state.http_client, &config, &gemini_body, &final_model).await;
+            let result = adapter::send_gemini_non_stream(
+                &state.http_client,
+                &config,
+                &gemini_body,
+                &final_model,
+            )
+            .await;
             match result {
                 Ok(upstream_json) => {
                     let latency = start.elapsed().as_millis() as i64;
                     let (in_tok, out_tok) = extract_gemini_usage(&upstream_json);
                     let trace = json!({"mode": "native_pass_through", "protocol": "gemini", "stream": false}).to_string();
-                    log_request_success(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, "",
+                    log_request_success(
+                        &state.db,
+                        &client_type,
+                        "/v1beta/generateContent",
+                        &request_id,
+                        &raw_body,
+                        "",
                         &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                         &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
-                        None, &config.name, &final_model, 200, latency, Some(&trace), in_tok, out_tok, None, None);
+                        None,
+                        &config.name,
+                        &final_model,
+                        200,
+                        latency,
+                        Some(&trace),
+                        in_tok,
+                        out_tok,
+                        None,
+                        None,
+                    );
                     return Ok(Json(upstream_json).into_response());
                 }
                 Err(err) => {
                     let latency = start.elapsed().as_millis() as i64;
-                    log_request_error_full(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, "",
-                        &config.name, &final_model, &err, 502, latency);
+                    log_request_error_full(
+                        &state.db,
+                        &client_type,
+                        "/v1beta/generateContent",
+                        &request_id,
+                        &raw_body,
+                        "",
+                        &config.name,
+                        &final_model,
+                        &err,
+                        502,
+                        latency,
+                    );
                     return Err(GatewayError(err));
                 }
             }
@@ -1419,7 +2111,16 @@ pub async fn handle_gemini_generate(
 
     // Convert Gemini → Chat Completions
     let mut chat_req = gemini_to_chat::convert(&gemini_body, &resolved_model).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1beta/generateContent",
+            &request_id,
+            &raw_body,
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
     chat_req.stream = is_stream;
@@ -1432,20 +2133,48 @@ pub async fn handle_gemini_generate(
 
     if is_stream {
         // Stream: Chat Completions SSE → convert each chunk to Gemini SSE format
-        let upstream_resp = adapter::send_stream(&state.http_client, &config, &mut chat_req).await.map_err(|e| {
-            let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json, &config.name, &resolved_model, &e, 502, latency);
-            GatewayError(e)
-        })?;
+        let upstream_resp = adapter::send_stream(&state.http_client, &config, &mut chat_req)
+            .await
+            .map_err(|e| {
+                let latency = start.elapsed().as_millis() as i64;
+                log_request_error_full(
+                    &state.db,
+                    &client_type,
+                    "/v1beta/generateContent",
+                    &request_id,
+                    &raw_body,
+                    &converted_json,
+                    &config.name,
+                    &resolved_model,
+                    &e,
+                    502,
+                    latency,
+                );
+                GatewayError(e)
+            })?;
         converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
 
         // Bootstrap-validate the upstream Chat Completions stream before
         // committing to forwarding the converted Gemini SSE back to the client.
-        let boot = crate::gateway::sse_bootstrap::bootstrap_detect(upstream_resp).await.map_err(|e| {
-            let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json, &config.name, &resolved_model, &e, 502, latency);
-            GatewayError(e)
-        })?;
+        let boot = crate::gateway::sse_bootstrap::bootstrap_detect(upstream_resp)
+            .await
+            .map_err(|e| {
+                let latency = start.elapsed().as_millis() as i64;
+                log_request_error_full(
+                    &state.db,
+                    &client_type,
+                    "/v1beta/generateContent",
+                    &request_id,
+                    &raw_body,
+                    &converted_json,
+                    &config.name,
+                    &resolved_model,
+                    &e,
+                    502,
+                    latency,
+                );
+                GatewayError(e)
+            })?;
 
         let (tx, rx) = mpsc::channel::<String>(256);
         let db = state.db.clone();
@@ -1488,13 +2217,20 @@ pub async fn handle_gemini_generate(
                     let line = buffer[..line_end].trim_end_matches('\r').to_string();
                     buffer = buffer[line_end + 1..].to_string();
 
-                    if line.is_empty() || line.starts_with(':') { continue; }
-                    let Some(data) = line.strip_prefix("data:").map(|d| d.trim()) else { continue };
-                    if data == "[DONE]" { break; }
+                    if line.is_empty() || line.starts_with(':') {
+                        continue;
+                    }
+                    let Some(data) = line.strip_prefix("data:").map(|d| d.trim()) else {
+                        continue;
+                    };
+                    if data == "[DONE]" {
+                        break;
+                    }
 
                     if let Ok(chunk_json) = serde_json::from_str::<Value>(data) {
                         // Accumulate text
-                        if let Some(delta) = chunk_json.get("choices")
+                        if let Some(delta) = chunk_json
+                            .get("choices")
                             .and_then(|c| c.as_array())
                             .and_then(|a| a.first())
                             .and_then(|c| c.get("delta"))
@@ -1516,14 +2252,32 @@ pub async fn handle_gemini_generate(
                 json!({"response_id": &req_id, "stream": true, "protocol": "gemini_input"}),
                 &diagnostic_events,
             );
-            log_request_success(&db, &client_type, "/v1beta/generateContent", &req_id, &raw_req, &conv_req, "", &full_text[..full_text.len().min(10000)],
-                None, &provider_name, &model_clone, 200, latency, Some(&trace), None, None, None, None);
+            log_request_success(
+                &db,
+                &client_type,
+                "/v1beta/generateContent",
+                &req_id,
+                &raw_req,
+                &conv_req,
+                "",
+                &full_text[..full_text.len().min(10000)],
+                None,
+                &provider_name,
+                &model_clone,
+                200,
+                latency,
+                Some(&trace),
+                None,
+                None,
+                None,
+                None,
+            );
         });
 
         let stream = ReceiverStream::new(rx);
-        let body = Body::from_stream(
-            tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
-        );
+        let body = Body::from_stream(tokio_stream::StreamExt::map(stream, |s| {
+            Ok::<_, std::convert::Infallible>(s)
+        }));
 
         Ok(Response::builder()
             .status(StatusCode::OK)
@@ -1539,23 +2293,51 @@ pub async fn handle_gemini_generate(
         match result {
             Ok(upstream_json) => {
                 converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
-                let gemini_resp = gemini_to_chat::response_to_gemini(&upstream_json, &resolved_model);
+                let gemini_resp =
+                    gemini_to_chat::response_to_gemini(&upstream_json, &resolved_model);
                 let latency = start.elapsed().as_millis() as i64;
                 let (in_tok, out_tok) = extract_usage(&upstream_json);
                 let trace = trace_with_degradation_events(
                     json!({"protocol": "gemini_input"}),
                     &chat_req.diagnostic_events,
                 );
-                log_request_success(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json,
+                log_request_success(
+                    &state.db,
+                    &client_type,
+                    "/v1beta/generateContent",
+                    &request_id,
+                    &raw_body,
+                    &converted_json,
                     &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                     &serde_json::to_string_pretty(&gemini_resp).unwrap_or_default(),
-                    None, &config.name, &resolved_model, 200, latency, Some(&trace), in_tok, out_tok, None, None);
+                    None,
+                    &config.name,
+                    &resolved_model,
+                    200,
+                    latency,
+                    Some(&trace),
+                    in_tok,
+                    out_tok,
+                    None,
+                    None,
+                );
                 Ok(Json(gemini_resp).into_response())
             }
             Err(err) => {
                 let latency = start.elapsed().as_millis() as i64;
-                log_request_error_full(&state.db, &client_type, "/v1beta/generateContent", &request_id, &raw_body, &converted_json,
-                    &config.name, &resolved_model, &err, 502, latency);
+                log_request_error_full(
+                    &state.db,
+                    &client_type,
+                    "/v1beta/generateContent",
+                    &request_id,
+                    &raw_body,
+                    &converted_json,
+                    &config.name,
+                    &resolved_model,
+                    &err,
+                    502,
+                    latency,
+                );
                 Err(GatewayError(err))
             }
         }
@@ -1571,11 +2353,23 @@ pub async fn handle_chat_completions(
 ) -> Result<Response, GatewayError> {
     validate_auth(&headers)?;
     let start = Instant::now();
-    let request_id = format!("req_{}", &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let request_id = format!(
+        "req_{}",
+        &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]
+    );
     let client_type = detect_client_from_ua(&headers, "Generic");
 
     let body = crate::gateway::body_decode::decode(&headers, body).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1/chat/completions", &request_id, "", None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1/chat/completions",
+            &request_id,
+            "",
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
 
@@ -1587,11 +2381,30 @@ pub async fn handle_chat_completions(
     // fallback 到 anthropic_messages —— 让只配了 Anthropic 端点的 provider
     // 也能服务 Chat 客户端，下面 anthropic 分支负责协议转换。
     let selection = crate::gateway::provider_selector::select_for_failover(
-        &state.db, "openai_chat_completions", requested_model.as_deref(), None,
-    ).or_else(|_| crate::gateway::provider_selector::select_for_failover(
-        &state.db, "anthropic_messages", requested_model.as_deref(), None,
-    )).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1/chat/completions", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        &state.db,
+        "openai_chat_completions",
+        requested_model.as_deref(),
+        None,
+    )
+    .or_else(|_| {
+        crate::gateway::provider_selector::select_for_failover(
+            &state.db,
+            "anthropic_messages",
+            requested_model.as_deref(),
+            None,
+        )
+    })
+    .map_err(|e| {
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1/chat/completions",
+            &request_id,
+            &sanitize_body(&body),
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
 
@@ -1600,7 +2413,10 @@ pub async fn handle_chat_completions(
     let raw_body = sanitize_body(&body);
 
     let mut attempt_order: Vec<&crate::gateway::provider_selector::ProviderCandidate> = Vec::new();
-    if let Some(primary) = candidates.iter().find(|c| c.provider_id == selection.provider.id) {
+    if let Some(primary) = candidates
+        .iter()
+        .find(|c| c.provider_id == selection.provider.id)
+    {
         attempt_order.push(primary);
     }
     if is_failover {
@@ -1615,42 +2431,73 @@ pub async fn handle_chat_completions(
 
     for (attempt_idx, candidate) in attempt_order.iter().enumerate() {
         let provider = {
-            let conn = state.db.lock().map_err(|_| GatewayError(AppError::internal("DB lock")))?;
+            let conn = state
+                .db
+                .lock()
+                .map_err(|_| GatewayError(AppError::internal("DB lock")))?;
             match crate::storage::providers::get_by_id(&conn, &candidate.provider_id) {
-                Ok(p) => p, Err(_) => continue,
+                Ok(p) => p,
+                Err(_) => continue,
             }
         };
 
         let config = match ProviderConfig::from_provider(&provider) {
-            Ok(c) => c, Err(e) => { last_error = Some(e); continue; }
+            Ok(c) => c,
+            Err(e) => {
+                last_error = Some(e);
+                continue;
+            }
         };
 
         // Chat → Anthropic 转换分支：provider 是 anthropic 且配了 anthropic_base_url。
         // 走 client_chat_to_anthropic_handle 转换请求体、调上游 Anthropic、再把响应/SSE
         // 翻译成 Chat 形态发回。
         if config.is_anthropic() && config.has_anthropic_url() {
-            let model_override = native_model_override(&provider, requested_model.as_deref(), Some(&candidate.model));
+            let model_override = native_model_override(
+                &provider,
+                requested_model.as_deref(),
+                Some(&candidate.model),
+            );
             let model = model_override.unwrap_or_else(|| candidate.model.clone());
             let result = client_chat_to_anthropic_handle(
-                state.clone(), config.clone(), provider.clone(), &body, model.clone(),
-                request_id.clone(), raw_body.clone(), start, client_type.clone(),
-            ).await;
+                state.clone(),
+                config.clone(),
+                provider.clone(),
+                &body,
+                model.clone(),
+                request_id.clone(),
+                raw_body.clone(),
+                start,
+                client_type.clone(),
+            )
+            .await;
 
             match result {
                 Ok(response) => {
                     if let Some(conn) = lock_db(&state.db) {
-                        let _ = crate::storage::provider_runtime_status::mark_success(&conn, &candidate.provider_id);
+                        let _ = crate::storage::provider_runtime_status::mark_success(
+                            &conn,
+                            &candidate.provider_id,
+                        );
                     }
                     return Ok(response);
                 }
                 Err(err) => {
                     if let Some(conn) = lock_db(&state.db) {
                         let _ = crate::storage::provider_runtime_status::mark_failure(
-                            &conn, &candidate.provider_id, &err.0.code, &err.0.message, candidate.cooldown_seconds,
+                            &conn,
+                            &candidate.provider_id,
+                            &err.0.code,
+                            &err.0.message,
+                            candidate.cooldown_seconds,
                         );
                     }
                     if is_failover && attempt_idx < attempt_order.len() - 1 {
-                        if crate::gateway::provider_selector::should_failover(Some(502), &err.0.message, candidate) {
+                        if crate::gateway::provider_selector::should_failover(
+                            Some(502),
+                            &err.0.message,
+                            candidate,
+                        ) {
                             last_error = Some(err.0);
                             continue;
                         }
@@ -1660,35 +2507,73 @@ pub async fn handle_chat_completions(
             }
         }
 
-        let decision = match crate::gateway::route_decision::decide("/v1/chat/completions", &provider.protocol, &config.base_url) {
-            Ok(d) => d, Err(e) => { last_error = Some(e); continue; }
+        let decision = match crate::gateway::route_decision::decide(
+            "/v1/chat/completions",
+            &provider.protocol,
+            &config.base_url,
+        ) {
+            Ok(d) => d,
+            Err(e) => {
+                last_error = Some(e);
+                continue;
+            }
         };
 
         if decision.mode != crate::gateway::route_decision::RouteMode::PassThrough {
-            last_error = Some(AppError::new("PROTOCOL_TRANSFORM_NOT_SUPPORTED", "Not a pass-through provider"));
+            last_error = Some(AppError::new(
+                "PROTOCOL_TRANSFORM_NOT_SUPPORTED",
+                "Not a pass-through provider",
+            ));
             continue;
         }
 
-        let model_override = native_model_override(&provider, requested_model.as_deref(), Some(&candidate.model));
+        let model_override = native_model_override(
+            &provider,
+            requested_model.as_deref(),
+            Some(&candidate.model),
+        );
         let result = crate::gateway::pass_through::handle(
-            &state.http_client, &state.db, &config, &decision.target_url, "/v1/chat/completions", "openai_chat_completions", &body, model_override.as_deref(), &request_id, start, &client_type, Some(&headers),
-        ).await;
+            &state.http_client,
+            &state.db,
+            &config,
+            &decision.target_url,
+            "/v1/chat/completions",
+            "openai_chat_completions",
+            &body,
+            model_override.as_deref(),
+            &request_id,
+            start,
+            &client_type,
+            Some(&headers),
+        )
+        .await;
 
         match result {
             Ok(response) => {
                 if let Some(conn) = lock_db(&state.db) {
-                    let _ = crate::storage::provider_runtime_status::mark_success(&conn, &candidate.provider_id);
+                    let _ = crate::storage::provider_runtime_status::mark_success(
+                        &conn,
+                        &candidate.provider_id,
+                    );
                 }
                 return Ok(response);
             }
             Err(err) => {
                 if let Some(conn) = lock_db(&state.db) {
                     let _ = crate::storage::provider_runtime_status::mark_failure(
-                        &conn, &candidate.provider_id, &err.code, &err.message, candidate.cooldown_seconds,
+                        &conn,
+                        &candidate.provider_id,
+                        &err.code,
+                        &err.message,
+                        candidate.cooldown_seconds,
                     );
                 }
                 if is_failover && attempt_idx < attempt_order.len() - 1 {
-                    if crate::gateway::provider_selector::should_failover(Some(502), &err.message, candidate) {
+                    if crate::gateway::provider_selector::should_failover(
+                        Some(502),
+                        &err.message,
+                        candidate,
+                    ) {
                         last_error = Some(err);
                         continue;
                     }
@@ -1698,7 +2583,9 @@ pub async fn handle_chat_completions(
         }
     }
 
-    Err(GatewayError(last_error.unwrap_or_else(|| AppError::new("FAILOVER_EXHAUSTED", "All providers failed"))))
+    Err(GatewayError(last_error.unwrap_or_else(|| {
+        AppError::new("FAILOVER_EXHAUSTED", "All providers failed")
+    })))
 }
 
 // ── Chat 客户端 + Anthropic provider 协议转换 ──────────────────
@@ -1725,8 +2612,20 @@ async fn client_chat_to_anthropic_handle(
 
     // 1. 解析 Chat 请求
     let mut chat_req: ChatCompletionsRequest = serde_json::from_str(body).map_err(|e| {
-        let err = AppError::new("CHAT_PARSE_ERROR", format!("Failed to parse chat request: {e}"));
-        log_request_error(&state.db, &client_type, "/v1/chat/completions", &request_id, &raw_request, None, &err, start.elapsed().as_millis() as i64);
+        let err = AppError::new(
+            "CHAT_PARSE_ERROR",
+            format!("Failed to parse chat request: {e}"),
+        );
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1/chat/completions",
+            &request_id,
+            &raw_request,
+            None,
+            &err,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(err)
     })?;
     // model_mapping 覆盖
@@ -1735,45 +2634,101 @@ async fn client_chat_to_anthropic_handle(
     let want_stream = chat_req.stream;
 
     // 2. Chat → Anthropic 转换
-    let mut anthropic_body = crate::transform::chat_to_anthropic::convert(&chat_req).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1/chat/completions", &request_id, &raw_request, None, &e, start.elapsed().as_millis() as i64);
-        GatewayError(e)
-    })?;
+    let mut anthropic_body =
+        crate::transform::chat_to_anthropic::convert(&chat_req).map_err(|e| {
+            log_request_error(
+                &state.db,
+                &client_type,
+                "/v1/chat/completions",
+                &request_id,
+                &raw_request,
+                None,
+                &e,
+                start.elapsed().as_millis() as i64,
+            );
+            GatewayError(e)
+        })?;
     // 3. 网关精炼层：开关全关时是 no-op，开了才会按 quirks 改写 outbound body
     let _refiner_log = refine_value_body(&state.db, &provider, &mut anthropic_body);
     let converted_request = serde_json::to_string_pretty(&anthropic_body).unwrap_or_default();
 
     if want_stream {
         return client_chat_to_anthropic_stream(
-            state, config, anthropic_body, model, request_id, raw_request, converted_request, start, client_type,
-        ).await;
+            state,
+            config,
+            anthropic_body,
+            model,
+            request_id,
+            raw_request,
+            converted_request,
+            start,
+            client_type,
+        )
+        .await;
     }
 
     // 3. 非流式：发 Anthropic non-stream 请求
-    let result = adapter::send_anthropic_non_stream(&state.http_client, &config, &anthropic_body).await;
+    let result =
+        adapter::send_anthropic_non_stream(&state.http_client, &config, &anthropic_body).await;
     match result {
         Ok(upstream_json) => {
             let chat_resp = crate::transform::anthropic_to_chat::convert(&upstream_json, &model);
             let latency = start.elapsed().as_millis() as i64;
             // usage 同时含 Anthropic + OpenAI 两形态字段，extract_cache_tokens 都识别
             let (in_tok, out_tok) = (
-                chat_resp.get("usage").and_then(|u| u.get("prompt_tokens")).and_then(|v| v.as_i64()),
-                chat_resp.get("usage").and_then(|u| u.get("completion_tokens")).and_then(|v| v.as_i64()),
+                chat_resp
+                    .get("usage")
+                    .and_then(|u| u.get("prompt_tokens"))
+                    .and_then(|v| v.as_i64()),
+                chat_resp
+                    .get("usage")
+                    .and_then(|u| u.get("completion_tokens"))
+                    .and_then(|v| v.as_i64()),
             );
-            let (cache_w, cache_r) = chat_resp.get("usage")
+            let (cache_w, cache_r) = chat_resp
+                .get("usage")
                 .map(crate::storage::request_logs::extract_cache_tokens)
                 .unwrap_or((None, None));
-            let trace = json!({"mode": "transform", "protocol": "chat_to_anthropic", "stream": false}).to_string();
-            log_request_success(&state.db, &client_type, "/v1/chat/completions", &request_id, &raw_request, &converted_request,
+            let trace =
+                json!({"mode": "transform", "protocol": "chat_to_anthropic", "stream": false})
+                    .to_string();
+            log_request_success(
+                &state.db,
+                &client_type,
+                "/v1/chat/completions",
+                &request_id,
+                &raw_request,
+                &converted_request,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&chat_resp).unwrap_or_default(),
-                None, &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok, cache_w, cache_r);
+                None,
+                &config.name,
+                &model,
+                200,
+                latency,
+                Some(&trace),
+                in_tok,
+                out_tok,
+                cache_w,
+                cache_r,
+            );
             Ok(Json(chat_resp).into_response())
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1/chat/completions", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &err, 502, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/chat/completions",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &err,
+                502,
+                latency,
+            );
             Err(GatewayError(err))
         }
     }
@@ -1794,20 +2749,44 @@ async fn client_chat_to_anthropic_stream(
 ) -> Result<Response, GatewayError> {
     use futures::StreamExt;
 
-    let upstream = adapter::send_anthropic_stream(&state.http_client, &config, &anthropic_body).await
+    let upstream = adapter::send_anthropic_stream(&state.http_client, &config, &anthropic_body)
+        .await
         .map_err(|e| {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1/chat/completions", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &e, 502, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/chat/completions",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &e,
+                502,
+                latency,
+            );
             GatewayError(e)
         })?;
 
     // Bootstrap 校验：HTTP 200 + 错误帧的情况能被识别并报错触发 failover
-    let boot = crate::gateway::sse_bootstrap::bootstrap_detect(upstream).await
+    let boot = crate::gateway::sse_bootstrap::bootstrap_detect(upstream)
+        .await
         .map_err(|e| {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1/chat/completions", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &e, 502, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/chat/completions",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &e,
+                502,
+                latency,
+            );
             GatewayError(e)
         })?;
 
@@ -1857,7 +2836,9 @@ async fn client_chat_to_anthropic_stream(
                     if let Some(et) = line.strip_prefix("event:").map(|s| s.trim()) {
                         event_type = et.to_string();
                     } else if let Some(d) = line.strip_prefix("data:").map(|s| s.trim()) {
-                        if !data_str.is_empty() { data_str.push('\n'); }
+                        if !data_str.is_empty() {
+                            data_str.push('\n');
+                        }
                         data_str.push_str(d);
                     }
                 }
@@ -1883,7 +2864,8 @@ async fn client_chat_to_anthropic_stream(
                 if event_type == "message_delta" {
                     if let Some(u) = data.get("usage") {
                         final_usage_json.get_or_insert_with(|| json!({}));
-                        if let Some(obj) = final_usage_json.as_mut().and_then(|u| u.as_object_mut()) {
+                        if let Some(obj) = final_usage_json.as_mut().and_then(|u| u.as_object_mut())
+                        {
                             if let Some(ot) = u.get("output_tokens") {
                                 obj.insert("output_tokens".into(), ot.clone());
                             }
@@ -1893,7 +2875,8 @@ async fn client_chat_to_anthropic_stream(
                 if event_type == "message_start" {
                     if let Some(u) = data.get("message").and_then(|m| m.get("usage")) {
                         final_usage_json.get_or_insert_with(|| json!({}));
-                        if let Some(obj) = final_usage_json.as_mut().and_then(|u| u.as_object_mut()) {
+                        if let Some(obj) = final_usage_json.as_mut().and_then(|u| u.as_object_mut())
+                        {
                             if let Some(it) = u.get("input_tokens") {
                                 obj.insert("input_tokens".into(), it.clone());
                             }
@@ -1931,30 +2914,65 @@ async fn client_chat_to_anthropic_stream(
                 let trace = json!({
                     "mode": "transform", "protocol": "chat_to_anthropic", "stream": true,
                     "text_len": total_text.len(),
-                }).to_string();
-                let (in_tok, out_tok) = final_usage_json.as_ref().map(|u| (
-                    u.get("input_tokens").and_then(|v| v.as_i64()),
-                    u.get("output_tokens").and_then(|v| v.as_i64()),
-                )).unwrap_or((None, None));
-                let (cache_w, cache_r) = final_usage_json.as_ref()
+                })
+                .to_string();
+                let (in_tok, out_tok) = final_usage_json
+                    .as_ref()
+                    .map(|u| {
+                        (
+                            u.get("input_tokens").and_then(|v| v.as_i64()),
+                            u.get("output_tokens").and_then(|v| v.as_i64()),
+                        )
+                    })
+                    .unwrap_or((None, None));
+                let (cache_w, cache_r) = final_usage_json
+                    .as_ref()
                     .map(crate::storage::request_logs::extract_cache_tokens)
                     .unwrap_or((None, None));
-                log_request_success(&db, &client_type_owned, "/v1/chat/completions", &req_id, &raw_req, &conv_req,
-                    "", &truncate_str(&total_text, 10000), None,
-                    &provider_name, &model_clone, 200, latency, Some(&trace), in_tok, out_tok, cache_w, cache_r);
+                log_request_success(
+                    &db,
+                    &client_type_owned,
+                    "/v1/chat/completions",
+                    &req_id,
+                    &raw_req,
+                    &conv_req,
+                    "",
+                    &truncate_str(&total_text, 10000),
+                    None,
+                    &provider_name,
+                    &model_clone,
+                    200,
+                    latency,
+                    Some(&trace),
+                    in_tok,
+                    out_tok,
+                    cache_w,
+                    cache_r,
+                );
             }
             Some(msg) => {
                 let err = AppError::new("UPSTREAM_STREAM_ERROR", &msg);
-                log_request_error_full(&db, &client_type_owned, "/v1/chat/completions", &req_id, &raw_req, &conv_req,
-                    &provider_name, &model_clone, &err, 502, latency);
+                log_request_error_full(
+                    &db,
+                    &client_type_owned,
+                    "/v1/chat/completions",
+                    &req_id,
+                    &raw_req,
+                    &conv_req,
+                    &provider_name,
+                    &model_clone,
+                    &err,
+                    502,
+                    latency,
+                );
             }
         }
     });
 
     let stream = ReceiverStream::new(rx);
-    let body = Body::from_stream(
-        tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
-    );
+    let body = Body::from_stream(tokio_stream::StreamExt::map(stream, |s| {
+        Ok::<_, std::convert::Infallible>(s)
+    }));
 
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -1974,11 +2992,23 @@ pub async fn handle_messages(
 ) -> Result<Response, GatewayError> {
     validate_auth(&headers)?;
     let start = Instant::now();
-    let request_id = format!("req_{}", &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]);
+    let request_id = format!(
+        "req_{}",
+        &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]
+    );
     let client_type = detect_client_from_ua(&headers, "Claude Code");
 
     let body = crate::gateway::body_decode::decode(&headers, body).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1/messages", &request_id, "", None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1/messages",
+            &request_id,
+            "",
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
 
@@ -1992,20 +3022,40 @@ pub async fn handle_messages(
         "anthropic_messages",
         requested_model.as_deref(),
         None,
-    ).or_else(|_| {
+    )
+    .or_else(|_| {
         crate::gateway::provider_selector::select_for_failover(
             &state.db,
             "openai_responses",
             requested_model.as_deref(),
             None,
         )
-    }).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+    })
+    .map_err(|e| {
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1/messages",
+            &request_id,
+            &sanitize_body(&body),
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
 
     let config = ProviderConfig::from_provider(&selection.provider).map_err(|e| {
-        log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &sanitize_body(&body), None, &e, start.elapsed().as_millis() as i64);
+        log_request_error(
+            &state.db,
+            &client_type,
+            "/v1/messages",
+            &request_id,
+            &sanitize_body(&body),
+            None,
+            &e,
+            start.elapsed().as_millis() as i64,
+        );
         GatewayError(e)
     })?;
 
@@ -2015,7 +3065,11 @@ pub async fn handle_messages(
     if config.has_anthropic_url() {
         {
             let target = config.anthropic_messages_url();
-            let model_override = native_model_override(&selection.provider, requested_model.as_deref(), Some(&selection.model));
+            let model_override = native_model_override(
+                &selection.provider,
+                requested_model.as_deref(),
+                Some(&selection.model),
+            );
             return crate::gateway::pass_through::handle_anthropic(
                 &state.http_client,
                 &state.db,
@@ -2027,51 +3081,89 @@ pub async fn handle_messages(
                 start,
                 &client_type,
                 Some(&headers),
-            ).await.map_err(|e| {
-                log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &raw, None, &e, start.elapsed().as_millis() as i64);
+            )
+            .await
+            .map_err(|e| {
+                log_request_error(
+                    &state.db,
+                    &client_type,
+                    "/v1/messages",
+                    &request_id,
+                    &raw,
+                    None,
+                    &e,
+                    start.elapsed().as_millis() as i64,
+                );
                 GatewayError(e)
             });
         }
     }
 
     // No anthropic endpoint — fall back to Messages → Chat Completions transform
-    let msg_req: crate::protocol::anthropic_messages::MessagesRequest = serde_json::from_str(&body).map_err(|e| {
-        let err = AppError::new("MESSAGES_PARSE_ERROR", format!("Failed to parse: {e}"));
-        log_request_error(&state.db, &client_type, "/v1/messages", &request_id, &raw, None, &err, start.elapsed().as_millis() as i64);
-        err
-    })?;
+    let msg_req: crate::protocol::anthropic_messages::MessagesRequest = serde_json::from_str(&body)
+        .map_err(|e| {
+            let err = AppError::new("MESSAGES_PARSE_ERROR", format!("Failed to parse: {e}"));
+            log_request_error(
+                &state.db,
+                &client_type,
+                "/v1/messages",
+                &request_id,
+                &raw,
+                None,
+                &err,
+                start.elapsed().as_millis() as i64,
+            );
+            err
+        })?;
 
     let model = selection.model.clone();
     let messages = crate::protocol::anthropic_messages::to_chat_messages(&msg_req);
     // Anthropic 工具形态 {name, description, input_schema} —— 没有顶层 type，
     // 必须走 anthropic_messages::tools_to_chat，否则 transform::tool_calls::convert_tools
     // 会把整组工具丢弃。
-    let tools: Option<Vec<serde_json::Value>> = msg_req.tools.as_ref().map(|t| {
-        crate::protocol::anthropic_messages::tools_to_chat(t, config.is_deepseek())
-    }).filter(|t| !t.is_empty());
+    let tools: Option<Vec<serde_json::Value>> = msg_req
+        .tools
+        .as_ref()
+        .map(|t| crate::protocol::anthropic_messages::tools_to_chat(t, config.is_deepseek()))
+        .filter(|t| !t.is_empty());
     // tool_choice 也得翻译：Anthropic {type:"tool",name:"X"} 与 Chat
     // {type:"function",function:{name:"X"}} 不通用；{type:"any"} → "required"。
-    let tool_choice = msg_req.tool_choice.as_ref()
+    let tool_choice = msg_req
+        .tool_choice
+        .as_ref()
         .map(crate::protocol::anthropic_messages::tool_choice_to_chat);
     // thinking.budget_tokens → reasoning_effort 字符串。Chat 没有真正的 budget 字段，
     // 桶化映射是最接近的等价表达（与 Responses→Anthropic 方向对称）。
-    let reasoning_effort = msg_req.thinking.as_ref()
+    let reasoning_effort = msg_req
+        .thinking
+        .as_ref()
         .and_then(crate::protocol::anthropic_messages::thinking_to_reasoning_effort);
     let want_stream = msg_req.stream.unwrap_or(false);
 
     let mut chat_req = crate::protocol::chat_completions::ChatCompletionsRequest {
-        model: model.clone(), messages, tools,
+        model: model.clone(),
+        messages,
+        tools,
         tool_choice,
         stream: want_stream,
-        temperature: msg_req.temperature, top_p: msg_req.top_p,
+        temperature: msg_req.temperature,
+        top_p: msg_req.top_p,
         max_tokens: msg_req.max_tokens,
         max_completion_tokens: msg_req.max_tokens, // 同步透传新字段（C 修复）
         thinking: None,
         // include_usage 必加：默认 Chat stream 不带 usage，client 看 token 都是 0；
         // 加上后终块带完整 usage，message_delta 能正确报 output_tokens。
-        stream_options: if want_stream { Some(json!({"include_usage": true})) } else { None },
-        response_format: None, reasoning_effort,
-        seed: None, stop: None, frequency_penalty: None, presence_penalty: None,
+        stream_options: if want_stream {
+            Some(json!({"include_usage": true}))
+        } else {
+            None
+        },
+        response_format: None,
+        reasoning_effort,
+        seed: None,
+        stop: None,
+        frequency_penalty: None,
+        presence_penalty: None,
         parallel_tool_calls: None,
         diagnostic_events: Vec::new(),
     };
@@ -2083,34 +3175,72 @@ pub async fn handle_messages(
         // 真流式：边收上游 Chat SSE chunk 边转 Anthropic 事件、立即转发给 client。
         // 首字延迟 = 上游首字延迟（1-3s 级别），不是上游完整耗时。
         return handle_anthropic_fallback_stream(
-            state, config, chat_req, model, request_id, raw, converted_json, start, client_type,
-        ).await;
+            state,
+            config,
+            chat_req,
+            model,
+            request_id,
+            raw,
+            converted_json,
+            start,
+            client_type,
+        )
+        .await;
     }
 
     let result = adapter::send_non_stream(&state.http_client, &config, &mut chat_req).await;
     match result {
         Ok(upstream_json) => {
             converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
-            let response = crate::protocol::anthropic_messages::from_chat_response(&upstream_json, &model);
+            let response =
+                crate::protocol::anthropic_messages::from_chat_response(&upstream_json, &model);
             let latency = start.elapsed().as_millis() as i64;
             let (in_tok, out_tok) = extract_usage(&upstream_json);
-            let (cache_w, cache_r) = upstream_json.get("usage")
+            let (cache_w, cache_r) = upstream_json
+                .get("usage")
                 .map(crate::storage::request_logs::extract_cache_tokens)
                 .unwrap_or((None, None));
             let trace = trace_with_degradation_events(
                 json!({"mode": "transform", "protocol": "anthropic_messages", "stream": false}),
                 &chat_req.diagnostic_events,
             );
-            log_request_success(&state.db, &client_type, "/v1/messages", &request_id, &raw, &converted_json,
+            log_request_success(
+                &state.db,
+                &client_type,
+                "/v1/messages",
+                &request_id,
+                &raw,
+                &converted_json,
                 &serde_json::to_string_pretty(&upstream_json).unwrap_or_default(),
                 &serde_json::to_string_pretty(&response).unwrap_or_default(),
-                None, &config.name, &model, 200, latency, Some(&trace), in_tok, out_tok, cache_w, cache_r);
+                None,
+                &config.name,
+                &model,
+                200,
+                latency,
+                Some(&trace),
+                in_tok,
+                out_tok,
+                cache_w,
+                cache_r,
+            );
             Ok(Json(response).into_response())
         }
         Err(err) => {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1/messages", &request_id, &raw, &converted_json,
-                &config.name, &model, &err, 502, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/messages",
+                &request_id,
+                &raw,
+                &converted_json,
+                &config.name,
+                &model,
+                &err,
+                502,
+                latency,
+            );
             Err(GatewayError(err))
         }
     }
@@ -2132,22 +3262,46 @@ async fn handle_anthropic_fallback_stream(
 ) -> Result<Response, GatewayError> {
     use futures::StreamExt;
 
-    let upstream = adapter::send_stream(&state.http_client, &config, &mut chat_req).await
+    let upstream = adapter::send_stream(&state.http_client, &config, &mut chat_req)
+        .await
         .map_err(|e| {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1/messages", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &e, 502, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/messages",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &e,
+                502,
+                latency,
+            );
             GatewayError(e)
         })?;
     converted_request = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
 
     // 用 sse_bootstrap 检查上游首批字节——HTTP 200 + 错误帧的情况能被识别并
     // 转成正常错误回给 client 的 SDK，而不是糊弄它走假流式。
-    let boot = crate::gateway::sse_bootstrap::bootstrap_detect(upstream).await
+    let boot = crate::gateway::sse_bootstrap::bootstrap_detect(upstream)
+        .await
         .map_err(|e| {
             let latency = start.elapsed().as_millis() as i64;
-            log_request_error_full(&state.db, &client_type, "/v1/messages", &request_id, &raw_request, &converted_request,
-                &config.name, &model, &e, 502, latency);
+            log_request_error_full(
+                &state.db,
+                &client_type,
+                "/v1/messages",
+                &request_id,
+                &raw_request,
+                &converted_request,
+                &config.name,
+                &model,
+                &e,
+                502,
+                latency,
+            );
             GatewayError(e)
         })?;
 
@@ -2185,18 +3339,27 @@ async fn handle_anthropic_fallback_stream(
                 return true; // continue
             }
             let chunk: crate::protocol::chat_completions::ChatCompletionChunk =
-                match serde_json::from_str(data_str) { Ok(c) => c, Err(_) => return true };
+                match serde_json::from_str(data_str) {
+                    Ok(c) => c,
+                    Err(_) => return true,
+                };
             // 顺手把可观测信号采集起来（落日志用）
-            if let Some(u) = &chunk.usage { *final_usage = Some(u.clone()); }
+            if let Some(u) = &chunk.usage {
+                *final_usage = Some(u.clone());
+            }
             if let Some(choices) = &chunk.choices {
                 for c in choices {
                     if let Some(d) = &c.delta {
-                        if let Some(t) = &d.content { total_text.push_str(t); }
+                        if let Some(t) = &d.content {
+                            total_text.push_str(t);
+                        }
                     }
                 }
             }
             for ev in converter.process_chunk(&chunk) {
-                if tx.send(ev).await.is_err() { return false; }
+                if tx.send(ev).await.is_err() {
+                    return false;
+                }
             }
             true
         }
@@ -2210,7 +3373,15 @@ async fn handle_anthropic_fallback_stream(
                 for line in frame.lines() {
                     let trimmed = line.trim_end_matches('\r');
                     if let Some(data) = trimmed.strip_prefix("data:").map(str::trim) {
-                        if !handle_frame(&mut converter, &tx, data, &mut total_text, &mut final_usage_json).await {
+                        if !handle_frame(
+                            &mut converter,
+                            &tx,
+                            data,
+                            &mut total_text,
+                            &mut final_usage_json,
+                        )
+                        .await
+                        {
                             return; // client 断开
                         }
                     }
@@ -2240,34 +3411,64 @@ async fn handle_anthropic_fallback_stream(
 
         // 关流前的收尾事件
         for ev in converter.finalize() {
-            if tx.send(ev).await.is_err() { break; }
+            if tx.send(ev).await.is_err() {
+                break;
+            }
         }
 
         let _ = bootstrap_replayed; // 仅用于潜在 debug，无副作用
 
         let latency = start.elapsed().as_millis() as i64;
-        let (in_tok, out_tok) = final_usage_json.as_ref().map(|u| {
-            let i = u.get("prompt_tokens").or_else(|| u.get("input_tokens")).and_then(|v| v.as_i64());
-            let o = u.get("completion_tokens").or_else(|| u.get("output_tokens")).and_then(|v| v.as_i64());
-            (i, o)
-        }).unwrap_or((None, None));
-        let (cache_w, cache_r) = final_usage_json.as_ref()
+        let (in_tok, out_tok) = final_usage_json
+            .as_ref()
+            .map(|u| {
+                let i = u
+                    .get("prompt_tokens")
+                    .or_else(|| u.get("input_tokens"))
+                    .and_then(|v| v.as_i64());
+                let o = u
+                    .get("completion_tokens")
+                    .or_else(|| u.get("output_tokens"))
+                    .and_then(|v| v.as_i64());
+                (i, o)
+            })
+            .unwrap_or((None, None));
+        let (cache_w, cache_r) = final_usage_json
+            .as_ref()
             .map(crate::storage::request_logs::extract_cache_tokens)
             .unwrap_or((None, None));
         let trace = trace_with_degradation_events(
             json!({"mode": "transform", "protocol": "anthropic_messages", "stream": true}),
             &diagnostic_events,
         );
-        log_request_success(&db, &client_type_owned, "/v1/messages", &req_id, &raw_req, &conv_req,
-            &final_usage_json.map(|u| serde_json::to_string_pretty(&u).unwrap_or_default()).unwrap_or_default(),
+        log_request_success(
+            &db,
+            &client_type_owned,
+            "/v1/messages",
+            &req_id,
+            &raw_req,
+            &conv_req,
+            &final_usage_json
+                .map(|u| serde_json::to_string_pretty(&u).unwrap_or_default())
+                .unwrap_or_default(),
             &total_text.chars().take(10_000).collect::<String>(),
-            None, &provider_name, &model_clone, 200, latency, Some(&trace), in_tok, out_tok, cache_w, cache_r);
+            None,
+            &provider_name,
+            &model_clone,
+            200,
+            latency,
+            Some(&trace),
+            in_tok,
+            out_tok,
+            cache_w,
+            cache_r,
+        );
     });
 
     let stream = ReceiverStream::new(rx);
-    let body = axum::body::Body::from_stream(
-        tokio_stream::StreamExt::map(stream, |s| Ok::<_, std::convert::Infallible>(s))
-    );
+    let body = axum::body::Body::from_stream(tokio_stream::StreamExt::map(stream, |s| {
+        Ok::<_, std::convert::Infallible>(s)
+    }));
     Ok(axum::response::Response::builder()
         .status(axum::http::StatusCode::OK)
         .header(axum::http::header::CONTENT_TYPE, "text/event-stream")
@@ -2294,7 +3495,8 @@ async fn handle_anthropic_fallback_stream(
 ///   - Continue.dev:          "continue"
 ///   - generic SDKs:          "Python/requests", "node-fetch", "axios", etc.
 pub(crate) fn detect_client_from_ua(headers: &HeaderMap, route_default: &str) -> String {
-    let ua = headers.get("user-agent")
+    let ua = headers
+        .get("user-agent")
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .trim();
@@ -2303,28 +3505,51 @@ pub(crate) fn detect_client_from_ua(headers: &HeaderMap, route_default: &str) ->
     }
     let lower = ua.to_ascii_lowercase();
     // Order matters: more specific matches first.
-    if lower.contains("claude-code") || lower.contains("claude-cli") || lower.contains("claude code") {
+    if lower.contains("claude-code")
+        || lower.contains("claude-cli")
+        || lower.contains("claude code")
+    {
         return "Claude Code".to_string();
     }
     if lower.contains("codex-cli") || lower.starts_with("codex/") {
         return "Codex".to_string();
     }
-    if lower.contains("opencode") { return "OpenCode".to_string(); }
-    if lower.contains("atomcode") { return "AtomCode".to_string(); }
+    if lower.contains("opencode") {
+        return "OpenCode".to_string();
+    }
+    if lower.contains("atomcode") {
+        return "AtomCode".to_string();
+    }
     if lower.contains("kimicli") || lower.contains("kimi-cli") || lower.contains("kimi cli") {
         return "Kimi CLI".to_string();
     }
-    if lower.contains("cursor") { return "Cursor".to_string(); }
-    if lower.contains("cherry") { return "Cherry Studio".to_string(); }
-    if lower.contains("continue") { return "Continue".to_string(); }
-    if lower.contains("cline") { return "Cline".to_string(); }
-    if lower.contains("roo") { return "Roo Code".to_string(); }
-    if lower.contains("hermes") { return "Hermes".to_string(); }
-    if lower.contains("opencode") { return "OpenCode".to_string(); }
+    if lower.contains("cursor") {
+        return "Cursor".to_string();
+    }
+    if lower.contains("cherry") {
+        return "Cherry Studio".to_string();
+    }
+    if lower.contains("continue") {
+        return "Continue".to_string();
+    }
+    if lower.contains("cline") {
+        return "Cline".to_string();
+    }
+    if lower.contains("roo") {
+        return "Roo Code".to_string();
+    }
+    if lower.contains("hermes") {
+        return "Hermes".to_string();
+    }
+    if lower.contains("opencode") {
+        return "OpenCode".to_string();
+    }
     if lower.starts_with("openai/") || lower.contains("openai-python") {
         // Codex CLI desktop reports "OpenAI/Python ..." too; treat as Codex
         // when the route is the Responses API.
-        if route_default == "Codex" { return "Codex".to_string(); }
+        if route_default == "Codex" {
+            return "Codex".to_string();
+        }
         return "OpenAI SDK".to_string();
     }
     if lower.contains("anthropic-sdk") || lower.starts_with("anthropic/") {
@@ -2333,13 +3558,29 @@ pub(crate) fn detect_client_from_ua(headers: &HeaderMap, route_default: &str) ->
     if lower.starts_with("python") || lower.contains("python-requests") || lower.contains("httpx") {
         return "Python SDK".to_string();
     }
-    if lower.starts_with("node") || lower.contains("node-fetch") || lower.contains("axios") || lower.contains("undici") {
+    if lower.starts_with("node")
+        || lower.contains("node-fetch")
+        || lower.contains("axios")
+        || lower.contains("undici")
+    {
         return "Node SDK".to_string();
     }
-    if lower.starts_with("curl") { return "curl".to_string(); }
+    if lower.starts_with("curl") {
+        return "curl".to_string();
+    }
     // Unknown — surface the raw first token (helps users identify new clients)
-    let token: String = ua.split_whitespace().next().unwrap_or(ua).chars().take(40).collect();
-    if token.is_empty() { route_default.to_string() } else { token }
+    let token: String = ua
+        .split_whitespace()
+        .next()
+        .unwrap_or(ua)
+        .chars()
+        .take(40)
+        .collect();
+    if token.is_empty() {
+        route_default.to_string()
+    } else {
+        token
+    }
 }
 
 pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
@@ -2357,7 +3598,10 @@ pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
             .unwrap_or("");
         (x_api_key, "x-api-key")
     } else {
-        (auth_header.strip_prefix("Bearer ").unwrap_or(auth_header), "authorization")
+        (
+            auth_header.strip_prefix("Bearer ").unwrap_or(auth_header),
+            "authorization",
+        )
     };
 
     if token.is_empty() {
@@ -2381,7 +3625,7 @@ pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{FS_LOCK, setup_temp_home, cleanup};
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
 
     #[test]
     fn test_validate_auth_missing() {
@@ -2502,8 +3746,9 @@ mod tests {
 
     #[test]
     fn test_gateway_error_has_type_field() {
-        let err = GatewayError(AppError::new("UPSTREAM_STREAM_ERROR", "Provider failed")
-            .with_detail("HTTP 502"));
+        let err = GatewayError(
+            AppError::new("UPSTREAM_STREAM_ERROR", "Provider failed").with_detail("HTTP 502"),
+        );
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     }
@@ -2511,19 +3756,27 @@ mod tests {
     #[test]
     fn test_gateway_error_status_mapping() {
         assert_eq!(
-            GatewayError(AppError::new("RESPONSES_PARSE_ERROR", "bad")).into_response().status(),
+            GatewayError(AppError::new("RESPONSES_PARSE_ERROR", "bad"))
+                .into_response()
+                .status(),
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
-            GatewayError(AppError::new("PROVIDER_API_KEY_MISSING", "no key")).into_response().status(),
+            GatewayError(AppError::new("PROVIDER_API_KEY_MISSING", "no key"))
+                .into_response()
+                .status(),
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            GatewayError(AppError::new("ACTIVE_PROVIDER_NOT_FOUND", "none")).into_response().status(),
+            GatewayError(AppError::new("ACTIVE_PROVIDER_NOT_FOUND", "none"))
+                .into_response()
+                .status(),
             StatusCode::SERVICE_UNAVAILABLE
         );
         assert_eq!(
-            GatewayError(AppError::new("UNKNOWN_CODE", "wat")).into_response().status(),
+            GatewayError(AppError::new("UNKNOWN_CODE", "wat"))
+                .into_response()
+                .status(),
             StatusCode::INTERNAL_SERVER_ERROR
         );
     }
@@ -2531,11 +3784,15 @@ mod tests {
     #[test]
     fn test_gateway_error_auth_status_codes() {
         assert_eq!(
-            GatewayError(AppError::new("GATEWAY_AUTH_MISSING", "no auth")).into_response().status(),
+            GatewayError(AppError::new("GATEWAY_AUTH_MISSING", "no auth"))
+                .into_response()
+                .status(),
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            GatewayError(AppError::new("GATEWAY_AUTH_INVALID", "bad token")).into_response().status(),
+            GatewayError(AppError::new("GATEWAY_AUTH_INVALID", "bad token"))
+                .into_response()
+                .status(),
             StatusCode::UNAUTHORIZED
         );
     }
@@ -2556,10 +3813,14 @@ mod tests {
         let _ = std::thread::spawn(move || {
             let _guard = db2.lock().unwrap();
             panic!("intentional panic to poison mutex");
-        }).join();
+        })
+        .join();
         // Mutex is now poisoned — lock_db should recover
         assert!(db.lock().is_err(), "Mutex should be poisoned");
-        assert!(lock_db(&db).is_some(), "lock_db should recover from poisoned mutex");
+        assert!(
+            lock_db(&db).is_some(),
+            "lock_db should recover from poisoned mutex"
+        );
     }
 
     fn provider_for_native_model_tests() -> Provider {
@@ -2634,7 +3895,10 @@ mod tests {
     #[test]
     fn native_model_override_preserves_unmapped_real_model() {
         let provider = provider_for_native_model_tests();
-        assert_eq!(native_model_override(&provider, Some("mimo-v2.5"), Some("deepseek-v4-flash")), None);
+        assert_eq!(
+            native_model_override(&provider, Some("mimo-v2.5"), Some("deepseek-v4-flash")),
+            None
+        );
     }
 
     #[test]
@@ -2703,7 +3967,10 @@ mod tests {
     fn test_detect_client_from_ua_unknown() {
         let mut headers = HeaderMap::new();
         headers.insert("user-agent", "MyCustomAgent/1.0".parse().unwrap());
-        assert_eq!(detect_client_from_ua(&headers, "Default"), "MyCustomAgent/1.0");
+        assert_eq!(
+            detect_client_from_ua(&headers, "Default"),
+            "MyCustomAgent/1.0"
+        );
     }
 
     fn responses_req_with_input(input: serde_json::Value) -> ResponsesRequest {
@@ -2745,8 +4012,10 @@ mod tests {
                 {"type": "input_text", "text": "what color is it?"}
             ]}
         ]));
-        assert!(!request_contains_images(&req),
-            "history image must NOT force promotion when current turn is text-only");
+        assert!(
+            !request_contains_images(&req),
+            "history image must NOT force promotion when current turn is text-only"
+        );
     }
 
     #[test]
@@ -2762,8 +4031,10 @@ mod tests {
                 {"type": "input_image", "image_url": {"url": "https://example.com/x.png"}}
             ]}
         ]));
-        assert!(request_contains_images(&req),
-            "current user turn with image must trigger promotion");
+        assert!(
+            request_contains_images(&req),
+            "current user turn with image must trigger promotion"
+        );
     }
 
     #[test]
@@ -2786,7 +4057,10 @@ mod tests {
                 {"type": "input_text", "text": "hi"}
             ]}
         ]));
-        assert!(!request_contains_images(&req), "assistant turns are not user input");
+        assert!(
+            !request_contains_images(&req),
+            "assistant turns are not user input"
+        );
     }
 
     #[test]
@@ -2799,27 +4073,34 @@ mod tests {
             ]},
             {"type": "function_call_output", "call_id": "c1", "output": "stuff"}
         ]));
-        assert!(request_contains_images(&req),
-            "rev iter must skip tool items and find last user message");
+        assert!(
+            request_contains_images(&req),
+            "rev iter must skip tool items and find last user message"
+        );
     }
 }
 
 fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayError> {
-    let conn = db.lock().map_err(|_| GatewayError(AppError::internal("DB lock failed")))?;
+    let conn = db
+        .lock()
+        .map_err(|_| GatewayError(AppError::internal("DB lock failed")))?;
     let settings = crate::storage::gateway_settings::get(&conn)?;
 
     let provider_id = settings.active_provider_id.ok_or_else(|| {
-        GatewayError(AppError::new(
-            "ACTIVE_PROVIDER_NOT_FOUND",
-            "No active provider configured",
-        ).with_suggestion("Set an active provider in the Providers page"))
+        GatewayError(
+            AppError::new("ACTIVE_PROVIDER_NOT_FOUND", "No active provider configured")
+                .with_suggestion("Set an active provider in the Providers page"),
+        )
     })?;
 
     let provider = crate::storage::providers::get_by_id(&conn, &provider_id).map_err(|_| {
-        GatewayError(AppError::new(
-            "ACTIVE_PROVIDER_NOT_FOUND",
-            "Active provider not found in database",
-        ).with_suggestion("Set a new active provider in the Providers page"))
+        GatewayError(
+            AppError::new(
+                "ACTIVE_PROVIDER_NOT_FOUND",
+                "Active provider not found in database",
+            )
+            .with_suggestion("Set a new active provider in the Providers page"),
+        )
     })?;
 
     Ok(provider)
@@ -2827,21 +4108,32 @@ fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayE
 
 const AGENTGATE_VIRTUAL_MODEL: &str = "agentgate";
 
-fn native_model_override(provider: &Provider, requested_model: Option<&str>, resolved_model: Option<&str>) -> Option<String> {
+fn native_model_override(
+    provider: &Provider,
+    requested_model: Option<&str>,
+    resolved_model: Option<&str>,
+) -> Option<String> {
     let requested = requested_model?.trim();
     if requested.is_empty() {
         return None;
     }
 
     if is_agentgate_virtual_model(requested) {
-        return Some(resolved_model.unwrap_or(&provider.default_model).to_string());
+        return Some(
+            resolved_model
+                .unwrap_or(&provider.default_model)
+                .to_string(),
+        );
     }
 
     explicit_model_mapping(provider, requested)
 }
 
 fn is_agentgate_virtual_model(requested: &str) -> bool {
-    let model = requested.rsplit_once('/').map(|(_, model)| model).unwrap_or(requested);
+    let model = requested
+        .rsplit_once('/')
+        .map(|(_, model)| model)
+        .unwrap_or(requested);
     model.eq_ignore_ascii_case(AGENTGATE_VIRTUAL_MODEL)
 }
 
@@ -2907,7 +4199,8 @@ fn sanitize_body(body: &str) -> String {
     let mut search_from = 0;
     while let Some(offset) = s[search_from..].find("sk-") {
         let start = search_from + offset;
-        let end = s[start..].find(|c: char| c.is_whitespace() || c == '"' || c == '\'')
+        let end = s[start..]
+            .find(|c: char| c.is_whitespace() || c == '"' || c == '\'')
             .map(|e| start + e)
             .unwrap_or(s.len());
         if end - start > 8 {
@@ -2934,8 +4227,12 @@ fn truncate_str(s: &str, max: usize) -> String {
 
 fn extract_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i64>) {
     let usage = upstream.get("usage");
-    let input = usage.and_then(|u| u.get("prompt_tokens").or(u.get("input_tokens"))).and_then(|v| v.as_i64());
-    let output = usage.and_then(|u| u.get("completion_tokens").or(u.get("output_tokens"))).and_then(|v| v.as_i64());
+    let input = usage
+        .and_then(|u| u.get("prompt_tokens").or(u.get("input_tokens")))
+        .and_then(|v| v.as_i64());
+    let output = usage
+        .and_then(|u| u.get("completion_tokens").or(u.get("output_tokens")))
+        .and_then(|v| v.as_i64());
     (input, output)
 }
 
@@ -2959,12 +4256,25 @@ fn log_request_error(
     err: &AppError,
     latency_ms: i64,
 ) {
-    log_request_error_full(db, client_type, route, request_id, raw_request,
-        converted_request.unwrap_or(""), "", "", err,
-        if err.code == "RESPONSES_PARSE_ERROR" { 400 }
-        else if err.code == "PROVIDER_API_KEY_MISSING" { 401 }
-        else { 500 },
-        latency_ms);
+    log_request_error_full(
+        db,
+        client_type,
+        route,
+        request_id,
+        raw_request,
+        converted_request.unwrap_or(""),
+        "",
+        "",
+        err,
+        if err.code == "RESPONSES_PARSE_ERROR" {
+            400
+        } else if err.code == "PROVIDER_API_KEY_MISSING" {
+            401
+        } else {
+            500
+        },
+        latency_ms,
+    );
 }
 
 /// Lock the DB, recovering from a poisoned Mutex if necessary.
@@ -3003,23 +4313,54 @@ fn log_request_success(
     if let Some(conn) = lock_db(db) {
         // Calculate cost from pricing table
         let cost = crate::storage::pricing::calculate_cost_for_request(
-            &conn, provider, model, input_tokens, output_tokens,
+            &conn,
+            provider,
+            model,
+            input_tokens,
+            output_tokens,
         );
         let _ = crate::storage::request_logs::insert(
-            &conn, request_id, client_type, provider, model,
-            route, status_code, latency_ms,
-            Some(raw_request), Some(converted_request),
-            if raw_response.is_empty() { None } else { Some(raw_response) },
-            if converted_response.is_empty() { None } else { Some(converted_response) },
-            None, tool_calls, None, trace_json,
-            input_tokens, output_tokens, cost,
-            cache_write_tokens, cache_read_tokens,
-            Some("gateway"), None, Some(request_id),
+            &conn,
+            request_id,
+            client_type,
+            provider,
+            model,
+            route,
+            status_code,
+            latency_ms,
+            Some(raw_request),
+            Some(converted_request),
+            if raw_response.is_empty() {
+                None
+            } else {
+                Some(raw_response)
+            },
+            if converted_response.is_empty() {
+                None
+            } else {
+                Some(converted_response)
+            },
+            None,
+            tool_calls,
+            None,
+            trace_json,
+            input_tokens,
+            output_tokens,
+            cost,
+            cache_write_tokens,
+            cache_read_tokens,
+            Some("gateway"),
+            None,
+            Some(request_id),
         );
     }
     // Prometheus 指标
     crate::gateway::metrics::record_request(
-        route, client_type, provider, status_code as u16, latency_ms as f64 / 1000.0,
+        route,
+        client_type,
+        provider,
+        status_code as u16,
+        latency_ms as f64 / 1000.0,
     );
     if let Some(t) = input_tokens {
         crate::gateway::metrics::record_tokens(provider, model, "input", t);
@@ -3059,28 +4400,55 @@ fn log_request_error_full(
     let trace = json!({
         "error_code": err.code,
         "suggestion": err.suggestion,
-    }).to_string();
+    })
+    .to_string();
     if let Some(conn) = lock_db(db) {
         let _ = crate::storage::request_logs::insert(
-            &conn, request_id, client_type,
-            if provider.is_empty() { "unknown" } else { provider },
+            &conn,
+            request_id,
+            client_type,
+            if provider.is_empty() {
+                "unknown"
+            } else {
+                provider
+            },
             if model.is_empty() { "unknown" } else { model },
-            route, status_code, latency_ms,
+            route,
+            status_code,
+            latency_ms,
             Some(raw_request),
-            if converted_request.is_empty() { None } else { Some(converted_request) },
-            None, None, None, None,
+            if converted_request.is_empty() {
+                None
+            } else {
+                Some(converted_request)
+            },
+            None,
+            None,
+            None,
+            None,
             Some(&error_msg),
             Some(&trace),
-            None, None, None, // no cost for errors
-            None, None,       // no cache tokens for errors
-            Some("gateway"), None, Some(request_id),
+            None,
+            None,
+            None, // no cost for errors
+            None,
+            None, // no cache tokens for errors
+            Some("gateway"),
+            None,
+            Some(request_id),
         );
     }
     // Prometheus 指标（错误也算一次请求）
     crate::gateway::metrics::record_request(
-        route, client_type,
-        if provider.is_empty() { "unknown" } else { provider },
-        status_code as u16, latency_ms as f64 / 1000.0,
+        route,
+        client_type,
+        if provider.is_empty() {
+            "unknown"
+        } else {
+            provider
+        },
+        status_code as u16,
+        latency_ms as f64 / 1000.0,
     );
 }
 
@@ -3097,8 +4465,13 @@ impl From<AppError> for GatewayError {
 impl IntoResponse for GatewayError {
     fn into_response(self) -> Response {
         let status = match self.0.code.as_str() {
-            "RESPONSES_PARSE_ERROR" | "TRANSFORM_ERROR" | "TOOL_OUTPUT_NOT_FOUND" | "TOOL_CALL_NOT_FOUND" => StatusCode::BAD_REQUEST,
-            "PROVIDER_API_KEY_MISSING" | "GATEWAY_AUTH_MISSING" | "GATEWAY_AUTH_INVALID" => StatusCode::UNAUTHORIZED,
+            "RESPONSES_PARSE_ERROR"
+            | "TRANSFORM_ERROR"
+            | "TOOL_OUTPUT_NOT_FOUND"
+            | "TOOL_CALL_NOT_FOUND" => StatusCode::BAD_REQUEST,
+            "PROVIDER_API_KEY_MISSING" | "GATEWAY_AUTH_MISSING" | "GATEWAY_AUTH_INVALID" => {
+                StatusCode::UNAUTHORIZED
+            }
             "ACTIVE_PROVIDER_NOT_FOUND" => StatusCode::SERVICE_UNAVAILABLE,
             c if c.starts_with("UPSTREAM") => StatusCode::BAD_GATEWAY,
             _ => StatusCode::INTERNAL_SERVER_ERROR,

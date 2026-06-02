@@ -5,7 +5,13 @@ pub fn redact_value(val: &str) -> String {
     if val.len() <= 8 {
         return "*".repeat(val.len());
     }
-    let prefix_len = if val.starts_with("ag_local_") { 9 } else if val.starts_with("sk-") { 3 } else { 4 };
+    let prefix_len = if val.starts_with("ag_local_") {
+        9
+    } else if val.starts_with("sk-") {
+        3
+    } else {
+        4
+    };
     let suffix_len = 4;
     let prefix = &val[..prefix_len.min(val.len())];
     let suffix = &val[val.len().saturating_sub(suffix_len)..];
@@ -34,7 +40,11 @@ fn redact_pattern(text: &str, prefix: &str) -> String {
         result.push_str(&remaining[..start]);
         let after = &remaining[start..];
         // Find end of token (whitespace, quote, comma, brace, or end)
-        let end = after.find(|c: char| c.is_whitespace() || c == '"' || c == '\'' || c == ',' || c == '}' || c == ')').unwrap_or(after.len());
+        let end = after
+            .find(|c: char| {
+                c.is_whitespace() || c == '"' || c == '\'' || c == ',' || c == '}' || c == ')'
+            })
+            .unwrap_or(after.len());
         if end > 8 {
             let token = &after[..end];
             result.push_str(&redact_value(token));
@@ -132,7 +142,9 @@ fn redact_bearer(text: &str) -> String {
         result.push_str(&remaining[..start]);
         result.push_str("Bearer ");
         let after = &remaining[start + pattern.len()..];
-        let end = after.find(|c: char| c.is_whitespace() || c == '"' || c == '\'').unwrap_or(after.len());
+        let end = after
+            .find(|c: char| c.is_whitespace() || c == '"' || c == '\'')
+            .unwrap_or(after.len());
         if end > 4 {
             result.push_str(&redact_value(&after[..end]));
         } else {

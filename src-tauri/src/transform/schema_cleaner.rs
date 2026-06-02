@@ -90,7 +90,8 @@ mod tests {
 
     #[test]
     fn test_removes_additional_properties_object() {
-        let mut schema = json!({"type": "object", "additionalProperties": {"type": "string", "strict": true}});
+        let mut schema =
+            json!({"type": "object", "additionalProperties": {"type": "string", "strict": true}});
         clean_schema_for_deepseek(&mut schema);
         assert!(schema.get("additionalProperties").is_none());
     }
@@ -156,7 +157,9 @@ mod tests {
         });
         clean_schema_for_deepseek(&mut schema);
         assert!(schema["$defs"]["User"].get("strict").is_none());
-        assert!(schema["definitions"]["Item"].get("additionalProperties").is_none());
+        assert!(schema["definitions"]["Item"]
+            .get("additionalProperties")
+            .is_none());
     }
 
     #[test]
@@ -182,7 +185,13 @@ mod tests {
         });
         clean_schema_for_deepseek(&mut schema);
         assert!(schema.get("strict").is_none());
-        assert!(schema["properties"]["users"]["items"].get("strict").is_none());
-        assert!(schema["properties"]["users"]["items"]["properties"]["tags"]["items"].get("strict").is_none());
+        assert!(schema["properties"]["users"]["items"]
+            .get("strict")
+            .is_none());
+        assert!(
+            schema["properties"]["users"]["items"]["properties"]["tags"]["items"]
+                .get("strict")
+                .is_none()
+        );
     }
 }

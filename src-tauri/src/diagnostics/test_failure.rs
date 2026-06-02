@@ -166,9 +166,7 @@ pub fn diagnose(
                     || body_lower.contains("does not exist")
                     || body_lower.contains("invalid model"));
             let zh_match = body.contains("模型")
-                && (body.contains("不存在")
-                    || body.contains("不支持")
-                    || body.contains("已下线"));
+                && (body.contains("不存在") || body.contains("不支持") || body.contains("已下线"));
             if en_match || zh_match {
                 return TestDiagnostic {
                     code: "model_not_found".into(),
@@ -196,7 +194,8 @@ pub fn diagnose(
             return TestDiagnostic {
                 code: "endpoint_not_found".into(),
                 title: "接口路径不存在".into(),
-                hint: "检查 base_url 是否完整。Custom OpenAI 兼容接口要确认是否带 /v1 前缀。".into(),
+                hint: "检查 base_url 是否完整。Custom OpenAI 兼容接口要确认是否带 /v1 前缀。"
+                    .into(),
                 action_url: None,
                 action_label: None,
                 raw: raw_error.to_string(),
@@ -261,14 +260,12 @@ pub fn diagnose(
         };
     }
 
-    if raw_lower.contains("certificate")
-        || raw_lower.contains("tls")
-        || raw_lower.contains("ssl")
-    {
+    if raw_lower.contains("certificate") || raw_lower.contains("tls") || raw_lower.contains("ssl") {
         return TestDiagnostic {
             code: "tls_error".into(),
             title: "TLS / 证书校验失败".into(),
-            hint: "Provider 证书有问题，或者你的代理在做 MITM。检查代理设置或换一条出网线路。".into(),
+            hint: "Provider 证书有问题，或者你的代理在做 MITM。检查代理设置或换一条出网线路。"
+                .into(),
             action_url: None,
             action_label: None,
             raw: raw_error.to_string(),
@@ -334,19 +331,31 @@ mod tests {
 
     #[test]
     fn model_not_found_400() {
-        let d = diag("deepseek", Some(400), r#"{"error":{"message":"Model deepseek-old does not exist"}}"#);
+        let d = diag(
+            "deepseek",
+            Some(400),
+            r#"{"error":{"message":"Model deepseek-old does not exist"}}"#,
+        );
         assert_eq!(d.code, "model_not_found");
     }
 
     #[test]
     fn model_not_supported_chinese() {
-        let d = diag("mimo", Some(400), r#"{"error":{"message":"模型不支持该请求"}}"#);
+        let d = diag(
+            "mimo",
+            Some(400),
+            r#"{"error":{"message":"模型不支持该请求"}}"#,
+        );
         assert_eq!(d.code, "model_not_found");
     }
 
     #[test]
     fn region_blocked_403() {
-        let d = diag("openai", Some(403), "Country, region or territory not supported");
+        let d = diag(
+            "openai",
+            Some(403),
+            "Country, region or territory not supported",
+        );
         assert_eq!(d.code, "region_blocked");
     }
 
@@ -365,7 +374,12 @@ mod tests {
 
     #[test]
     fn dns_failed_no_status() {
-        let d = diagnose("mimo", None, "", "Connection error: failed to lookup address info: nodename nor servname provided");
+        let d = diagnose(
+            "mimo",
+            None,
+            "",
+            "Connection error: failed to lookup address info: nodename nor servname provided",
+        );
         assert_eq!(d.code, "dns_failed");
     }
 
@@ -377,13 +391,23 @@ mod tests {
 
     #[test]
     fn connection_refused_local_vllm() {
-        let d = diagnose("custom", None, "", "Connection error: tcp connect error: Connection refused");
+        let d = diagnose(
+            "custom",
+            None,
+            "",
+            "Connection error: tcp connect error: Connection refused",
+        );
         assert_eq!(d.code, "connection_refused");
     }
 
     #[test]
     fn tls_error() {
-        let d = diagnose("openai", None, "", "Connection error: invalid peer certificate: UnknownIssuer");
+        let d = diagnose(
+            "openai",
+            None,
+            "",
+            "Connection error: invalid peer certificate: UnknownIssuer",
+        );
         assert_eq!(d.code, "tls_error");
     }
 
@@ -398,7 +422,11 @@ mod tests {
     fn mimo_invalid_key_specifically_does_not_get_websearch_diagnostic() {
         // Guard against the obvious mis-classification: body says "false"
         // but it's an auth body, not a web_search body.
-        let d = diag("mimo", Some(401), r#"{"error":{"message":"invalid api key"}}"#);
+        let d = diag(
+            "mimo",
+            Some(401),
+            r#"{"error":{"message":"invalid api key"}}"#,
+        );
         assert_eq!(d.code, "invalid_api_key");
     }
 }

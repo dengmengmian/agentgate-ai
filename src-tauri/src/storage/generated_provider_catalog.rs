@@ -3,12 +3,25 @@
 pub const MIMO_PAYG_BASE_URL: &str = "https://api.xiaomimimo.com/v1";
 pub const MIMO_PAYG_ANTHROPIC_URL: &str = "https://api.xiaomimimo.com/anthropic";
 pub const MIMO_TOKEN_PLAN_DEFAULT_BASE_URL: &str = "https://token-plan-cn.xiaomimimo.com/v1";
-pub const MIMO_TOKEN_PLAN_DEFAULT_ANTHROPIC_URL: &str = "https://token-plan-cn.xiaomimimo.com/anthropic";
+pub const MIMO_TOKEN_PLAN_DEFAULT_ANTHROPIC_URL: &str =
+    "https://token-plan-cn.xiaomimimo.com/anthropic";
 pub const MIMO_TOKEN_PLAN_REGIONS: &[&str] = &["cn", "sgp", "ams"];
 pub const MIMO_TOKEN_PLAN_ENDPOINTS: &[(&str, &str, &str)] = &[
-    ("cn", "https://token-plan-cn.xiaomimimo.com/v1", "https://token-plan-cn.xiaomimimo.com/anthropic"),
-    ("sgp", "https://token-plan-sgp.xiaomimimo.com/v1", "https://token-plan-sgp.xiaomimimo.com/anthropic"),
-    ("ams", "https://token-plan-ams.xiaomimimo.com/v1", "https://token-plan-ams.xiaomimimo.com/anthropic"),
+    (
+        "cn",
+        "https://token-plan-cn.xiaomimimo.com/v1",
+        "https://token-plan-cn.xiaomimimo.com/anthropic",
+    ),
+    (
+        "sgp",
+        "https://token-plan-sgp.xiaomimimo.com/v1",
+        "https://token-plan-sgp.xiaomimimo.com/anthropic",
+    ),
+    (
+        "ams",
+        "https://token-plan-ams.xiaomimimo.com/v1",
+        "https://token-plan-ams.xiaomimimo.com/anthropic",
+    ),
 ];
 
 pub const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com";
@@ -17,17 +30,53 @@ pub const DEEPSEEK_REASONING_MODEL: &str = "deepseek-v4-pro";
 pub const DEEPSEEK_SUPPORTED_MODELS_JSON: &str = "[\"deepseek-v4-flash\",\"deepseek-v4-pro\"]";
 
 pub const MODEL_CAPABILITIES: &[(&str, &str, &[&str])] = &[
-    ("mimo", "mimo-v2.5-pro", &["text", "reasoning", "tools", "web_search"]),
-    ("mimo", "mimo-v2-pro", &["text", "reasoning", "tools", "web_search"]),
-    ("mimo", "mimo-v2.5", &["text", "vision", "audio_in", "video_in", "reasoning", "tools", "web_search"]),
-    ("mimo", "mimo-v2-omni", &["text", "vision", "audio_in", "video_in", "tools"]),
-    ("mimo", "mimo-v2-flash", &["text", "reasoning", "tools", "web_search"]),
+    (
+        "mimo",
+        "mimo-v2.5-pro",
+        &["text", "reasoning", "tools", "web_search"],
+    ),
+    (
+        "mimo",
+        "mimo-v2-pro",
+        &["text", "reasoning", "tools", "web_search"],
+    ),
+    (
+        "mimo",
+        "mimo-v2.5",
+        &[
+            "text",
+            "vision",
+            "audio_in",
+            "video_in",
+            "reasoning",
+            "tools",
+            "web_search",
+        ],
+    ),
+    (
+        "mimo",
+        "mimo-v2-omni",
+        &["text", "vision", "audio_in", "video_in", "tools"],
+    ),
+    (
+        "mimo",
+        "mimo-v2-flash",
+        &["text", "reasoning", "tools", "web_search"],
+    ),
     ("mimo", "mimo-v2.5-tts", &["tts"]),
     ("mimo", "mimo-v2.5-tts-voiceclone", &["tts"]),
     ("mimo", "mimo-v2.5-tts-voicedesign", &["tts"]),
     ("mimo", "mimo-v2-tts", &["tts"]),
-    ("deepseek", "deepseek-v4-flash", &["text", "reasoning", "tools"]),
-    ("deepseek", "deepseek-v4-pro", &["text", "reasoning", "tools"]),
+    (
+        "deepseek",
+        "deepseek-v4-flash",
+        &["text", "reasoning", "tools"],
+    ),
+    (
+        "deepseek",
+        "deepseek-v4-pro",
+        &["text", "reasoning", "tools"],
+    ),
 ];
 
 pub const MODEL_PRICING_DEFAULTS: &[(&str, &str, f64, f64)] = &[
@@ -73,5 +122,12 @@ pub const DEPRECATED_MODELS: &[(&str, &str)] = &[
 
 pub const RECOMMENDED_MAPPING_PROFILES: &[(&str, &str, &str, &str, &str, bool)] = &[
     ("mimo", "default", "default", "reasoning", "default", true),
-    ("deepseek", "reasoning", "default", "reasoning", "default", true),
+    (
+        "deepseek",
+        "reasoning",
+        "default",
+        "reasoning",
+        "default",
+        true,
+    ),
 ];

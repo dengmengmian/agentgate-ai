@@ -12,10 +12,10 @@ mod tools;
 pub mod transform;
 
 use std::sync::{Arc, Mutex};
-use tauri::Manager;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::WebviewWindowBuilder;
+use tauri::Manager;
 
 use app::commands;
 use app::state::AppState;
@@ -69,7 +69,8 @@ fn move_pet_to_visible_area(app: &tauri::AppHandle, pet_win: &tauri::WebviewWind
         return;
     };
     let (x, y) = normalized_pet_position(&monitors, position.x as f64, position.y as f64);
-    if (x - position.x as f64).abs() > f64::EPSILON || (y - position.y as f64).abs() > f64::EPSILON {
+    if (x - position.x as f64).abs() > f64::EPSILON || (y - position.y as f64).abs() > f64::EPSILON
+    {
         let _ = pet_win.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)));
     }
 }
@@ -375,7 +376,9 @@ pub fn run() {
         });
 }
 
-pub fn is_chinese_locale_pub() -> bool { is_chinese_locale() }
+pub fn is_chinese_locale_pub() -> bool {
+    is_chinese_locale()
+}
 
 fn is_chinese_locale() -> bool {
     ["LC_ALL", "LC_MESSAGES", "LANG"]
@@ -419,9 +422,21 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // Build a minimal placeholder menu; `app::tray::refresh_tray` rebuilds
     // it with dynamic items (active provider, today count, switch submenu)
     // immediately after the tray is registered.
-    let show = MenuItemBuilder::with_id("show", if zh { "显示 AgentGate" } else { "Show AgentGate" }).build(app)?;
+    let show = MenuItemBuilder::with_id(
+        "show",
+        if zh {
+            "显示 AgentGate"
+        } else {
+            "Show AgentGate"
+        },
+    )
+    .build(app)?;
     let quit = MenuItemBuilder::with_id("quit", if zh { "退出" } else { "Quit" }).build(app)?;
-    let placeholder_menu = MenuBuilder::new(app).item(&show).separator().item(&quit).build()?;
+    let placeholder_menu = MenuBuilder::new(app)
+        .item(&show)
+        .separator()
+        .item(&quit)
+        .build()?;
 
     let _tray = TrayIconBuilder::with_id(app::tray::TRAY_ID)
         .icon(app.default_window_icon().unwrap().clone())
@@ -479,12 +494,15 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                             let state: tauri::State<'_, AppState> = app_handle.state();
                             let db = state.db.clone();
                             let conn = db.lock().unwrap();
-                            let _ = storage::pet_settings::update(&conn, crate::models::pet::UpdatePetSettingsInput {
-                                pet_type: None,
-                                visible: Some(new_visible),
-                                pos_x: None,
-                                pos_y: None,
-                            });
+                            let _ = storage::pet_settings::update(
+                                &conn,
+                                crate::models::pet::UpdatePetSettingsInput {
+                                    pet_type: None,
+                                    visible: Some(new_visible),
+                                    pos_x: None,
+                                    pos_y: None,
+                                },
+                            );
                         });
                     }
                 }
@@ -519,7 +537,11 @@ pub(crate) mod test_utils {
     pub static FS_LOCK: Mutex<()> = Mutex::new(());
 
     pub fn setup_temp_home() -> std::path::PathBuf {
-        let temp = std::env::temp_dir().join(format!("agentgate_test_{}", std::process::id()));
+        let temp = std::env::temp_dir().join(format!(
+            "agentgate_test_{}_{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
         let _ = std::fs::remove_dir_all(&temp);
         std::fs::create_dir_all(&temp).unwrap();
         std::env::set_var("HOME", &temp);

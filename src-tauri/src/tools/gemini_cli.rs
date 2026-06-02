@@ -44,20 +44,21 @@ fn saved_env_path() -> PathBuf {
 
 fn save_official_settings() -> Result<(), AppError> {
     let dir = saved_dir();
-    fs::create_dir_all(&dir).map_err(|e| {
-        AppError::new("GEMINI_SAVE_FAILED", format!("Cannot create dir: {e}"))
-    })?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| AppError::new("GEMINI_SAVE_FAILED", format!("Cannot create dir: {e}")))?;
     let src = settings_path();
     if src.exists() {
         fs::copy(&src, saved_settings_path()).map_err(|e| {
-            AppError::new("GEMINI_SAVE_FAILED", format!("Cannot save settings.json: {e}"))
+            AppError::new(
+                "GEMINI_SAVE_FAILED",
+                format!("Cannot save settings.json: {e}"),
+            )
         })?;
     }
     let env_src = env_file_path();
     if env_src.exists() {
-        fs::copy(&env_src, saved_env_path()).map_err(|e| {
-            AppError::new("GEMINI_SAVE_FAILED", format!("Cannot save .env: {e}"))
-        })?;
+        fs::copy(&env_src, saved_env_path())
+            .map_err(|e| AppError::new("GEMINI_SAVE_FAILED", format!("Cannot save .env: {e}")))?;
     }
     Ok(())
 }
@@ -69,11 +70,16 @@ pub fn has_saved_official() -> bool {
 fn restore_official_settings() -> Result<(), AppError> {
     let saved = saved_settings_path();
     if !saved.exists() {
-        return Err(AppError::new("GEMINI_NO_SAVED_FILES",
-            "No saved official settings found."));
+        return Err(AppError::new(
+            "GEMINI_NO_SAVED_FILES",
+            "No saved official settings found.",
+        ));
     }
     fs::copy(&saved, settings_path()).map_err(|e| {
-        AppError::new("GEMINI_RESTORE_FAILED", format!("Cannot restore settings.json: {e}"))
+        AppError::new(
+            "GEMINI_RESTORE_FAILED",
+            format!("Cannot restore settings.json: {e}"),
+        )
     })?;
     // Restore .env (or remove the AgentGate one)
     let saved_env = saved_env_path();
@@ -120,8 +126,10 @@ pub fn detect() -> GeminiCliConfigStatus {
     let (has_agentgate, current_model) = if exists {
         let content = fs::read_to_string(&sp).unwrap_or_default();
         let env_content = fs::read_to_string(env_file_path()).unwrap_or_default();
-        let has_ag = content.contains("ag_local_") || content.contains("agentgate")
-            || env_content.contains("ag_local_") || env_content.contains("agentgate");
+        let has_ag = content.contains("ag_local_")
+            || content.contains("agentgate")
+            || env_content.contains("ag_local_")
+            || env_content.contains("agentgate");
         let model = serde_json::from_str::<serde_json::Value>(&content)
             .ok()
             .and_then(|v| v.get("model")?.get("name")?.as_str().map(String::from));
@@ -149,7 +157,10 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
     // Ensure parent dir
     if let Some(parent) = sp.parent() {
         fs::create_dir_all(parent).map_err(|e| {
-            AppError::new("GEMINI_CONFIG_WRITE_FAILED", format!("Cannot create directory: {e}"))
+            AppError::new(
+                "GEMINI_CONFIG_WRITE_FAILED",
+                format!("Cannot create directory: {e}"),
+            )
         })?;
     }
 
@@ -167,7 +178,10 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
     };
 
     let mut doc: serde_json::Value = serde_json::from_str(&existing).map_err(|e| {
-        AppError::new("GEMINI_CONFIG_PARSE_ERROR", format!("Cannot parse settings.json: {e}"))
+        AppError::new(
+            "GEMINI_CONFIG_PARSE_ERROR",
+            format!("Cannot parse settings.json: {e}"),
+        )
     })?;
 
     // Set model
@@ -187,16 +201,25 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
 
     // Write settings.json atomically
     let new_content = serde_json::to_string_pretty(&doc).map_err(|e| {
-        AppError::new("GEMINI_CONFIG_WRITE_FAILED", format!("Cannot serialize: {e}"))
+        AppError::new(
+            "GEMINI_CONFIG_WRITE_FAILED",
+            format!("Cannot serialize: {e}"),
+        )
     })?;
 
     let tmp = sp.with_extension("json.tmp");
     fs::write(&tmp, format!("{new_content}\n")).map_err(|e| {
-        AppError::new("GEMINI_CONFIG_WRITE_FAILED", format!("Failed to write temp: {e}"))
+        AppError::new(
+            "GEMINI_CONFIG_WRITE_FAILED",
+            format!("Failed to write temp: {e}"),
+        )
     })?;
     fs::rename(&tmp, &sp).map_err(|e| {
         let _ = fs::remove_file(&tmp);
-        AppError::new("GEMINI_CONFIG_WRITE_FAILED", format!("Failed to replace: {e}"))
+        AppError::new(
+            "GEMINI_CONFIG_WRITE_FAILED",
+            format!("Failed to replace: {e}"),
+        )
     })?;
 
     // Write .env file in ~/.gemini/ (Gemini CLI loads env from here)
@@ -205,7 +228,10 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
         "# AgentGate configuration — do not edit manually\nGEMINI_API_KEY={token}\nGOOGLE_GEMINI_BASE_URL=http://{host}:{port}\n"
     );
     fs::write(&env_path, &env_content).map_err(|e| {
-        AppError::new("GEMINI_CONFIG_WRITE_FAILED", format!("Failed to write .env: {e}"))
+        AppError::new(
+            "GEMINI_CONFIG_WRITE_FAILED",
+            format!("Failed to write .env: {e}"),
+        )
     })?;
 
     if has_saved_official() {
@@ -215,7 +241,11 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
     Ok(ApplyConfigResult {
         success: true,
         config_path: sp_str,
-        changed_keys: vec!["model.name".to_string(), ".env GEMINI_API_KEY".to_string(), ".env GOOGLE_GEMINI_BASE_URL".to_string()],
+        changed_keys: vec![
+            "model.name".to_string(),
+            ".env GEMINI_API_KEY".to_string(),
+            ".env GOOGLE_GEMINI_BASE_URL".to_string(),
+        ],
         warnings,
     })
 }
@@ -243,11 +273,13 @@ pub fn toggle(host: &str, port: i64, model: &str) -> Result<ToggleResult, AppErr
 pub fn open_config() -> Result<(), AppError> {
     let sp = settings_path();
     if !sp.exists() {
-        return Err(AppError::new("GEMINI_CONFIG_NOT_FOUND", "Gemini CLI settings.json does not exist"));
+        return Err(AppError::new(
+            "GEMINI_CONFIG_NOT_FOUND",
+            "Gemini CLI settings.json does not exist",
+        ));
     }
-    open::that(&sp).map_err(|e| {
-        AppError::new("GEMINI_CONFIG_OPEN_FAILED", format!("Failed to open: {e}"))
-    })
+    open::that(&sp)
+        .map_err(|e| AppError::new("GEMINI_CONFIG_OPEN_FAILED", format!("Failed to open: {e}")))
 }
 
 pub fn generate_snippet(host: &str, port: i64, model: &str) -> String {
@@ -265,7 +297,7 @@ export GOOGLE_GEMINI_BASE_URL="http://{host}:{port}"
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{FS_LOCK, setup_temp_home, cleanup};
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
 
     #[test]
     fn test_detect_no_config() {

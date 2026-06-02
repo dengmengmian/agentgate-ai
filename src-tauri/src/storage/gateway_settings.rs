@@ -51,8 +51,12 @@ pub fn update(
     let input_protocol = input.input_protocol.unwrap_or(existing.input_protocol);
     let output_protocol = input.output_protocol.unwrap_or(existing.output_protocol);
     let auto_start = input.auto_start.unwrap_or(existing.auto_start);
-    let log_retention_days = input.log_retention_days.unwrap_or(existing.log_retention_days);
-    let body_filter_global = input.body_filter_global.unwrap_or(existing.body_filter_global);
+    let log_retention_days = input
+        .log_retention_days
+        .unwrap_or(existing.log_retention_days);
+    let body_filter_global = input
+        .body_filter_global
+        .unwrap_or(existing.body_filter_global);
     let thinking_rectifier_global = input
         .thinking_rectifier_global
         .unwrap_or(existing.thinking_rectifier_global);
@@ -107,14 +111,18 @@ mod tests {
     #[test]
     fn test_update_gateway_settings() {
         let conn = setup_db();
-        let updated = update(&conn, UpdateGatewaySettingsInput {
-            host: Some("0.0.0.0".to_string()),
-            port: Some(8080),
-            input_protocol: Some("openai_chat_completions".to_string()),
-            auto_start: Some(true),
-            log_retention_days: Some(7),
-            ..Default::default()
-        }).unwrap();
+        let updated = update(
+            &conn,
+            UpdateGatewaySettingsInput {
+                host: Some("0.0.0.0".to_string()),
+                port: Some(8080),
+                input_protocol: Some("openai_chat_completions".to_string()),
+                auto_start: Some(true),
+                log_retention_days: Some(7),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(updated.host, "0.0.0.0");
         assert_eq!(updated.port, 8080);
         assert_eq!(updated.input_protocol, "openai_chat_completions");
@@ -126,10 +134,14 @@ mod tests {
     fn test_partial_update_preserves_existing() {
         let conn = setup_db();
         let original = get(&conn).unwrap();
-        let updated = update(&conn, UpdateGatewaySettingsInput {
-            host: Some("0.0.0.0".to_string()),
-            ..Default::default()
-        }).unwrap();
+        let updated = update(
+            &conn,
+            UpdateGatewaySettingsInput {
+                host: Some("0.0.0.0".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
         assert_eq!(updated.host, "0.0.0.0");
         assert_eq!(updated.port, original.port);
         assert_eq!(updated.input_protocol, original.input_protocol);

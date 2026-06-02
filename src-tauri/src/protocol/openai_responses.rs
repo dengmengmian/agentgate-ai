@@ -66,4 +66,3 @@ mod tests {
         assert_eq!(req.extra.get("custom_key").unwrap(), "custom_value");
     }
 }
-

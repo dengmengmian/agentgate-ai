@@ -43,7 +43,11 @@ async fn deepseek_strips_image_with_notice() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);
@@ -97,7 +101,11 @@ async fn deepseek_reasoning_content_survives_roundtrip() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let body: serde_json::Value = res.json().await.expect("parse gateway response");
     let output = body["output"]
@@ -123,10 +131,10 @@ async fn deepseek_strips_legacy_1m_suffix_on_anthropic_passthrough() {
     // DeepSeek's Anthropic endpoint 400s on that model id — the gateway
     // strips the `[1m]` suffix before forwarding.
     let mock = MockUpstream::start().await;
-    mock.stub_anthropic_messages_ok("deepseek-v4-pro", "ok").await;
+    mock.stub_anthropic_messages_ok("deepseek-v4-pro", "ok")
+        .await;
 
-    let spec = ProviderSpec::chat_only("deepseek", "deepseek-v4-pro")
-        .with_anthropic(mock.url());
+    let spec = ProviderSpec::chat_only("deepseek", "deepseek-v4-pro").with_anthropic(mock.url());
 
     let harness = GatewayHarness::start(spec, &mock).await;
     let client = harness.client();
@@ -142,7 +150,11 @@ async fn deepseek_strips_legacy_1m_suffix_on_anthropic_passthrough() {
         .send()
         .await
         .expect("send /v1/messages");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     assert_eq!(received.len(), 1);

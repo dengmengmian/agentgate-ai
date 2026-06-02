@@ -108,9 +108,16 @@ fn recommended_pairs(
 
     let mut pairs = Vec::new();
     if matches!(profile, MappingProfile::All | MappingProfile::Codex) {
-        let codex_primary =
-            target_model(profile_def.codex_primary_target, default_model, reasoning_model);
-        let codex_small = target_model(profile_def.codex_mini_target, default_model, reasoning_model);
+        let codex_primary = target_model(
+            profile_def.codex_primary_target,
+            default_model,
+            reasoning_model,
+        );
+        let codex_small = target_model(
+            profile_def.codex_mini_target,
+            default_model,
+            reasoning_model,
+        );
         for model in CODEX_MODELS {
             pairs.push(((*model).to_string(), codex_primary.clone()));
         }
@@ -120,10 +127,16 @@ fn recommended_pairs(
     }
 
     if matches!(profile, MappingProfile::All | MappingProfile::ClaudeCode) {
-        let claude_primary =
-            target_model(profile_def.claude_primary_target, default_model, reasoning_model);
-        let claude_small =
-            target_model(profile_def.claude_small_target, default_model, reasoning_model);
+        let claude_primary = target_model(
+            profile_def.claude_primary_target,
+            default_model,
+            reasoning_model,
+        );
+        let claude_small = target_model(
+            profile_def.claude_small_target,
+            default_model,
+            reasoning_model,
+        );
         for model in CLAUDE_PRIMARY_MODELS {
             pairs.push(((*model).to_string(), claude_primary.clone()));
         }
@@ -147,8 +160,11 @@ fn repair_legacy_1m_recommendations(
     if !profile_def.repair_legacy_1m {
         return;
     }
-    let primary =
-        target_model(profile_def.claude_primary_target, default_model, reasoning_model);
+    let primary = target_model(
+        profile_def.claude_primary_target,
+        default_model,
+        reasoning_model,
+    );
     if primary.is_empty() {
         return;
     }
@@ -240,10 +256,7 @@ mod tests {
         );
         assert_eq!(mapping.get("gpt-5.5").unwrap(), "mimo-v2.5-pro");
         assert_eq!(mapping.get("gpt-5.4-mini").unwrap(), "mimo-v2.5-pro");
-        assert_eq!(
-            mapping.get("claude-sonnet-4-6").unwrap(),
-            "mimo-v2.5-pro"
-        );
+        assert_eq!(mapping.get("claude-sonnet-4-6").unwrap(), "mimo-v2.5-pro");
         assert_eq!(
             mapping.get("claude-haiku-4-5-20251001").unwrap(),
             "mimo-v2.5-pro"
@@ -261,10 +274,7 @@ mod tests {
         );
         assert_eq!(mapping.get("gpt-5.5").unwrap(), "deepseek-v4-pro");
         assert_eq!(mapping.get("gpt-5.4-mini").unwrap(), "deepseek-v4-flash");
-        assert_eq!(
-            mapping.get("claude-opus-4-6").unwrap(),
-            "deepseek-v4-pro"
-        );
+        assert_eq!(mapping.get("claude-opus-4-6").unwrap(), "deepseek-v4-pro");
         assert_eq!(
             mapping.get("claude-haiku-4-5-20251001").unwrap(),
             "deepseek-v4-flash"
@@ -309,9 +319,6 @@ mod tests {
             Some("mimo-v2.5-pro"),
             MappingProfile::ClaudeCode,
         );
-        assert_eq!(
-            mapping.get("claude-sonnet-4-6").unwrap(),
-            "mimo-v2.5-pro"
-        );
+        assert_eq!(mapping.get("claude-sonnet-4-6").unwrap(), "mimo-v2.5-pro");
     }
 }

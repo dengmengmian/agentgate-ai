@@ -34,11 +34,13 @@ fn save_official_config() -> Result<(), AppError> {
         return Ok(());
     }
     let dir = saved_dir();
-    fs::create_dir_all(&dir).map_err(|e| {
-        AppError::new("ATOMCODE_SAVE_FAILED", format!("Cannot create dir: {e}"))
-    })?;
+    fs::create_dir_all(&dir)
+        .map_err(|e| AppError::new("ATOMCODE_SAVE_FAILED", format!("Cannot create dir: {e}")))?;
     fs::copy(&src, saved_config_path()).map_err(|e| {
-        AppError::new("ATOMCODE_SAVE_FAILED", format!("Cannot save config.toml: {e}"))
+        AppError::new(
+            "ATOMCODE_SAVE_FAILED",
+            format!("Cannot save config.toml: {e}"),
+        )
     })?;
     Ok(())
 }
@@ -50,11 +52,16 @@ pub fn has_saved_official() -> bool {
 fn restore_official_config() -> Result<(), AppError> {
     let saved = saved_config_path();
     if !saved.exists() {
-        return Err(AppError::new("ATOMCODE_NO_SAVED_FILES",
-            "No saved official config found."));
+        return Err(AppError::new(
+            "ATOMCODE_NO_SAVED_FILES",
+            "No saved official config found.",
+        ));
     }
     fs::copy(&saved, config_path()).map_err(|e| {
-        AppError::new("ATOMCODE_RESTORE_FAILED", format!("Cannot restore config.toml: {e}"))
+        AppError::new(
+            "ATOMCODE_RESTORE_FAILED",
+            format!("Cannot restore config.toml: {e}"),
+        )
     })?;
     Ok(())
 }
@@ -92,7 +99,8 @@ pub fn detect() -> AtomCodeConfigStatus {
         let content = fs::read_to_string(&path).unwrap_or_default();
         let has_ag = content.contains("ag_local_") || content.contains("agentgate");
         // Try to extract model from TOML
-        let model = content.lines()
+        let model = content
+            .lines()
             .find(|l| l.trim().starts_with("model") && l.contains('='))
             .and_then(|l| l.split('=').nth(1))
             .map(|v| v.trim().trim_matches('"').to_string());
@@ -120,7 +128,10 @@ pub fn apply(host: &str, port: i64, _model: &str) -> Result<ApplyConfigResult, A
     // Ensure parent dir
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
-            AppError::new("ATOMCODE_CONFIG_WRITE_FAILED", format!("Cannot create directory: {e}"))
+            AppError::new(
+                "ATOMCODE_CONFIG_WRITE_FAILED",
+                format!("Cannot create directory: {e}"),
+            )
         })?;
     }
 
@@ -140,19 +151,30 @@ pub fn apply(host: &str, port: i64, _model: &str) -> Result<ApplyConfigResult, A
         String::new()
     };
     let mut merged = existing;
-    merged = crate::tools::toml_merge::upsert_top_level_key(&merged, "default_provider", "\"agentgate\"");
+    merged = crate::tools::toml_merge::upsert_top_level_key(
+        &merged,
+        "default_provider",
+        "\"agentgate\"",
+    );
     let section_body = format!(
         "type = \"openai\"\napi_key = \"{token}\"\nmodel = \"{AGENTGATE_MODEL}\"\nbase_url = \"http://{host}:{port}/v1\"\ncontext_window = 1000000\n"
     );
-    merged = crate::tools::toml_merge::upsert_section(&merged, "providers.agentgate", &section_body);
+    merged =
+        crate::tools::toml_merge::upsert_section(&merged, "providers.agentgate", &section_body);
 
     let tmp = path.with_extension("toml.tmp");
     fs::write(&tmp, &merged).map_err(|e| {
-        AppError::new("ATOMCODE_CONFIG_WRITE_FAILED", format!("Failed to write: {e}"))
+        AppError::new(
+            "ATOMCODE_CONFIG_WRITE_FAILED",
+            format!("Failed to write: {e}"),
+        )
     })?;
     fs::rename(&tmp, &path).map_err(|e| {
         let _ = fs::remove_file(&tmp);
-        AppError::new("ATOMCODE_CONFIG_WRITE_FAILED", format!("Failed to replace: {e}"))
+        AppError::new(
+            "ATOMCODE_CONFIG_WRITE_FAILED",
+            format!("Failed to replace: {e}"),
+        )
     })?;
 
     Ok(ApplyConfigResult {
@@ -186,10 +208,16 @@ pub fn toggle(host: &str, port: i64, model: &str) -> Result<ToggleResult, AppErr
 pub fn open_config() -> Result<(), AppError> {
     let path = config_path();
     if !path.exists() {
-        return Err(AppError::new("ATOMCODE_CONFIG_NOT_FOUND", "AtomCode config.toml does not exist"));
+        return Err(AppError::new(
+            "ATOMCODE_CONFIG_NOT_FOUND",
+            "AtomCode config.toml does not exist",
+        ));
     }
     open::that(&path).map_err(|e| {
-        AppError::new("ATOMCODE_CONFIG_OPEN_FAILED", format!("Failed to open: {e}"))
+        AppError::new(
+            "ATOMCODE_CONFIG_OPEN_FAILED",
+            format!("Failed to open: {e}"),
+        )
     })
 }
 
@@ -213,7 +241,7 @@ context_window = 1000000"#
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::{FS_LOCK, setup_temp_home, cleanup};
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
 
     #[test]
     fn test_detect_no_config() {
@@ -284,11 +312,15 @@ api_key = "sk-kimi-key"
         let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let temp = setup_temp_home();
         std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
-        std::fs::write(config_path(), r#"[providers.deepseek]
+        std::fs::write(
+            config_path(),
+            r#"[providers.deepseek]
 type = "openai"
 api_key = "sk-real"
 model = "deepseek-v4-flash"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         // Toggle to agentgate
         let result = toggle("127.0.0.1", 9090, "gpt-5.5").unwrap();
         assert_eq!(result.new_provider, "agentgate");

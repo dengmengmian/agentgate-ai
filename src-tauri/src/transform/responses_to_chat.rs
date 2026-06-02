@@ -1,11 +1,13 @@
 use serde_json::Value;
 
-use crate::errors::AppError;
-use crate::protocol::chat_completions::{CapabilityDegradationEvent, ChatCompletionsRequest, ChatMessage, ToolCall, ToolCallFunction};
-use crate::protocol::openai_responses::ResponsesRequest;
-use crate::transform::tool_calls;
-use crate::transform::reasoning_store;
 use super::providers::ProviderTransform;
+use crate::errors::AppError;
+use crate::protocol::chat_completions::{
+    CapabilityDegradationEvent, ChatCompletionsRequest, ChatMessage, ToolCall, ToolCallFunction,
+};
+use crate::protocol::openai_responses::ResponsesRequest;
+use crate::transform::reasoning_store;
+use crate::transform::tool_calls;
 
 pub fn convert_with_provider(
     req: &ResponsesRequest,
@@ -41,14 +43,17 @@ pub fn convert_with_provider_matrix(
         if !text.is_empty() {
             // Remove any existing system message from history to avoid duplication
             messages.retain(|m| m.role != "system");
-            messages.insert(0, ChatMessage {
-                role: "system".to_string(),
-                content: Some(Value::String(text.clone())),
-                reasoning_content: None,
-                tool_calls: None,
-                tool_call_id: None,
-                name: None,
-            });
+            messages.insert(
+                0,
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: Some(Value::String(text.clone())),
+                    reasoning_content: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                    name: None,
+                },
+            );
         }
     }
 
@@ -58,13 +63,26 @@ pub fn convert_with_provider_matrix(
 
     // 3. Convert tools (provider + matrix aware: Kimi $web_search builtin,
     //    MiMo web_search builtin gated by per-model capability matrix)
-    let converted_tools = req.tools.as_ref().map(|t| {
-        tool_calls::convert_tools_with_matrix(t, provider.clean_schemas(), provider.provider_type(), model, matrix)
-    }).filter(|t| !t.is_empty());
+    let converted_tools = req
+        .tools
+        .as_ref()
+        .map(|t| {
+            tool_calls::convert_tools_with_matrix(
+                t,
+                provider.clean_schemas(),
+                provider.provider_type(),
+                model,
+                matrix,
+            )
+        })
+        .filter(|t| !t.is_empty());
     inject_mcp_advisory_if_needed(&mut messages, req.tools.as_deref(), &mut diagnostic_events);
 
     // 4. Convert tool_choice
-    let tool_choice = req.tool_choice.as_ref().map(tool_calls::convert_tool_choice);
+    let tool_choice = req
+        .tool_choice
+        .as_ref()
+        .map(tool_calls::convert_tool_choice);
 
     // 5. Provider-specific message processing (e.g. DeepSeek: fix order, strip images, inject reasoning)
     messages = provider.process_messages(messages)?;
@@ -97,7 +115,9 @@ pub fn convert_with_provider_matrix(
 
     // Convert reasoning.effort → reasoning_effort
     // "智能"=auto → None (provider default), "超高"=xhigh → "high"
-    let reasoning_effort = req.reasoning.as_ref()
+    let reasoning_effort = req
+        .reasoning
+        .as_ref()
         .and_then(|r| r.get("effort"))
         .and_then(|e| e.as_str())
         .and_then(|e| provider.map_reasoning_effort(e));
@@ -113,7 +133,9 @@ pub fn convert_with_provider_matrix(
     let reasoning_effort = apply_effort_overrides(provider.provider_type(), reasoning_effort);
 
     // Convert text.format → response_format
-    let response_format = req.text.as_ref()
+    let response_format = req
+        .text
+        .as_ref()
         .and_then(|t| t.get("format"))
         .and_then(|f| {
             let fmt_type = f.get("type").and_then(|t| t.as_str()).unwrap_or("");
@@ -160,17 +182,13 @@ fn convert_input(
     diagnostic_events: &mut Vec<CapabilityDegradationEvent>,
 ) -> Result<Vec<ChatMessage>, AppError> {
     match input {
-        Value::String(s) => {
-            Ok(vec![msg("user", Value::String(s.clone()))])
-        }
+        Value::String(s) => Ok(vec![msg("user", Value::String(s.clone()))]),
         Value::Array(items) => convert_input_array(items, diagnostic_events),
         Value::Object(_) => {
             let content = extract_content(Some(input));
             Ok(vec![msg("user", content)])
         }
-        _ => {
-            Ok(vec![msg("user", Value::String(input.to_string()))])
-        }
+        _ => Ok(vec![msg("user", Value::String(input.to_string()))]),
     }
 }
 
@@ -187,11 +205,13 @@ fn convert_input_array(
 
         match item_type {
             "message" => {
-                flush_tool_calls(&mut messages, &mut pending_tool_calls, &mut pending_reasoning);
-
-                let role = map_role(
-                    item.get("role").and_then(|r| r.as_str()).unwrap_or("user"),
+                flush_tool_calls(
+                    &mut messages,
+                    &mut pending_tool_calls,
+                    &mut pending_reasoning,
                 );
+
+                let role = map_role(item.get("role").and_then(|r| r.as_str()).unwrap_or("user"));
 
                 // Check for embedded tool_calls in content array (Codex multi-turn history format)
                 let mut embedded_text = String::new();
@@ -212,14 +232,28 @@ fn convert_input_array(
                             "tool_call" => {
                                 has_embedded_tool_calls = true;
                                 embedded_tool_calls.push(ToolCall {
-                                    id: part.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string(),
+                                    id: part
+                                        .get("id")
+                                        .and_then(|i| i.as_str())
+                                        .unwrap_or("")
+                                        .to_string(),
                                     call_type: "function".to_string(),
                                     function: ToolCallFunction {
-                                        name: part.get("name").and_then(|n| n.as_str()).unwrap_or("").to_string(),
-                                        arguments: part.get("arguments").map(|a| {
-                                            if a.is_string() { a.as_str().unwrap().to_string() }
-                                            else { a.to_string() }
-                                        }).unwrap_or_default(),
+                                        name: part
+                                            .get("name")
+                                            .and_then(|n| n.as_str())
+                                            .unwrap_or("")
+                                            .to_string(),
+                                        arguments: part
+                                            .get("arguments")
+                                            .map(|a| {
+                                                if a.is_string() {
+                                                    a.as_str().unwrap().to_string()
+                                                } else {
+                                                    a.to_string()
+                                                }
+                                            })
+                                            .unwrap_or_default(),
                                     },
                                 });
                             }
@@ -255,7 +289,11 @@ fn convert_input_array(
                     role,
                     content: Some(content),
                     reasoning_content: reasoning,
-                    tool_calls: if embedded_tool_calls.is_empty() { None } else { Some(embedded_tool_calls) },
+                    tool_calls: if embedded_tool_calls.is_empty() {
+                        None
+                    } else {
+                        Some(embedded_tool_calls)
+                    },
                     tool_call_id: None,
                     name: None,
                 });
@@ -272,7 +310,8 @@ fn convert_input_array(
                     .get("call_id")
                     .and_then(|c| c.as_str())
                     .unwrap_or("call_unknown");
-                let call_id = crate::transform::tool_calls::sanitize_call_id(raw_call_id).into_owned();
+                let call_id =
+                    crate::transform::tool_calls::sanitize_call_id(raw_call_id).into_owned();
                 let name = item
                     .get("name")
                     .and_then(|n| n.as_str())
@@ -293,7 +332,10 @@ fn convert_input_array(
                 // provider 400 "unexpected end of data"。salvage 成 {} 让对话能继续。
                 // 与 sse.rs 出站方向对称。
                 let arguments = crate::transform::tool_calls::salvage_tool_arguments(
-                    &raw_arguments, &name, &call_id, None,
+                    &raw_arguments,
+                    &name,
+                    &call_id,
+                    None,
                 );
 
                 pending_tool_calls.push(ToolCall {
@@ -304,11 +346,13 @@ fn convert_input_array(
             }
             "function_call_output" => {
                 // Flush pending tool calls before adding tool response
-                flush_tool_calls(&mut messages, &mut pending_tool_calls, &mut pending_reasoning);
+                flush_tool_calls(
+                    &mut messages,
+                    &mut pending_tool_calls,
+                    &mut pending_reasoning,
+                );
 
-                let call_id = item
-                    .get("call_id")
-                    .and_then(|c| c.as_str());
+                let call_id = item.get("call_id").and_then(|c| c.as_str());
 
                 if call_id.is_none() || call_id == Some("") {
                     return Err(AppError::new(
@@ -317,12 +361,14 @@ fn convert_input_array(
                     ).with_suggestion("Each function_call_output must have a call_id matching a previous function_call"));
                 }
 
-                let raw_output = item.get("output").map(|o| {
-                    flatten_tool_output_with_events(o, diagnostic_events)
-                }).unwrap_or_default();
+                let raw_output = item
+                    .get("output")
+                    .map(|o| flatten_tool_output_with_events(o, diagnostic_events))
+                    .unwrap_or_default();
                 let output = Value::String(raw_output);
 
-                let sanitized_id = crate::transform::tool_calls::sanitize_call_id(call_id.unwrap()).into_owned();
+                let sanitized_id =
+                    crate::transform::tool_calls::sanitize_call_id(call_id.unwrap()).into_owned();
                 messages.push(ChatMessage {
                     role: "tool".to_string(),
                     content: Some(output),
@@ -334,8 +380,13 @@ fn convert_input_array(
             }
             "compaction" | "context_compaction" | "compaction_summary" => {
                 // Codex auto-compact: convert summary to user message
-                flush_tool_calls(&mut messages, &mut pending_tool_calls, &mut pending_reasoning);
-                let summary = item.get("summary")
+                flush_tool_calls(
+                    &mut messages,
+                    &mut pending_tool_calls,
+                    &mut pending_reasoning,
+                );
+                let summary = item
+                    .get("summary")
                     .or(item.get("content"))
                     .map(|v| extract_content(Some(v)))
                     .unwrap_or(Value::String("[context compacted]".to_string()));
@@ -372,22 +423,40 @@ fn convert_input_array(
                 }
                 if pending_reasoning.is_none() {
                     if let Some(rc) = item.get("summary").and_then(|v| {
-                        if v.is_string() { v.as_str().map(String::from) }
-                        else if v.is_array() {
-                            let texts: Vec<String> = v.as_array().unwrap().iter()
-                                .filter_map(|p| p.get("text").and_then(|t| t.as_str()).map(String::from))
+                        if v.is_string() {
+                            v.as_str().map(String::from)
+                        } else if v.is_array() {
+                            let texts: Vec<String> = v
+                                .as_array()
+                                .unwrap()
+                                .iter()
+                                .filter_map(|p| {
+                                    p.get("text").and_then(|t| t.as_str()).map(String::from)
+                                })
                                 .collect();
-                            if texts.is_empty() { None } else { Some(texts.join("")) }
-                        } else { None }
+                            if texts.is_empty() {
+                                None
+                            } else {
+                                Some(texts.join(""))
+                            }
+                        } else {
+                            None
+                        }
                     }) {
-                        if !rc.is_empty() { pending_reasoning = Some(rc); }
+                        if !rc.is_empty() {
+                            pending_reasoning = Some(rc);
+                        }
                     }
                 }
             }
             _ => {
                 // Unknown item: try to extract as message if it has role/content
                 if let Some(role) = item.get("role").and_then(|r| r.as_str()) {
-                    flush_tool_calls(&mut messages, &mut pending_tool_calls, &mut pending_reasoning);
+                    flush_tool_calls(
+                        &mut messages,
+                        &mut pending_tool_calls,
+                        &mut pending_reasoning,
+                    );
                     let content = extract_content(item.get("content"));
                     messages.push(ChatMessage {
                         role: map_role(role),
@@ -404,12 +473,20 @@ fn convert_input_array(
     }
 
     // Flush remaining pending tool calls
-    flush_tool_calls(&mut messages, &mut pending_tool_calls, &mut pending_reasoning);
+    flush_tool_calls(
+        &mut messages,
+        &mut pending_tool_calls,
+        &mut pending_reasoning,
+    );
 
     Ok(messages)
 }
 
-fn flush_tool_calls(messages: &mut Vec<ChatMessage>, pending: &mut Vec<ToolCall>, reasoning: &mut Option<String>) {
+fn flush_tool_calls(
+    messages: &mut Vec<ChatMessage>,
+    pending: &mut Vec<ToolCall>,
+    reasoning: &mut Option<String>,
+) {
     if pending.is_empty() {
         return;
     }
@@ -437,7 +514,9 @@ fn inject_mcp_advisory_if_needed(
     tools: Option<&[Value]>,
     diagnostic_events: &mut Vec<CapabilityDegradationEvent>,
 ) {
-    let Some(tools) = tools else { return; };
+    let Some(tools) = tools else {
+        return;
+    };
     let labels = collect_dropped_mcp_labels(tools);
     if labels.is_empty() {
         return;
@@ -445,14 +524,17 @@ fn inject_mcp_advisory_if_needed(
     diagnostic_events.push(crate::transform::degradation::mcp_advisory_event(&labels));
     let note = build_mcp_advisory_note(&labels);
     let insert_at = messages.iter().take_while(|m| m.role == "system").count();
-    messages.insert(insert_at, ChatMessage {
-        role: "system".to_string(),
-        content: Some(Value::String(note)),
-        reasoning_content: None,
-        tool_calls: None,
-        tool_call_id: None,
-        name: None,
-    });
+    messages.insert(
+        insert_at,
+        ChatMessage {
+            role: "system".to_string(),
+            content: Some(Value::String(note)),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        },
+    );
 }
 
 fn collect_dropped_mcp_labels(tools: &[Value]) -> Vec<String> {
@@ -476,7 +558,11 @@ fn collect_dropped_mcp_labels(tools: &[Value]) -> Vec<String> {
 }
 
 fn build_mcp_advisory_note(labels: &[String]) -> String {
-    let list = labels.iter().map(|l| format!("\"{l}\"")).collect::<Vec<_>>().join(", ");
+    let list = labels
+        .iter()
+        .map(|l| format!("\"{l}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
     let mut note = format!(
         "AgentGate note: the user has OpenAI Responses MCP connector tool(s) enabled ({list}), \
          but this request is being converted to Chat Completions for the upstream provider. \
@@ -499,7 +585,12 @@ fn connector_cli_hints(labels: &[String]) -> Vec<String> {
         let lower = label.to_ascii_lowercase();
         let hint = if lower.contains("github") {
             Some("GitHub: gh")
-        } else if lower.contains("gmail") || lower.contains("google_drive") || lower.contains("google drive") || lower.contains("google-docs") || lower.contains("google docs") {
+        } else if lower.contains("gmail")
+            || lower.contains("google_drive")
+            || lower.contains("google drive")
+            || lower.contains("google-docs")
+            || lower.contains("google docs")
+        {
             Some("Google/Gmail/Drive: rclone or Google's official CLI tools")
         } else if lower.contains("dropbox") {
             Some("Dropbox: rclone or dropbox CLI")
@@ -561,12 +652,16 @@ fn flatten_tool_output_with_events(
                 "[transform] {dropped_images} image attachment(s) dropped from tool output \
                  (Chat Completions protocol does not support images in tool messages)"
             );
-            diagnostic_events.push(crate::transform::degradation::tool_output_image_omitted_event(
-                dropped_images as usize,
-            ));
-            chunks.push(crate::transform::degradation::tool_output_image_omitted_notice(
-                dropped_images as usize,
-            ));
+            diagnostic_events.push(
+                crate::transform::degradation::tool_output_image_omitted_event(
+                    dropped_images as usize,
+                ),
+            );
+            chunks.push(
+                crate::transform::degradation::tool_output_image_omitted_notice(
+                    dropped_images as usize,
+                ),
+            );
         }
         if chunks.is_empty() {
             return output.to_string();
@@ -615,10 +710,16 @@ fn extract_content(content: Option<&Value>) -> Value {
                         has_image = true;
                         // Responses 协议 detail 字段在 input_image 顶层（"auto"/"low"/"high"）；
                         // Chat 协议把它塞在 image_url 对象里。两种位置都收，保留进出参一致。
-                        let detail = part.get("detail").and_then(|d| d.as_str())
-                            .or_else(|| part.get("image_url").and_then(|u| u.get("detail")).and_then(|d| d.as_str()));
-                        let url = part.get("image_url").and_then(|u| u.as_str())
-                            .or_else(|| part.get("image_url").and_then(|u| u.get("url")).and_then(|u| u.as_str()));
+                        let detail = part.get("detail").and_then(|d| d.as_str()).or_else(|| {
+                            part.get("image_url")
+                                .and_then(|u| u.get("detail"))
+                                .and_then(|d| d.as_str())
+                        });
+                        let url = part.get("image_url").and_then(|u| u.as_str()).or_else(|| {
+                            part.get("image_url")
+                                .and_then(|u| u.get("url"))
+                                .and_then(|u| u.as_str())
+                        });
                         if let Some(url) = url {
                             let mut image_url = serde_json::json!({"url": url});
                             if let Some(d) = detail {
@@ -651,7 +752,8 @@ fn extract_content(content: Option<&Value>) -> Value {
                 Value::Array(parts_out)
             } else {
                 // Text-only: join into a single string for compatibility
-                let text = parts_out.iter()
+                let text = parts_out
+                    .iter()
                     .filter_map(|p| p.get("text").and_then(|t| t.as_str()))
                     .collect::<Vec<_>>()
                     .join("");
@@ -771,7 +873,10 @@ fn apply_effort_overrides(provider_type: &str, current: Option<String>) -> Optio
 fn provider_in_env_list(provider_type: &str, env_var: &str) -> bool {
     std::env::var(env_var)
         .ok()
-        .map(|raw| raw.split(',').any(|s| s.trim().eq_ignore_ascii_case(provider_type)))
+        .map(|raw| {
+            raw.split(',')
+                .any(|s| s.trim().eq_ignore_ascii_case(provider_type))
+        })
         .unwrap_or(false)
 }
 
@@ -860,7 +965,11 @@ impl ThinkSplitter {
             }
         }
 
-        let reasoning_opt = if reasoning.is_empty() { None } else { Some(reasoning) };
+        let reasoning_opt = if reasoning.is_empty() {
+            None
+        } else {
+            Some(reasoning)
+        };
         (visible, reasoning_opt)
     }
 
@@ -899,8 +1008,8 @@ fn trailing_partial(s: &str, target: &str) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::providers::{DeepSeekProvider, DefaultProvider, KimiProvider};
+    use super::*;
     use serde_json::json;
 
     #[test]
@@ -1101,7 +1210,12 @@ mod tests {
             ..Default::default()
         };
         let result = convert_with_provider(&req, "deepseek-v4-pro", &DeepSeekProvider).unwrap();
-        let parts = result.messages[0].content.as_ref().unwrap().as_array().unwrap();
+        let parts = result.messages[0]
+            .content
+            .as_ref()
+            .unwrap()
+            .as_array()
+            .unwrap();
         assert_eq!(parts.len(), 1);
         assert_eq!(parts[0]["type"], "text");
         let text = parts[0]["text"].as_str().unwrap();
@@ -1123,18 +1237,23 @@ mod tests {
             ..Default::default()
         };
         let result = convert_with_provider(&req, "deepseek-v4-flash", &DeepSeekProvider).unwrap();
-        let parts = result.messages[0].content.as_ref().unwrap().as_array().unwrap();
+        let parts = result.messages[0]
+            .content
+            .as_ref()
+            .unwrap()
+            .as_array()
+            .unwrap();
         assert_eq!(parts.len(), 1);
         assert_eq!(parts[0]["type"], "text");
-        assert!(parts[0]["text"].as_str().unwrap().contains("vision-capable"));
+        assert!(parts[0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("vision-capable"));
     }
 
     #[test]
     fn test_merge_consecutive_user_messages() {
-        let messages = vec![
-            msg("user", json!("hello")),
-            msg("user", json!("world")),
-        ];
+        let messages = vec![msg("user", json!("hello")), msg("user", json!("world"))];
         let merged = merge_consecutive_messages(messages);
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].content, Some(json!("hello\n\nworld")));
@@ -1142,10 +1261,7 @@ mod tests {
 
     #[test]
     fn test_merge_consecutive_system_messages() {
-        let messages = vec![
-            msg("system", json!("sys1")),
-            msg("system", json!("sys2")),
-        ];
+        let messages = vec![msg("system", json!("sys1")), msg("system", json!("sys2"))];
         let merged = merge_consecutive_messages(messages);
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].content, Some(json!("sys1\n\nsys2")));
@@ -1153,10 +1269,7 @@ mod tests {
 
     #[test]
     fn test_do_not_merge_assistant_messages() {
-        let messages = vec![
-            msg("assistant", json!("a1")),
-            msg("assistant", json!("a2")),
-        ];
+        let messages = vec![msg("assistant", json!("a1")), msg("assistant", json!("a2"))];
         let merged = merge_consecutive_messages(messages);
         assert_eq!(merged.len(), 2);
     }
@@ -1171,7 +1284,10 @@ mod tests {
                 tool_calls: Some(vec![ToolCall {
                     id: "tc1".to_string(),
                     call_type: "function".to_string(),
-                    function: ToolCallFunction { name: "f".to_string(), arguments: "{}".to_string() },
+                    function: ToolCallFunction {
+                        name: "f".to_string(),
+                        arguments: "{}".to_string(),
+                    },
                 }]),
                 tool_call_id: None,
                 name: None,
@@ -1191,7 +1307,10 @@ mod tests {
             tool_calls: Some(vec![ToolCall {
                 id: "tc1".to_string(),
                 call_type: "function".to_string(),
-                function: ToolCallFunction { name: "f".to_string(), arguments: "not json".to_string() },
+                function: ToolCallFunction {
+                    name: "f".to_string(),
+                    arguments: "not json".to_string(),
+                },
             }]),
             tool_call_id: None,
             name: None,
@@ -1208,7 +1327,12 @@ mod tests {
                 }
             }
         }
-        assert_eq!(messages[0].tool_calls.as_ref().unwrap()[0].function.arguments, "{}");
+        assert_eq!(
+            messages[0].tool_calls.as_ref().unwrap()[0]
+                .function
+                .arguments,
+            "{}"
+        );
     }
 
     #[test]
@@ -1277,10 +1401,17 @@ mod tests {
             ..Default::default()
         };
         let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
-        assert!(result.tools.is_none(), "MCP tools must not be sent as Chat tools");
+        assert!(
+            result.tools.is_none(),
+            "MCP tools must not be sent as Chat tools"
+        );
         assert_eq!(result.messages.len(), 2);
         assert_eq!(result.messages[0].role, "system");
-        let sys = result.messages[0].content.as_ref().and_then(|v| v.as_str()).unwrap();
+        let sys = result.messages[0]
+            .content
+            .as_ref()
+            .and_then(|v| v.as_str())
+            .unwrap();
         assert!(sys.contains("Be concise"));
         assert!(sys.contains("GitHub"));
         assert!(sys.contains("not callable"));
@@ -1409,7 +1540,10 @@ mod tests {
     #[test]
     fn test_extract_content_array_no_text() {
         let arr = json!([{"type": "image", "url": "http://example.com"}]);
-        assert_eq!(extract_content(Some(&arr)), json!("[{\"type\":\"image\",\"url\":\"http://example.com\"}]"));
+        assert_eq!(
+            extract_content(Some(&arr)),
+            json!("[{\"type\":\"image\",\"url\":\"http://example.com\"}]")
+        );
     }
 
     #[test]
@@ -1480,7 +1614,11 @@ mod tests {
         let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         let tool_msg = &result.messages[1];
         let content_str = tool_msg.content.as_ref().unwrap().as_str().unwrap();
-        assert_eq!(content_str.len(), 10000, "Tool output should not be truncated");
+        assert_eq!(
+            content_str.len(),
+            10000,
+            "Tool output should not be truncated"
+        );
     }
 
     #[test]
@@ -1497,7 +1635,10 @@ mod tests {
         let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         let tool_msg = &result.messages[1];
         let content_str = tool_msg.content.as_ref().unwrap().as_str().unwrap();
-        assert_eq!(content_str, chinese_output, "Chinese tool output should pass through intact");
+        assert_eq!(
+            content_str, chinese_output,
+            "Chinese tool output should pass through intact"
+        );
     }
 
     // ── split_think_tags whitespace preservation (critical for markdown rendering) ──
@@ -1515,7 +1656,10 @@ mod tests {
     fn test_split_think_tags_preserves_table_newlines() {
         let chunk = "\n| col1 | col2 |\n| --- | --- |\n| a | b |\n";
         let (text, reasoning) = split_think_tags(chunk);
-        assert_eq!(text, chunk, "Table newlines must be preserved for markdown rendering");
+        assert_eq!(
+            text, chunk,
+            "Table newlines must be preserved for markdown rendering"
+        );
         assert_eq!(reasoning, None);
     }
 
@@ -1595,7 +1739,10 @@ mod tests {
     fn test_flatten_tool_output_non_string_non_array() {
         // Numbers, objects, etc. → JSON stringify
         assert_eq!(flatten_tool_output(&json!(42)), "42");
-        assert_eq!(flatten_tool_output(&json!({"key": "val"})), "{\"key\":\"val\"}");
+        assert_eq!(
+            flatten_tool_output(&json!({"key": "val"})),
+            "{\"key\":\"val\"}"
+        );
     }
 
     // ── extract_content image preservation tests ──
@@ -1713,7 +1860,10 @@ mod tests {
         // user, assistant(reasoning=...)
         assert_eq!(msgs.len(), 2);
         assert_eq!(msgs[1].role, "assistant");
-        assert_eq!(msgs[1].reasoning_content.as_deref(), Some("Let me think... 4."));
+        assert_eq!(
+            msgs[1].reasoning_content.as_deref(),
+            Some("Let me think... 4.")
+        );
         assert!(events.is_empty());
     }
 
@@ -1736,8 +1886,14 @@ mod tests {
         let mut events = Vec::new();
         let msgs = convert_input_array(&items, &mut events).unwrap();
         // user + assistant(tool_calls, reasoning) + tool
-        let assistant = msgs.iter().find(|m| m.role == "assistant").expect("assistant present");
-        assert_eq!(assistant.reasoning_content.as_deref(), Some("I should search."));
+        let assistant = msgs
+            .iter()
+            .find(|m| m.role == "assistant")
+            .expect("assistant present");
+        assert_eq!(
+            assistant.reasoning_content.as_deref(),
+            Some("I should search.")
+        );
         assert!(assistant.tool_calls.is_some());
         assert!(events.is_empty());
     }

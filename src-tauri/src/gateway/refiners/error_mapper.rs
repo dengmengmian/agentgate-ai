@@ -89,7 +89,8 @@ pub fn apply(
 
 /// Pull (code, message) out of common upstream shapes.
 fn extract_upstream(body: &Value, _status: u16) -> (Option<String>, Option<String>) {
-    let code = body.pointer("/error/code")
+    let code = body
+        .pointer("/error/code")
         .or_else(|| body.pointer("/error/type"))
         .and_then(|v| v.as_str())
         .map(String::from)
@@ -99,8 +100,15 @@ fn extract_upstream(body: &Value, _status: u16) -> (Option<String>, Option<Strin
                 .and_then(|v| v.as_str())
                 .map(String::from)
         });
-    let message = body.pointer("/error/message").and_then(|v| v.as_str()).map(String::from)
-        .or_else(|| body.get("message").and_then(|v| v.as_str()).map(String::from));
+    let message = body
+        .pointer("/error/message")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+        .or_else(|| {
+            body.get("message")
+                .and_then(|v| v.as_str())
+                .map(String::from)
+        });
     (code, message)
 }
 
@@ -141,7 +149,10 @@ fn classify(status: u16, upstream_code: Option<&str>) -> String {
 fn detect_context_overflow(message: &str, upstream_code: Option<&str>) -> bool {
     if let Some(code) = upstream_code {
         let lc = code.to_ascii_lowercase();
-        if lc.contains("context_length") || lc.contains("context length") || lc == "string_above_max_length" {
+        if lc.contains("context_length")
+            || lc.contains("context length")
+            || lc == "string_above_max_length"
+        {
             return true;
         }
     }
@@ -220,22 +231,34 @@ mod tests {
 
     fn provider(provider_type: &str) -> Provider {
         Provider {
-            id: "p".into(), name: "P".into(), provider_type: provider_type.into(),
-            base_url: "https://x".into(), api_key: Some("sk".into()),
-            default_model: "m".into(), reasoning_model: None,
-            supported_models: None, model_mapping: None, extra_headers: None,
-            anthropic_base_url: None, responses_base_url: None,
+            id: "p".into(),
+            name: "P".into(),
+            provider_type: provider_type.into(),
+            base_url: "https://x".into(),
+            api_key: Some("sk".into()),
+            default_model: "m".into(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
             protocol: "openai_chat_completions".into(),
-            timeout_seconds: 60, status: "ok".into(),
-            supports_vision: None, auto_cache_control: None, supports_cache: None,
+            timeout_seconds: 60,
+            status: "ok".into(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
             model_capabilities: None,
             provider_quirks: None,
             body_filter_enabled: None,
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
-            enabled: true, is_active: true,
-            created_at: "now".into(), updated_at: "now".into(),
+            enabled: true,
+            is_active: true,
+            created_at: "now".into(),
+            updated_at: "now".into(),
         }
     }
 
@@ -315,7 +338,10 @@ mod tests {
         let p = provider("gemini");
         let body = json!({"error": {"status": "RESOURCE_EXHAUSTED", "message": "quota"}});
         let m = apply(&p, &body, 429, "openai_responses").unwrap();
-        assert_eq!(m.action.upstream_code.as_deref(), Some("RESOURCE_EXHAUSTED"));
+        assert_eq!(
+            m.action.upstream_code.as_deref(),
+            Some("RESOURCE_EXHAUSTED")
+        );
         assert_eq!(m.action.mapped_code, "resource_exhausted");
     }
 
