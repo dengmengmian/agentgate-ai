@@ -933,6 +933,17 @@ pub fn clear_request_logs(state: State<'_, AppState>) -> Result<bool, AppError> 
     storage::request_logs::clear(&conn)
 }
 
+/// 按 session_id 聚合用量：Logs 页「按会话分组」视图用。
+/// 返回最近 `limit` 个会话，按最后活跃时间倒序排列。
+#[tauri::command]
+pub fn aggregate_request_logs_by_session(
+    limit: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::models::request_log::SessionUsageSummary>, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::request_logs::aggregate_by_session(&conn, limit.unwrap_or(100))
+}
+
 // ── Tool Commands ──────────────────────────────────────────────
 
 #[tauri::command]

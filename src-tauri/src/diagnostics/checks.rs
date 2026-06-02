@@ -35,7 +35,7 @@ pub fn health_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
         Ok(conn) => {
             checks.push(CheckItem::ok("db_lock", "Database", "Database accessible"));
             // Tables
-            let tables = ["providers", "gateway_settings", "request_logs", "route_profiles", "config_backups"];
+            let tables = ["providers", "gateway_settings", "request_logs", "route_profiles", "config_backups", "client_apply_history"];
             for table in &tables {
                 let exists: bool = conn.prepare(&format!("SELECT 1 FROM {table} LIMIT 0")).is_ok();
                 if exists {
@@ -69,6 +69,7 @@ pub fn database_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
         ("route_profiles", "Route profiles"),
         ("request_logs", "Request logs"),
         ("config_backups", "Config backups"),
+        ("client_apply_history", "Client apply history"),
     ] {
         match conn.query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get::<_, i64>(0)) {
             Ok(n) => checks.push(CheckItem::ok(&format!("count_{table}"), label, &format!("{n} rows"))),
@@ -430,6 +431,7 @@ pub fn export_bundle(
         if include_logs {
             let filter = crate::models::request_log::RequestLogFilter {
                 client: None, provider: None, status: None, keyword: None,
+                source: None, session_id: None,
                 limit: Some(max_logs as i64), offset: None,
             };
             let logs = storage::request_logs::list(&conn, filter).unwrap_or_default();

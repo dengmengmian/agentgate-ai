@@ -46,7 +46,10 @@ export function RequestLogTable({ requests, onSelect }: RequestLogTableProps) {
                   {req.client ?? "—"}
                 </td>
                 <td className="px-5 py-2.5 text-text-secondary">
-                  {req.provider ?? "—"}
+                  <div className="flex items-center gap-1.5">
+                    <SourceBadge source={req.source} />
+                    <span>{req.provider ?? "—"}</span>
+                  </div>
                 </td>
                 <td className="px-5 py-2.5 font-mono text-text-secondary">
                   {req.model ?? "—"}
@@ -66,4 +69,30 @@ export function RequestLogTable({ requests, onSelect }: RequestLogTableProps) {
       </table>
     </div>
   );
+}
+
+/// 来源徽章——区分 gateway 流量 vs 从客户端本地日志扫出来的条目。后者拿不到
+/// raw_request / SSE / tool_calls 等字段，详情页会显示降级 banner。
+function SourceBadge({ source }: { source: string | null }) {
+  if (!source || source === "gateway") return null;
+  const label = sourceLabel(source);
+  return (
+    <span
+      title={label}
+      className="inline-flex h-4 items-center rounded bg-card-secondary px-1.5 text-[10px] font-medium uppercase tracking-wider text-text-muted"
+    >
+      {label}
+    </span>
+  );
+}
+
+export function sourceLabel(source: string | null): string {
+  switch (source) {
+    case "gateway": return "网关";
+    case "claude_session": return "Claude";
+    case "codex_session": return "Codex";
+    case "gemini_session": return "Gemini";
+    case "mixed": return "混合";
+    default: return source ?? "—";
+  }
 }

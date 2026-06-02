@@ -248,6 +248,7 @@ pub fn run() {
             commands::count_request_logs,
             commands::get_request_log_detail,
             commands::clear_request_logs,
+            commands::aggregate_request_logs_by_session,
             // Tools
             commands::list_tools,
             commands::generate_codex_config,

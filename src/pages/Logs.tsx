@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import { ScrollText, RefreshCcw, ChevronLeft, ChevronRight } from "lucide-react";
-import { RequestLogTable } from "@/components/logs/RequestLogTable";
+import { ScrollText, RefreshCcw, ChevronLeft, ChevronRight, LayoutList, Layers } from "lucide-react";
+import { RequestLogTable, sourceLabel } from "@/components/logs/RequestLogTable";
 import { RequestDetailDrawer } from "@/components/logs/RequestDetailDrawer";
+import { SessionGroupView } from "@/components/logs/SessionGroupView";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
@@ -28,6 +29,10 @@ export function Logs() {
   const [statusFilter, setStatusFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [clientFilter, setClientFilter] = useState("");
+  // 'all' / 'gateway' / 'session_log'（聚合所有客户端日志）/ 单一来源（'claude_session' 等）
+  const [sourceFilter, setSourceFilter] = useState<string>("");
+  // 'list'（按时间逐条）/ 'session'（按会话聚合）
+  const [viewMode, setViewMode] = useState<"list" | "session">("list");
   const [providerOptions, setProviderOptions] = useState<ProviderView[]>([]);
 
   // Pagination
@@ -43,7 +48,7 @@ export function Logs() {
   // Reset to page 1 whenever filters change.
   useEffect(() => {
     setPage(1);
-  }, [keyword, statusFilter, providerFilter, clientFilter]);
+  }, [keyword, statusFilter, providerFilter, clientFilter, sourceFilter]);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -53,6 +58,7 @@ export function Logs() {
         status: statusFilter || undefined,
         provider: providerFilter || undefined,
         client: clientFilter || undefined,
+        source: sourceFilter || undefined,
         limit: PAGE_SIZE,
         offset: (page - 1) * PAGE_SIZE,
       };
@@ -67,7 +73,7 @@ export function Logs() {
     } finally {
       setLoading(false);
     }
-  }, [keyword, statusFilter, providerFilter, clientFilter, page]);
+  }, [keyword, statusFilter, providerFilter, clientFilter, sourceFilter, page]);
 
   useEffect(() => {
     loadLogs();
@@ -138,8 +144,40 @@ export function Logs() {
             <option value="">{t("logs.all_clients")}</option>
             {KNOWN_CLIENTS.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="form-input w-32"
+            title="按来源过滤：网关 / 各客户端本地日志"
+          >
+            <option value="">全部来源</option>
+            <option value="gateway">{sourceLabel("gateway")}</option>
+            <option value="session_log">客户端日志（全部）</option>
+            <option value="claude_session">{sourceLabel("claude_session")}</option>
+            <option value="codex_session">{sourceLabel("codex_session")}</option>
+            <option value="gemini_session">{sourceLabel("gemini_session")}</option>
+          </select>
         </div>
         <div className="flex items-center gap-2">
+          {/* 列表/会话两种视图切换——列表按时间逐条，会话按 session_id 聚合 */}
+          <div className="flex items-center rounded-md bg-card-secondary p-0.5">
+            <button
+              onClick={() => setViewMode("list")}
+              className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+              title="按时间逐条"
+            >
+              <LayoutList className="h-3 w-3" />
+              请求
+            </button>
+            <button
+              onClick={() => setViewMode("session")}
+              className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "session" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+              title="按会话聚合用量"
+            >
+              <Layers className="h-3 w-3" />
+              会话
+            </button>
+          </div>
           <button
             onClick={loadLogs}
             disabled={loading}
@@ -157,7 +195,17 @@ export function Logs() {
         </div>
       </div>
 
-      {loading ? (
+      {viewMode === "session" ? (
+        <SessionGroupView
+          onPickSession={(sid) => {
+            // 点击某会话 → 切回列表视图并 filter 到该 session_id
+            setViewMode("list");
+            // session_id filter 在 RequestLogFilter 里，但目前 UI 没有 input；
+            // 简化：点会话直接显示 keyword 过滤，让用户看到属于这个 session 的所有条目
+            setKeyword(sid.slice(0, 16));
+          }}
+        />
+      ) : loading ? (
         <p className="text-xs text-text-muted">{t("common.loading")}</p>
       ) : logs.length === 0 ? (
         <EmptyState

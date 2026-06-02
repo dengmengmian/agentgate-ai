@@ -12,6 +12,10 @@ pub struct RequestLogListItem {
     pub status_code: Option<i64>,
     pub latency_ms: Option<i64>,
     pub error_message: Option<String>,
+    /// 'gateway' / 'claude_session' / 'codex_session' / 'gemini_session'
+    pub source: Option<String>,
+    /// 会话指纹：gateway 来源走 session_affinity；客户端日志来源是文件里的 session id
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,6 +39,9 @@ pub struct RequestLogDetail {
     pub tool_calls: Option<String>,
     pub error_message: Option<String>,
     pub trace_json: Option<String>,
+    pub source: Option<String>,
+    pub session_id: Option<String>,
+    pub external_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -43,8 +50,31 @@ pub struct RequestLogFilter {
     pub provider: Option<String>,
     pub status: Option<String>,
     pub keyword: Option<String>,
+    /// 'gateway' / 'claude_session' / 'codex_session' / 'gemini_session' /
+    /// 'session_log'（聚合：所有非 gateway 来源）。
+    pub source: Option<String>,
+    /// 按指定 session_id 过滤——「按会话分组」视图点开某条 session 时用。
+    pub session_id: Option<String>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
+}
+
+/// 按 session 维度聚合的用量摘要。Logs 页「按会话分组」视图用。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionUsageSummary {
+    pub session_id: String,
+    /// 该 session 多数请求的 source。混合时填 'mixed'。
+    pub source: String,
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub first_seen: String,
+    pub last_seen: String,
+    pub request_count: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub cost: f64,
 }
 
 #[cfg(test)]
@@ -64,6 +94,8 @@ mod tests {
             status_code: Some(200),
             latency_ms: Some(500),
             error_message: None,
+            source: Some("gateway".to_string()),
+            session_id: None,
         };
         let json = serde_json::to_string(&item).unwrap();
         assert!(json.contains("req_1"));
@@ -79,6 +111,8 @@ mod tests {
             provider: None,
             status: Some("success".to_string()),
             keyword: Some("error".to_string()),
+            source: None,
+            session_id: None,
             limit: Some(50),
             offset: Some(0),
         };
@@ -110,6 +144,9 @@ mod tests {
             tool_calls: None,
             error_message: None,
             trace_json: None,
+            source: Some("gateway".to_string()),
+            session_id: None,
+            external_id: None,
         };
         let json = serde_json::to_string(&detail).unwrap();
         assert!(json.contains("hello"));

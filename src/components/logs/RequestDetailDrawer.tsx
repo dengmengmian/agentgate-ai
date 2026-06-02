@@ -1,9 +1,11 @@
+import { Info } from "lucide-react";
 import { DetailDrawer } from "@/components/layout/DetailDrawer";
 import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
 import { ErrorExplanationCard } from "@/components/common/ErrorExplanationCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { formatTimestamp, formatLatency } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { sourceLabel } from "@/components/logs/RequestLogTable";
 import type { RequestLogDetail } from "@/types/request-log";
 
 interface RequestDetailDrawerProps {
@@ -30,6 +32,20 @@ export function RequestDetailDrawer({
       title={`${t("common.details")} ${request.request_id}`}
     >
       <div className="space-y-5">
+        {/* 非 gateway 来源：raw_request / SSE / tool_calls 等大部分字段为 NULL，
+            给个 banner 解释为啥下面一堆字段是空的。 */}
+        {request.source && request.source !== "gateway" && (
+          <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-3">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+            <div className="text-[11px] leading-relaxed text-text-secondary">
+              <span className="font-medium text-text-primary">{sourceLabel(request.source)} 客户端日志条目</span>
+              ：从本地会话文件解析而来，只含模型、token、费用等用量字段。
+              请求体 / 响应体 / SSE / 工具调用等完整内容**不会**保存到本地日志，因此下方相关区块为空。
+              如需完整链路，请让对应客户端走 AgentGate 网关。
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-3 text-xs">
           <div>
             <span className="text-text-muted">{t("logs.time")}</span>

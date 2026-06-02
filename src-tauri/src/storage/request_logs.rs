@@ -11,44 +11,7 @@ pub fn count(conn: &Connection, filter: &RequestLogFilter) -> Result<i64, AppErr
     let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     let mut idx = 1;
 
-    if let Some(ref client) = filter.client {
-        sql.push_str(&format!(" AND client = ?{idx}"));
-        param_values.push(Box::new(client.clone()));
-        idx += 1;
-    }
-    if let Some(ref provider) = filter.provider {
-        sql.push_str(&format!(" AND provider = ?{idx}"));
-        param_values.push(Box::new(provider.clone()));
-        idx += 1;
-    }
-    if let Some(ref status) = filter.status {
-        match status.as_str() {
-            "success" => {
-                sql.push_str(&format!(" AND status_code >= ?{} AND status_code < ?{}", idx, idx + 1));
-                param_values.push(Box::new(200i64));
-                param_values.push(Box::new(300i64));
-                idx += 2;
-            }
-            "error" => {
-                sql.push_str(&format!(" AND (status_code >= ?{} OR status_code < ?{})", idx, idx + 1));
-                param_values.push(Box::new(400i64));
-                param_values.push(Box::new(200i64));
-                idx += 2;
-            }
-            _ => {}
-        }
-    }
-    if let Some(ref keyword) = filter.keyword {
-        let like = format!("%{keyword}%");
-        sql.push_str(&format!(
-            " AND (request_id LIKE ?{idx} OR error_message LIKE ?{} OR model LIKE ?{} OR route LIKE ?{})",
-            idx + 1, idx + 2, idx + 3
-        ));
-        param_values.push(Box::new(like.clone()));
-        param_values.push(Box::new(like.clone()));
-        param_values.push(Box::new(like.clone()));
-        param_values.push(Box::new(like));
-    }
+    apply_log_filter(filter, &mut sql, &mut param_values, &mut idx);
 
     let params: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|b| &**b as &dyn rusqlite::types::ToSql).collect();
     let total: i64 = conn
@@ -59,56 +22,13 @@ pub fn count(conn: &Connection, filter: &RequestLogFilter) -> Result<i64, AppErr
 
 pub fn list(conn: &Connection, filter: RequestLogFilter) -> Result<Vec<RequestLogListItem>, AppError> {
     let mut sql = String::from(
-        "SELECT id, request_id, timestamp, client, provider, model, route, status_code, latency_ms, error_message
+        "SELECT id, request_id, timestamp, client, provider, model, route, status_code, latency_ms, error_message, source, session_id
          FROM request_logs WHERE 1=1",
     );
     let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     let mut idx = 1;
 
-    if let Some(ref client) = filter.client {
-        sql.push_str(&format!(" AND client = ?{idx}"));
-        param_values.push(Box::new(client.clone()));
-        idx += 1;
-    }
-
-    if let Some(ref provider) = filter.provider {
-        sql.push_str(&format!(" AND provider = ?{idx}"));
-        param_values.push(Box::new(provider.clone()));
-        idx += 1;
-    }
-
-    if let Some(ref status) = filter.status {
-        match status.as_str() {
-            "success" => {
-                sql.push_str(&format!(" AND status_code >= ?{} AND status_code < ?{}", idx, idx + 1));
-                param_values.push(Box::new(200i64));
-                param_values.push(Box::new(300i64));
-                idx += 2;
-            }
-            "error" => {
-                sql.push_str(&format!(" AND (status_code >= ?{} OR status_code < ?{})", idx, idx + 1));
-                param_values.push(Box::new(400i64));
-                param_values.push(Box::new(200i64));
-                idx += 2;
-            }
-            _ => {}
-        }
-    }
-
-    if let Some(ref keyword) = filter.keyword {
-        let like = format!("%{keyword}%");
-        sql.push_str(&format!(
-            " AND (request_id LIKE ?{idx} OR error_message LIKE ?{} OR model LIKE ?{} OR route LIKE ?{})",
-            idx + 1,
-            idx + 2,
-            idx + 3
-        ));
-        param_values.push(Box::new(like.clone()));
-        param_values.push(Box::new(like.clone()));
-        param_values.push(Box::new(like.clone()));
-        param_values.push(Box::new(like));
-        idx += 4;
-    }
+    apply_log_filter(&filter, &mut sql, &mut param_values, &mut idx);
 
     sql.push_str(" ORDER BY timestamp DESC");
 
@@ -133,6 +53,8 @@ pub fn list(conn: &Connection, filter: RequestLogFilter) -> Result<Vec<RequestLo
             status_code: row.get(7)?,
             latency_ms: row.get(8)?,
             error_message: row.get(9)?,
+            source: row.get(10)?,
+            session_id: row.get(11)?,
         })
     })?;
 
@@ -143,11 +65,76 @@ pub fn list(conn: &Connection, filter: RequestLogFilter) -> Result<Vec<RequestLo
     Ok(items)
 }
 
+/// 把 RequestLogFilter 的过滤条件转 WHERE 子句。count / list / aggregate_by_session
+/// 共享，保证过滤语义一致。
+fn apply_log_filter(
+    filter: &RequestLogFilter,
+    sql: &mut String,
+    param_values: &mut Vec<Box<dyn rusqlite::types::ToSql>>,
+    idx: &mut usize,
+) {
+    if let Some(ref client) = filter.client {
+        sql.push_str(&format!(" AND client = ?{idx}"));
+        param_values.push(Box::new(client.clone()));
+        *idx += 1;
+    }
+    if let Some(ref provider) = filter.provider {
+        sql.push_str(&format!(" AND provider = ?{idx}"));
+        param_values.push(Box::new(provider.clone()));
+        *idx += 1;
+    }
+    if let Some(ref source) = filter.source {
+        // 'session_log' = 所有非 gateway 来源的合集（聚合视图用）。
+        if source == "session_log" {
+            sql.push_str(" AND source IS NOT NULL AND source != 'gateway'");
+        } else {
+            sql.push_str(&format!(" AND source = ?{idx}"));
+            param_values.push(Box::new(source.clone()));
+            *idx += 1;
+        }
+    }
+    if let Some(ref sid) = filter.session_id {
+        sql.push_str(&format!(" AND session_id = ?{idx}"));
+        param_values.push(Box::new(sid.clone()));
+        *idx += 1;
+    }
+    if let Some(ref status) = filter.status {
+        match status.as_str() {
+            "success" => {
+                sql.push_str(&format!(" AND status_code >= ?{} AND status_code < ?{}", idx, *idx + 1));
+                param_values.push(Box::new(200i64));
+                param_values.push(Box::new(300i64));
+                *idx += 2;
+            }
+            "error" => {
+                sql.push_str(&format!(" AND (status_code >= ?{} OR status_code < ?{})", idx, *idx + 1));
+                param_values.push(Box::new(400i64));
+                param_values.push(Box::new(200i64));
+                *idx += 2;
+            }
+            _ => {}
+        }
+    }
+    if let Some(ref keyword) = filter.keyword {
+        let like = format!("%{keyword}%");
+        sql.push_str(&format!(
+            " AND (request_id LIKE ?{idx} OR error_message LIKE ?{} OR model LIKE ?{} OR route LIKE ?{})",
+            *idx + 1, *idx + 2, *idx + 3
+        ));
+        param_values.push(Box::new(like.clone()));
+        param_values.push(Box::new(like.clone()));
+        param_values.push(Box::new(like.clone()));
+        param_values.push(Box::new(like));
+        *idx += 4;
+    }
+}
+
 pub fn get_detail(conn: &Connection, id: &str) -> Result<RequestLogDetail, AppError> {
     conn.query_row(
         "SELECT id, request_id, timestamp, client, provider, model, route, status_code,
                 latency_ms, input_tokens, output_tokens, raw_request, converted_request,
-                raw_response, converted_response, sse_events, tool_calls, error_message, trace_json
+                raw_response, converted_response, sse_events, tool_calls, error_message, trace_json,
+                source, session_id, external_id
          FROM request_logs WHERE id = ?1",
         [id],
         |row| {
@@ -171,6 +158,9 @@ pub fn get_detail(conn: &Connection, id: &str) -> Result<RequestLogDetail, AppEr
                 tool_calls: row.get(16)?,
                 error_message: row.get(17)?,
                 trace_json: row.get(18)?,
+                source: row.get(19)?,
+                session_id: row.get(20)?,
+                external_id: row.get(21)?,
             })
         },
     )
@@ -203,24 +193,120 @@ pub fn insert(
     cost: Option<f64>,
     cache_write_tokens: Option<i64>,
     cache_read_tokens: Option<i64>,
+    source: Option<&str>,
+    session_id: Option<&str>,
+    external_id: Option<&str>,
 ) -> Result<(), AppError> {
     let id = uuid::Uuid::new_v4().to_string();
     let now = chrono::Utc::now().to_rfc3339();
+    // 缺省视为 'gateway' —— 旧调用方迁移期间还没传，保持以前的语义。
+    let source = source.unwrap_or("gateway");
 
     conn.execute(
         "INSERT INTO request_logs (id, request_id, timestamp, client, provider, model, route,
                 status_code, latency_ms, raw_request, converted_request, raw_response,
                 converted_response, sse_events, tool_calls, error_message, trace_json,
-                input_tokens, output_tokens, cost, cache_write_tokens, cache_read_tokens)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
+                input_tokens, output_tokens, cost, cache_write_tokens, cache_read_tokens,
+                source, session_id, external_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
         rusqlite::params![
             &id, request_id, &now, client, provider, model, route,
             status_code, latency_ms, raw_request, converted_request, raw_response,
             converted_response, sse_events, tool_calls, error_message, trace_json,
             input_tokens, output_tokens, cost, cache_write_tokens, cache_read_tokens,
+            source, session_id, external_id,
         ],
     )?;
     Ok(())
+}
+
+/// 给客户端日志同步器用：从 DB 里查询某个 source 下已存在的 external_id 集合。
+/// 同步前先调一次，把扫到的条目和这个集合做差集，避免重复插入。
+pub fn external_ids_for_source(
+    conn: &Connection,
+    source: &str,
+    candidates: &[String],
+) -> Result<std::collections::HashSet<String>, AppError> {
+    if candidates.is_empty() {
+        return Ok(std::collections::HashSet::new());
+    }
+    // SQLite 单语句最多约 32k 个 placeholder；这里取 800 为一批，留足余量。
+    let mut found = std::collections::HashSet::new();
+    for chunk in candidates.chunks(800) {
+        let placeholders = (1..=chunk.len()).map(|i| format!("?{}", i + 1)).collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT external_id FROM request_logs
+             WHERE source = ?1 AND external_id IN ({placeholders})"
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let mut params: Vec<&dyn rusqlite::types::ToSql> = vec![&source as &dyn rusqlite::types::ToSql];
+        for c in chunk {
+            params.push(c as &dyn rusqlite::types::ToSql);
+        }
+        let rows = stmt.query_map(rusqlite::params_from_iter(params.iter()), |r| {
+            r.get::<_, String>(0)
+        })?;
+        for r in rows {
+            if let Ok(id) = r {
+                found.insert(id);
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// 按 session_id 聚合用量：Logs 页「按会话分组」视图用。
+/// 同一个 session_id 跨 gateway + client_session 多来源时，source 字段返回 'mixed'。
+pub fn aggregate_by_session(
+    conn: &Connection,
+    limit: i64,
+) -> Result<Vec<crate::models::request_log::SessionUsageSummary>, AppError> {
+    let limit = limit.clamp(1, 1000);
+    // GROUP_CONCAT(DISTINCT source) 让我们事后判断「单源 vs 混合」——SQLite 不支持
+    // CASE WHEN COUNT(DISTINCT source) > 1，所以用字符串聚合解决。
+    let sql = "SELECT
+        session_id,
+        GROUP_CONCAT(DISTINCT source) AS sources,
+        MAX(provider) AS provider,
+        MAX(model) AS model,
+        MIN(timestamp) AS first_seen,
+        MAX(timestamp) AS last_seen,
+        COUNT(*) AS request_count,
+        COALESCE(SUM(input_tokens), 0) AS input_tokens,
+        COALESCE(SUM(output_tokens), 0) AS output_tokens,
+        COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+        COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
+        COALESCE(SUM(cost), 0.0) AS cost
+        FROM request_logs
+        WHERE session_id IS NOT NULL AND session_id != ''
+        GROUP BY session_id
+        ORDER BY last_seen DESC
+        LIMIT ?1";
+
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map([limit], |r| {
+        let sources: String = r.get::<_, Option<String>>(1)?.unwrap_or_default();
+        let single_source = !sources.contains(',');
+        Ok(crate::models::request_log::SessionUsageSummary {
+            session_id: r.get(0)?,
+            source: if single_source { sources } else { "mixed".to_string() },
+            provider: r.get(2)?,
+            model: r.get(3)?,
+            first_seen: r.get(4)?,
+            last_seen: r.get(5)?,
+            request_count: r.get(6)?,
+            input_tokens: r.get(7)?,
+            output_tokens: r.get(8)?,
+            cache_read_tokens: r.get(9)?,
+            cache_write_tokens: r.get(10)?,
+            cost: r.get(11)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
 }
 
 /// Pull `(cache_write_tokens, cache_read_tokens)` out of any supported upstream

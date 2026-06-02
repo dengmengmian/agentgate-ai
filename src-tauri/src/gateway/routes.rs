@@ -3014,6 +3014,7 @@ fn log_request_success(
             None, tool_calls, None, trace_json,
             input_tokens, output_tokens, cost,
             cache_write_tokens, cache_read_tokens,
+            Some("gateway"), None, Some(request_id),
         );
     }
     // Prometheus 指标
@@ -3072,6 +3073,7 @@ fn log_request_error_full(
             Some(&trace),
             None, None, None, // no cost for errors
             None, None,       // no cache tokens for errors
+            Some("gateway"), None, Some(request_id),
         );
     }
     // Prometheus 指标（错误也算一次请求）

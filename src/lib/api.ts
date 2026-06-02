@@ -167,6 +167,12 @@ export async function clearRequestLogs(): Promise<boolean> {
   return cmd("clear_request_logs");
 }
 
+export async function aggregateRequestLogsBySession(
+  limit?: number,
+): Promise<import("@/types/request-log").SessionUsageSummary[]> {
+  return cmd("aggregate_request_logs_by_session", { limit });
+}
+
 // ── Tools ──────────────────────────────────────────────────────
 
 export async function listTools(): Promise<ToolConfigView[]> {

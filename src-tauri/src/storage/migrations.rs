@@ -283,6 +283,28 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN model_degradation_chain TEXT;")?;
     }
 
+    // Phase 8: client_apply_history — one row per `apply` / `disable` /
+    // `toggle` call against any of the 5 clients (codex / claude_code /
+    // opencode / gemini / atomcode). Stores a snapshot of the pre-write
+    // on-disk config so the user can roll back from the UI. Retention:
+    // first 'initial' row per client kept forever + most recent 10 others.
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS client_apply_history (
+            id TEXT PRIMARY KEY,
+            client_id TEXT NOT NULL,
+            action TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            summary TEXT NOT NULL,
+            is_initial INTEGER NOT NULL DEFAULT 0,
+            agentgate_version TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_apply_history_client_created
+          ON client_apply_history(client_id, created_at DESC);
+        ",
+    )?;
+
     // Migration: global refiner toggles on gateway_settings. Default 0 (off)
     // — per-provider switch can still force on if user opts in explicitly.
     for col in ["body_filter_global", "thinking_rectifier_global", "error_mapper_global"] {
@@ -294,6 +316,42 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
                 "ALTER TABLE gateway_settings ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0;"
             ))?;
         }
+    }
+
+    // Migration: source / session_id / external_id 三列 —— request_logs 不再
+    // 是 gateway 专属，要能同时容纳从客户端本地日志（Claude / Codex / Gemini）
+    // 扫出的条目。
+    //   - source：'gateway' / 'claude_session' / 'codex_session' / 'gemini_session'
+    //     老数据 backfill 成 'gateway'。NOT NULL 但 default 走 SQLite ALTER 限制
+    //     （不允许非常量 default），用 backfill UPDATE 补齐。
+    //   - session_id：客户端的会话指纹 / session_id；按会话聚合视图用。
+    //   - external_id：每条客户端日志的稳定唯一 ID（message_id / event_id），
+    //     供 session 同步去重。gateway 路径填请求的 UUID。
+    let has_source: bool = conn
+        .prepare("SELECT source FROM request_logs LIMIT 0")
+        .is_ok();
+    if !has_source {
+        conn.execute_batch(
+            "ALTER TABLE request_logs ADD COLUMN source TEXT;
+             UPDATE request_logs SET source = 'gateway' WHERE source IS NULL;",
+        )?;
+    }
+    let has_sid: bool = conn
+        .prepare("SELECT session_id FROM request_logs LIMIT 0")
+        .is_ok();
+    if !has_sid {
+        conn.execute_batch("ALTER TABLE request_logs ADD COLUMN session_id TEXT;")?;
+    }
+    let has_ext: bool = conn
+        .prepare("SELECT external_id FROM request_logs LIMIT 0")
+        .is_ok();
+    if !has_ext {
+        conn.execute_batch(
+            "ALTER TABLE request_logs ADD COLUMN external_id TEXT;
+             CREATE INDEX IF NOT EXISTS idx_request_logs_source_external_id
+                ON request_logs(source, external_id)
+                WHERE external_id IS NOT NULL;",
+        )?;
     }
 
     // Migration: split cache tokens into Write vs Read so the dashboard can
@@ -402,6 +460,7 @@ mod tests {
         assert!(tables.contains(&"app_settings".to_string()));
         assert!(tables.contains(&"route_profiles".to_string()));
         assert!(tables.contains(&"config_backups".to_string()));
+        assert!(tables.contains(&"client_apply_history".to_string()));
         assert!(tables.contains(&"pet_settings".to_string()));
         assert!(tables.contains(&"provider_runtime_status".to_string()));
     }
