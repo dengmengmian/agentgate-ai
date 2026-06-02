@@ -16,6 +16,7 @@ import {
 import { getVersion } from "@tauri-apps/api/app";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import * as api from "@/lib/api";
 
 // 顺序按新用户配置任务流：
 // 看运行情况（概览） → 配上游（供应商） → 接客户端（客户端） →
@@ -48,11 +49,9 @@ export function Sidebar() {
   useEffect(() => {
     if (localStorage.getItem("agentgate_hide_quick_setup") === "1") return;
     if (localStorage.getItem("agentgate_show_quick_setup") === "1") { setShowQuickSetup(true); return; }
-    import("@/lib/api").then(api => {
-      api.listProviders().then(providers => {
-        setShowQuickSetup(providers.length === 0);
-      }).catch(() => {});
-    });
+    api.listProviders().then(providers => {
+      setShowQuickSetup(providers.length === 0);
+    }).catch(() => {});
   }, []);
 
   return (
