@@ -271,6 +271,37 @@ pub async fn fetch_provider_models(
     Err(AppError::new("PROVIDER_REQUEST_FAILED", "Could not fetch models from provider"))
 }
 
+/// Speedtest a single provider — sends a 1-token probe request and reports
+/// connect / TTFB / total latency. User-triggered only (never automatic) to
+/// avoid burning tokens.
+#[tauri::command]
+pub async fn provider_speedtest(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<crate::diagnostics::speedtest::ProviderSpeedReport, AppError> {
+    let provider = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::providers::get_by_id(&conn, &id)?
+    };
+    Ok(crate::diagnostics::speedtest::probe(&provider).await)
+}
+
+/// Speedtest every enabled provider in parallel. Heavier than single-provider
+/// probe — confirm the user wants this in UI before calling.
+#[tauri::command]
+pub async fn provider_speedtest_all(
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::diagnostics::speedtest::ProviderSpeedReport>, AppError> {
+    let providers = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::providers::list_all(&conn)?
+            .into_iter()
+            .filter(|p| p.enabled)
+            .collect::<Vec<_>>()
+    };
+    crate::diagnostics::speedtest::probe_many(&providers).await
+}
+
 #[tauri::command]
 pub async fn test_provider(
     id: String,

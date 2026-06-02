@@ -231,6 +231,8 @@ pub fn run() {
             commands::set_active_provider,
             commands::fetch_provider_models,
             commands::test_provider,
+            commands::provider_speedtest,
+            commands::provider_speedtest_all,
             commands::detect_provider_vision,
             commands::seed_model_capabilities,
             commands::autofill_provider_capabilities,
