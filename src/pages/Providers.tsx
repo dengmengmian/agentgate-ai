@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Inbox, Search } from "lucide-react";
+import { Plus, Inbox, Search, Zap } from "lucide-react";
 import { ProviderCard } from "@/components/providers/ProviderCard";
 import { ProviderFormDialog } from "@/components/providers/ProviderFormDialog";
 import { TestConnectionDialog } from "@/components/providers/TestConnectionDialog";
+import { SpeedtestDialog } from "@/components/providers/SpeedtestDialog";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
@@ -28,6 +29,7 @@ export function Providers() {
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testingProvider, setTestingProvider] = useState<ProviderView | null>(null);
   const [search, setSearch] = useState("");
+  const [speedtestOpen, setSpeedtestOpen] = useState(false);
 
   // 过滤：name / provider_type / default_model 任一匹配（大小写不敏感）。
   // provider 数少时不显示搜索框（减少视觉噪音），>= 5 个才出现。
@@ -171,16 +173,27 @@ export function Providers() {
             </div>
           )}
         </div>
-        <button
-          onClick={() => {
-            setEditTarget(null);
-            setFormOpen(true);
-          }}
-          className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t("providers.add")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setSpeedtestOpen(true)}
+            disabled={providers.length === 0}
+            className="flex items-center gap-1.5 rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-card hover:text-text-primary disabled:opacity-40"
+            title="对所有启用的 provider 并行发探测请求，记录延迟"
+          >
+            <Zap className="h-3.5 w-3.5" />
+            测速
+          </button>
+          <button
+            onClick={() => {
+              setEditTarget(null);
+              setFormOpen(true);
+            }}
+            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            {t("providers.add")}
+          </button>
+        </div>
       </div>
 
       {loading ? (
@@ -246,6 +259,8 @@ export function Providers() {
         onClose={handleTestDone}
         onSuccess={loadProviders}
       />
+
+      <SpeedtestDialog open={speedtestOpen} onClose={() => setSpeedtestOpen(false)} />
     </div>
   );
 }

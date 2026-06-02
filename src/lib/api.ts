@@ -87,6 +87,14 @@ export async function testProvider(id: string): Promise<ProviderTestResult> {
   return cmd("test_provider", { id });
 }
 
+export async function providerSpeedtest(id: string): Promise<import("@/types/provider").ProviderSpeedReport> {
+  return cmd("provider_speedtest", { id });
+}
+
+export async function providerSpeedtestAll(): Promise<import("@/types/provider").ProviderSpeedReport[]> {
+  return cmd("provider_speedtest_all", {});
+}
+
 export async function detectProviderVision(id: string): Promise<ProviderTestResult> {
   return cmd("detect_provider_vision", { id });
 }

@@ -18,6 +18,12 @@ export interface ProviderView {
   auto_cache_control: boolean | null;
   supports_cache: boolean | null;
   model_capabilities: string | null;  // JSON: {"model_id": ["text","vision",...]}
+  // Refiner pipeline (default 全部关，需要全局总闸打开才生效，详见 Settings 页)
+  provider_quirks: string | null;            // JSON: ProviderQuirks
+  body_filter_enabled: number | null;        // null = 跟随全局, 0 = 强制关, 1 = 强制开
+  thinking_rectifier_enabled: number | null;
+  error_mapper_enabled: number | null;
+  model_degradation_chain: string | null;    // JSON: {"requested":["fallback1","fallback2"]}
   enabled: boolean;
   is_active: boolean;
   created_at: string;
@@ -38,6 +44,11 @@ export interface CreateProviderInput {
   responses_base_url?: string;
   auto_cache_control?: boolean;
   model_capabilities?: string;
+  provider_quirks?: string;
+  body_filter_enabled?: number | null;
+  thinking_rectifier_enabled?: number | null;
+  error_mapper_enabled?: number | null;
+  model_degradation_chain?: string;
   protocol: string;
   timeout_seconds?: number;
   enabled?: boolean;
@@ -57,9 +68,27 @@ export interface UpdateProviderInput {
   responses_base_url?: string;
   auto_cache_control?: boolean;
   model_capabilities?: string;
+  provider_quirks?: string;
+  body_filter_enabled?: number | null;
+  thinking_rectifier_enabled?: number | null;
+  error_mapper_enabled?: number | null;
+  model_degradation_chain?: string;
   protocol?: string;
   timeout_seconds?: number;
   enabled?: boolean;
+}
+
+/// Speedtest 报告项。手动触发，每个 provider 一份。
+export interface ProviderSpeedReport {
+  provider_id: string;
+  provider_name: string;
+  endpoint: string;
+  status_code: number | null;
+  connect_ms: number | null;
+  ttfb_ms: number | null;
+  total_ms: number;
+  success: boolean;
+  error: string | null;
 }
 
 export const CAPABILITY_LABELS: Record<string, string> = {

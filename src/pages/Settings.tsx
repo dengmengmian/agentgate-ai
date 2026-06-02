@@ -81,6 +81,18 @@ export function Settings() {
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
+  // 全局 refiner 总闸更新（3 个独立开关共用一个 handler，通过 key 区分）
+  const handleUpdateRefinerGlobal = async (
+    key: "body_filter_global" | "thinking_rectifier_global" | "error_mapper_global",
+    val: boolean,
+  ) => {
+    try {
+      await api.updateGatewaySettings({ [key]: val });
+      toast("success", t("settings.updated"));
+      load();
+    } catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
   const handleCopyToken = async () => {
     try {
       const token = await api.getLocalAccessToken();
@@ -203,6 +215,46 @@ export function Settings() {
                     window.location.reload();
                   }}
                 />
+              </div>
+
+              {/* 网关精炼层全局总闸——默认全关 = 字节级透明 pass-through */}
+              <div className="border-t border-border pt-4">
+                <p className="text-sm font-medium text-text-primary">网关精炼层 (Refiner)</p>
+                <p className="mb-3 text-xs text-text-muted">
+                  默认全部关闭，网关原样转发请求。打开后会按每个 provider 的 quirks 配置改写请求 / 响应。每个 provider 还能单独覆写为强制关。
+                </p>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 pr-4">
+                      <p className="text-sm text-text-primary">请求字段过滤</p>
+                      <p className="text-xs text-text-muted">按 Quirks 剥不支持的请求字段，避免 400 错误</p>
+                    </div>
+                    <ToggleSwitch
+                      checked={settings.body_filter_global}
+                      onChange={(v) => handleUpdateRefinerGlobal("body_filter_global", v)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 pr-4">
+                      <p className="text-sm text-text-primary">推理参数校正</p>
+                      <p className="text-xs text-text-muted">thinking.budget_tokens / reasoning.effort 自动归一</p>
+                    </div>
+                    <ToggleSwitch
+                      checked={settings.thinking_rectifier_global}
+                      onChange={(v) => handleUpdateRefinerGlobal("thinking_rectifier_global", v)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 pr-4">
+                      <p className="text-sm text-text-primary">错误响应归一</p>
+                      <p className="text-xs text-text-muted">provider 错误结构改写成客户端协议期望的形态</p>
+                    </div>
+                    <ToggleSwitch
+                      checked={settings.error_mapper_global}
+                      onChange={(v) => handleUpdateRefinerGlobal("error_mapper_global", v)}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </section>

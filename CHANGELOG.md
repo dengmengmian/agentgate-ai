@@ -2,6 +2,40 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+围绕「网关精炼层」做一次纵深建设：在透明转发的基础上，按 provider 的实际兼容性约束做请求/响应改写，附带节点测速和模型降级链。**全部能力默认关闭**，开关全关时网关行为与之前完全一致；按需开启时 GUI 可观测到具体改写动作。
+
+### 新增
+
+- **网关精炼层 (Refiner Pipeline)** —— 三个新模块按 ROI 排列开关，默认全部关闭走透明 pass-through，避免破坏现有用户行为：
+  - **请求字段过滤 (Body Filter)**：按每个 provider 的 quirks 表剥不支持的请求字段（如 DeepSeek 的 `web_search`、Kimi 的 `web_search_options`），避免常见 400 错误。
+  - **推理参数校正 (Thinking Rectifier)**：`thinking.budget_tokens` 在 provider 接受范围内做 clamp（MiMo 1024-32768、Anthropic 1024-64000），`reasoning.effort` 在 provider 接受值集合外归一到 `medium`。
+  - **错误响应归一 (Error Mapper)**：把 provider 错误结构改写成客户端协议期望的形态（Anthropic Messages / OpenAI / Gemini 三种 envelope 均支持），并支持每个 provider 配置 `error_code_overrides` 表（如 DeepSeek `insufficient_balance` → 通用 `insufficient_quota`）。
+  - 内置 DeepSeek / MiMo / Anthropic / OpenAI / Kimi 默认 quirks 种子；用户可在 provider 编辑页填 `provider_quirks` JSON 覆写（叠加策略：用户列表追加到默认列表）。
+- **节点测速** —— Providers 页加「测速」按钮，对所有启用 provider 并行发 `max_tokens=1` 探测请求，记录 connect / TTFB / total 三段延迟。用户手动触发（每次消耗少量 token），结果按延迟排序染色（< 500ms 绿 / 500-1500ms 黄 / > 1500ms 红）。
+- **三态熔断器 (Circuit Breaker)** —— 基于现有 `provider_runtime_status` 表做 Closed / Open / HalfOpen 三态封装，方便后续 routes 接入与 GUI 展示。读路径无副作用，写路径仍走原有 `mark_failure / mark_success`。
+- **模型降级链 (Degradation Chain)** —— provider 编辑页新增配置 `{"requested_model":["fallback1","fallback2"]}` 的能力，主模型失败时按链顺序尝试同 provider 内的其他模型（接入到 routes 失败重试逻辑是下一步）。
+- **精炼日志 (RefinerLog)** —— `request_logs.trace_json` 新增 `body_filter` / `thinking_rectifier` / `error_mapper` / `circuit_breaker` / `degradation` 五个可选字段，每次改写都记录「from → to + reason」便于事后追溯。
+
+### 数据库
+
+- `providers` 表新增 5 列：`provider_quirks`(JSON) / `body_filter_enabled` / `thinking_rectifier_enabled` / `error_mapper_enabled` / `model_degradation_chain`(JSON)。
+- 每个 refiner 开关 3 态：`NULL = 跟随全局总闸 / 0 = 强制关 / 1 = 强制开`。全局总闸为 master kill —— 全局关时任何 per-provider opt-in 都不生效。
+- `gateway_settings` 表新增 3 列：`body_filter_global` / `thinking_rectifier_global` / `error_mapper_global`，默认全 `0`（关闭）。
+
+### 工程
+
+- 新增 6 个后端模块：`gateway/circuit_breaker.rs`、`gateway/refiner_log.rs`、`gateway/refiners/{body_filter,thinking_rectifier,error_mapper,runtime}.rs`、`diagnostics/speedtest.rs`。
+- 新增 2 个 Tauri command：`provider_speedtest` / `provider_speedtest_all`。
+- 单元测试 792 → 840（新增 48 个，覆盖 refiners 全部分支 + speedtest 探测形态 + circuit breaker 三态转换 + degradation chain 边界）。
+- 前端 `ProviderFormDialog` 高级区新增「网关精炼层」小节（3 个三态开关 + Quirks JSON 编辑器 + 降级链 JSON 编辑器）；`Settings` 通用 tab 新增 3 个全局总闸；`Providers` 页新增「测速」按钮 + `SpeedtestDialog` 组件。
+
+### 限制 (Known Limits)
+
+- 当前 commit 完成「数据层 + 模块代码 + GUI 配置面板 + 测速」，**精炼层尚未接入到 `routes.rs` 请求路径**——开启开关后 GUI 能保存配置、能在 trace_json 结构里识别字段，但请求转发本身仍是字节级透明。这一步留到下一个 commit 单独做（涉及 6 个 handler 共 3000+ 行，单独成 commit 风险更小）。
+- 模型降级链同理：配置可保存，失败重试逻辑接入留到下一个 commit。
+
 ## [1.3.0] - 2026-06-01
 
 围绕「5 分钟跑通」上手体验做一轮闭环，同时把三层能力转换的回归测试基建立起来。

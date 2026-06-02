@@ -17,6 +17,10 @@ export interface GatewaySettings {
   output_protocol: string;
   auto_start: boolean;
   log_retention_days: number;
+  /// 全局总闸：3 个 refiner 默认全关，开 = 全局开启（仍可被每个 provider 的 enabled 强制关闭）。
+  body_filter_global: boolean;
+  thinking_rectifier_global: boolean;
+  error_mapper_global: boolean;
   updated_at: string;
 }
 
@@ -28,4 +32,7 @@ export interface UpdateGatewaySettingsInput {
   output_protocol?: string;
   auto_start?: boolean;
   log_retention_days?: number;
+  body_filter_global?: boolean;
+  thinking_rectifier_global?: boolean;
+  error_mapper_global?: boolean;
 }
