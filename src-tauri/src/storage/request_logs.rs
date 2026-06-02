@@ -220,6 +220,50 @@ pub fn insert(
     Ok(())
 }
 
+/// 给客户端会话日志同步器用：插入一条来自客户端本地日志的请求记录。
+/// 与 `insert` 的差别：
+///   - timestamp 来自调用方（文件里的事件时间），不是 now()
+///   - 没有 raw_request / converted_request / response / SSE / tool_calls / error_message
+///     —— 客户端日志只能给到 usage，不可能反推完整请求
+///   - source / session_id / external_id 必填
+///
+/// 调用方应当先用 `external_ids_for_source` 过滤去重，再批量调这个函数。
+#[allow(clippy::too_many_arguments)]
+pub fn insert_session_log(
+    conn: &Connection,
+    timestamp: &str,
+    client: &str,
+    provider: &str,
+    model: &str,
+    route: &str,
+    source: &str,
+    session_id: &str,
+    external_id: &str,
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    cache_write_tokens: Option<i64>,
+    cache_read_tokens: Option<i64>,
+    cost: Option<f64>,
+) -> Result<(), AppError> {
+    let id = uuid::Uuid::new_v4().to_string();
+    // request_id 我们没有真实值——客户端日志的 message_id 作为 request_id，方便用户在
+    // Logs 详情里通过 request_id 列追溯到原文件里的那条消息。external_id 同时填同样的值，
+    // 用作幂等 key 防止重复同步。
+    conn.execute(
+        "INSERT INTO request_logs (id, request_id, timestamp, client, provider, model, route,
+                status_code, latency_ms,
+                input_tokens, output_tokens, cost, cache_write_tokens, cache_read_tokens,
+                source, session_id, external_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 200, 0, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+        rusqlite::params![
+            &id, external_id, timestamp, client, provider, model, route,
+            input_tokens, output_tokens, cost, cache_write_tokens, cache_read_tokens,
+            source, session_id, external_id,
+        ],
+    )?;
+    Ok(())
+}
+
 /// 给客户端日志同步器用：从 DB 里查询某个 source 下已存在的 external_id 集合。
 /// 同步前先调一次，把扫到的条目和这个集合做差集，避免重复插入。
 pub fn external_ids_for_source(

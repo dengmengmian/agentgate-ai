@@ -173,6 +173,17 @@ export async function aggregateRequestLogsBySession(
   return cmd("aggregate_request_logs_by_session", { limit });
 }
 
+export interface SyncResult {
+  files_scanned: number;
+  imported: number;
+  skipped: number;
+  errors: string[];
+}
+
+export async function syncClaudeSessions(): Promise<SyncResult> {
+  return cmd("sync_claude_sessions");
+}
+
 // ── Tools ──────────────────────────────────────────────────────
 
 export async function listTools(): Promise<ToolConfigView[]> {

@@ -944,6 +944,15 @@ pub fn aggregate_request_logs_by_session(
     storage::request_logs::aggregate_by_session(&conn, limit.unwrap_or(100))
 }
 
+/// 扫描 ~/.claude/projects 下的 Claude Code 会话日志并写入 request_logs。
+/// 幂等：已同步过的 message_id 会被跳过。
+#[tauri::command]
+pub async fn sync_claude_sessions(
+    state: State<'_, AppState>,
+) -> Result<crate::session_sync::SyncResult, AppError> {
+    crate::session_sync::claude::sync(&state.db)
+}
+
 // ── Tool Commands ──────────────────────────────────────────────
 
 #[tauri::command]

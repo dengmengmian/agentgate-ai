@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ScrollText, RefreshCcw, ChevronLeft, ChevronRight, LayoutList, Layers } from "lucide-react";
+import { ScrollText, RefreshCcw, ChevronLeft, ChevronRight, LayoutList, Layers, Download } from "lucide-react";
 import { RequestLogTable, sourceLabel } from "@/components/logs/RequestLogTable";
 import { RequestDetailDrawer } from "@/components/logs/RequestDetailDrawer";
 import { SessionGroupView } from "@/components/logs/SessionGroupView";
@@ -101,6 +101,25 @@ export function Logs() {
     }
   };
 
+  const [syncing, setSyncing] = useState(false);
+  const handleSyncClaude = async () => {
+    setSyncing(true);
+    try {
+      const r = await api.syncClaudeSessions();
+      if (r.files_scanned === 0) {
+        toast("success", "未找到 Claude Code 会话目录（~/.claude/projects/）");
+      } else {
+        toast("success", `Claude 已扫描 ${r.files_scanned} 个文件：新增 ${r.imported}，跳过 ${r.skipped}` +
+          (r.errors.length > 0 ? `，${r.errors.length} 个错误` : ""));
+      }
+      loadLogs();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -178,6 +197,15 @@ export function Logs() {
               会话
             </button>
           </div>
+          <button
+            onClick={handleSyncClaude}
+            disabled={syncing}
+            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
+            title="扫描 ~/.claude/projects/ 下的会话日志，补齐绕过网关使用 Claude Code 时的用量记录"
+          >
+            <Download className={`h-3 w-3 ${syncing ? "animate-pulse" : ""}`} />
+            同步 Claude 日志
+          </button>
           <button
             onClick={loadLogs}
             disabled={loading}
