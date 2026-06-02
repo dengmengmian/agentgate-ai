@@ -21,10 +21,53 @@ pub struct Provider {
     pub auto_cache_control: Option<bool>,
     pub supports_cache: Option<bool>,
     pub model_capabilities: Option<String>, // JSON: {"model_id": ["text","vision",...]}
+    /// Per-provider request-shape quirks consumed by gateway refiners.
+    /// Serialized as `ProviderQuirks` JSON. None = no known quirks (refiners
+    /// fall back to provider-type defaults seeded in `providers::capabilities`).
+    pub provider_quirks: Option<String>,
+    /// Per-provider override for the body_filter refiner.
+    /// None = inherit gateway_settings.body_filter_global; Some(0)=off; Some(1)=on.
+    pub body_filter_enabled: Option<i64>,
+    /// Per-provider override for the thinking_rectifier refiner.
+    pub thinking_rectifier_enabled: Option<i64>,
+    /// Per-provider override for the error_mapper refiner.
+    pub error_mapper_enabled: Option<i64>,
+    /// JSON: {"requested_model": ["fallback1","fallback2"]}. Walked when the
+    /// primary model fails before moving to the next failover provider.
+    pub model_degradation_chain: Option<String>,
     pub enabled: bool,
     pub is_active: bool,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// Known per-provider request quirks. Serialized into Provider.provider_quirks
+/// as JSON. Every field optional so partial overrides don't have to spell out
+/// the whole struct.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ProviderQuirks {
+    /// Top-level request fields the provider will 400 on. Body filter strips
+    /// these when its switch is enabled.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported_fields: Vec<String>,
+    /// Bounds for Anthropic-style `thinking.budget_tokens`. Thinking rectifier
+    /// clamps to this range when enabled. None = no rectification.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thinking_budget: Option<RangeI64>,
+    /// Accepted values for OpenAI-style `reasoning.effort`. Thinking rectifier
+    /// rewrites unrecognized values to the closest match, or drops the field.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reasoning_effort_values: Vec<String>,
+    /// Per-error-code overrides — provider-specific error string → mapped code.
+    /// Error mapper consults this before falling back to its built-in heuristics.
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub error_code_overrides: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+pub struct RangeI64 {
+    pub min: i64,
+    pub max: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,13 +91,18 @@ pub struct ProviderView {
     pub auto_cache_control: Option<bool>,
     pub supports_cache: Option<bool>,
     pub model_capabilities: Option<String>,
+    pub provider_quirks: Option<String>,
+    pub body_filter_enabled: Option<i64>,
+    pub thinking_rectifier_enabled: Option<i64>,
+    pub error_mapper_enabled: Option<i64>,
+    pub model_degradation_chain: Option<String>,
     pub enabled: bool,
     pub is_active: bool,
     pub created_at: String,
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct CreateProviderInput {
     pub name: String,
     pub provider_type: String,
@@ -71,10 +119,15 @@ pub struct CreateProviderInput {
     pub timeout_seconds: Option<i64>,
     pub auto_cache_control: Option<bool>,
     pub model_capabilities: Option<String>,
+    pub provider_quirks: Option<String>,
+    pub body_filter_enabled: Option<i64>,
+    pub thinking_rectifier_enabled: Option<i64>,
+    pub error_mapper_enabled: Option<i64>,
+    pub model_degradation_chain: Option<String>,
     pub enabled: Option<bool>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct UpdateProviderInput {
     pub name: Option<String>,
     pub provider_type: Option<String>,
@@ -89,6 +142,11 @@ pub struct UpdateProviderInput {
     pub responses_base_url: Option<String>,
     pub auto_cache_control: Option<bool>,
     pub model_capabilities: Option<String>,
+    pub provider_quirks: Option<String>,
+    pub body_filter_enabled: Option<i64>,
+    pub thinking_rectifier_enabled: Option<i64>,
+    pub error_mapper_enabled: Option<i64>,
+    pub model_degradation_chain: Option<String>,
     pub protocol: Option<String>,
     pub timeout_seconds: Option<i64>,
     pub enabled: Option<bool>,
@@ -130,10 +188,57 @@ impl Provider {
             auto_cache_control: self.auto_cache_control,
             supports_cache: self.supports_cache,
             model_capabilities: self.model_capabilities.clone(),
+            provider_quirks: self.provider_quirks.clone(),
+            body_filter_enabled: self.body_filter_enabled,
+            thinking_rectifier_enabled: self.thinking_rectifier_enabled,
+            error_mapper_enabled: self.error_mapper_enabled,
+            model_degradation_chain: self.model_degradation_chain.clone(),
             enabled: self.enabled,
             is_active: self.is_active,
             created_at: self.created_at.clone(),
             updated_at: self.updated_at.clone(),
+        }
+    }
+
+    /// Parse `provider_quirks` JSON into a `ProviderQuirks` struct.
+    /// Returns the default (empty) struct on missing/invalid JSON so callers
+    /// can chain methods without unwrap noise.
+    pub fn parse_quirks(&self) -> ProviderQuirks {
+        self.provider_quirks
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<ProviderQuirks>(s).ok())
+            .unwrap_or_default()
+    }
+
+    /// Parse `model_degradation_chain` JSON into `{model → [fallbacks]}`.
+    /// Returns empty map on missing/invalid JSON.
+    pub fn parse_degradation_chain(
+        &self,
+    ) -> std::collections::HashMap<String, Vec<String>> {
+        self.model_degradation_chain
+            .as_deref()
+            .and_then(|s| {
+                serde_json::from_str::<std::collections::HashMap<String, Vec<String>>>(s).ok()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Resolve effective on/off for a refiner switch. `per_provider` is the
+    /// 3-state column (None/0/1); `global` is the gateway-wide default
+    /// (0/1). The decision rule is "global is the master kill — when global
+    /// is off, no per-provider opt-in can turn the refiner on":
+    ///   - global=0  → always off (per-provider opt-in ignored)
+    ///   - global=1, per_provider=None → on (inherit)
+    ///   - global=1, per_provider=Some(0) → off (per-provider opt-out)
+    ///   - global=1, per_provider=Some(1) → on
+    pub fn refiner_effective(per_provider: Option<i64>, global: bool) -> bool {
+        if !global {
+            return false;
+        }
+        match per_provider {
+            None => true,
+            Some(0) => false,
+            Some(_) => true,
         }
     }
 
@@ -297,6 +402,11 @@ mod tests {
             auto_cache_control: None,
             supports_cache: None,
             model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -332,6 +442,11 @@ mod tests {
             auto_cache_control: None,
             supports_cache: None,
             model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -364,6 +479,11 @@ mod tests {
             auto_cache_control: None,
             supports_cache: None,
             model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -396,6 +516,11 @@ mod tests {
             auto_cache_control: None,
             supports_cache: None,
             model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -415,6 +540,11 @@ mod tests {
             model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
             protocol: r#"["openai_chat_completions","openai_responses"]"#.to_string(),
             timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None, model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
             enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
         };
         assert_eq!(provider.protocols(), vec!["openai_chat_completions", "openai_responses"]);
@@ -432,6 +562,11 @@ mod tests {
             model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
             protocol: "openai_chat_completions".to_string(),
             timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None, model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
             enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
         };
         assert_eq!(provider.protocols(), vec!["openai_chat_completions"]);
@@ -448,6 +583,11 @@ mod tests {
             model_mapping: None, extra_headers: None, anthropic_base_url: None, responses_base_url: None,
             protocol: r#"["openai_chat_completions","openai_responses","anthropic_messages"]"#.to_string(),
             timeout_seconds: 60, status: "ok".to_string(), supports_vision: None, auto_cache_control: None, supports_cache: None, model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
             enabled: true, is_active: true, created_at: "2024-01-01".to_string(), updated_at: "2024-01-01".to_string(),
         };
         assert!(provider.supports_protocol("openai_chat_completions"));

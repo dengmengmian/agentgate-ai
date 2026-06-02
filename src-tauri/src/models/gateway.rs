@@ -14,10 +14,16 @@ pub struct GatewaySettings {
     pub output_protocol: String,
     pub auto_start: bool,
     pub log_retention_days: i64,
+    /// Global master switches for the refiner pipeline. When off, every
+    /// per-provider opt-in is ignored — the gateway stays byte-level
+    /// transparent. Default off for both, so the upgrade is silent.
+    pub body_filter_global: bool,
+    pub thinking_rectifier_global: bool,
+    pub error_mapper_global: bool,
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct UpdateGatewaySettingsInput {
     pub host: Option<String>,
     pub port: Option<i64>,
@@ -26,6 +32,9 @@ pub struct UpdateGatewaySettingsInput {
     pub output_protocol: Option<String>,
     pub auto_start: Option<bool>,
     pub log_retention_days: Option<i64>,
+    pub body_filter_global: Option<bool>,
+    pub thinking_rectifier_global: Option<bool>,
+    pub error_mapper_global: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -81,6 +90,9 @@ mod tests {
             output_protocol: "chat".into(),
             auto_start: true,
             log_retention_days: 14,
+            body_filter_global: false,
+            thinking_rectifier_global: false,
+            error_mapper_global: false,
             updated_at: "2024-01-01T00:00:00Z".into(),
         };
         let json = serde_json::to_string(&s).unwrap();

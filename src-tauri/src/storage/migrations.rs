@@ -251,6 +251,51 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute_batch("ALTER TABLE request_logs ADD COLUMN trace_json TEXT;")?;
     }
 
+    // Migration: provider_quirks (JSON) — per-provider known-bad request fields
+    // and reasoning/thinking parameter bounds. Consumed by gateway refiners
+    // (body_filter, thinking_rectifier) when their switches are on.
+    let has_pq: bool = conn
+        .prepare("SELECT provider_quirks FROM providers LIMIT 0")
+        .is_ok();
+    if !has_pq {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN provider_quirks TEXT;")?;
+    }
+
+    // Migration: per-provider refiner switches. NULL = inherit global toggle
+    // from gateway_settings, 0 = force off, 1 = force on. Default NULL keeps
+    // every existing provider in "transparent" mode until the user opts in.
+    for col in ["body_filter_enabled", "thinking_rectifier_enabled", "error_mapper_enabled"] {
+        let has: bool = conn
+            .prepare(&format!("SELECT {col} FROM providers LIMIT 0"))
+            .is_ok();
+        if !has {
+            conn.execute_batch(&format!("ALTER TABLE providers ADD COLUMN {col} INTEGER;"))?;
+        }
+    }
+
+    // Migration: model_degradation_chain (JSON map { requested_model → [fallback,...] }).
+    // Used by provider_selector when the primary model on a provider fails;
+    // the gateway walks the chain before moving to the next failover candidate.
+    let has_mdc: bool = conn
+        .prepare("SELECT model_degradation_chain FROM providers LIMIT 0")
+        .is_ok();
+    if !has_mdc {
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN model_degradation_chain TEXT;")?;
+    }
+
+    // Migration: global refiner toggles on gateway_settings. Default 0 (off)
+    // — per-provider switch can still force on if user opts in explicitly.
+    for col in ["body_filter_global", "thinking_rectifier_global", "error_mapper_global"] {
+        let has: bool = conn
+            .prepare(&format!("SELECT {col} FROM gateway_settings LIMIT 0"))
+            .is_ok();
+        if !has {
+            conn.execute_batch(&format!(
+                "ALTER TABLE gateway_settings ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0;"
+            ))?;
+        }
+    }
+
     // Migration: split cache tokens into Write vs Read so the dashboard can
     // show the real value of session affinity / prompt caching. Upstream
     // formats:

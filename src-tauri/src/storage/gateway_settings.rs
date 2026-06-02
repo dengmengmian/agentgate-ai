@@ -6,7 +6,8 @@ use crate::models::gateway::{GatewaySettings, UpdateGatewaySettingsInput};
 pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
     conn.query_row(
         "SELECT id, host, port, active_provider_id, input_protocol, output_protocol,
-                auto_start, log_retention_days, updated_at
+                auto_start, log_retention_days, body_filter_global, thinking_rectifier_global,
+                error_mapper_global, updated_at
          FROM gateway_settings WHERE id = 1",
         [],
         |row| {
@@ -19,7 +20,10 @@ pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
                 output_protocol: row.get(5)?,
                 auto_start: row.get(6)?,
                 log_retention_days: row.get(7)?,
-                updated_at: row.get(8)?,
+                body_filter_global: row.get(8)?,
+                thinking_rectifier_global: row.get(9)?,
+                error_mapper_global: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         },
     )
@@ -48,11 +52,19 @@ pub fn update(
     let output_protocol = input.output_protocol.unwrap_or(existing.output_protocol);
     let auto_start = input.auto_start.unwrap_or(existing.auto_start);
     let log_retention_days = input.log_retention_days.unwrap_or(existing.log_retention_days);
+    let body_filter_global = input.body_filter_global.unwrap_or(existing.body_filter_global);
+    let thinking_rectifier_global = input
+        .thinking_rectifier_global
+        .unwrap_or(existing.thinking_rectifier_global);
+    let error_mapper_global = input
+        .error_mapper_global
+        .unwrap_or(existing.error_mapper_global);
 
     conn.execute(
         "UPDATE gateway_settings SET host=?1, port=?2, active_provider_id=?3,
                 input_protocol=?4, output_protocol=?5, auto_start=?6,
-                log_retention_days=?7, updated_at=?8
+                log_retention_days=?7, body_filter_global=?8,
+                thinking_rectifier_global=?9, error_mapper_global=?10, updated_at=?11
          WHERE id = 1",
         params![
             &host,
@@ -62,6 +74,9 @@ pub fn update(
             &output_protocol,
             auto_start,
             log_retention_days,
+            body_filter_global,
+            thinking_rectifier_global,
+            error_mapper_global,
             &now,
         ],
     )?;
@@ -95,11 +110,10 @@ mod tests {
         let updated = update(&conn, UpdateGatewaySettingsInput {
             host: Some("0.0.0.0".to_string()),
             port: Some(8080),
-            active_provider_id: None,
             input_protocol: Some("openai_chat_completions".to_string()),
-            output_protocol: None,
             auto_start: Some(true),
             log_retention_days: Some(7),
+            ..Default::default()
         }).unwrap();
         assert_eq!(updated.host, "0.0.0.0");
         assert_eq!(updated.port, 8080);
@@ -114,12 +128,7 @@ mod tests {
         let original = get(&conn).unwrap();
         let updated = update(&conn, UpdateGatewaySettingsInput {
             host: Some("0.0.0.0".to_string()),
-            port: None,
-            active_provider_id: None,
-            input_protocol: None,
-            output_protocol: None,
-            auto_start: None,
-            log_retention_days: None,
+            ..Default::default()
         }).unwrap();
         assert_eq!(updated.host, "0.0.0.0");
         assert_eq!(updated.port, original.port);

@@ -3,41 +3,46 @@ use rusqlite::{params, Connection};
 use crate::errors::AppError;
 use crate::models::provider::{CreateProviderInput, Provider, UpdateProviderInput};
 
+const PROVIDER_COLUMNS: &str = "id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url, \
+                                 protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, model_capabilities, provider_quirks, body_filter_enabled, thinking_rectifier_enabled, error_mapper_enabled, model_degradation_chain, enabled, is_active, created_at, updated_at";
+
+fn map_provider_row(row: &rusqlite::Row) -> rusqlite::Result<Provider> {
+    Ok(Provider {
+        id: row.get(0)?,
+        name: row.get(1)?,
+        provider_type: row.get(2)?,
+        base_url: row.get(3)?,
+        api_key: row.get(4)?,
+        default_model: row.get(5)?,
+        reasoning_model: row.get(6)?,
+        supported_models: row.get(7)?,
+        model_mapping: row.get(8)?,
+        extra_headers: row.get(9)?,
+        anthropic_base_url: row.get(10)?,
+        responses_base_url: row.get(11)?,
+        protocol: row.get(12)?,
+        timeout_seconds: row.get(13)?,
+        status: row.get(14)?,
+        supports_vision: row.get(15)?,
+        auto_cache_control: row.get(16)?,
+        supports_cache: row.get(17)?,
+        model_capabilities: row.get(18)?,
+        provider_quirks: row.get(19)?,
+        body_filter_enabled: row.get(20)?,
+        thinking_rectifier_enabled: row.get(21)?,
+        error_mapper_enabled: row.get(22)?,
+        model_degradation_chain: row.get(23)?,
+        enabled: row.get(24)?,
+        is_active: row.get(25)?,
+        created_at: row.get(26)?,
+        updated_at: row.get(27)?,
+    })
+}
+
 pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
-    let mut stmt = conn.prepare(
-        "SELECT id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url,
-                protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, model_capabilities, enabled, is_active, created_at, updated_at
-         FROM providers ORDER BY is_active DESC, created_at ASC",
-    )?;
-
-    let rows = stmt.query_map([], |row| {
-        Ok(Provider {
-            id: row.get(0)?,
-            name: row.get(1)?,
-            provider_type: row.get(2)?,
-            base_url: row.get(3)?,
-            api_key: row.get(4)?,
-            default_model: row.get(5)?,
-            reasoning_model: row.get(6)?,
-            supported_models: row.get(7)?,
-            model_mapping: row.get(8)?,
-            extra_headers: row.get(9)?,
-            anthropic_base_url: row.get(10)?,
-            responses_base_url: row.get(11)?,
-            protocol: row.get(12)?,
-            timeout_seconds: row.get(13)?,
-            status: row.get(14)?,
-            supports_vision: row.get(15)?,
-            auto_cache_control: row.get(16)?,
-            supports_cache: row.get(17)?,
-            model_capabilities: row.get(18)?,
-            enabled: row.get(19)?,
-            is_active: row.get(20)?,
-            created_at: row.get(21)?,
-            updated_at: row.get(22)?,
-        })
-    })?;
-
+    let sql = format!("SELECT {PROVIDER_COLUMNS} FROM providers ORDER BY is_active DESC, created_at ASC");
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map([], map_provider_row)?;
     let mut providers = Vec::new();
     for row in rows {
         providers.push(row?);
@@ -46,43 +51,12 @@ pub fn list_all(conn: &Connection) -> Result<Vec<Provider>, AppError> {
 }
 
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<Provider, AppError> {
-    conn.query_row(
-        "SELECT id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url,
-                protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, model_capabilities, enabled, is_active, created_at, updated_at
-         FROM providers WHERE id = ?1",
-        [id],
-        |row| {
-            Ok(Provider {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                provider_type: row.get(2)?,
-                base_url: row.get(3)?,
-                api_key: row.get(4)?,
-                default_model: row.get(5)?,
-                reasoning_model: row.get(6)?,
-                supported_models: row.get(7)?,
-                model_mapping: row.get(8)?,
-                extra_headers: row.get(9)?,
-                anthropic_base_url: row.get(10)?,
-                responses_base_url: row.get(11)?,
-                protocol: row.get(12)?,
-                timeout_seconds: row.get(13)?,
-                status: row.get(14)?,
-                supports_vision: row.get(15)?,
-                auto_cache_control: row.get(16)?,
-                supports_cache: row.get(17)?,
-                model_capabilities: row.get(18)?,
-                enabled: row.get(19)?,
-                is_active: row.get(20)?,
-                created_at: row.get(21)?,
-                updated_at: row.get(22)?,
-            })
-        },
-    )
-    .map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => AppError::not_found("Provider", id),
-        other => AppError::database(other),
-    })
+    let sql = format!("SELECT {PROVIDER_COLUMNS} FROM providers WHERE id = ?1");
+    conn.query_row(&sql, [id], map_provider_row)
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => AppError::not_found("Provider", id),
+            other => AppError::database(other),
+        })
 }
 
 pub fn create(conn: &Connection, mut input: CreateProviderInput) -> Result<Provider, AppError> {
@@ -96,8 +70,10 @@ pub fn create(conn: &Connection, mut input: CreateProviderInput) -> Result<Provi
 
     conn.execute(
         "INSERT INTO providers (id, name, provider_type, base_url, api_key, default_model, reasoning_model,
-                                supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url, protocol, timeout_seconds, status, auto_cache_control, model_capabilities, enabled, is_active, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tested', ?15, ?16, ?17, 0, ?18, ?18)",
+                                supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url, protocol, timeout_seconds, status, auto_cache_control, model_capabilities,
+                                provider_quirks, body_filter_enabled, thinking_rectifier_enabled, error_mapper_enabled, model_degradation_chain,
+                                enabled, is_active, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tested', ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, 0, ?23, ?23)",
         params![
             &id,
             &input.name,
@@ -115,6 +91,11 @@ pub fn create(conn: &Connection, mut input: CreateProviderInput) -> Result<Provi
             timeout,
             &input.auto_cache_control,
             &input.model_capabilities,
+            &input.provider_quirks,
+            &input.body_filter_enabled,
+            &input.thinking_rectifier_enabled,
+            &input.error_mapper_enabled,
+            &input.model_degradation_chain,
             enabled,
             &now,
         ],
@@ -168,12 +149,23 @@ pub fn update(
     let timeout_seconds = input.timeout_seconds.unwrap_or(existing.timeout_seconds);
     let auto_cache_control = input.auto_cache_control.or(existing.auto_cache_control);
     let model_capabilities = input.model_capabilities.or(existing.model_capabilities);
+    let provider_quirks = input.provider_quirks.or(existing.provider_quirks);
+    let body_filter_enabled = input.body_filter_enabled.or(existing.body_filter_enabled);
+    let thinking_rectifier_enabled = input
+        .thinking_rectifier_enabled
+        .or(existing.thinking_rectifier_enabled);
+    let error_mapper_enabled = input.error_mapper_enabled.or(existing.error_mapper_enabled);
+    let model_degradation_chain = input
+        .model_degradation_chain
+        .or(existing.model_degradation_chain);
     let enabled = input.enabled.unwrap_or(existing.enabled);
 
     conn.execute(
         "UPDATE providers SET name=?1, provider_type=?2, base_url=?3, api_key=?4, default_model=?5,
-                reasoning_model=?6, supported_models=?7, model_mapping=?8, extra_headers=?9, anthropic_base_url=?10, responses_base_url=?11, protocol=?12, timeout_seconds=?13, auto_cache_control=?14, model_capabilities=?15, enabled=?16, updated_at=?17
-         WHERE id=?18",
+                reasoning_model=?6, supported_models=?7, model_mapping=?8, extra_headers=?9, anthropic_base_url=?10, responses_base_url=?11, protocol=?12, timeout_seconds=?13, auto_cache_control=?14, model_capabilities=?15,
+                provider_quirks=?16, body_filter_enabled=?17, thinking_rectifier_enabled=?18, error_mapper_enabled=?19, model_degradation_chain=?20,
+                enabled=?21, updated_at=?22
+         WHERE id=?23",
         params![
             &name,
             &provider_type,
@@ -190,6 +182,11 @@ pub fn update(
             timeout_seconds,
             auto_cache_control,
             &model_capabilities,
+            &provider_quirks,
+            body_filter_enabled,
+            thinking_rectifier_enabled,
+            error_mapper_enabled,
+            &model_degradation_chain,
             enabled,
             &now,
             id,
@@ -348,6 +345,11 @@ mod tests {
                 timeout_seconds: Some(120),
                 auto_cache_control: None,
                 model_capabilities: None,
+                provider_quirks: None,
+                body_filter_enabled: None,
+                thinking_rectifier_enabled: None,
+                error_mapper_enabled: None,
+                model_degradation_chain: None,
                 enabled: Some(true),
             },
         )
@@ -395,6 +397,11 @@ mod tests {
                 timeout_seconds: Some(120),
                 auto_cache_control: None,
                 model_capabilities: None,
+                provider_quirks: None,
+                body_filter_enabled: None,
+                thinking_rectifier_enabled: None,
+                error_mapper_enabled: None,
+                model_degradation_chain: None,
                 enabled: Some(true),
             },
         )
@@ -430,21 +437,7 @@ mod tests {
             &p.id,
             UpdateProviderInput {
                 name: Some("Updated".to_string()),
-                provider_type: None,
-                base_url: None,
-                api_key: None,
-                default_model: None,
-                reasoning_model: None,
-                supported_models: None,
-                model_mapping: None,
-                extra_headers: None,
-                anthropic_base_url: None,
-                responses_base_url: None,
-                auto_cache_control: None,
-                model_capabilities: None,
-                protocol: None,
-                timeout_seconds: None,
-                enabled: None,
+                ..Default::default()
             },
         )
         .unwrap();

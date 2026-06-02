@@ -251,6 +251,11 @@ mod tests {
                 timeout_seconds: Some(120),
                 auto_cache_control: None,
                 model_capabilities: None,
+                provider_quirks: None,
+                body_filter_enabled: None,
+                thinking_rectifier_enabled: None,
+                error_mapper_enabled: None,
+                model_degradation_chain: None,
                 enabled: Some(true),
             },
         )

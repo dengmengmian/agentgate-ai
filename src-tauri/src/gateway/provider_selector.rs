@@ -389,6 +389,34 @@ fn strip_qualifier(model: &str) -> &str {
     model
 }
 
+/// Walk the per-provider `model_degradation_chain` for the given requested
+/// model. Returns the *full ordered chain including the requested model
+/// itself* (head = primary), so the failover loop can iterate without
+/// having to track "did I try the original yet?" separately. Returns
+/// just `[requested]` when the provider has no degradation chain configured
+/// or the requested model has no fallbacks listed.
+///
+/// Example:
+///   provider.model_degradation_chain = {"gpt-5-codex": ["gpt-5-mini","gpt-4o"]}
+///   degradation_chain_for_model(provider, "gpt-5-codex")
+///       → ["gpt-5-codex", "gpt-5-mini", "gpt-4o"]
+///
+/// Models not present in the chain (e.g. user requested "claude-sonnet-4"
+/// against a provider with no entry for it) return a single-element vec
+/// — the failover loop falls back to provider-level failover at that point.
+pub fn degradation_chain_for_model(provider: &Provider, requested_model: &str) -> Vec<String> {
+    let chain = provider.parse_degradation_chain();
+    let mut result = vec![requested_model.to_string()];
+    if let Some(fallbacks) = chain.get(requested_model) {
+        for m in fallbacks {
+            if m != requested_model && !result.contains(m) {
+                result.push(m.clone());
+            }
+        }
+    }
+    result
+}
+
 /// Check if we should failover based on error status/message and the candidate's config.
 pub fn should_failover(status_code: Option<u16>, error_msg: &str, candidate: &ProviderCandidate) -> bool {
     // Check status code
@@ -518,6 +546,11 @@ mod tests {
                 "mimo-v2-omni":["text","vision","audio_in","video_in","tools"],
                 "mimo-v2-flash":["text","reasoning","tools","web_search"]
             }"#.into()),
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
             enabled: true, is_active: true,
             created_at: "2024-01-01".into(), updated_at: "2024-01-01".into(),
         }
@@ -704,5 +737,78 @@ mod tests {
         assert!(should_failover(None, "RATE LIMIT", &c));
         assert!(should_failover(None, "Timeout", &c));
         assert!(should_failover(None, "TIMEOUT", &c));
+    }
+
+    // ── Degradation chain tests ──
+
+    fn provider_with_chain(chain_json: Option<&str>) -> Provider {
+        Provider {
+            id: "p".into(), name: "P".into(), provider_type: "openai".into(),
+            base_url: "https://api.openai.com".into(), api_key: Some("sk-x".into()),
+            default_model: "gpt-5-codex".into(),
+            reasoning_model: None, supported_models: None,
+            model_mapping: None, extra_headers: None,
+            anthropic_base_url: None, responses_base_url: None,
+            protocol: "openai_responses".into(),
+            timeout_seconds: 120, status: "ok".into(),
+            supports_vision: None, auto_cache_control: None, supports_cache: None,
+            model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: chain_json.map(|s| s.to_string()),
+            enabled: true, is_active: true,
+            created_at: "2024".into(), updated_at: "2024".into(),
+        }
+    }
+
+    #[test]
+    fn degradation_chain_returns_requested_then_fallbacks() {
+        let p = provider_with_chain(Some(r#"{"gpt-5-codex":["gpt-5-mini","gpt-4o"]}"#));
+        assert_eq!(
+            degradation_chain_for_model(&p, "gpt-5-codex"),
+            vec!["gpt-5-codex", "gpt-5-mini", "gpt-4o"]
+        );
+    }
+
+    #[test]
+    fn degradation_chain_returns_just_requested_when_no_entry() {
+        let p = provider_with_chain(Some(r#"{"gpt-5-codex":["gpt-5-mini"]}"#));
+        assert_eq!(
+            degradation_chain_for_model(&p, "claude-sonnet-4"),
+            vec!["claude-sonnet-4"]
+        );
+    }
+
+    #[test]
+    fn degradation_chain_handles_missing_config() {
+        let p = provider_with_chain(None);
+        assert_eq!(
+            degradation_chain_for_model(&p, "gpt-5-codex"),
+            vec!["gpt-5-codex"]
+        );
+    }
+
+    #[test]
+    fn degradation_chain_dedupes_and_skips_self_reference() {
+        // Pathological config: chain includes the requested model and a dup.
+        // The walker should not loop or revisit a model.
+        let p = provider_with_chain(Some(
+            r#"{"gpt-5-codex":["gpt-5-codex","gpt-5-mini","gpt-5-mini","gpt-4o"]}"#,
+        ));
+        assert_eq!(
+            degradation_chain_for_model(&p, "gpt-5-codex"),
+            vec!["gpt-5-codex", "gpt-5-mini", "gpt-4o"]
+        );
+    }
+
+    #[test]
+    fn degradation_chain_handles_invalid_json() {
+        let p = provider_with_chain(Some("not-json-at-all"));
+        assert_eq!(
+            degradation_chain_for_model(&p, "anything"),
+            vec!["anything"]
+        );
     }
 }

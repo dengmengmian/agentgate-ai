@@ -152,6 +152,95 @@ pub fn seed_for_models(provider_type: &str, model_ids: &[String]) -> std::collec
         .collect()
 }
 
+/// Default-known request-shape quirks for a provider type. Empty by default —
+/// only seeded for providers where AgentGate has direct evidence (404/400 in
+/// the wild). Refiner consumers should treat the returned struct as a starting
+/// point that the user can override via `provider_quirks` JSON.
+///
+/// Keep this list narrow on purpose: incorrectly listing a field as unsupported
+/// silently drops it when body_filter is on, which breaks features. Only add a
+/// field once we've confirmed the provider 400s on it.
+pub fn default_quirks_for_provider(
+    provider_type: &str,
+) -> crate::models::provider::ProviderQuirks {
+    use crate::models::provider::{ProviderQuirks, RangeI64};
+    let pt = provider_type.to_ascii_lowercase();
+    let mut q = ProviderQuirks::default();
+    match pt.as_str() {
+        // DeepSeek's OpenAI-compatible endpoint silently ignores `web_search`
+        // top-level (no native builtin); the Anthropic-compatible endpoint
+        // 400s on `cache_control`. We strip the worst offender by default
+        // and let the user opt out per-provider if they know better.
+        "deepseek" => {
+            q.unsupported_fields = vec!["web_search".into(), "web_search_options".into()];
+        }
+        // MiMo: Anthropic-compatible endpoint accepts cache_control; the
+        // OpenAI-compatible endpoint rejects it with 400. The body filter
+        // is route-agnostic so we only strip on confirmed-bad shapes.
+        // (Server-side `$web_search` works via the Plugin path — see
+        // adapter.rs MIMO_WEB_SEARCH_DISABLED cache.)
+        "mimo" | "xiaomi" => {
+            q.thinking_budget = Some(RangeI64 { min: 1024, max: 32_768 });
+        }
+        // Anthropic Messages: reasoning effort is via `thinking.budget_tokens`
+        // (Sonnet/Haiku >= 1024, Opus >= 2048). Clamp upper bound to avoid
+        // wasting credits.
+        "anthropic" => {
+            q.thinking_budget = Some(RangeI64 { min: 1024, max: 64_000 });
+        }
+        // OpenAI Responses: reasoning.effort takes "minimal" / "low" / "medium" / "high".
+        "openai" | "azure_openai" => {
+            q.reasoning_effort_values = vec![
+                "minimal".into(),
+                "low".into(),
+                "medium".into(),
+                "high".into(),
+            ];
+        }
+        // Kimi: rejects unknown reasoning-style fields; the $web_search
+        // builtin works via the Plugin name, not the OpenAI `web_search_options`.
+        "kimi" | "moonshot" => {
+            q.unsupported_fields = vec!["web_search_options".into(), "reasoning".into()];
+        }
+        _ => {}
+    }
+    q
+}
+
+#[cfg(test)]
+mod quirks_tests {
+    use super::*;
+
+    #[test]
+    fn deepseek_default_drops_web_search() {
+        let q = default_quirks_for_provider("deepseek");
+        assert!(q.unsupported_fields.iter().any(|f| f == "web_search"));
+    }
+
+    #[test]
+    fn mimo_default_has_thinking_budget_range() {
+        let q = default_quirks_for_provider("mimo");
+        let r = q.thinking_budget.expect("MiMo should advertise thinking range");
+        assert_eq!(r.min, 1024);
+        assert!(r.max >= r.min);
+    }
+
+    #[test]
+    fn openai_default_lists_reasoning_effort_values() {
+        let q = default_quirks_for_provider("openai");
+        assert!(q.reasoning_effort_values.contains(&"medium".to_string()));
+        assert!(q.reasoning_effort_values.contains(&"high".to_string()));
+    }
+
+    #[test]
+    fn unknown_provider_returns_empty_quirks() {
+        let q = default_quirks_for_provider("some-new-thing");
+        assert!(q.unsupported_fields.is_empty());
+        assert!(q.thinking_budget.is_none());
+        assert!(q.reasoning_effort_values.is_empty());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
