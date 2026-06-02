@@ -77,14 +77,13 @@ fn restart_macos() -> CodexRestartResult {
     }
 }
 
-#[cfg(test)]
+// macOS path actually invokes `pkill Codex` + `open -a Codex` and would
+// sandbag a developer running Codex Desktop while tests run, so we only
+// exercise it on platforms where restart() is a no-op stub.
+#[cfg(all(test, not(target_os = "macos")))]
 mod tests {
     use super::*;
 
-    // macOS path actually invokes `pkill Codex` + `open -a Codex` and would
-    // sandbag a developer running Codex Desktop while tests run, so we only
-    // exercise it on platforms where restart() is a no-op stub.
-    #[cfg(not(target_os = "macos"))]
     #[test]
     fn restart_is_unsupported_on_non_macos() {
         let r = restart().unwrap();

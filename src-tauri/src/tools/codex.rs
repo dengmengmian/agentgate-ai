@@ -19,6 +19,16 @@ pub fn auth_json_path() -> PathBuf {
     PathBuf::from(home).join(".codex").join("auth.json")
 }
 
+/// Files captured into a client_apply_history snapshot so a rollback can
+/// restore the pre-apply state. Order is what the UI sees in the history
+/// drawer.
+pub fn snapshot_paths() -> Vec<(&'static str, PathBuf)> {
+    vec![
+        ("config.toml", config_path()),
+        ("auth.json", auth_json_path()),
+    ]
+}
+
 /// Directory where we save the user's original config.toml + auth.json.
 fn saved_dir() -> PathBuf {
     local_token::token_dir().join("codex_official")

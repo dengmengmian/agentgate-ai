@@ -22,6 +22,13 @@ pub fn env_file_path() -> PathBuf {
     PathBuf::from(home).join(".gemini").join(".env")
 }
 
+pub fn snapshot_paths() -> Vec<(&'static str, PathBuf)> {
+    vec![
+        ("settings.json", settings_path()),
+        (".env", env_file_path()),
+    ]
+}
+
 /// Directory where we save the user's original settings.json.
 fn saved_dir() -> PathBuf {
     local_token::token_dir().join("gemini_cli_official")

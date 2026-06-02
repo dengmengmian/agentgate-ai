@@ -373,6 +373,33 @@ export async function restartCodexDesktop(): Promise<CodexRestartResult> {
   return cmd("restart_codex_desktop");
 }
 
+// ── Client apply history ───────────────────────────────────────
+
+export interface ClientApplyHistoryEntry {
+  id: string;
+  client_id: string;
+  /// 'apply' | 'disable' | 'toggle'
+  action: string;
+  snapshot_json: string;
+  summary: string;
+  is_initial: boolean;
+  agentgate_version: string;
+  /// RFC 3339
+  created_at: string;
+}
+
+export async function listClientApplyHistory(
+  clientId: string
+): Promise<ClientApplyHistoryEntry[]> {
+  return cmd("list_client_apply_history", { clientId });
+}
+
+export async function rollbackClientApply(
+  historyId: string
+): Promise<ClientApplyHistoryEntry> {
+  return cmd("rollback_client_apply", { historyId });
+}
+
 // ── Route Profiles ─────────────────────────────────────────────
 
 import type {

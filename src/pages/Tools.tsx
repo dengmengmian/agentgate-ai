@@ -23,6 +23,7 @@ import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
 import { CopyButton } from "@/components/common/CopyButton";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { PostApplyDialog } from "@/components/tools/PostApplyDialog";
+import { ClientHistoryButton } from "@/components/tools/ClientHistoryButton";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
@@ -401,6 +402,7 @@ export function Tools() {
           {codexStatus?.exists && (
             <button onClick={() => api.openCodexConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
           )}
+          <ClientHistoryButton clientId="codex" clientName="Codex" onRollbackDone={load} />
           <CopyButton text={codexConfig} />
         </div>
         </>}
@@ -466,6 +468,7 @@ export function Tools() {
           {claudeEnv?.settings_exists && (
             <button onClick={() => api.openClaudeCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
           )}
+          <ClientHistoryButton clientId="claude_code" clientName="Claude Code" onRollbackDone={load} />
           <button onClick={handleGenerateClaudeSnippet} className="btn-secondary"><Code className="h-3 w-3" />{t("tools.env_snippet")}</button>
         </div>
 
@@ -512,6 +515,7 @@ export function Tools() {
           {openCodeStatus?.exists && (
             <button onClick={() => api.openOpenCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
           )}
+          <ClientHistoryButton clientId="opencode" clientName="OpenCode" onRollbackDone={load} />
         </div>
         </>}
       </div>
@@ -559,6 +563,7 @@ export function Tools() {
           {geminiStatus?.exists && (
             <button onClick={() => api.openGeminiConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
           )}
+          <ClientHistoryButton clientId="gemini" clientName="Gemini CLI" onRollbackDone={load} />
         </div>
         </>}
       </div>
@@ -606,6 +611,7 @@ export function Tools() {
           {atomCodeStatus?.exists && (
             <button onClick={() => api.openAtomCodeConfig()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("tools.open")}</button>
           )}
+          <ClientHistoryButton clientId="atomcode" clientName="AtomCode" onRollbackDone={load} />
         </div>
         </>}
       </div>

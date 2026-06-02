@@ -16,6 +16,10 @@ pub fn config_path() -> PathBuf {
     PathBuf::from(home).join(".atomcode").join("config.toml")
 }
 
+pub fn snapshot_paths() -> Vec<(&'static str, PathBuf)> {
+    vec![("config.toml", config_path())]
+}
+
 fn saved_dir() -> PathBuf {
     local_token::token_dir().join("atomcode_official")
 }

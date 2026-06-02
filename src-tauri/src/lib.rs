@@ -308,6 +308,9 @@ pub fn run() {
             // Post-apply process detection
             commands::detect_client_running,
             commands::restart_codex_desktop,
+            // Client apply history
+            commands::list_client_apply_history,
+            commands::rollback_client_apply,
             // Route Profiles
             commands::list_route_profiles,
             commands::get_route_profile,

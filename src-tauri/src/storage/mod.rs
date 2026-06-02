@@ -7,6 +7,7 @@ pub mod app_settings;
 pub mod route_profiles;
 pub mod provider_runtime_status;
 pub mod config_backups;
+pub mod apply_history;
 pub mod pricing;
 pub mod pet_settings;
 pub mod provider_endpoints;

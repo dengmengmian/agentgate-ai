@@ -1201,6 +1201,25 @@ pub fn open_token_folder() -> Result<bool, AppError> {
     Ok(true)
 }
 
+// ── Client apply history helper ────────────────────────────────
+
+/// Snapshot the client's on-disk config files **before** the apply/disable/
+/// toggle path rewrites them, and append one row to `client_apply_history`.
+/// Failures are swallowed: losing one rollback point shouldn't break the
+/// actual apply.
+fn record_pre_apply(
+    state: &State<'_, AppState>,
+    client_id: &str,
+    action: &str,
+    paths: Vec<(&'static str, std::path::PathBuf)>,
+    summary: &str,
+) {
+    // Read off disk before acquiring the DB lock — file I/O may be slow.
+    let snap = storage::apply_history::snapshot_files_at(&paths);
+    let Ok(conn) = state.db.lock() else { return };
+    let _ = storage::apply_history::record(&conn, client_id, action, &snap, summary);
+}
+
 // ── Codex Config Commands ──────────────────────────────────────
 
 #[tauri::command]
@@ -1220,25 +1239,31 @@ pub fn apply_codex_config(state: State<'_, AppState>) -> Result<crate::tools::co
         (settings.host, settings.port)
     };
 
+    record_pre_apply(&state, "codex", "apply", crate::tools::codex::snapshot_paths(), "apply");
     crate::tools::codex::apply(&host, port)
 }
 
 #[tauri::command]
 pub fn toggle_codex_provider(state: State<'_, AppState>) -> Result<crate::tools::codex::ToggleResult, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    let _ = storage::recommended_mappings::supplement_active_provider(
-        &conn,
-        storage::recommended_mappings::MappingProfile::Codex,
-    );
-    let settings = storage::gateway_settings::get(&conn)?;
-    crate::tools::codex::toggle_provider(&settings.host, settings.port)
+    let (host, port) = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let _ = storage::recommended_mappings::supplement_active_provider(
+            &conn,
+            storage::recommended_mappings::MappingProfile::Codex,
+        );
+        let settings = storage::gateway_settings::get(&conn)?;
+        (settings.host, settings.port)
+    };
+    record_pre_apply(&state, "codex", "toggle", crate::tools::codex::snapshot_paths(), "toggle");
+    crate::tools::codex::toggle_provider(&host, port)
 }
 
 /// Restore Codex to its pre-AgentGate state — the saved config.toml is
 /// copied back so the user gets the official `[plugins.*]` / `[mcp_servers.*]`
 /// blocks alive again. Used by the UI's "Switch to native mode" button.
 #[tauri::command]
-pub fn disable_codex_agentgate() -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
+pub fn disable_codex_agentgate(state: State<'_, AppState>) -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
+    record_pre_apply(&state, "codex", "disable", crate::tools::codex::snapshot_paths(), "disable");
     crate::tools::codex::disable()
 }
 
@@ -1266,18 +1291,23 @@ pub fn apply_claude_code_config(state: State<'_, AppState>) -> Result<crate::too
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
     };
+    record_pre_apply(&state, "claude_code", "apply", crate::tools::claude_code::snapshot_paths(), "apply");
     crate::tools::claude_code::apply_config(&host, port, "claude-sonnet-4-7")
 }
 
 #[tauri::command]
 pub fn toggle_claude_code_provider(state: State<'_, AppState>) -> Result<crate::tools::claude_code::ToggleResult, AppError> {
-    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
-    let _ = storage::recommended_mappings::supplement_active_provider(
-        &conn,
-        storage::recommended_mappings::MappingProfile::ClaudeCode,
-    );
-    let settings = storage::gateway_settings::get(&conn)?;
-    crate::tools::claude_code::toggle_provider(&settings.host, settings.port, "claude-sonnet-4-7")
+    let (host, port) = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        let _ = storage::recommended_mappings::supplement_active_provider(
+            &conn,
+            storage::recommended_mappings::MappingProfile::ClaudeCode,
+        );
+        let settings = storage::gateway_settings::get(&conn)?;
+        (settings.host, settings.port)
+    };
+    record_pre_apply(&state, "claude_code", "toggle", crate::tools::claude_code::snapshot_paths(), "toggle");
+    crate::tools::claude_code::toggle_provider(&host, port, "claude-sonnet-4-7")
 }
 
 #[tauri::command]
@@ -1307,6 +1337,7 @@ pub fn apply_opencode_config(state: State<'_, AppState>) -> Result<crate::tools:
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
     };
+    record_pre_apply(&state, "opencode", "apply", crate::tools::opencode::snapshot_paths(), "apply");
     crate::tools::opencode::apply(&host, port)
 }
 
@@ -1340,6 +1371,7 @@ pub fn apply_gemini_config(state: State<'_, AppState>) -> Result<crate::tools::g
         let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gemini-2.5-flash".to_string());
         (settings.host, settings.port, model)
     };
+    record_pre_apply(&state, "gemini", "apply", crate::tools::gemini_cli::snapshot_paths(), "apply");
     crate::tools::gemini_cli::apply(&host, port, &model)
 }
 
@@ -1360,6 +1392,7 @@ pub fn toggle_gemini_provider(state: State<'_, AppState>) -> Result<crate::tools
         let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gemini-2.5-flash".to_string());
         (settings.host, settings.port, model)
     };
+    record_pre_apply(&state, "gemini", "toggle", crate::tools::gemini_cli::snapshot_paths(), "toggle");
     crate::tools::gemini_cli::toggle(&host, port, &model)
 }
 
@@ -1386,6 +1419,7 @@ pub fn apply_atomcode_config(state: State<'_, AppState>) -> Result<crate::tools:
         let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gpt-5.5".to_string());
         (settings.host, settings.port, model)
     };
+    record_pre_apply(&state, "atomcode", "apply", crate::tools::atomcode::snapshot_paths(), "apply");
     crate::tools::atomcode::apply(&host, port, &model)
 }
 
@@ -1430,6 +1464,36 @@ pub fn restart_codex_desktop() -> Result<crate::tools::codex_restart::CodexResta
     crate::tools::codex_restart::restart()
 }
 
+/// 列出某客户端的 apply/disable/toggle 历史（按时间倒序）。前端用来
+/// 渲染历史抽屉。
+#[tauri::command]
+pub fn list_client_apply_history(
+    state: State<'_, AppState>,
+    client_id: String,
+) -> Result<Vec<storage::apply_history::HistoryEntry>, AppError> {
+    let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::apply_history::list(&conn, &client_id)
+}
+
+/// 回滚到某条历史记录所代表的盘上状态。snapshot 反序列化后按 file 写回原
+/// absolute_path（不存在的文件被删除）。回滚本身**不**记录新历史，避免反复
+/// 回滚把保留窗撑满。
+#[tauri::command]
+pub fn rollback_client_apply(
+    state: State<'_, AppState>,
+    history_id: String,
+) -> Result<storage::apply_history::HistoryEntry, AppError> {
+    let entry = {
+        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::apply_history::get(&conn, &history_id)?
+    };
+    let snapshot: storage::apply_history::ClientSnapshot =
+        serde_json::from_str(&entry.snapshot_json)
+            .map_err(|e| AppError::internal(format!("snapshot deserialise failed: {e}")))?;
+    storage::apply_history::restore_files(&snapshot)?;
+    Ok(entry)
+}
+
 #[tauri::command]
 pub fn toggle_atomcode_provider(state: State<'_, AppState>) -> Result<crate::tools::atomcode::ToggleResult, AppError> {
     let (host, port, model) = {
@@ -1440,6 +1504,7 @@ pub fn toggle_atomcode_provider(state: State<'_, AppState>) -> Result<crate::too
         let model = provider.map(|p| p.default_model).unwrap_or_else(|| "gpt-5.5".to_string());
         (settings.host, settings.port, model)
     };
+    record_pre_apply(&state, "atomcode", "toggle", crate::tools::atomcode::snapshot_paths(), "toggle");
     crate::tools::atomcode::toggle(&host, port, &model)
 }
 

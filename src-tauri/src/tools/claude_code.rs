@@ -104,6 +104,10 @@ pub fn settings_path() -> PathBuf {
     PathBuf::from(home).join(".claude").join("settings.json")
 }
 
+pub fn snapshot_paths() -> Vec<(&'static str, PathBuf)> {
+    vec![("settings.json", settings_path())]
+}
+
 pub fn detect_env() -> ClaudeCodeEnvStatus {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))

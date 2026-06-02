@@ -15,6 +15,10 @@ pub fn config_path() -> PathBuf {
     PathBuf::from(home).join(".config").join("opencode").join("opencode.json")
 }
 
+pub fn snapshot_paths() -> Vec<(&'static str, PathBuf)> {
+    vec![("opencode.json", config_path())]
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct OpenCodeConfigStatus {
     pub config_path: String,
