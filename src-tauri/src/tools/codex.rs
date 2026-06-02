@@ -335,13 +335,31 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
         changed_keys.push("auth.json (restored)".to_string());
     }
 
-    // === Write config.toml with experimental_bearer_token. auth.json is
-    // intentionally left alone — the bearer travels via config.toml's
-    // model_providers.agentgate block instead, matching cc-switch's
-    // approach. ===
-    let new_content = generate_snippet(host, port, &token);
+    // === Surgical merge into config.toml. auth.json is intentionally left
+    // alone — the bearer travels via config.toml's [model_providers.OpenAI]
+    // table.
+    //
+    // We don't rewrite the file from scratch. Many users have non-AgentGate
+    // config (approval_policy / model_reasoning_effort / [projects] trust
+    // levels / [mcp_servers] / inline comments) that we have no business
+    // touching. Only two keys move:
+    //   - top-level `model_provider = "OpenAI"`
+    //   - `[model_providers.OpenAI]` table body (5 keys)
+    // Everything else in the file is preserved byte-for-byte.
+    let existing = if path.exists() {
+        fs::read_to_string(&path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let mut merged = existing;
+    merged = crate::tools::toml_merge::upsert_top_level_key(&merged, "model_provider", "\"OpenAI\"");
+    let section_body = format!(
+        "name = \"OpenAI\"\nbase_url = \"http://{host}:{port}/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"{token}\"\nrequires_openai_auth = true\n"
+    );
+    merged = crate::tools::toml_merge::upsert_section(&merged, "model_providers.OpenAI", &section_body);
+
     let tmp_path = path.with_extension("toml.tmp");
-    fs::write(&tmp_path, &new_content).map_err(|e| {
+    fs::write(&tmp_path, &merged).map_err(|e| {
         AppError::new("CODEX_CONFIG_WRITE_FAILED", format!("Failed to write temp file: {e}"))
     })?;
     fs::rename(&tmp_path, &path).map_err(|e| {
@@ -572,6 +590,57 @@ mod tests {
         assert!(cfg.contains("model_provider = \"OpenAI\""), "new hijack-OpenAI format");
         assert!(cfg.contains("requires_openai_auth = true"));
         assert!(cfg.contains("experimental_bearer_token = \"ag_local_"));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn test_apply_preserves_user_config_toml() {
+        // 回归测试：surgical merge 不应该擦掉用户已有的 [projects] / [mcp_servers] /
+        // 顶级 approval_policy / 注释。
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        std::fs::create_dir_all(config_path().parent().unwrap()).unwrap();
+        let user_config = r#"# My Codex notes
+approval_policy = "on-request"
+model_reasoning_effort = "high"
+
+[projects."/Users/me/repo"]
+trust_level = "trusted"
+
+[mcp_servers.local]
+command = "my-mcp-server"
+args = ["--port", "1234"]
+"#;
+        std::fs::write(config_path(), user_config).unwrap();
+
+        apply("127.0.0.1", 9090).unwrap();
+        let cfg = std::fs::read_to_string(config_path()).unwrap();
+
+        // 我们的改动落地
+        assert!(cfg.contains("model_provider = \"OpenAI\""));
+        assert!(cfg.contains("[model_providers.OpenAI]"));
+        assert!(cfg.contains("experimental_bearer_token = \"ag_local_"));
+        // 用户的所有其他内容完整保留
+        assert!(cfg.contains("# My Codex notes"), "comments preserved");
+        assert!(cfg.contains("approval_policy = \"on-request\""));
+        assert!(cfg.contains("model_reasoning_effort = \"high\""));
+        assert!(cfg.contains("[projects.\"/Users/me/repo\"]"));
+        assert!(cfg.contains("trust_level = \"trusted\""));
+        assert!(cfg.contains("[mcp_servers.local]"));
+        assert!(cfg.contains("command = \"my-mcp-server\""));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn test_apply_idempotent_second_run_is_no_op() {
+        // 再次 apply 应该和首次完全一样，不会重复追加 section / 改字段。
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        apply("127.0.0.1", 9090).unwrap();
+        let after_first = std::fs::read_to_string(config_path()).unwrap();
+        apply("127.0.0.1", 9090).unwrap();
+        let after_second = std::fs::read_to_string(config_path()).unwrap();
+        assert_eq!(after_first, after_second, "second apply must be a no-op");
         cleanup(&temp);
     }
 

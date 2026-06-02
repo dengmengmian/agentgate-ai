@@ -1,5 +1,6 @@
 pub mod codex;
 pub mod codex_restart;
+pub mod toml_merge;
 pub mod claude_code;
 pub mod opencode;
 pub mod gemini_cli;
