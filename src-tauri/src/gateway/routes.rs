@@ -23,6 +23,43 @@ use crate::gateway::sse_anthropic::AnthropicSseAccumulator;
 use crate::gateway::sse_gemini::GeminiSseAccumulator;
 use crate::security::local_token;
 
+/// Run refiner pipeline on a Value-shaped outbound request body, mutating it
+/// in place. Returns the RefinerLog (current callers ignore it pending the
+/// trace_json wiring change; once that lands, every handler should stash it
+/// into the request log). Failing to lock the DB or read settings degrades
+/// to no-op — the gateway should still forward the request transparently.
+fn refine_value_body(db: &Arc<Mutex<Connection>>, provider: &Provider, body: &mut Value)
+    -> crate::gateway::refiner_log::RefinerLog
+{
+    let settings = match db.lock().ok().and_then(|c| crate::storage::gateway_settings::get(&c).ok()) {
+        Some(s) => s,
+        None => return crate::gateway::refiner_log::RefinerLog::default(),
+    };
+    crate::gateway::refiners::runtime::apply_request(provider, &settings, body)
+}
+
+/// Convenience wrapper: serde-ify a serializable request struct, run the
+/// refiner pipeline against the JSON view, then ask serde to materialise the
+/// modified struct back. If either serde leg fails the original struct is
+/// returned untouched — refiner errors must never block the request.
+fn refine_struct_body<T>(db: &Arc<Mutex<Connection>>, provider: &Provider, req: &mut T)
+    -> crate::gateway::refiner_log::RefinerLog
+where
+    T: serde::Serialize + serde::de::DeserializeOwned,
+{
+    let mut body = match serde_json::to_value(&*req) {
+        Ok(v) => v,
+        Err(_) => return crate::gateway::refiner_log::RefinerLog::default(),
+    };
+    let log = refine_value_body(db, provider, &mut body);
+    if !log.is_empty() {
+        if let Ok(new) = serde_json::from_value::<T>(body) {
+            *req = new;
+        }
+    }
+    log
+}
+
 /// Shared state for the gateway HTTP server.
 #[derive(Clone)]
 pub struct GatewayState {
@@ -290,7 +327,7 @@ pub async fn handle_responses(
             // Claude Messages API conversion (only for Anthropic-type providers)
             // auto_cache_control: default true unless provider explicitly set false
             let auto_cache = provider.auto_cache_control.unwrap_or(true);
-            let anthropic_body = match responses_to_anthropic::convert(&req, &model, auto_cache) {
+            let mut anthropic_body = match responses_to_anthropic::convert(&req, &model, auto_cache) {
                 Ok(b) => b,
                 Err(e) => {
                     attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));
@@ -298,6 +335,7 @@ pub async fn handle_responses(
                     break;
                 }
             };
+            let _refiner_log = refine_value_body(&state.db, &provider, &mut anthropic_body);
             let converted_json = serde_json::to_string_pretty(&anthropic_body).unwrap_or_default();
             let is_stream = req.stream.unwrap_or(false);
             if is_stream {
@@ -307,7 +345,7 @@ pub async fn handle_responses(
             }
         } else if config.is_gemini() {
             // Gemini API conversion
-            let gemini_body = match responses_to_gemini::convert(&req, &model) {
+            let mut gemini_body = match responses_to_gemini::convert(&req, &model) {
                 Ok(b) => b,
                 Err(e) => {
                     attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));
@@ -315,6 +353,7 @@ pub async fn handle_responses(
                     break;
                 }
             };
+            let _refiner_log = refine_value_body(&state.db, &provider, &mut gemini_body);
             let converted_json = serde_json::to_string_pretty(&gemini_body).unwrap_or_default();
             let is_stream = req.stream.unwrap_or(false);
             if is_stream {
@@ -336,7 +375,7 @@ pub async fn handle_responses(
                     .and_then(|s| serde_json::from_str::<std::collections::HashMap<String, Vec<String>>>(&s).ok())
                     .unwrap_or_default()
             };
-            let chat_req = match responses_to_chat::convert_with_provider_matrix(&req, &model, provider_transform.as_ref(), &matrix) {
+            let mut chat_req = match responses_to_chat::convert_with_provider_matrix(&req, &model, provider_transform.as_ref(), &matrix) {
                 Ok(r) => r,
                 Err(e) => {
                     attempts_trace.push(json!({"provider": &candidate.provider_name, "error": e.message, "attempt": attempt_idx + 1}));
@@ -344,6 +383,7 @@ pub async fn handle_responses(
                     break;
                 }
             };
+            let _refiner_log = refine_struct_body(&state.db, &provider, &mut chat_req);
             let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
             let is_stream = chat_req.stream;
             if is_stream {
@@ -1387,6 +1427,7 @@ pub async fn handle_gemini_generate(
         chat_req.stream_options = None;
     }
 
+    let _refiner_log = refine_struct_body(&state.db, &selection.provider, &mut chat_req);
     let mut converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
 
     if is_stream {
@@ -1591,7 +1632,7 @@ pub async fn handle_chat_completions(
             let model_override = native_model_override(&provider, requested_model.as_deref(), Some(&candidate.model));
             let model = model_override.unwrap_or_else(|| candidate.model.clone());
             let result = client_chat_to_anthropic_handle(
-                state.clone(), config.clone(), &body, model.clone(),
+                state.clone(), config.clone(), provider.clone(), &body, model.clone(),
                 request_id.clone(), raw_body.clone(), start, client_type.clone(),
             ).await;
 
@@ -1672,6 +1713,7 @@ pub async fn handle_chat_completions(
 async fn client_chat_to_anthropic_handle(
     state: GatewayState,
     config: ProviderConfig,
+    provider: Provider,
     body: &str,
     model: String,
     request_id: String,
@@ -1693,10 +1735,12 @@ async fn client_chat_to_anthropic_handle(
     let want_stream = chat_req.stream;
 
     // 2. Chat → Anthropic 转换
-    let anthropic_body = crate::transform::chat_to_anthropic::convert(&chat_req).map_err(|e| {
+    let mut anthropic_body = crate::transform::chat_to_anthropic::convert(&chat_req).map_err(|e| {
         log_request_error(&state.db, &client_type, "/v1/chat/completions", &request_id, &raw_request, None, &e, start.elapsed().as_millis() as i64);
         GatewayError(e)
     })?;
+    // 3. 网关精炼层：开关全关时是 no-op，开了才会按 quirks 改写 outbound body
+    let _refiner_log = refine_value_body(&state.db, &provider, &mut anthropic_body);
     let converted_request = serde_json::to_string_pretty(&anthropic_body).unwrap_or_default();
 
     if want_stream {
@@ -2032,6 +2076,7 @@ pub async fn handle_messages(
         diagnostic_events: Vec::new(),
     };
 
+    let _refiner_log = refine_struct_body(&state.db, &selection.provider, &mut chat_req);
     let mut converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
 
     if want_stream {

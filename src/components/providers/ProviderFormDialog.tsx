@@ -51,12 +51,6 @@ export function ProviderFormDialog({
   const [protocols, setProtocols] = useState<string[]>(["openai_chat_completions"]);
   const [timeoutSeconds, setTimeoutSeconds] = useState("120");
   const [enabled, setEnabled] = useState(true);
-  // 三个 refiner 的 per-provider 覆写：null=跟随全局总闸 / 0=强制关 / 1=强制开
-  const [bodyFilterOverride, setBodyFilterOverride] = useState<number | null>(null);
-  const [thinkingRectifierOverride, setThinkingRectifierOverride] = useState<number | null>(null);
-  const [errorMapperOverride, setErrorMapperOverride] = useState<number | null>(null);
-  const [providerQuirks, setProviderQuirks] = useState("");           // JSON 文本
-  const [modelDegradationChain, setModelDegradationChain] = useState(""); // JSON 文本
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [fetchingModels, setFetchingModels] = useState(false);
   const [newMappingClient, setNewMappingClient] = useState("");
@@ -159,11 +153,6 @@ export function ProviderFormDialog({
       try { setProtocols(JSON.parse(provider.protocol)); } catch { setProtocols([provider.protocol]); }
       setTimeoutSeconds(String(provider.timeout_seconds));
       setEnabled(provider.enabled);
-      setBodyFilterOverride(provider.body_filter_enabled);
-      setThinkingRectifierOverride(provider.thinking_rectifier_enabled);
-      setErrorMapperOverride(provider.error_mapper_enabled);
-      setProviderQuirks(provider.provider_quirks ?? "");
-      setModelDegradationChain(provider.model_degradation_chain ?? "");
     } else {
       const defaultType = "deepseek";
       const preset = PROVIDER_PRESETS[defaultType];
@@ -183,11 +172,6 @@ export function ProviderFormDialog({
       setProtocols(preset?.protocols ?? ["openai_chat_completions"]);
       setTimeoutSeconds("120");
       setEnabled(true);
-      setBodyFilterOverride(null);
-      setThinkingRectifierOverride(null);
-      setErrorMapperOverride(null);
-      setProviderQuirks("");
-      setModelDegradationChain("");
     }
     setErrors({});
     setQuickMode(!provider);
@@ -210,24 +194,6 @@ export function ProviderFormDialog({
     e.preventDefault();
     if (!validate()) return;
 
-    // 校验 provider_quirks / 降级链 JSON 形态，避免提交无效 JSON 到后端
-    const validateOptionalJson = (raw: string, field: string): string | undefined => {
-      const trimmed = raw.trim();
-      if (!trimmed) return undefined;
-      try { JSON.parse(trimmed); return trimmed; }
-      catch (err) {
-        setErrors((prev) => ({ ...prev, [field]: "JSON 解析失败" }));
-        throw err;
-      }
-    };
-
-    let pqStr: string | undefined;
-    let mdcStr: string | undefined;
-    try {
-      pqStr = validateOptionalJson(providerQuirks, "providerQuirks");
-      mdcStr = validateOptionalJson(modelDegradationChain, "modelDegradationChain");
-    } catch { return; }
-
     const mmStr = Object.keys(modelMapping).length > 0 ? JSON.stringify(modelMapping) : undefined;
     const smStr = supportedModels || undefined;
     const ehStr = extraHeaders || undefined;
@@ -248,11 +214,6 @@ export function ProviderFormDialog({
         supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: submitAnthropicBaseUrl, responses_base_url: rbuStr,
         auto_cache_control: autoCacheControl,
         model_capabilities: mcStr,
-        provider_quirks: pqStr,
-        body_filter_enabled: bodyFilterOverride,
-        thinking_rectifier_enabled: thinkingRectifierOverride,
-        error_mapper_enabled: errorMapperOverride,
-        model_degradation_chain: mdcStr,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
       if (validKeys.length === 1) input.api_key = validKeys[0];
@@ -265,11 +226,6 @@ export function ProviderFormDialog({
         supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: submitAnthropicBaseUrl, responses_base_url: rbuStr,
         auto_cache_control: autoCacheControl,
         model_capabilities: mcStr,
-        provider_quirks: pqStr,
-        body_filter_enabled: bodyFilterOverride,
-        thinking_rectifier_enabled: thinkingRectifierOverride,
-        error_mapper_enabled: errorMapperOverride,
-        model_degradation_chain: mdcStr,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
       if (validKeys.length === 1) input.api_key = validKeys[0];
@@ -666,62 +622,6 @@ export function ProviderFormDialog({
                   )}
                 </div>
 
-                {/* Gateway behaviour——精炼层 per-provider 覆写 + 降级链 + quirks */}
-                <div className="border-t border-border/50 pt-4">
-                  <label className="mb-1 block text-xs font-medium text-text-secondary">网关精炼层 (Refiner)</label>
-                  <p className="mb-3 text-[11px] text-text-muted">
-                    默认全部跟随设置页的全局总闸（开关全关 = 字节级透明）。仅当某 provider 需要特殊处理时单独覆写。
-                  </p>
-                  <div className="space-y-2">
-                    <RefinerSwitch
-                      label="请求字段过滤"
-                      hint="按 Quirks 剥 provider 不支持的字段（如 web_search），避免 400"
-                      value={bodyFilterOverride}
-                      onChange={setBodyFilterOverride}
-                    />
-                    <RefinerSwitch
-                      label="推理参数校正"
-                      hint="thinking.budget_tokens 与 reasoning.effort 自动归一到 provider 接受的范围"
-                      value={thinkingRectifierOverride}
-                      onChange={setThinkingRectifierOverride}
-                    />
-                    <RefinerSwitch
-                      label="错误响应归一"
-                      hint="把 provider 错误码改写成客户端协议期望的形态（Anthropic / OpenAI / Gemini）"
-                      value={errorMapperOverride}
-                      onChange={setErrorMapperOverride}
-                    />
-                  </div>
-
-                  <Field
-                    label="Provider Quirks (JSON, 可选)"
-                    hint='覆写默认值：{"unsupported_fields":["web_search"],"thinking_budget":{"min":1024,"max":32768}}'
-                    error={errors.providerQuirks}
-                  >
-                    <textarea
-                      value={providerQuirks}
-                      onChange={(e) => { setProviderQuirks(e.target.value); if (errors.providerQuirks) setErrors({ ...errors, providerQuirks: "" }); }}
-                      placeholder="留空走默认值（按 provider_type 推导）"
-                      rows={3}
-                      className="form-input font-mono text-[11px]"
-                    />
-                  </Field>
-
-                  <Field
-                    label="模型降级链 (JSON, 可选)"
-                    hint='主模型不可用时按链顺序尝试：{"gpt-5-codex":["gpt-5-mini","gpt-4o"]}'
-                    error={errors.modelDegradationChain}
-                  >
-                    <textarea
-                      value={modelDegradationChain}
-                      onChange={(e) => { setModelDegradationChain(e.target.value); if (errors.modelDegradationChain) setErrors({ ...errors, modelDegradationChain: "" }); }}
-                      placeholder="留空 = 不降级（失败直接 failover 到下一个 provider）"
-                      rows={3}
-                      className="form-input font-mono text-[11px]"
-                    />
-                  </Field>
-                </div>
-
                 {/* Model Mapping——最底部，加"通常无需配置"文案 */}
                 <div className="border-t border-border/50 pt-4">
                   <label className="mb-1 block text-xs font-medium text-text-secondary">{t("providers.model_mapping")}</label>
@@ -795,50 +695,6 @@ function Field({ label, error, hint, children }: { label: string; error?: string
   );
 }
 
-/// 三态开关组件：跟随全局（null）/ 强制关（0）/ 强制开（1）。
-function RefinerSwitch({
-  label,
-  hint,
-  value,
-  onChange,
-}: {
-  label: string;
-  hint: string;
-  value: number | null;
-  onChange: (v: number | null) => void;
-}) {
-  const options: { v: number | null; label: string }[] = [
-    { v: null, label: "跟随全局" },
-    { v: 0, label: "强制关" },
-    { v: 1, label: "强制开" },
-  ];
-  return (
-    <div className="rounded-md border border-border/40 bg-card-secondary/40 p-2.5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-medium text-text-primary">{label}</p>
-          <p className="mt-0.5 text-[11px] text-text-muted">{hint}</p>
-        </div>
-        <div className="flex shrink-0 gap-1">
-          {options.map((o) => (
-            <button
-              key={String(o.v)}
-              type="button"
-              onClick={() => onChange(o.v)}
-              className={`rounded px-2 py-1 text-[11px] transition-colors ${
-                value === o.v
-                  ? "bg-accent text-white"
-                  : "bg-bg text-text-muted hover:bg-card hover:text-text-primary"
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ModelCombo({ value, onChange, models, placeholder }: { value: string; onChange: (v: string) => void; models: string[]; placeholder?: string }) {
   const [open, setOpen] = useState(false);
