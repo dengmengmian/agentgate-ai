@@ -48,11 +48,11 @@ pub fn apply(
     }
 
     let quirks = super::resolve_quirks(provider);
-    let mapped_code = upstream_code
+    let mut mapped_code = upstream_code
         .as_deref()
         .and_then(|c| quirks.error_code_overrides.get(c).cloned())
         .unwrap_or_else(|| classify(status, upstream_code.as_deref()));
-    let mapped_message = upstream_message.clone().unwrap_or_else(|| {
+    let mut mapped_message = upstream_message.clone().unwrap_or_else(|| {
         // Fall back to a generic message if upstream gave us nothing useful.
         match status {
             400 => "Bad request".into(),
@@ -64,6 +64,16 @@ pub fn apply(
             _ => format!("Request failed with status {status}"),
         }
     });
+
+    // Context overflow semantic detection: upgrade generic 400 into a clearly
+    // labelled `context_length_exceeded` so clients (and users) can act.
+    if status == 400 && detect_context_overflow(&mapped_message, upstream_code.as_deref()) {
+        mapped_code = "context_length_exceeded".to_string();
+        mapped_message = format!(
+            "{} — 建议：清理对话历史或换用更长上下文模型。",
+            mapped_message.trim_end_matches(['。', '.', ' '])
+        );
+    }
 
     let reshaped = reshape(client_protocol, &mapped_code, &mapped_message, status);
     Some(MappedError {
@@ -117,6 +127,55 @@ fn classify(status: u16, upstream_code: Option<&str>) -> String {
         _ => "unknown_error",
     }
     .into()
+}
+
+/// Heuristic: does this 400 response look like "input too long for model"?
+///
+/// Matches common English + Chinese phrasings across providers. Hits return
+/// `true` so the caller can re-label the error as `context_length_exceeded`,
+/// which is what clients (OpenAI SDK, Anthropic SDK, our own UI) check to
+/// decide between "show error" vs "auto-trim history and retry".
+///
+/// Code path is checked first because some providers (OpenAI) already return
+/// `context_length_exceeded` as the code — that's a free hit without regex.
+fn detect_context_overflow(message: &str, upstream_code: Option<&str>) -> bool {
+    if let Some(code) = upstream_code {
+        let lc = code.to_ascii_lowercase();
+        if lc.contains("context_length") || lc.contains("context length") || lc == "string_above_max_length" {
+            return true;
+        }
+    }
+    let m = message.to_ascii_lowercase();
+    // English patterns — substring match, lowercased.
+    const EN: &[&str] = &[
+        "maximum context length",
+        "max context length",
+        "context length exceeded",
+        "context window",
+        "prompt is too long",
+        "prompt too long",
+        "input is too long",
+        "input too long",
+        "too many tokens",
+        "tokens exceed",
+        "reduce the length of the messages",
+    ];
+    if EN.iter().any(|p| m.contains(p)) {
+        return true;
+    }
+    // Chinese patterns — keep raw, no lowercasing needed.
+    const ZH: &[&str] = &[
+        "上下文过长",
+        "上下文超长",
+        "上下文长度",
+        "输入过长",
+        "输入太长",
+        "提示词过长",
+        "超出最大长度",
+        "tokens 超出",
+        "tokens超出",
+    ];
+    ZH.iter().any(|p| message.contains(p))
 }
 
 fn normalise_code(code: &str) -> String {
@@ -264,6 +323,64 @@ mod tests {
     fn upstream_dash_separated_code_normalised_to_snake() {
         let p = provider("openai");
         let body = json!({"error": {"code": "Rate-Limit-Exceeded", "message": "x"}});
+        let m = apply(&p, &body, 429, "openai_responses").unwrap();
+        assert_eq!(m.action.mapped_code, "rate_limit_exceeded");
+    }
+
+    #[test]
+    fn openai_context_overflow_message_detected() {
+        let p = provider("openai");
+        let body = json!({
+            "error": {
+                "message": "This model's maximum context length is 128000 tokens. However, your messages resulted in 130000 tokens. Please reduce the length of the messages.",
+                "type": "invalid_request_error",
+                "code": "context_length_exceeded"
+            }
+        });
+        let m = apply(&p, &body, 400, "openai_responses").unwrap();
+        assert_eq!(m.action.mapped_code, "context_length_exceeded");
+        assert!(m.action.mapped_message.contains("建议"));
+    }
+
+    #[test]
+    fn anthropic_prompt_too_long_detected() {
+        let p = provider("anthropic");
+        let body = json!({
+            "type": "error",
+            "error": {"type": "invalid_request_error", "message": "prompt is too long: 250000 tokens > 200000 maximum"}
+        });
+        let m = apply(&p, &body, 400, "anthropic_messages").unwrap();
+        assert_eq!(m.body["error"]["type"], "context_length_exceeded");
+    }
+
+    #[test]
+    fn chinese_overflow_phrasing_detected() {
+        let p = provider("deepseek");
+        let body = json!({
+            "error": {"message": "输入过长，超过模型上下文长度限制", "code": "invalid_request_error"}
+        });
+        let m = apply(&p, &body, 400, "openai_responses").unwrap();
+        assert_eq!(m.action.mapped_code, "context_length_exceeded");
+    }
+
+    #[test]
+    fn unrelated_400_not_misclassified_as_overflow() {
+        let p = provider("openai");
+        let body = json!({
+            "error": {"message": "missing required field: model", "type": "invalid_request_error"}
+        });
+        let m = apply(&p, &body, 400, "openai_responses").unwrap();
+        assert_eq!(m.action.mapped_code, "invalid_request_error");
+        assert!(!m.action.mapped_message.contains("建议"));
+    }
+
+    #[test]
+    fn overflow_only_triggers_on_400_not_429() {
+        // A 429 with a long-tokens message shouldn't get relabelled.
+        let p = provider("openai");
+        let body = json!({
+            "error": {"message": "too many tokens per minute, slow down", "code": "rate_limit_exceeded"}
+        });
         let m = apply(&p, &body, 429, "openai_responses").unwrap();
         assert_eq!(m.action.mapped_code, "rate_limit_exceeded");
     }

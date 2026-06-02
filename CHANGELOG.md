@@ -8,7 +8,7 @@
 - **网关精炼层** —— 「设置 → 通用 → 网关精炼层」一个全局开关组，三项默认全关，开了才生效：
     - **请求字段过滤**：自动剥掉 provider 不支持的字段（如 DeepSeek 的 `web_search`），少踩 400。
     - **推理参数校正**：把 `thinking.budget_tokens` / `reasoning.effort` 调到 provider 接受的范围。
-    - **错误响应归一**（下一版接入）：把 provider 错误改写成客户端期望的形态。
+    - **错误响应归一**：把 provider 错误改写成客户端期望的形态；并识别中英文常见的"上下文超长"提示（OpenAI `maximum context length` / Anthropic `prompt is too long` / 国产模型「输入过长」「上下文过长」等），统一标为 `context_length_exceeded` 并附"清理对话历史或换长上下文模型"建议。
     - 内置 DeepSeek / MiMo / Anthropic / OpenAI / Kimi 默认规则。
 
 ## [1.3.0] - 2026-06-01
