@@ -1,11 +1,15 @@
-import { CheckCircle2, AlertTriangle, X } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, AlertTriangle, X, RefreshCw, Loader2 } from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
+import * as api from "@/lib/api";
 import type { RunningProcess } from "@/lib/api";
 
 interface Props {
   open: boolean;
+  /// Client id used to gate the "restart desktop" button — only `codex` shows it.
+  clientId?: string;
   /// Display name of the client we just applied config for, e.g. "Claude Code".
   clientName: string;
   /// Where the config landed on disk.
@@ -21,8 +25,9 @@ interface Props {
 /// users learn that an existing client session needs a restart before the
 /// new config matters, with a copy-to-clipboard kill command for advanced
 /// users. We never auto-kill — this was a deliberate UX call.
-export function PostApplyDialog({ open, clientName, configPath, processes, onClose }: Props) {
+export function PostApplyDialog({ open, clientId, clientName, configPath, processes, onClose }: Props) {
   const { t } = useI18n();
+  const [restarting, setRestarting] = useState(false);
   if (!open) return null;
 
   const handleCopyKill = async (pid: number) => {
@@ -35,6 +40,32 @@ export function PostApplyDialog({ open, clientName, configPath, processes, onClo
       toast("error", `kill ${pid}`);
     }
   };
+
+  const handleRestartCodex = async () => {
+    setRestarting(true);
+    try {
+      const r = await api.restartCodexDesktop();
+      if (!r.supported) {
+        toast("error", t("tools.post_apply.restart_unsupported"));
+        return;
+      }
+      if (r.relaunched) {
+        toast("success", r.was_running
+          ? t("tools.post_apply.restart_done")
+          : t("tools.post_apply.restart_launched"));
+        onClose();
+      } else {
+        toast("error", t("tools.post_apply.restart_failed"));
+      }
+    } catch {
+      toast("error", t("tools.post_apply.restart_failed"));
+    } finally {
+      setRestarting(false);
+    }
+  };
+
+  // Codex Desktop 是唯一一个 GUI 客户端；其他 4 个 CLI 重启 shell 无意义。
+  const showCodexRestart = clientId === "codex";
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center">
@@ -96,6 +127,21 @@ export function PostApplyDialog({ open, clientName, configPath, processes, onClo
                   </div>
                 ))}
               </div>
+              {showCodexRestart && (
+                <button
+                  type="button"
+                  onClick={handleRestartCodex}
+                  disabled={restarting}
+                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-warning/40 bg-warning/10 px-2 py-1.5 text-[11px] font-medium text-warning hover:bg-warning/20 disabled:opacity-60"
+                >
+                  {restarting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3" />
+                  )}
+                  {t("tools.post_apply.restart_codex")}
+                </button>
+              )}
             </div>
           ) : (
             <div className="flex items-start gap-2 rounded-md border border-border bg-card-secondary p-3">

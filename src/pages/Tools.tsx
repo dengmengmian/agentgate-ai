@@ -618,6 +618,7 @@ export function Tools() {
 
       <PostApplyDialog
         open={postApply !== null}
+        clientId={postApply?.clientId}
         clientName={postApply?.clientName ?? ""}
         configPath={postApply?.configPath ?? ""}
         processes={postApply?.processes ?? []}

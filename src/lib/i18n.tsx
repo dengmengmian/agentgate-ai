@@ -295,6 +295,26 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "tools.post_apply.copy_kill": { en: "Copy `kill {pid}`", zh: "复制 `kill {pid}`" },
   "tools.post_apply.kill_copied": { en: "Kill command copied", zh: "已复制 kill 命令" },
+  "tools.post_apply.restart_codex": {
+    en: "Restart Codex Desktop",
+    zh: "重启 Codex 桌面应用",
+  },
+  "tools.post_apply.restart_done": {
+    en: "Codex Desktop restarted",
+    zh: "Codex 桌面应用已重启",
+  },
+  "tools.post_apply.restart_launched": {
+    en: "Codex Desktop launched",
+    zh: "Codex 桌面应用已启动",
+  },
+  "tools.post_apply.restart_failed": {
+    en: "Failed to restart Codex Desktop",
+    zh: "重启 Codex 桌面应用失败",
+  },
+  "tools.post_apply.restart_unsupported": {
+    en: "Auto-restart isn't supported on this platform yet — restart Codex manually.",
+    zh: "当前平台暂不支持自动重启，请手动重启 Codex。",
+  },
   "tools.direct_credentials": { en: "Direct credentials", zh: "直接凭证" },
   "tools.no_credentials": { en: "No credentials", zh: "无凭证" },
   "tools.conflicts_detected": { en: "conflicts detected", zh: "冲突已检测到" },

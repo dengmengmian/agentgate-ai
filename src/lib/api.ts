@@ -333,6 +333,21 @@ export async function detectClientRunning(clientId: string): Promise<RunningProc
   return cmd("detect_client_running", { clientId });
 }
 
+export interface CodexRestartResult {
+  supported: boolean;
+  platform: string;
+  was_running: boolean;
+  killed: number;
+  relaunched: boolean;
+}
+
+/// Restart Codex Desktop so the freshly-written config picks up. macOS only
+/// for now; on other platforms returns `supported: false` and the UI hides
+/// the button.
+export async function restartCodexDesktop(): Promise<CodexRestartResult> {
+  return cmd("restart_codex_desktop");
+}
+
 // ── Route Profiles ─────────────────────────────────────────────
 
 import type {

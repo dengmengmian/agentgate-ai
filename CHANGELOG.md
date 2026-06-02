@@ -4,6 +4,7 @@
 
 ### 新增
 
+- **一键重启 Codex 桌面应用**（macOS） —— Codex 应用配置成功后，弹窗里多一个「重启 Codex 桌面应用」按钮。点了才执行 `pkill -x Codex` + `open -a Codex`，按 basename 精确匹配只杀桌面 App，不动 CLI 二进制。默认不自动触发，避免误伤正在对话的用户。Windows / Linux 暂不支持，按钮不显示。
 - **节点测速** —— Providers 页加「测速」按钮，对所有启用 provider 并行发一个 1-token 探测，按延迟从快到慢排表，连接 / TTFB / 总耗时三段染色（< 500ms 绿 / 500-1500ms 黄 / > 1500ms 红）。手动触发，每次会消耗少量 token。
 - **网关精炼层** —— 「设置 → 通用 → 网关精炼层」一个全局开关组，三项默认全关，开了才生效：
     - **请求字段过滤**：自动剥掉 provider 不支持的字段（如 DeepSeek 的 `web_search`），少踩 400。

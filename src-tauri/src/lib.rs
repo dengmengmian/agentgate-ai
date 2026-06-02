@@ -295,6 +295,7 @@ pub fn run() {
             commands::open_atomcode_config,
             // Post-apply process detection
             commands::detect_client_running,
+            commands::restart_codex_desktop,
             // Route Profiles
             commands::list_route_profiles,
             commands::get_route_profile,

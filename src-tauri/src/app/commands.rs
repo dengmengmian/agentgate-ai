@@ -1382,6 +1382,16 @@ pub fn detect_client_running(
     Ok(crate::tools::process_detect::find_running(needles))
 }
 
+/// Restart Codex Desktop so freshly-written config.toml / auth.json take
+/// effect. macOS only at the moment — `restart_codex_desktop` returns
+/// `supported: false` on other platforms and the UI hides the button.
+/// Never called automatically; only fires when the user clicks the button in
+/// PostApplyDialog.
+#[tauri::command]
+pub fn restart_codex_desktop() -> Result<crate::tools::codex_restart::CodexRestartResult, AppError> {
+    crate::tools::codex_restart::restart()
+}
+
 #[tauri::command]
 pub fn toggle_atomcode_provider(state: State<'_, AppState>) -> Result<crate::tools::atomcode::ToggleResult, AppError> {
     let (host, port, model) = {
