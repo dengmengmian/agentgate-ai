@@ -133,8 +133,8 @@ export function Logs() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <p className="shrink-0 text-xs text-text-muted whitespace-nowrap">
             共 {total.toLocaleString()} {t("logs.requests")}
           </p>
@@ -143,12 +143,12 @@ export function Logs() {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={t("logs.search")}
-            className="form-input w-48"
+            className="form-input !w-48 shrink-0"
           />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="form-input w-28"
+            className="form-input !w-28 shrink-0"
           >
             <option value="">{t("logs.all")}</option>
             <option value="success">{t("logs.success")}</option>
@@ -158,7 +158,7 @@ export function Logs() {
             <select
               value={providerFilter}
               onChange={(e) => setProviderFilter(e.target.value)}
-              className="form-input w-36"
+              className="form-input !w-36 shrink-0"
               title={t("logs.filter_provider")}
             >
               <option value="">{t("logs.all_providers")}</option>
@@ -168,7 +168,7 @@ export function Logs() {
           <select
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
-            className="form-input w-32"
+            className="form-input !w-32 shrink-0"
             title={t("logs.filter_client")}
           >
             <option value="">{t("logs.all_clients")}</option>
@@ -177,7 +177,7 @@ export function Logs() {
           <select
             value={sourceFilter}
             onChange={(e) => setSourceFilter(e.target.value)}
-            className="form-input w-32"
+            className="form-input !w-32 shrink-0"
             title="按来源过滤：网关 / 各客户端本地日志"
           >
             <option value="">全部来源</option>
@@ -188,9 +188,9 @@ export function Logs() {
             <option value="gemini_session">{sourceLabel("gemini_session")}</option>
           </select>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {/* 列表/会话两种视图切换——列表按时间逐条，会话按 session_id 聚合 */}
-          <div className="flex items-center rounded-md bg-card-secondary p-0.5">
+          <div className="flex shrink-0 items-center rounded-md bg-card-secondary p-0.5">
             <button
               onClick={() => setViewMode("list")}
               className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
@@ -211,7 +211,7 @@ export function Logs() {
           <button
             onClick={handleSyncClaude}
             disabled={syncing !== null}
-            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
             title="扫描 ~/.claude/projects/ 下的会话日志，补齐绕过网关使用 Claude Code 时的用量记录"
           >
             <Download className={`h-3 w-3 ${syncing === "claude" ? "animate-pulse" : ""}`} />
@@ -220,7 +220,7 @@ export function Logs() {
           <button
             onClick={handleSyncCodex}
             disabled={syncing !== null}
-            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
             title="扫描 ~/.codex/sessions/ 下的会话日志，补齐绕过网关使用 Codex 时的用量记录"
           >
             <Download className={`h-3 w-3 ${syncing === "codex" ? "animate-pulse" : ""}`} />
@@ -229,7 +229,7 @@ export function Logs() {
           <button
             onClick={handleSyncGemini}
             disabled={syncing !== null}
-            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
             title="扫描 ~/.gemini/tmp/ 下的会话日志，补齐绕过网关使用 Gemini CLI 时的用量记录"
           >
             <Download className={`h-3 w-3 ${syncing === "gemini" ? "animate-pulse" : ""}`} />
@@ -238,14 +238,14 @@ export function Logs() {
           <button
             onClick={loadLogs}
             disabled={loading}
-            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
           >
             <RefreshCcw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
             {t("common.refresh")}
           </button>
           <button
             onClick={() => setConfirmClear(true)}
-            className="rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+            className="shrink-0 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
           >
             {t("logs.clear")}
           </button>
