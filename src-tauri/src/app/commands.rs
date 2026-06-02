@@ -953,6 +953,15 @@ pub async fn sync_claude_sessions(
     crate::session_sync::claude::sync(&state.db)
 }
 
+/// 扫描 ~/.codex/sessions 下的 Codex 会话日志并写入 request_logs。
+/// 幂等：external_id = "{session_id}:{event_index}" 保证再次同步只写新增。
+#[tauri::command]
+pub async fn sync_codex_sessions(
+    state: State<'_, AppState>,
+) -> Result<crate::session_sync::SyncResult, AppError> {
+    crate::session_sync::codex::sync(&state.db)
+}
+
 // ── Tool Commands ──────────────────────────────────────────────
 
 #[tauri::command]

@@ -251,6 +251,7 @@ pub fn run() {
             commands::clear_request_logs,
             commands::aggregate_request_logs_by_session,
             commands::sync_claude_sessions,
+            commands::sync_codex_sessions,
             // Tools
             commands::list_tools,
             commands::generate_codex_config,

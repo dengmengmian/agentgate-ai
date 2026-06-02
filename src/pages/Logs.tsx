@@ -101,24 +101,33 @@ export function Logs() {
     }
   };
 
-  const [syncing, setSyncing] = useState(false);
-  const handleSyncClaude = async () => {
-    setSyncing(true);
+  const [syncing, setSyncing] = useState<null | "claude" | "codex">(null);
+  const runSync = async (
+    kind: "claude" | "codex",
+    label: string,
+    fn: () => Promise<api.SyncResult>,
+    missingHint: string,
+  ) => {
+    setSyncing(kind);
     try {
-      const r = await api.syncClaudeSessions();
+      const r = await fn();
       if (r.files_scanned === 0) {
-        toast("success", "未找到 Claude Code 会话目录（~/.claude/projects/）");
+        toast("success", missingHint);
       } else {
-        toast("success", `Claude 已扫描 ${r.files_scanned} 个文件：新增 ${r.imported}，跳过 ${r.skipped}` +
+        toast("success", `${label} 已扫描 ${r.files_scanned} 个文件：新增 ${r.imported}，跳过 ${r.skipped}` +
           (r.errors.length > 0 ? `，${r.errors.length} 个错误` : ""));
       }
       loadLogs();
     } catch (err) {
       toast("error", (err as api.AppError).message);
     } finally {
-      setSyncing(false);
+      setSyncing(null);
     }
   };
+  const handleSyncClaude = () =>
+    runSync("claude", "Claude", api.syncClaudeSessions, "未找到 Claude Code 会话目录（~/.claude/projects/）");
+  const handleSyncCodex = () =>
+    runSync("codex", "Codex", api.syncCodexSessions, "未找到 Codex 会话目录（~/.codex/sessions/）");
 
   return (
     <div className="space-y-4">
@@ -199,12 +208,21 @@ export function Logs() {
           </div>
           <button
             onClick={handleSyncClaude}
-            disabled={syncing}
+            disabled={syncing !== null}
             className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
             title="扫描 ~/.claude/projects/ 下的会话日志，补齐绕过网关使用 Claude Code 时的用量记录"
           >
-            <Download className={`h-3 w-3 ${syncing ? "animate-pulse" : ""}`} />
-            同步 Claude 日志
+            <Download className={`h-3 w-3 ${syncing === "claude" ? "animate-pulse" : ""}`} />
+            同步 Claude
+          </button>
+          <button
+            onClick={handleSyncCodex}
+            disabled={syncing !== null}
+            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
+            title="扫描 ~/.codex/sessions/ 下的会话日志，补齐绕过网关使用 Codex 时的用量记录"
+          >
+            <Download className={`h-3 w-3 ${syncing === "codex" ? "animate-pulse" : ""}`} />
+            同步 Codex
           </button>
           <button
             onClick={loadLogs}

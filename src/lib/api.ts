@@ -184,6 +184,10 @@ export async function syncClaudeSessions(): Promise<SyncResult> {
   return cmd("sync_claude_sessions");
 }
 
+export async function syncCodexSessions(): Promise<SyncResult> {
+  return cmd("sync_codex_sessions");
+}
+
 // ── Tools ──────────────────────────────────────────────────────
 
 export async function listTools(): Promise<ToolConfigView[]> {

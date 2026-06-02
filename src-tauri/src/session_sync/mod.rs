@@ -19,6 +19,7 @@
 //! directories yield an empty result (the user might not have installed it).
 
 pub mod claude;
+pub mod codex;
 
 use serde::{Deserialize, Serialize};
 
