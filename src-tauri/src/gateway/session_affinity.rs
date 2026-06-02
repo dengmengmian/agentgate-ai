@@ -258,6 +258,13 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    // STORE 是 process-local 全局状态（OnceLock<Mutex<HashMap>>），cargo test
+    // 默认并行跑 `tests` 模块里的多个 #[test]，导致 A 刚 record 完 B 的 clear()
+    // 把 A 写入的条目清掉，A 的 lookup 就拿到 None。给所有触碰 STORE 的测试
+    // 串行化解决——这是 lib.rs::test_utils::FS_LOCK 同款模式。derive_* 一类
+    // 纯函数测试不动 STORE，跑并行无所谓。
+    static SESSION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn req_with_input(input: Value) -> ResponsesRequest {
         ResponsesRequest {
             model: Some("gpt-5".into()),
@@ -289,6 +296,7 @@ mod tests {
 
     #[test]
     fn record_and_lookup_returns_provider() {
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         clear();
         record("sa_abc", "prov_mimo");
         let entry = lookup("sa_abc").expect("entry should exist");
@@ -298,6 +306,7 @@ mod tests {
 
     #[test]
     fn record_twice_increments_hit_count() {
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         clear();
         record("sa_xyz", "prov_a");
         record("sa_xyz", "prov_a");
@@ -307,6 +316,7 @@ mod tests {
 
     #[test]
     fn record_with_different_provider_resets_binding() {
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         clear();
         record("sa_q", "prov_a");
         record("sa_q", "prov_a");
@@ -318,12 +328,14 @@ mod tests {
 
     #[test]
     fn lookup_returns_none_for_unknown_session() {
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         clear();
         assert!(lookup("sa_nope").is_none());
     }
 
     #[test]
     fn record_if_cache_hit_no_cached_tokens_is_noop() {
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         clear();
         let usage = json!({"input_tokens": 100, "output_tokens": 50});
         let recorded = record_if_cache_hit("sa_n", "prov_a", &usage);
@@ -333,6 +345,7 @@ mod tests {
 
     #[test]
     fn record_if_cache_hit_writes_on_responses_format() {
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         clear();
         let usage = json!({
             "input_tokens": 200,
@@ -345,6 +358,7 @@ mod tests {
 
     #[test]
     fn record_if_cache_hit_writes_on_chat_completions_format() {
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         clear();
         let usage = json!({
             "prompt_tokens": 200,
@@ -356,6 +370,7 @@ mod tests {
 
     #[test]
     fn record_if_cache_hit_writes_on_anthropic_format() {
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         clear();
         let usage = json!({
             "input_tokens": 200,
