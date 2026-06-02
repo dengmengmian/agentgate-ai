@@ -962,6 +962,15 @@ pub async fn sync_codex_sessions(
     crate::session_sync::codex::sync(&state.db)
 }
 
+/// 扫描 ~/.gemini/tmp/*/chats 下的 Gemini CLI 会话日志并写入 request_logs。
+/// 幂等：event 自带 UUID id 作 external_id。
+#[tauri::command]
+pub async fn sync_gemini_sessions(
+    state: State<'_, AppState>,
+) -> Result<crate::session_sync::SyncResult, AppError> {
+    crate::session_sync::gemini::sync(&state.db)
+}
+
 // ── Tool Commands ──────────────────────────────────────────────
 
 #[tauri::command]

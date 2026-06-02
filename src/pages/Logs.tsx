@@ -101,9 +101,9 @@ export function Logs() {
     }
   };
 
-  const [syncing, setSyncing] = useState<null | "claude" | "codex">(null);
+  const [syncing, setSyncing] = useState<null | "claude" | "codex" | "gemini">(null);
   const runSync = async (
-    kind: "claude" | "codex",
+    kind: "claude" | "codex" | "gemini",
     label: string,
     fn: () => Promise<api.SyncResult>,
     missingHint: string,
@@ -128,6 +128,8 @@ export function Logs() {
     runSync("claude", "Claude", api.syncClaudeSessions, "未找到 Claude Code 会话目录（~/.claude/projects/）");
   const handleSyncCodex = () =>
     runSync("codex", "Codex", api.syncCodexSessions, "未找到 Codex 会话目录（~/.codex/sessions/）");
+  const handleSyncGemini = () =>
+    runSync("gemini", "Gemini", api.syncGeminiSessions, "未找到 Gemini CLI 会话目录（~/.gemini/tmp/）");
 
   return (
     <div className="space-y-4">
@@ -223,6 +225,15 @@ export function Logs() {
           >
             <Download className={`h-3 w-3 ${syncing === "codex" ? "animate-pulse" : ""}`} />
             同步 Codex
+          </button>
+          <button
+            onClick={handleSyncGemini}
+            disabled={syncing !== null}
+            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
+            title="扫描 ~/.gemini/tmp/ 下的会话日志，补齐绕过网关使用 Gemini CLI 时的用量记录"
+          >
+            <Download className={`h-3 w-3 ${syncing === "gemini" ? "animate-pulse" : ""}`} />
+            同步 Gemini
           </button>
           <button
             onClick={loadLogs}

@@ -100,6 +100,7 @@ pub fn run() {
             };
 
             let cleanup_db = state.db.clone();
+            let session_sync_db = state.db.clone();
             app.manage(state);
 
             // ── Ensure local access token exists ──
@@ -124,6 +125,12 @@ pub fn run() {
                     }
                 });
             }
+
+            // ── Periodic client session log sync ──
+            // 启动 5 秒后同步一次，之后每小时一次。从 Claude / Codex / Gemini 本地
+            // 日志增量扫出 token 用量，写入 request_logs（source='*_session'），
+            // 让绕过网关的请求也能在 Dashboard 和 Logs 里看到。
+            crate::session_sync::periodic::spawn(session_sync_db);
 
             // ── System Tray ──
             setup_tray(app)?;
@@ -252,6 +259,7 @@ pub fn run() {
             commands::aggregate_request_logs_by_session,
             commands::sync_claude_sessions,
             commands::sync_codex_sessions,
+            commands::sync_gemini_sessions,
             // Tools
             commands::list_tools,
             commands::generate_codex_config,

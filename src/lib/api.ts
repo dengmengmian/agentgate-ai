@@ -188,6 +188,10 @@ export async function syncCodexSessions(): Promise<SyncResult> {
   return cmd("sync_codex_sessions");
 }
 
+export async function syncGeminiSessions(): Promise<SyncResult> {
+  return cmd("sync_gemini_sessions");
+}
+
 // ── Tools ──────────────────────────────────────────────────────
 
 export async function listTools(): Promise<ToolConfigView[]> {
