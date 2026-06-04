@@ -1167,6 +1167,19 @@ pub fn aggregate_cost_by_client(
     storage::request_logs::aggregate_cost_by_client(&conn, since.as_deref(), limit.unwrap_or(50))
 }
 
+#[tauri::command]
+pub fn aggregate_route_profile_stats(
+    days: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::models::route_profile::RouteProfileStats>, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    let since = cost_since(days);
+    storage::request_logs::aggregate_route_profile_stats(&conn, since.as_deref())
+}
+
 /// 扫描 ~/.claude/projects 下的 Claude Code 会话日志并写入 request_logs。
 /// 幂等：已同步过的 message_id 会被跳过。
 #[tauri::command]

@@ -27,7 +27,7 @@ import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
 import * as api from "@/lib/api";
-import type { RouteProfileView, RouteProfileDetail, RoutingConditions } from "@/types/route-profile";
+import type { RouteProfileView, RouteProfileDetail, RoutingConditions, RouteProfileStats } from "@/types/route-profile";
 import type { ProviderView } from "@/types/provider";
 
 const PROTOCOL_LABELS: Record<string, string> = {
@@ -45,6 +45,7 @@ export function Routes() {
   const [profiles, setProfiles] = useState<RouteProfileView[]>([]);
   const [detail, setDetail] = useState<RouteProfileDetail | null>(null);
   const [providers, setProviders] = useState<ProviderView[]>([]);
+  const [profileStats, setProfileStats] = useState<Record<string, RouteProfileStats>>({});
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<RouteProfileView | null>(null);
   const selectedIdRef = useRef<string | null>(null);
@@ -58,12 +59,14 @@ export function Routes() {
 
   const load = useCallback(async () => {
     try {
-      const [p, prov] = await Promise.all([
+      const [p, prov, stats] = await Promise.all([
         api.listRouteProfiles(),
         api.listProviders(),
+        api.aggregateRouteProfileStats(7),
       ]);
       setProfiles(p);
       setProviders(prov);
+      setProfileStats(Object.fromEntries(stats.map((s) => [s.route_profile_id, s])));
       if (p.length > 0) {
         const currentId = selectedIdRef.current;
         const toLoad = currentId && p.find((x) => x.id === currentId) ? currentId : p[0].id;
@@ -172,6 +175,7 @@ export function Routes() {
   const availableProviders = detail
     ? providers.filter((p) => !detail.providers.some((rp) => rp.provider_id === p.id))
     : [];
+  const currentStats = detail ? profileStats[detail.profile.id] : undefined;
 
   if (loading) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
 
@@ -369,6 +373,30 @@ export function Routes() {
                   label={t("routes.overview_fallback")}
                   value={detail.profile.mode === "failover" ? `${Math.max(detail.providers.length - 1, 0)} ${t("routes.fallback_count")}` : t("routes.not_enabled")}
                   hint={detail.profile.mode === "failover" ? t("routes.fallback_hint") : t("routes.no_fallback_hint")}
+                />
+              </div>
+
+              {/* Route stats */}
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+                <SummaryTile
+                  label={t("routes.stats_requests")}
+                  value={(currentStats?.request_count ?? 0).toString()}
+                  hint={t("routes.stats_window")}
+                />
+                <SummaryTile
+                  label={t("routes.stats_success_rate")}
+                  value={formatPercent(currentStats?.success_rate)}
+                  hint={`${currentStats?.success_count ?? 0} ${t("routes.stats_success")} / ${currentStats?.error_count ?? 0} ${t("routes.stats_errors")}`}
+                />
+                <SummaryTile
+                  label={t("routes.stats_avg_latency")}
+                  value={formatStatLatency(currentStats?.avg_latency_ms)}
+                  hint={t("routes.stats_gateway_only")}
+                />
+                <SummaryTile
+                  label={t("routes.stats_cost")}
+                  value={formatCost(currentStats?.cost)}
+                  hint={t("routes.stats_priced_only")}
                 />
               </div>
 
@@ -617,6 +645,21 @@ function SummaryTile({ label, value, hint }: { label: string; value: string; hin
       <p className="mt-1 text-[11px] text-text-muted">{hint}</p>
     </div>
   );
+}
+
+function formatPercent(value: number | undefined): string {
+  if (value == null) return "0%";
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatStatLatency(value: number | undefined): string {
+  if (!value) return "0 ms";
+  return value >= 1000 ? `${(value / 1000).toFixed(1)} s` : `${Math.round(value)} ms`;
+}
+
+function formatCost(value: number | undefined): string {
+  if (!value) return "$0.00";
+  return `$${value.toFixed(value < 0.01 ? 4 : 2)}`;
 }
 
 type ConditionPreset = {

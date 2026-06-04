@@ -86,3 +86,13 @@ export interface ProviderRuntimeStatus {
   last_probe_error: string | null;
   updated_at: string;
 }
+
+export interface RouteProfileStats {
+  route_profile_id: string;
+  request_count: number;
+  success_count: number;
+  error_count: number;
+  success_rate: number;
+  avg_latency_ms: number;
+  cost: number;
+}

@@ -460,6 +460,60 @@ pub fn aggregate_cost_by_client(
     aggregate_cost_grouped(conn, "client", since, limit)
 }
 
+pub fn aggregate_route_profile_stats(
+    conn: &Connection,
+    since: Option<&str>,
+) -> Result<Vec<crate::models::route_profile::RouteProfileStats>, AppError> {
+    let mut sql = String::from(
+        "SELECT
+            json_extract(trace_json, '$.route_decision.profile_id') AS profile_id,
+            COUNT(*) AS request_count,
+            SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END) AS success_count,
+            SUM(CASE WHEN status_code < 200 OR status_code >= 400 THEN 1 ELSE 0 END) AS error_count,
+            COALESCE(AVG(latency_ms), 0) AS avg_latency_ms,
+            COALESCE(SUM(cost), 0.0) AS cost
+         FROM request_logs
+         WHERE source = 'gateway'
+           AND trace_json IS NOT NULL
+           AND json_extract(trace_json, '$.route_decision.profile_id') IS NOT NULL",
+    );
+    if since.is_some() {
+        sql.push_str(" AND timestamp >= ?1");
+    }
+    sql.push_str(" GROUP BY profile_id");
+
+    let mut stmt = conn.prepare(&sql)?;
+    let map_row = |r: &rusqlite::Row<'_>| {
+        let request_count: i64 = r.get(1)?;
+        let success_count: i64 = r.get(2)?;
+        let error_count: i64 = r.get(3)?;
+        Ok(crate::models::route_profile::RouteProfileStats {
+            route_profile_id: r.get(0)?,
+            request_count,
+            success_count,
+            error_count,
+            success_rate: if request_count > 0 {
+                success_count as f64 / request_count as f64
+            } else {
+                0.0
+            },
+            avg_latency_ms: r.get::<_, f64>(4)?.round() as i64,
+            cost: r.get(5)?,
+        })
+    };
+
+    let rows = if let Some(since) = since {
+        stmt.query_map([since], map_row)?
+    } else {
+        stmt.query_map([], map_row)?
+    };
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
 /// 各 provider 近 N 小时成功请求(2xx)的平均延迟(ms)——延迟感知路由用。
 /// key 为 provider 名（与日志写入一致）。只算 **网关来源** 的成功请求：客户端会话
 /// 同步导入的 latency 是客户端自记、不反映网关到上游的真实延迟，不能用于路由决策
@@ -1037,6 +1091,44 @@ mod tests {
         let map = avg_latency_by_provider(&conn, 24).unwrap();
         assert!((map["fast"] - 150.0).abs() < 1e-9);
         assert!((map["slow"] - 900.0).abs() < 1e-9); // 失败的 r4 被排除
+    }
+
+    #[test]
+    fn aggregate_route_profile_stats_from_trace_json() {
+        let conn = empty_logs_db();
+        let trace = |id: &str| {
+            serde_json::json!({
+                "route_decision": {
+                    "profile_id": id,
+                    "profile_name": "Default"
+                }
+            })
+            .to_string()
+        };
+
+        insert(
+            &conn, "r1", "Codex", "P", "m", "/v1/responses", 200, 100,
+            None, None, None, None, None, None, None, Some(&trace("rp1")),
+            Some(100), Some(20), Some(0.03), None, None, Some("gateway"), None, None,
+        )
+        .unwrap();
+        insert(
+            &conn, "r2", "Codex", "P", "m", "/v1/responses", 500, 300,
+            None, None, None, None, None, None, Some("boom"), Some(&trace("rp1")),
+            Some(50), Some(10), Some(0.02), None, None, Some("gateway"), None, None,
+        )
+        .unwrap();
+
+        let stats = aggregate_route_profile_stats(&conn, None).unwrap();
+
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].route_profile_id, "rp1");
+        assert_eq!(stats[0].request_count, 2);
+        assert_eq!(stats[0].success_count, 1);
+        assert_eq!(stats[0].error_count, 1);
+        assert!((stats[0].success_rate - 0.5).abs() < 1e-9);
+        assert_eq!(stats[0].avg_latency_ms, 200);
+        assert!((stats[0].cost - 0.05).abs() < 1e-9);
     }
 
     #[test]

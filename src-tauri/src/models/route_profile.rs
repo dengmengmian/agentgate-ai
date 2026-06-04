@@ -198,3 +198,14 @@ pub struct ProviderRuntimeStatus {
     pub last_probe_error: Option<String>,
     pub updated_at: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RouteProfileStats {
+    pub route_profile_id: String,
+    pub request_count: i64,
+    pub success_count: i64,
+    pub error_count: i64,
+    pub success_rate: f64,
+    pub avg_latency_ms: i64,
+    pub cost: f64,
+}

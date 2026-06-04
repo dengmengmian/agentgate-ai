@@ -267,6 +267,7 @@ pub fn run() {
             commands::aggregate_request_logs_by_session,
             commands::aggregate_cost_by_model,
             commands::aggregate_cost_by_client,
+            commands::aggregate_route_profile_stats,
             commands::sync_claude_sessions,
             commands::sync_codex_sessions,
             commands::sync_gemini_sessions,

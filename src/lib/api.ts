@@ -187,6 +187,12 @@ export async function aggregateCostByClient(
   return cmd("aggregate_cost_by_client", { days, limit });
 }
 
+export async function aggregateRouteProfileStats(
+  days?: number,
+): Promise<import("@/types/route-profile").RouteProfileStats[]> {
+  return cmd("aggregate_route_profile_stats", { days });
+}
+
 export interface SyncResult {
   files_scanned: number;
   imported: number;
