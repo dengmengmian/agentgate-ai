@@ -35,6 +35,12 @@ It is built for real integration problems:
 
 AgentGate's job is: **one local gateway + protocol conversion + native pass-through + smart routing + GUI configuration**.
 
+## Why AgentGate
+
+- 💰 **Spend less** — point Codex / Claude Code / Gemini CLI at DeepSeek, MiMo, GLM, Kimi… and see exactly how much you save, broken down by model and client.
+- 🔁 **Stay up** — automatic failover, circuit breaker, and cooldown keep requests flowing when a provider rate-limits or dies.
+- ⚡ **Zero hand-editing** — one-click apply / restore for your coding agents; no more poking at `config.toml` / `settings.json`.
+
 ## Why Not Just a Proxy?
 
 | Plain proxy | AgentGate |

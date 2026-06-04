@@ -35,6 +35,12 @@ AgentGate 是面向 AI 编程 Agent 的**本地模型网关**。它把 Codex、C
 
 AgentGate 的定位是：**本地统一入口 + 协议转换 + 原生直连 + 智能路由 + 图形化配置**。
 
+## 为什么用 AgentGate
+
+- 💰 **更省** —— 把 Codex / Claude Code / Gemini CLI 接到 DeepSeek、MiMo、GLM、Kimi…，按模型和客户端清楚看到省了多少。
+- 🔁 **不掉链子** —— 自动故障切换、熔断、冷却，某家限流或挂了请求照常跑。
+- ⚡ **零手改配置** —— 客户端一键应用 / 还原，不用再抠 `config.toml` / `settings.json`。
+
 ## 为什么不是普通代理？
 
 | 普通代理 | AgentGate |
