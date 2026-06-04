@@ -15,6 +15,7 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
+  Monitor,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
@@ -32,13 +33,14 @@ import type {
   OpenCodeConfigStatus,
   GeminiCliConfigStatus,
   AtomCodeConfigStatus,
+  ClaudeDesktopStatus,
 } from "@/types/config";
 import type { GatewayStatus } from "@/types/gateway";
 
 /// Master-detail 布局：左侧 5 行客户端列表常驻显示状态，右侧渲染选中客户端
 /// 的完整详情。比原先的手风琴更适合「同时管理 5 个客户端」的场景——总览不
 /// 丢失、详情区不再被卡片 chrome 切碎。
-type ClientId = "codex" | "claude_code" | "opencode" | "gemini_cli" | "atomcode";
+type ClientId = "codex" | "claude_code" | "opencode" | "gemini_cli" | "atomcode" | "claude_desktop";
 
 /// 把每个客户端在「列表行」上需要的状态压成统一三态：
 /// - `active`：已接入 AgentGate
@@ -58,6 +60,8 @@ export function Tools() {
   const [openCodeStatus, setOpenCodeStatus] = useState<OpenCodeConfigStatus | null>(null);
   const [geminiStatus, setGeminiStatus] = useState<GeminiCliConfigStatus | null>(null);
   const [atomCodeStatus, setAtomCodeStatus] = useState<AtomCodeConfigStatus | null>(null);
+  const [claudeDesktopStatus, setClaudeDesktopStatus] = useState<ClaudeDesktopStatus | null>(null);
+  const [cdPreview, setCdPreview] = useState("");
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null);
   const [startingGateway, setStartingGateway] = useState(false);
 
@@ -105,12 +109,13 @@ export function Tools() {
 
   const load = useCallback(async () => {
     try {
-      const [c, cc, oc, gc, ac, gw] = await Promise.all([
+      const [c, cc, oc, gc, ac, cd, gw] = await Promise.all([
         api.detectCodexConfig(),
         api.detectClaudeCodeEnv(),
         api.detectOpenCodeConfig(),
         api.detectGeminiConfig(),
         api.detectAtomCodeConfig(),
+        api.detectClaudeDesktop().catch(() => null),
         api.getGatewayStatus(),
       ]);
       setCodexStatus(c);
@@ -118,6 +123,7 @@ export function Tools() {
       setOpenCodeStatus(oc);
       setGeminiStatus(gc);
       setAtomCodeStatus(ac);
+      setClaudeDesktopStatus(cd);
       setGatewayStatus(gw);
       const snippet = await api.generateCodexConfig();
       setCodexConfig(snippet);
@@ -140,6 +146,22 @@ export function Tools() {
       if (result.success) {
         await showPostApply("codex", "Codex", result.config_path);
       }
+    } catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
+  const handleApplyClaudeDesktop = async () => {
+    try {
+      const result = await api.applyClaudeDesktopConfig();
+      load();
+      if (result.success) {
+        await showPostApply("claude_desktop", "Claude Desktop", result.profile_path);
+      }
+    } catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
+  const handlePreviewClaudeDesktop = async () => {
+    try {
+      setCdPreview(await api.previewClaudeDesktopProfile());
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
@@ -304,14 +326,20 @@ export function Tools() {
       : atomCodeStatus?.exists
         ? "detected"
         : "absent";
+    const claudeDesktopPresence: ClientPresence = claudeDesktopStatus?.has_agentgate_profile
+      ? "active"
+      : claudeDesktopStatus?.installed
+        ? "detected"
+        : "absent";
     return [
       { id: "codex", name: t("tools.codex"), desc: t("tools.codex_desc"), icon: Code, presence: codexPresence },
       { id: "claude_code", name: t("tools.claude_code"), desc: t("tools.claude_code_desc"), icon: Terminal, presence: claudePresence },
       { id: "opencode", name: t("tools.opencode"), desc: t("tools.opencode_desc"), icon: Braces, presence: opencodePresence },
       { id: "gemini_cli", name: t("tools.gemini_cli"), desc: t("tools.gemini_cli_desc"), icon: Sparkles, presence: geminiPresence },
       { id: "atomcode", name: t("tools.atomcode"), desc: t("tools.atomcode_desc"), icon: Atom, presence: atomPresence },
+      { id: "claude_desktop", name: "Claude Desktop", desc: "接入 Claude Desktop（实验·macOS）", icon: Monitor, presence: claudeDesktopPresence },
     ];
-  }, [codexStatus, claudeEnv, openCodeStatus, geminiStatus, atomCodeStatus, t]);
+  }, [codexStatus, claudeEnv, openCodeStatus, geminiStatus, atomCodeStatus, claudeDesktopStatus, t]);
 
   if (loading) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
 
@@ -438,6 +466,40 @@ export function Tools() {
               load={load}
               t={t}
             />
+          )}
+          {selectedClientId === "claude_desktop" && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-text-primary">Claude Desktop</h3>
+                <p className="mt-1 text-xs text-text-muted">把 Claude Desktop 的第三方推理网关指向 AgentGate。仅 macOS；需先在 Claude Desktop 里启用过一次第三方网关。</p>
+              </div>
+              {!claudeDesktopStatus?.supported ? (
+                <p className="text-xs text-error">当前平台不支持（仅 macOS）。</p>
+              ) : !claudeDesktopStatus?.installed ? (
+                <p className="text-xs text-text-muted">未检测到 Claude Desktop。</p>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 text-xs">
+                    <StatusBadge variant={claudeDesktopStatus.has_agentgate_profile ? "success" : "muted"}>
+                      {claudeDesktopStatus.has_agentgate_profile ? "已接入 AgentGate" : "未接入"}
+                    </StatusBadge>
+                    {claudeDesktopStatus.deployment_mode && (
+                      <span className="text-text-muted">模式 {claudeDesktopStatus.deployment_mode}</span>
+                    )}
+                  </div>
+                  <p className="break-all font-mono text-[11px] text-text-muted">{claudeDesktopStatus.profile_path}</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={handleApplyClaudeDesktop} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
+                    <button onClick={handlePreviewClaudeDesktop} className="btn-secondary">预览 profile</button>
+                    <ClientHistoryButton clientId="claude_desktop" clientName="Claude Desktop" onRollbackDone={load} />
+                  </div>
+                  {cdPreview && (
+                    <pre className="max-h-60 overflow-auto rounded-md bg-card-secondary p-3 text-[11px] text-text-primary">{cdPreview}</pre>
+                  )}
+                  <p className="text-[11px] text-text-muted">应用后请重启 Claude Desktop 生效。要还原，用上面的历史回滚。</p>
+                </>
+              )}
+            </div>
           )}
         </section>
       </div>

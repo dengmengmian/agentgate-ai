@@ -86,3 +86,21 @@ export interface AtomCodeConfigStatus {
   has_saved_official: boolean;
 }
 
+export interface ClaudeDesktopStatus {
+  supported: boolean;
+  normal_config_path: string;
+  threep_config_path: string;
+  profile_path: string;
+  installed: boolean;
+  has_agentgate_profile: boolean;
+  applied_profile_id: string | null;
+  deployment_mode: string | null;
+}
+
+export interface ClaudeDesktopApplyResult {
+  success: boolean;
+  profile_path: string;
+  base_url: string;
+  warnings: string[];
+}
+

@@ -287,6 +287,9 @@ pub fn run() {
             commands::toggle_codex_provider,
             commands::open_codex_config,
             // Claude Code
+            commands::detect_claude_desktop,
+            commands::preview_claude_desktop_profile,
+            commands::apply_claude_desktop_config,
             commands::detect_claude_code_env,
             commands::apply_claude_code_config,
             commands::toggle_claude_code_provider,

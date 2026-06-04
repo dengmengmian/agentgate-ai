@@ -222,6 +222,19 @@ export async function generateCodexConfig(): Promise<string> {
   return cmd("generate_codex_config");
 }
 
+// ── Claude Desktop（接入 AgentGate 网关）──
+export async function detectClaudeDesktop(): Promise<import("@/types/config").ClaudeDesktopStatus> {
+  return cmd("detect_claude_desktop");
+}
+
+export async function previewClaudeDesktopProfile(): Promise<string> {
+  return cmd("preview_claude_desktop_profile");
+}
+
+export async function applyClaudeDesktopConfig(): Promise<import("@/types/config").ClaudeDesktopApplyResult> {
+  return cmd("apply_claude_desktop_config");
+}
+
 // ── Gateway Auth ───────────────────────────────────────────────
 
 export async function getGatewayAuthSettings(): Promise<GatewayAuthSettings> {

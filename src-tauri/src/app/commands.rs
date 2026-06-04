@@ -1692,6 +1692,58 @@ pub fn open_codex_config() -> Result<bool, AppError> {
     Ok(true)
 }
 
+// ── Claude Desktop Commands（第一阶段：只读 detect + profile 预览，不写盘）──
+
+#[tauri::command]
+pub fn detect_claude_desktop() -> crate::tools::claude_desktop::ClaudeDesktopStatus {
+    crate::tools::claude_desktop::detect()
+}
+
+/// 生成指向 AgentGate 网关的 3p profile JSON（pretty），仅供和用户机器上实际的
+/// Claude Desktop 3p 配置对比、确认 schema，不写任何文件。
+#[tauri::command]
+pub fn preview_claude_desktop_profile(
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let (host, port) = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
+        let s = storage::gateway_settings::get(&conn)?;
+        (s.host, s.port)
+    };
+    let token = crate::security::local_token::ensure_token()?;
+    let profile = crate::tools::claude_desktop::generate_profile(&host, port, &token);
+    serde_json::to_string_pretty(&profile)
+        .map_err(|e| AppError::internal(format!("serialize profile failed: {e}")))
+}
+
+/// 接入 Claude Desktop：写 3p profile + 切 appliedId 到 AgentGate。apply 前先经
+/// apply_history 快照 profile/_meta，用户可在客户端历史里一键回滚。
+#[tauri::command]
+pub fn apply_claude_desktop_config(
+    state: State<'_, AppState>,
+) -> Result<crate::tools::claude_desktop::ClaudeDesktopApplyResult, AppError> {
+    let (host, port) = {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
+        let settings = storage::gateway_settings::get(&conn)?;
+        (settings.host, settings.port)
+    };
+    let token = crate::security::local_token::ensure_token()?;
+    record_pre_apply(
+        &state,
+        "claude_desktop",
+        "apply",
+        crate::tools::claude_desktop::snapshot_paths(),
+        "apply",
+    );
+    crate::tools::claude_desktop::apply(&host, port, &token)
+}
+
 // ── Claude Code Commands ──────────────────────────────────────
 
 #[tauri::command]
