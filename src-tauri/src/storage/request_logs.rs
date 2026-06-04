@@ -484,6 +484,9 @@ fn aggregate_cost_grouped(
         FROM request_logs
         WHERE {col} IS NOT NULL AND {col} != ''
           AND (?1 IS NULL OR timestamp >= ?1)
+          -- 过滤无 token 用量的噪音条目（失败请求 / synthetic 错误兜底 / 上游未返回
+          -- usage 的直通请求），它们对成本统计零贡献。
+          AND (COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)) > 0
         GROUP BY {col}
         ORDER BY cost DESC, request_count DESC
         LIMIT ?2",
@@ -1235,6 +1238,26 @@ mod tests {
         assert!((by_client[0].cost - 0.05).abs() < 1e-9);
         assert_eq!(by_client[1].key, "Codex");
         assert_eq!(by_client[1].request_count, 2);
+    }
+
+    #[test]
+    fn cost_breakdown_filters_zero_token_noise() {
+        let conn = empty_logs_db();
+        let ins = |rid: &str, model: &str, input: Option<i64>, output: Option<i64>| {
+            insert(
+                &conn, rid, "Codex", "P", model, "/v1/x", 200, 10,
+                None, None, None, None, None, None, None, None,
+                input, output, Some(0.0), None, None, Some("gateway"), None, None,
+            )
+            .unwrap();
+        };
+        ins("r1", "real-model", Some(100), Some(20)); // 有 token
+        ins("r2", "<synthetic>", Some(0), Some(0)); // 噪音：token=0
+        ins("r3", "no-usage", None, None); // 噪音：无 token
+
+        let by_model = aggregate_cost_by_model(&conn, None, 100).unwrap();
+        assert_eq!(by_model.len(), 1, "token=0 的条目应被过滤");
+        assert_eq!(by_model[0].key, "real-model");
     }
 
     #[test]
