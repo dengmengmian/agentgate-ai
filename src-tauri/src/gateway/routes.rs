@@ -3854,6 +3854,37 @@ mod tests {
         assert!(reasons.contains(&"unsupported_vision".to_string()));
     }
 
+    #[test]
+    fn route_fallback_chain_marks_primary_backup_and_selected() {
+        let mk = |priority: i64, name: &str| crate::models::route_profile::RouteProfileProviderView {
+            id: format!("rpp{priority}"),
+            provider_id: format!("p{priority}"),
+            provider_name: name.into(),
+            provider_type: "openai".into(),
+            provider_protocol: "openai_responses".into(),
+            has_anthropic_url: false,
+            supports_vision: None,
+            model_capabilities: None,
+            priority,
+            enabled: true,
+            model_override: None,
+            cooldown_seconds: 600,
+            failover_on_status_codes: None,
+            failover_on_error_keywords: None,
+            routing_conditions: None,
+            runtime_available: true,
+            cooldown_until: None,
+            consecutive_failures: 0,
+        };
+        let providers = vec![mk(1, "Primary"), mk(2, "Backup")];
+
+        let chain = route_fallback_chain(&providers, "Backup");
+
+        assert_eq!(chain[0]["role"], "primary");
+        assert_eq!(chain[1]["role"], "fallback");
+        assert_eq!(chain[1]["selected"], true);
+    }
+
     fn provider_for_native_model_tests() -> Provider {
         Provider {
             id: "p1".to_string(),
@@ -4324,6 +4355,7 @@ fn enrich_trace_with_route_decision(
         "selected_model": model,
         "selected_priority": selected.map(|p| p.priority),
         "matched_conditions": matched_conditions,
+        "fallback_chain": route_fallback_chain(&providers, provider_name),
         "candidates": providers.iter().map(|p| {
             json!({
                 "provider_id": p.provider_id,
@@ -4342,6 +4374,26 @@ fn enrich_trace_with_route_decision(
         }).collect::<Vec<_>>(),
     });
     Some(trace.to_string())
+}
+
+fn route_fallback_chain(
+    providers: &[crate::models::route_profile::RouteProfileProviderView],
+    selected_provider_name: &str,
+) -> Vec<Value> {
+    providers
+        .iter()
+        .enumerate()
+        .map(|(idx, p)| {
+            json!({
+                "provider_id": p.provider_id,
+                "provider_name": p.provider_name,
+                "priority": p.priority,
+                "role": if idx == 0 { "primary" } else { "fallback" },
+                "step": idx + 1,
+                "selected": p.provider_name == selected_provider_name,
+            })
+        })
+        .collect()
 }
 
 fn route_candidate_skip_reasons(

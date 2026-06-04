@@ -22,6 +22,12 @@ interface RouteDecisionTrace {
     has_conditions?: boolean;
     skip_reasons?: string[];
   }>;
+  fallback_chain?: Array<{
+    provider_name?: string;
+    role?: "primary" | "fallback";
+    step?: number;
+    selected?: boolean;
+  }>;
 }
 
 interface RequestDetailDrawerProps {
@@ -201,6 +207,25 @@ function RouteDecisionCard({ decision }: { decision: RouteDecisionTrace }) {
                 {candidate.priority ?? idx + 1}. {candidate.provider_name ?? "—"}
                 {candidate.has_conditions ? ` · ${t("routes.has_conditions")}` : ""}
                 {candidate.skip_reasons?.length ? ` · ${candidate.skip_reasons.map((r) => skipReasonLabel(r, t)).join(", ")}` : ""}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {decision.fallback_chain && decision.fallback_chain.length > 0 && (
+        <div className="mt-3 space-y-1">
+          <span className="text-[11px] text-text-muted">{t("logs.fallback_chain")}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {decision.fallback_chain.map((step, idx) => (
+              <span
+                key={`${step.provider_name ?? "fallback"}-${idx}`}
+                className={`rounded-md border px-2 py-1 text-[11px] ${
+                  step.selected
+                    ? "border-accent/40 bg-accent/10 text-accent"
+                    : "border-border bg-card text-text-secondary"
+                }`}
+              >
+                {step.step ?? idx + 1}. {step.role === "primary" ? t("logs.fallback_primary") : t("logs.fallback_backup")} · {step.provider_name ?? "—"}
               </span>
             ))}
           </div>
