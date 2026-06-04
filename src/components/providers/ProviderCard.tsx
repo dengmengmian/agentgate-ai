@@ -89,6 +89,8 @@ export function ProviderCard({
       runtime.quota_exhausted ||
       inCooldown ||
       runtime.consecutive_failures > 0);
+  const h24Failures = health ? Math.max(health.h24_total - health.h24_success, 0) : 0;
+  const latestError = health?.recent_errors[0];
 
   return (
     <div className={`rounded-xl border bg-card p-5 ${provider.is_active ? "border-accent/40 border-l-2 border-l-accent" : "border-border"}`} style={{ boxShadow: "var(--shadow-sm)" }}>
@@ -201,18 +203,34 @@ export function ProviderCard({
 
       {/* ── Health Stats — compact inline ── */}
       {health && health.h24_total > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted">
-          <span className="flex items-center gap-1">
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.h1_success_rate >= 95 ? "bg-green-400" : health.h1_success_rate >= 80 ? "bg-yellow-400" : "bg-red-400"}`} />
-            1h {health.h1_success_rate}%
-          </span>
-          <span className="flex items-center gap-1">
-            <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.h24_success_rate >= 95 ? "bg-green-400" : health.h24_success_rate >= 80 ? "bg-yellow-400" : "bg-red-400"}`} />
-            24h {health.h24_success_rate}%
-          </span>
-          <span>{health.h1_avg_latency_ms}ms avg</span>
-          <span>P95 {health.h1_p95_latency_ms}ms</span>
-          <span>{health.h24_total} reqs</span>
+        <div className="mb-3 space-y-1.5 rounded-md border border-border/50 bg-card-secondary/40 px-3 py-2 text-[11px] text-text-muted">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-medium text-text-secondary">{t("providers.health")}</span>
+            <span className="flex items-center gap-1">
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.h1_success_rate >= 95 ? "bg-green-400" : health.h1_success_rate >= 80 ? "bg-yellow-400" : "bg-red-400"}`} />
+              1h {health.h1_success_rate}%
+            </span>
+            <span className="flex items-center gap-1">
+              <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.h24_success_rate >= 95 ? "bg-green-400" : health.h24_success_rate >= 80 ? "bg-yellow-400" : "bg-red-400"}`} />
+              24h {health.h24_success_rate}%
+            </span>
+            <span>{health.h1_avg_latency_ms}ms avg</span>
+            <span>P95 {health.h1_p95_latency_ms}ms</span>
+            <span>{h24Failures} {t("providers.health_failures")}</span>
+          </div>
+          {latestError && (
+            <div className="truncate text-[11px] text-text-muted" title={`${latestError.status_code} ${latestError.message}`}>
+              {t("providers.health_recent_errors")}: {latestError.status_code} · {latestError.message}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── No recent traffic: keep a small neutral hint instead of hiding health entirely ── */}
+      {health && health.h24_total === 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border/50 bg-card-secondary/40 px-3 py-2 text-[11px] text-text-muted">
+          <span className="font-medium text-text-secondary">{t("providers.health")}</span>
+          <span>{t("providers.health_no_recent")}</span>
         </div>
       )}
 

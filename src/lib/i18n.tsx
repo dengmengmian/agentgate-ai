@@ -85,6 +85,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.health_success": { en: "Success", zh: "成功率" },
   "providers.health_avg_latency": { en: "Avg Latency", zh: "平均延迟" },
   "providers.health_recent_errors": { en: "Recent Errors", zh: "最近错误" },
+  "providers.health_failures": { en: "failures", zh: "次失败" },
+  "providers.health_no_recent": { en: "No gateway traffic in the last 24h", zh: "最近 24h 无网关请求" },
   "providers.cache_enabled": { en: "Cache", zh: "缓存" },
   "providers.cache_supported": { en: "Cache ✓", zh: "支持缓存" },
   "providers.details": { en: "Details", zh: "详情" },
