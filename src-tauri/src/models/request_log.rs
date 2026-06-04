@@ -48,7 +48,10 @@ pub struct RequestLogDetail {
 pub struct RequestLogFilter {
     pub client: Option<String>,
     pub provider: Option<String>,
+    pub model: Option<String>,
+    pub route_profile_id: Option<String>,
     pub status: Option<String>,
+    pub error_type: Option<String>,
     pub keyword: Option<String>,
     /// 'gateway' / 'claude_session' / 'codex_session' / 'gemini_session' /
     /// 'session_log'（聚合：所有非 gateway 来源）。
@@ -150,7 +153,10 @@ mod tests {
         let filter = RequestLogFilter {
             client: Some("codex".to_string()),
             provider: None,
+            model: None,
+            route_profile_id: None,
             status: Some("success".to_string()),
+            error_type: None,
             keyword: Some("error".to_string()),
             source: None,
             session_id: None,

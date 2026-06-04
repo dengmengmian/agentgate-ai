@@ -664,7 +664,10 @@ pub fn export_bundle(
             let filter = crate::models::request_log::RequestLogFilter {
                 client: None,
                 provider: None,
+                model: None,
+                route_profile_id: None,
                 status: None,
+                error_type: None,
                 keyword: None,
                 source: None,
                 session_id: None,

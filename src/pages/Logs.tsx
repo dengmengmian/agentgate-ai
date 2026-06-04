@@ -11,6 +11,7 @@ import * as api from "@/lib/api";
 import type { RequestLogListItem } from "@/types/request-log";
 import type { RequestLogDetail } from "@/types/request-log";
 import type { ProviderView } from "@/types/provider";
+import type { RouteProfileView } from "@/types/route-profile";
 
 // 客户端候选——detect_client_from_ua 用的固定列表。
 const KNOWN_CLIENTS = ["Codex", "Claude Code", "OpenCode", "Gemini CLI", "AtomCode", "Generic"];
@@ -28,6 +29,9 @@ export function Logs() {
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
+  const [modelFilter, setModelFilter] = useState("");
+  const [routeProfileFilter, setRouteProfileFilter] = useState("");
+  const [errorTypeFilter, setErrorTypeFilter] = useState("");
   const [clientFilter, setClientFilter] = useState("");
   // 'all' / 'gateway' / 'session_log'（聚合所有客户端日志）/ 单一来源（'claude_session' 等）
   const [sourceFilter, setSourceFilter] = useState<string>("");
@@ -35,6 +39,7 @@ export function Logs() {
   // 'list'（按时间逐条）/ 'session'（按会话聚合）
   const [viewMode, setViewMode] = useState<"list" | "session">("list");
   const [providerOptions, setProviderOptions] = useState<ProviderView[]>([]);
+  const [routeProfileOptions, setRouteProfileOptions] = useState<RouteProfileView[]>([]);
 
   // Pagination
   const [page, setPage] = useState(1); // 1-indexed
@@ -44,12 +49,13 @@ export function Logs() {
   // 字段存的是 name 字符串（见 routes.rs log_request_success 调用）。
   useEffect(() => {
     api.listProviders().then(setProviderOptions).catch(() => {});
+    api.listRouteProfiles().then(setRouteProfileOptions).catch(() => {});
   }, []);
 
   // Reset to page 1 whenever filters change.
   useEffect(() => {
     setPage(1);
-  }, [keyword, statusFilter, providerFilter, clientFilter, sourceFilter, sessionIdFilter]);
+  }, [keyword, statusFilter, providerFilter, modelFilter, routeProfileFilter, errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter]);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
@@ -58,6 +64,9 @@ export function Logs() {
         keyword: keyword || undefined,
         status: statusFilter || undefined,
         provider: providerFilter || undefined,
+        model: modelFilter || undefined,
+        route_profile_id: routeProfileFilter || undefined,
+        error_type: errorTypeFilter || undefined,
         client: clientFilter || undefined,
         source: sourceFilter || undefined,
         session_id: sessionIdFilter || undefined,
@@ -75,7 +84,7 @@ export function Logs() {
     } finally {
       setLoading(false);
     }
-  }, [keyword, statusFilter, providerFilter, clientFilter, sourceFilter, sessionIdFilter, page]);
+  }, [keyword, statusFilter, providerFilter, modelFilter, routeProfileFilter, errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter, page]);
 
   useEffect(() => {
     loadLogs();
@@ -167,6 +176,39 @@ export function Logs() {
               {providerOptions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           )}
+          <input
+            type="text"
+            value={modelFilter}
+            onChange={(e) => setModelFilter(e.target.value)}
+            placeholder={t("logs.filter_model")}
+            className="form-input !w-40 shrink-0"
+          />
+          {routeProfileOptions.length > 0 && (
+            <select
+              value={routeProfileFilter}
+              onChange={(e) => setRouteProfileFilter(e.target.value)}
+              className="form-input !w-40 shrink-0"
+              title={t("logs.filter_route_profile")}
+            >
+              <option value="">{t("logs.all_routes")}</option>
+              {routeProfileOptions.map((profile) => (
+                <option key={profile.id} value={profile.id}>{profile.name}</option>
+              ))}
+            </select>
+          )}
+          <select
+            value={errorTypeFilter}
+            onChange={(e) => setErrorTypeFilter(e.target.value)}
+            className="form-input !w-36 shrink-0"
+            title={t("logs.filter_error_type")}
+          >
+            <option value="">{t("logs.all_error_types")}</option>
+            <option value="auth_failed">{t("logs.error_type.auth_failed")}</option>
+            <option value="rate_limited">{t("logs.error_type.rate_limited")}</option>
+            <option value="quota_or_balance">{t("logs.error_type.quota_or_balance")}</option>
+            <option value="server_error">{t("logs.error_type.server_error")}</option>
+            <option value="other_error">{t("logs.error_type.other_error")}</option>
+          </select>
           <select
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}

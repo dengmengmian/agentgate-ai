@@ -42,7 +42,10 @@ export interface RequestLogDetail {
 export interface RequestLogFilter {
   client?: string;
   provider?: string;
+  model?: string;
+  route_profile_id?: string;
   status?: string;
+  error_type?: string;
   keyword?: string;
   // 'gateway' / 'claude_session' / 'codex_session' / 'gemini_session' /
   // 'session_log'（聚合：所有非 gateway 来源）

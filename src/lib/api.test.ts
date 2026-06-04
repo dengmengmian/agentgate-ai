@@ -143,9 +143,21 @@ describe("API client", () => {
 
   it("listRequestLogs passes filter", async () => {
     vi.mocked(invoke).mockResolvedValue({ items: [], total: 0 });
-    const result = await listRequestLogs({ limit: 10, offset: 0 });
+    const result = await listRequestLogs({
+      limit: 10,
+      offset: 0,
+      model: "m1",
+      route_profile_id: "rp1",
+      error_type: "rate_limited",
+    });
     expect(invoke).toHaveBeenCalledWith("list_request_logs", {
-      filter: { limit: 10, offset: 0 },
+      filter: {
+        limit: 10,
+        offset: 0,
+        model: "m1",
+        route_profile_id: "rp1",
+        error_type: "rate_limited",
+      },
     });
     expect(result).toEqual({ items: [], total: 0 });
   });

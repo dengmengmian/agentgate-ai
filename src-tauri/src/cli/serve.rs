@@ -875,11 +875,14 @@ fn cmd_logs(
     let filter = agentgate_lib::models::request_log::RequestLogFilter {
         client: client.map(String::from),
         provider: provider.map(String::from),
+        model: None,
+        route_profile_id: None,
         status: if errors_only {
             Some("error".into())
         } else {
             None
         },
+        error_type: None,
         keyword: keyword.map(String::from),
         source: None,
         session_id: None,

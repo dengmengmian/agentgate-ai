@@ -92,6 +92,18 @@ fn apply_log_filter(
         param_values.push(Box::new(provider.clone()));
         *idx += 1;
     }
+    if let Some(ref model) = filter.model {
+        sql.push_str(&format!(" AND model = ?{idx}"));
+        param_values.push(Box::new(model.clone()));
+        *idx += 1;
+    }
+    if let Some(ref route_profile_id) = filter.route_profile_id {
+        sql.push_str(&format!(
+            " AND json_extract(trace_json, '$.route_decision.profile_id') = ?{idx}"
+        ));
+        param_values.push(Box::new(route_profile_id.clone()));
+        *idx += 1;
+    }
     if let Some(ref source) = filter.source {
         // 'session_log' = 所有非 gateway 来源的合集（聚合视图用）。
         if source == "session_log" {
@@ -132,6 +144,9 @@ fn apply_log_filter(
             _ => {}
         }
     }
+    if let Some(ref error_type) = filter.error_type {
+        apply_error_type_filter(error_type, sql);
+    }
     if let Some(ref keyword) = filter.keyword {
         let like = format!("%{keyword}%");
         sql.push_str(&format!(
@@ -143,6 +158,57 @@ fn apply_log_filter(
         param_values.push(Box::new(like.clone()));
         param_values.push(Box::new(like));
         *idx += 4;
+    }
+}
+
+fn apply_error_type_filter(error_type: &str, sql: &mut String) {
+    match error_type {
+        "auth_failed" => {
+            sql.push_str(
+                " AND (status_code IN (401, 403)
+                    OR lower(COALESCE(error_message, '')) LIKE '%unauthorized%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%authentication%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%invalid api key%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%invalid_api_key%')",
+            );
+        }
+        "rate_limited" => {
+            sql.push_str(
+                " AND (status_code = 429
+                    OR lower(COALESCE(error_message, '')) LIKE '%rate limit%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%rate_limit%')",
+            );
+        }
+        "quota_or_balance" => {
+            sql.push_str(
+                " AND (status_code = 402
+                    OR lower(COALESCE(error_message, '')) LIKE '%quota%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%balance%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%credit%')",
+            );
+        }
+        "server_error" => {
+            sql.push_str(" AND status_code >= 500");
+        }
+        "other_error" => {
+            sql.push_str(
+                " AND (status_code >= 400 OR status_code < 200)
+                  AND NOT (
+                    status_code IN (401, 402, 403, 429)
+                    OR status_code >= 500
+                    OR lower(COALESCE(error_message, '')) LIKE '%unauthorized%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%authentication%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%invalid api key%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%invalid_api_key%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%rate limit%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%rate_limit%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%quota%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%balance%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%credit%'
+                  )",
+            );
+        }
+        _ => {}
     }
 }
 
@@ -1356,6 +1422,78 @@ mod tests {
         assert!((stats.model_stats[1].cost - 0.05).abs() < 1e-9);
         assert_eq!(stats.latency_points.len(), 3);
         assert!(stats.latency_points.iter().all(|p| p.latency_ms > 0));
+    }
+
+    #[test]
+    fn list_filters_by_route_profile_model_and_error_type() {
+        let conn = empty_logs_db();
+        let trace = |id: &str| {
+            serde_json::json!({
+                "route_decision": {
+                    "profile_id": id,
+                    "profile_name": "Default"
+                }
+            })
+            .to_string()
+        };
+
+        insert(
+            &conn, "r1", "Codex", "P", "m1", "/v1/responses", 429, 100,
+            None, None, None, None, None, None, Some("rate limit exceeded"), Some(&trace("rp1")),
+            Some(10), Some(1), Some(0.01), None, None, Some("gateway"), None, None,
+        )
+        .unwrap();
+        insert(
+            &conn, "r2", "Codex", "P", "m2", "/v1/responses", 401, 100,
+            None, None, None, None, None, None, Some("Unauthorized"), Some(&trace("rp1")),
+            Some(10), Some(1), Some(0.01), None, None, Some("gateway"), None, None,
+        )
+        .unwrap();
+        insert(
+            &conn, "r3", "Codex", "P", "m1", "/v1/responses", 500, 100,
+            None, None, None, None, None, None, Some("server error"), Some(&trace("rp2")),
+            Some(10), Some(1), Some(0.01), None, None, Some("gateway"), None, None,
+        )
+        .unwrap();
+
+        let logs = list(
+            &conn,
+            RequestLogFilter {
+                client: None,
+                provider: None,
+                model: Some("m1".to_string()),
+                route_profile_id: Some("rp1".to_string()),
+                status: None,
+                error_type: Some("rate_limited".to_string()),
+                keyword: None,
+                source: None,
+                session_id: None,
+                limit: Some(20),
+                offset: Some(0),
+            },
+        )
+        .unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].request_id, "r1");
+
+        let auth_count = count(
+            &conn,
+            &RequestLogFilter {
+                client: None,
+                provider: None,
+                model: None,
+                route_profile_id: None,
+                status: None,
+                error_type: Some("auth_failed".to_string()),
+                keyword: None,
+                source: None,
+                session_id: None,
+                limit: None,
+                offset: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(auth_count, 1);
     }
 
     #[test]
