@@ -167,6 +167,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.status_not_tested": { en: "not tested", zh: "未测试" },
   "providers.runtime_unavailable": { en: "Unavailable", zh: "不可用" },
   "providers.runtime_cooldown": { en: "Cooldown", zh: "冷却中" },
+  "providers.runtime_recovers_at": { en: "recovers at", zh: "恢复于" },
+  "providers.runtime_reason": { en: "reason", zh: "原因" },
   "providers.runtime_quota": { en: "Quota exhausted", zh: "配额耗尽" },
   "providers.runtime_failures": { en: "consecutive fails", zh: "连续失败" },
   "providers.runtime_reset": { en: "Reset", zh: "重置" },

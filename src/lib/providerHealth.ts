@@ -1,4 +1,5 @@
 import type { RecentError } from "@/types/stats";
+import type { ProviderRuntimeStatus } from "@/types/route-profile";
 
 export type ProviderErrorStatus =
   | "rate_limited"
@@ -56,4 +57,29 @@ export function classifyProviderErrorStatus(error: Pick<RecentError, "status_cod
 export function summarizeProviderErrorStatuses(errors: RecentError[]): ProviderErrorStatus[] {
   const statuses = errors.map(classifyProviderErrorStatus);
   return Array.from(new Set(statuses)).filter((status) => status !== "other_error");
+}
+
+export interface ProviderCooldownSummary {
+  remainingSeconds: number;
+  recoverAt: string;
+  reason: string | null;
+}
+
+export function getProviderCooldownSummary(
+  runtime: Pick<ProviderRuntimeStatus, "cooldown_until" | "last_error" | "last_error_code"> | null | undefined,
+  nowMs = Date.now(),
+): ProviderCooldownSummary | null {
+  if (!runtime?.cooldown_until) return null;
+
+  const recoverAtMs = new Date(runtime.cooldown_until).getTime();
+  if (!Number.isFinite(recoverAtMs)) return null;
+
+  const remainingMs = recoverAtMs - nowMs;
+  if (remainingMs <= 0) return null;
+
+  return {
+    remainingSeconds: Math.ceil(remainingMs / 1000),
+    recoverAt: runtime.cooldown_until,
+    reason: runtime.last_error_code ?? runtime.last_error,
+  };
 }
