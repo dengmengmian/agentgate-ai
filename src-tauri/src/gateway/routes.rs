@@ -3823,6 +3823,37 @@ mod tests {
         );
     }
 
+    #[test]
+    fn route_candidate_skip_reasons_explain_unavailable_cooldown_and_vision() {
+        let provider = crate::models::route_profile::RouteProfileProviderView {
+            id: "rpp1".into(),
+            provider_id: "p1".into(),
+            provider_name: "NoVision".into(),
+            provider_type: "openai".into(),
+            provider_protocol: "openai_responses".into(),
+            has_anthropic_url: false,
+            supports_vision: Some(false),
+            model_capabilities: None,
+            priority: 1,
+            enabled: false,
+            model_override: None,
+            cooldown_seconds: 600,
+            failover_on_status_codes: None,
+            failover_on_error_keywords: None,
+            routing_conditions: None,
+            runtime_available: false,
+            cooldown_until: Some((chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339()),
+            consecutive_failures: 3,
+        };
+
+        let reasons = route_candidate_skip_reasons(&provider, true);
+
+        assert!(reasons.contains(&"disabled".to_string()));
+        assert!(reasons.contains(&"runtime_unavailable".to_string()));
+        assert!(reasons.contains(&"cooldown".to_string()));
+        assert!(reasons.contains(&"unsupported_vision".to_string()));
+    }
+
     fn provider_for_native_model_tests() -> Provider {
         Provider {
             id: "p1".to_string(),
@@ -4260,6 +4291,7 @@ fn enrich_trace_with_route_decision(
     route: &str,
     provider_name: &str,
     model: &str,
+    raw_request: &str,
     trace_json: Option<&str>,
 ) -> Option<String> {
     let mut trace = trace_json
@@ -4275,6 +4307,10 @@ fn enrich_trace_with_route_decision(
         .flatten()?;
     let providers = crate::storage::route_profiles::list_providers(conn, &profile.id).ok()?;
     let selected = providers.iter().find(|p| p.provider_name == provider_name);
+    let request_has_images = route == "/v1/responses"
+        && serde_json::from_str::<ResponsesRequest>(raw_request)
+            .map(|req| request_contains_images(&req))
+            .unwrap_or(false);
     let matched_conditions = selected
         .and_then(|p| p.routing_conditions.as_ref())
         .and_then(|s| serde_json::from_str::<Value>(s).ok());
@@ -4301,10 +4337,36 @@ fn enrich_trace_with_route_decision(
                 }).unwrap_or(false),
                 "supports_vision": p.supports_vision,
                 "has_conditions": p.routing_conditions.is_some(),
+                "skip_reasons": route_candidate_skip_reasons(p, request_has_images),
             })
         }).collect::<Vec<_>>(),
     });
     Some(trace.to_string())
+}
+
+fn route_candidate_skip_reasons(
+    provider: &crate::models::route_profile::RouteProfileProviderView,
+    request_has_images: bool,
+) -> Vec<String> {
+    let mut reasons = Vec::new();
+    if !provider.enabled {
+        reasons.push("disabled".to_string());
+    }
+    if !provider.runtime_available {
+        reasons.push("runtime_unavailable".to_string());
+    }
+    let in_cooldown = provider.cooldown_until.as_ref().map(|until| {
+        chrono::DateTime::parse_from_rfc3339(until)
+            .map(|cd| cd > chrono::Utc::now())
+            .unwrap_or(false)
+    }).unwrap_or(false);
+    if in_cooldown {
+        reasons.push("cooldown".to_string());
+    }
+    if request_has_images && provider.supports_vision == Some(false) {
+        reasons.push("unsupported_vision".to_string());
+    }
+    reasons
 }
 
 fn log_request_error(
@@ -4381,7 +4443,7 @@ fn log_request_success(
             output_tokens,
         );
         let trace_json =
-            enrich_trace_with_route_decision(&conn, route, provider, model, trace_json);
+            enrich_trace_with_route_decision(&conn, route, provider, model, raw_request, trace_json);
         let _ = crate::storage::request_logs::insert(
             &conn,
             request_id,

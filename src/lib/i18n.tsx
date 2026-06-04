@@ -243,6 +243,10 @@ const translations: Record<string, Record<Locale, string>> = {
   "logs.selected_model": { en: "Selected Model", zh: "选中模型" },
   "logs.matched_conditions": { en: "Matched Conditions", zh: "命中条件" },
   "logs.route_candidates": { en: "Candidates", zh: "候选列表" },
+  "logs.skip_disabled": { en: "disabled", zh: "已禁用" },
+  "logs.skip_runtime_unavailable": { en: "unavailable", zh: "不可用" },
+  "logs.skip_cooldown": { en: "cooldown", zh: "冷却中" },
+  "logs.skip_unsupported_vision": { en: "no vision", zh: "不支持图片" },
 
   // ── Tools ──
   "tools.codex": { en: "Codex", zh: "Codex" },

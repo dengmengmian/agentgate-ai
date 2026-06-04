@@ -20,6 +20,7 @@ interface RouteDecisionTrace {
     model?: string | null;
     in_cooldown?: boolean;
     has_conditions?: boolean;
+    skip_reasons?: string[];
   }>;
 }
 
@@ -198,8 +199,8 @@ function RouteDecisionCard({ decision }: { decision: RouteDecisionTrace }) {
                 className="rounded-md border border-border bg-card px-2 py-1 text-[11px] text-text-secondary"
               >
                 {candidate.priority ?? idx + 1}. {candidate.provider_name ?? "—"}
-                {candidate.in_cooldown ? ` · ${t("routes.cooldown")}` : ""}
                 {candidate.has_conditions ? ` · ${t("routes.has_conditions")}` : ""}
+                {candidate.skip_reasons?.length ? ` · ${candidate.skip_reasons.map((r) => skipReasonLabel(r, t)).join(", ")}` : ""}
               </span>
             ))}
           </div>
@@ -207,4 +208,14 @@ function RouteDecisionCard({ decision }: { decision: RouteDecisionTrace }) {
       )}
     </div>
   );
+}
+
+function skipReasonLabel(reason: string, t: (key: string) => string): string {
+  const labels: Record<string, string> = {
+    disabled: t("logs.skip_disabled"),
+    runtime_unavailable: t("logs.skip_runtime_unavailable"),
+    cooldown: t("logs.skip_cooldown"),
+    unsupported_vision: t("logs.skip_unsupported_vision"),
+  };
+  return labels[reason] ?? reason;
 }
