@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Layers, X, MessageSquare } from "lucide-react";
+import { Loader2, Layers, X, MessageSquare, Copy } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { formatTimestamp } from "@/lib/utils";
 import { toast } from "@/components/common/Toast";
@@ -20,7 +20,7 @@ interface SessionGroupViewProps {
 export function SessionGroupView({ onPickSession }: SessionGroupViewProps) {
   const [rows, setRows] = useState<SessionUsageSummary[]>([]);
   const [loading, setLoading] = useState(true);
-  const [convoSession, setConvoSession] = useState<string | null>(null);
+  const [convo, setConvo] = useState<{ sessionId: string; source: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,7 +82,7 @@ export function SessionGroupView({ onPickSession }: SessionGroupViewProps) {
               <td className="px-5 py-2.5 font-mono text-text-primary">
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={(e) => { e.stopPropagation(); setConvoSession(row.session_id); }}
+                    onClick={(e) => { e.stopPropagation(); setConvo({ sessionId: row.session_id, source: row.source }); }}
                     className="shrink-0 text-text-muted transition-colors hover:text-accent"
                     title="查看对话"
                   >
@@ -117,14 +117,20 @@ export function SessionGroupView({ onPickSession }: SessionGroupViewProps) {
         </tbody>
       </table>
     </div>
-    {convoSession && (
-      <ConversationModal sessionId={convoSession} onClose={() => setConvoSession(null)} />
+    {convo && (
+      <ConversationModal sessionId={convo.sessionId} source={convo.source} onClose={() => setConvo(null)} />
     )}
     </>
   );
 }
 
-function ConversationModal({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+function resumeCommand(sessionId: string, source: string): string | null {
+  if (source === "codex_session") return `codex resume ${sessionId}`;
+  if (source === "gateway") return null; // 网关请求没有「会话恢复」概念
+  return `claude --resume ${sessionId}`; // claude_session / mixed / 默认
+}
+
+function ConversationModal({ sessionId, source, onClose }: { sessionId: string; source: string; onClose: () => void }) {
   const [msgs, setMsgs] = useState<ConversationMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -150,9 +156,18 @@ function ConversationModal({ sessionId, onClose }: { sessionId: string; onClose:
           </div>
           <button onClick={onClose} className="shrink-0 text-text-muted hover:text-text-primary"><X className="h-4 w-4" /></button>
         </div>
-        <div className="border-b border-border px-5 py-2">
-          <code className="font-mono text-[11px] text-text-secondary">claude --resume {sessionId}</code>
-        </div>
+        {resumeCommand(sessionId, source) && (
+          <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-2">
+            <code className="truncate font-mono text-[11px] text-text-secondary">{resumeCommand(sessionId, source)}</code>
+            <button
+              onClick={() => { navigator.clipboard.writeText(resumeCommand(sessionId, source)!); toast("success", "已复制恢复命令"); }}
+              className="shrink-0 text-text-muted transition-colors hover:text-accent"
+              title="复制"
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
         <div className="flex-1 space-y-3 overflow-y-auto p-5">
           {loading ? (
             <div className="flex items-center gap-2 text-xs text-text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" />加载中…</div>

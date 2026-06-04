@@ -1095,12 +1095,18 @@ pub fn list_log_models(state: State<'_, AppState>) -> Result<Vec<String>, AppErr
     storage::request_logs::distinct_models(&conn)
 }
 
-/// 读取某个 Claude Code 会话的完整对话（会话详情视图用）。直接读本地 jsonl，不走 DB。
+/// 读取某个会话的完整对话（会话详情视图用）。直接读本地 jsonl，不走 DB。
+/// 先试 Claude Code 日志，找不到再试 Codex 日志。
 #[tauri::command]
 pub fn get_session_conversation(
     session_id: String,
 ) -> Result<Vec<crate::session_sync::claude::ConversationMessage>, AppError> {
-    crate::session_sync::claude::read_conversation(&session_id)
+    if let Ok(msgs) = crate::session_sync::claude::read_conversation(&session_id) {
+        if !msgs.is_empty() {
+            return Ok(msgs);
+        }
+    }
+    crate::session_sync::codex::read_conversation(&session_id)
 }
 
 #[tauri::command]
