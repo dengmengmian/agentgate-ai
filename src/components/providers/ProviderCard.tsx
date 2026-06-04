@@ -4,6 +4,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { CapabilityIcons } from "@/components/common/CapabilityIcons";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
+import { summarizeProviderErrorStatuses, type ProviderErrorStatus } from "@/lib/providerHealth";
 import type { ProviderView } from "@/types/provider";
 import type { ProviderHealth } from "@/types/stats";
 import type { ProviderRuntimeStatus } from "@/types/route-profile";
@@ -91,6 +92,14 @@ export function ProviderCard({
       runtime.consecutive_failures > 0);
   const h24Failures = health ? Math.max(health.h24_total - health.h24_success, 0) : 0;
   const latestError = health?.recent_errors[0];
+  const errorStatuses = summarizeProviderErrorStatuses(health?.recent_errors ?? []);
+  const errorStatusVariant: Record<ProviderErrorStatus, "error" | "warning" | "muted"> = {
+    rate_limited: "warning",
+    quota_exhausted: "error",
+    insufficient_balance: "error",
+    auth_failed: "error",
+    other_error: "muted",
+  };
 
   return (
     <div className={`rounded-xl border bg-card p-5 ${provider.is_active ? "border-accent/40 border-l-2 border-l-accent" : "border-border"}`} style={{ boxShadow: "var(--shadow-sm)" }}>
@@ -217,6 +226,11 @@ export function ProviderCard({
             <span>{health.h1_avg_latency_ms}ms avg</span>
             <span>P95 {health.h1_p95_latency_ms}ms</span>
             <span>{h24Failures} {t("providers.health_failures")}</span>
+            {errorStatuses.map((status) => (
+              <StatusBadge key={status} variant={errorStatusVariant[status]} className="px-1.5 py-0 text-[10px]">
+                {t(`providers.error_status.${status}`)}
+              </StatusBadge>
+            ))}
           </div>
           {latestError && (
             <div className="truncate text-[11px] text-text-muted" title={`${latestError.status_code} ${latestError.message}`}>
