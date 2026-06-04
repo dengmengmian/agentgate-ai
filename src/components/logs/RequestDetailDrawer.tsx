@@ -30,6 +30,27 @@ interface RouteDecisionTrace {
   }>;
 }
 
+interface RequestTrace {
+  route_decision?: RouteDecisionTrace;
+  error_mapper?: {
+    upstream_code?: string | null;
+    upstream_message?: string | null;
+    mapped_code?: string;
+    mapped_message?: string;
+  };
+  circuit_breaker?: {
+    observed_state?: string;
+    transition?: string | null;
+    provider_id?: string;
+  };
+  degradation?: {
+    requested_model?: string;
+    chain?: string[];
+    picked?: string | null;
+    reason?: string;
+  };
+}
+
 interface RequestDetailDrawerProps {
   request: RequestLogDetail | null;
   onClose: () => void;
@@ -46,7 +67,9 @@ export function RequestDetailDrawer({
   const isError =
     request.status_code !== null &&
     (request.status_code >= 400 || request.status_code < 200);
-  const routeDecision = parseRouteDecision(request.trace_json);
+  const trace = parseTrace(request.trace_json);
+  const routeDecision = trace?.route_decision ?? null;
+  const totalTokens = (request.input_tokens ?? 0) + (request.output_tokens ?? 0);
 
   return (
     <DetailDrawer
@@ -106,14 +129,18 @@ export function RequestDetailDrawer({
             <span className="text-text-muted">{t("logs.route")}</span>
             <p className="font-mono text-text-primary">{request.route ?? "—"}</p>
           </div>
-          {request.input_tokens !== null && (
-            <div>
-              <span className="text-text-muted">{t("logs.tokens")}</span>
-              <p className="font-mono text-text-primary">
-                {request.input_tokens} in / {request.output_tokens ?? 0} out
-              </p>
-            </div>
-          )}
+        </div>
+
+        <div className="rounded-lg border border-border bg-card-secondary p-4">
+          <h4 className="mb-3 text-xs font-semibold text-text-primary">{t("logs.usage_and_cost")}</h4>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <Metric label={t("logs.tokens_input")} value={request.input_tokens?.toLocaleString() ?? "—"} />
+            <Metric label={t("logs.tokens_output")} value={request.output_tokens?.toLocaleString() ?? "—"} />
+            <Metric label={t("logs.tokens_total")} value={totalTokens > 0 ? totalTokens.toLocaleString() : "—"} />
+            <Metric label={t("logs.cost")} value={formatCost(request.cost)} />
+            <Metric label={t("logs.cache_write")} value={request.cache_write_tokens?.toLocaleString() ?? "—"} />
+            <Metric label={t("logs.cache_read")} value={request.cache_read_tokens?.toLocaleString() ?? "—"} />
+          </div>
         </div>
 
         {request.error_message && (
@@ -122,6 +149,8 @@ export function RequestDetailDrawer({
             message={request.error_message}
           />
         )}
+
+        {isError && <ErrorChainCard request={request} trace={trace} />}
 
         {routeDecision && <RouteDecisionCard decision={routeDecision} />}
 
@@ -148,14 +177,29 @@ export function RequestDetailDrawer({
   );
 }
 
-function parseRouteDecision(traceJson: string | null): RouteDecisionTrace | null {
+function parseTrace(traceJson: string | null): RequestTrace | null {
   if (!traceJson) return null;
   try {
-    const parsed = JSON.parse(traceJson) as { route_decision?: RouteDecisionTrace };
-    return parsed.route_decision ?? null;
+    return JSON.parse(traceJson) as RequestTrace;
   } catch {
     return null;
   }
+}
+
+function formatCost(cost: number | null): string {
+  if (cost == null) return "—";
+  if (cost <= 0) return "$0.00";
+  if (cost < 0.01) return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(2)}`;
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <span className="text-text-muted">{label}</span>
+      <p className="font-mono text-text-primary">{value}</p>
+    </div>
+  );
 }
 
 function formatConditions(conditions: Record<string, unknown> | null | undefined): string {
@@ -231,6 +275,57 @@ function RouteDecisionCard({ decision }: { decision: RouteDecisionTrace }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function ErrorChainCard({ request, trace }: { request: RequestLogDetail; trace: RequestTrace | null }) {
+  const { t } = useI18n();
+  const mapper = trace?.error_mapper;
+  const breaker = trace?.circuit_breaker;
+  const degradation = trace?.degradation;
+
+  return (
+    <div className="rounded-lg border border-error/20 bg-error/5 p-4">
+      <h4 className="mb-3 text-xs font-semibold text-text-primary">{t("logs.error_chain")}</h4>
+      <div className="space-y-2 text-xs">
+        <div className="rounded-md border border-border bg-card px-3 py-2">
+          <span className="text-text-muted">{t("logs.error_final")}</span>
+          <p className="mt-1 text-text-primary">
+            HTTP {request.status_code ?? "—"} · {request.error_message ?? "—"}
+          </p>
+        </div>
+        {mapper && (
+          <div className="rounded-md border border-border bg-card px-3 py-2">
+            <span className="text-text-muted">{t("logs.error_mapper")}</span>
+            <p className="mt-1 text-text-primary">
+              {mapper.upstream_code ?? "upstream"} → {mapper.mapped_code ?? "mapped"}
+            </p>
+            <p className="mt-1 truncate text-text-muted" title={mapper.upstream_message ?? mapper.mapped_message ?? ""}>
+              {mapper.upstream_message ?? mapper.mapped_message ?? "—"}
+            </p>
+          </div>
+        )}
+        {breaker && (
+          <div className="rounded-md border border-border bg-card px-3 py-2">
+            <span className="text-text-muted">{t("logs.circuit_breaker")}</span>
+            <p className="mt-1 text-text-primary">
+              {breaker.observed_state ?? "—"}{breaker.transition ? ` · ${breaker.transition}` : ""}
+            </p>
+          </div>
+        )}
+        {degradation && (
+          <div className="rounded-md border border-border bg-card px-3 py-2">
+            <span className="text-text-muted">{t("logs.model_degradation")}</span>
+            <p className="mt-1 text-text-primary">
+              {degradation.requested_model ?? "—"} → {degradation.picked ?? "—"}
+            </p>
+            {degradation.chain?.length ? (
+              <p className="mt-1 font-mono text-[11px] text-text-muted">{degradation.chain.join(" → ")}</p>
+            ) : null}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

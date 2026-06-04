@@ -217,7 +217,7 @@ pub fn get_detail(conn: &Connection, id: &str) -> Result<RequestLogDetail, AppEr
         "SELECT id, request_id, timestamp, client, provider, model, route, status_code,
                 latency_ms, input_tokens, output_tokens, raw_request, converted_request,
                 raw_response, converted_response, sse_events, tool_calls, error_message, trace_json,
-                source, session_id, external_id
+                source, session_id, external_id, cost, cache_write_tokens, cache_read_tokens
          FROM request_logs WHERE id = ?1",
         [id],
         |row| {
@@ -244,6 +244,9 @@ pub fn get_detail(conn: &Connection, id: &str) -> Result<RequestLogDetail, AppEr
                 source: row.get(19)?,
                 session_id: row.get(20)?,
                 external_id: row.get(21)?,
+                cost: row.get(22)?,
+                cache_write_tokens: row.get(23)?,
+                cache_read_tokens: row.get(24)?,
             })
         },
     )
@@ -1494,6 +1497,43 @@ mod tests {
         )
         .unwrap();
         assert_eq!(auth_count, 1);
+    }
+
+    #[test]
+    fn detail_includes_cost_and_cache_tokens() {
+        let conn = empty_logs_db();
+        insert(
+            &conn, "r1", "Codex", "P", "m1", "/v1/responses", 200, 100,
+            None, None, None, None, None, None, None, None,
+            Some(100), Some(20), Some(0.03), Some(11), Some(22), Some("gateway"), None, None,
+        )
+        .unwrap();
+
+        let item = list(
+            &conn,
+            RequestLogFilter {
+                client: None,
+                provider: None,
+                model: None,
+                route_profile_id: None,
+                status: None,
+                error_type: None,
+                keyword: None,
+                source: None,
+                session_id: None,
+                limit: Some(1),
+                offset: Some(0),
+            },
+        )
+        .unwrap()
+        .remove(0);
+        let detail = get_detail(&conn, &item.id).unwrap();
+
+        assert_eq!(detail.input_tokens, Some(100));
+        assert_eq!(detail.output_tokens, Some(20));
+        assert_eq!(detail.cache_write_tokens, Some(11));
+        assert_eq!(detail.cache_read_tokens, Some(22));
+        assert_eq!(detail.cost, Some(0.03));
     }
 
     #[test]

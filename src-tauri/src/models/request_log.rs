@@ -31,6 +31,9 @@ pub struct RequestLogDetail {
     pub latency_ms: Option<i64>,
     pub input_tokens: Option<i64>,
     pub output_tokens: Option<i64>,
+    pub cost: Option<f64>,
+    pub cache_write_tokens: Option<i64>,
+    pub cache_read_tokens: Option<i64>,
     pub raw_request: Option<String>,
     pub converted_request: Option<String>,
     pub raw_response: Option<String>,
@@ -183,6 +186,9 @@ mod tests {
             latency_ms: Some(500),
             input_tokens: Some(100),
             output_tokens: Some(50),
+            cost: Some(0.0123),
+            cache_write_tokens: Some(10),
+            cache_read_tokens: Some(20),
             raw_request: Some(r#"{"input":"hello"}"#.to_string()),
             converted_request: None,
             raw_response: Some(r#"{"output":"hi"}"#.to_string()),
@@ -199,5 +205,7 @@ mod tests {
         assert!(json.contains("hello"));
         let de: RequestLogDetail = serde_json::from_str(&json).unwrap();
         assert_eq!(de.input_tokens, Some(100));
+        assert_eq!(de.cache_read_tokens, Some(20));
+        assert_eq!(de.cost, Some(0.0123));
     }
 }
