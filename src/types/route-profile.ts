@@ -3,6 +3,7 @@ export interface RouteProfileView {
   name: string;
   input_protocol: string;
   mode: string;
+  selection_strategy: string;   // "priority" | "cheapest" | "fastest"
   active_provider_id: string | null;
   active_provider_name: string | null;
   enabled: boolean;
@@ -47,6 +48,7 @@ export interface CreateRouteProfileInput {
 export interface UpdateRouteProfileInput {
   name?: string;
   mode?: string;
+  selection_strategy?: string;
   enabled?: boolean;
 }
 

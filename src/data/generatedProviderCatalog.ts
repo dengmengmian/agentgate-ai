@@ -372,6 +372,13 @@ export const GENERATED_PROVIDER_CATALOG = {
         }
       },
       {
+        "id": "gpt-5.4",
+        "pricing": {
+          "inputPerMillion": 2.5,
+          "outputPerMillion": 15
+        }
+      },
+      {
         "id": "o3",
         "pricing": {
           "inputPerMillion": 10,
@@ -557,6 +564,13 @@ export const GENERATED_PROVIDER_CATALOG = {
         "pricing": {
           "inputPerMillion": 0.7,
           "outputPerMillion": 0.7
+        }
+      },
+      {
+        "id": "glm-5",
+        "pricing": {
+          "inputPerMillion": 1,
+          "outputPerMillion": 3.2
         }
       }
     ],

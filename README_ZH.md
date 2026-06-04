@@ -5,8 +5,8 @@
 <h1 align="center">AgentGate</h1>
 
 <p align="center">
-  <b>面向 Codex / Claude Code / Gemini CLI / OpenCode / AtomCode 的本地 AI 网关</b><br>
-  该转换时转换，该直连时直连；一个入口接入 24 个 Provider
+  <b>让 Codex、Claude Code、Gemini CLI 跑在更便宜的模型上 —— 还不掉链子。</b><br>
+  自动故障切换 · 成本统计 · 一键配置。一个本地网关，接入 24 个 Provider。
 </p>
 
 <p align="center">

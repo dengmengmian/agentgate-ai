@@ -85,7 +85,8 @@ pub fn get_price(conn: &Connection, provider: &str, model: &str) -> Option<(f64,
         }
     }
 
-    // 3. Wildcard match
+    // 3. Wildcard match —— 本 provider 配的 '*' 通配是用户明确意图，
+    // 优先于跨 provider 的同名 model 价。
     if let Ok(row) = conn.query_row(
         "SELECT input_price, output_price FROM model_pricing
          WHERE LOWER(provider) = ?1 AND model_pattern = '*'
@@ -94,6 +95,30 @@ pub fn get_price(conn: &Connection, provider: &str, model: &str) -> Option<(f64,
         |row| Ok((row.get::<_, f64>(0)?, row.get::<_, f64>(1)?)),
     ) {
         return Some(row);
+    }
+
+    // 4. Model-only match across providers —— provider 实例名几乎从不等于 pricing
+    // 的类型名（"anthropic_official" vs "anthropic"），但 model 名通常全局唯一。
+    // 退而按 model 跨 provider 查价（custom 优先）。这是成本计算的主路径，
+    // 参考 cc-switch 的纯 model 匹配。候选：原 model、去 qualifier 的 base，
+    // 以及各自去掉 "vendor/" 前缀的形式（"z-ai/glm-5" → "glm-5"，应对 OpenRouter
+    // 风格的带前缀 model id）。
+    let mut model_candidates = vec![model, base];
+    for c in [model, base] {
+        if let Some((_, after)) = c.rsplit_once('/') {
+            model_candidates.push(after);
+        }
+    }
+    for m in model_candidates {
+        if let Ok(row) = conn.query_row(
+            "SELECT input_price, output_price FROM model_pricing
+             WHERE model_pattern = ?1
+             ORDER BY is_custom DESC LIMIT 1",
+            params![m],
+            |row| Ok((row.get::<_, f64>(0)?, row.get::<_, f64>(1)?)),
+        ) {
+            return Some(row);
+        }
     }
 
     None
@@ -252,6 +277,32 @@ mod tests {
         let (inp, out) = price.unwrap();
         assert!((inp - 2.0).abs() < 0.01);
         assert!((out - 8.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn model_only_fallback_when_provider_name_mismatches() {
+        let conn = setup_db();
+        ensure_defaults(&conn).unwrap();
+        // provider 实例名（"anthropic_official"）和 pricing 的类型名（"deepseek"）对不上，
+        // 但 model 名全局唯一——应靠 model-only 兜底命中。这是真实主路径：provider
+        // 实例名几乎从不等于 pricing 的类型名，否则全部成本算成 0。
+        let price = get_price(&conn, "anthropic_official", "deepseek-v4-pro");
+        assert!(price.is_some(), "应靠 model-only 兜底命中价格");
+        assert!((price.unwrap().0 - 2.0).abs() < 0.01);
+
+        // 带 qualifier 的也要能兜底到 base。
+        let q = get_price(&conn, "some_proxy", "deepseek-v4-pro[1m]");
+        assert!(q.is_some(), "qualifier 去除后应靠 model-only 命中");
+    }
+
+    #[test]
+    fn model_only_strips_vendor_prefix() {
+        let conn = setup_db();
+        ensure_defaults(&conn).unwrap();
+        // OpenRouter 风格 "vendor/model" id（如 "z-ai/glm-5"）应去掉前缀后匹配到 glm-5。
+        let p = get_price(&conn, "some_proxy", "z-ai/glm-5");
+        assert!(p.is_some(), "应去 vendor 前缀后命中 glm-5");
+        assert!((p.unwrap().0 - 1.0).abs() < 0.01);
     }
 
     #[test]

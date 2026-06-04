@@ -13,7 +13,8 @@
   "defaultModel": "glm-4-plus",
   "supportedModels": ["glm-4-plus"],
   "models": [
-    { "id": "glm-4-plus", "pricing": { "inputPerMillion": 0.7, "outputPerMillion": 0.7 } }
+    { "id": "glm-4-plus", "pricing": { "inputPerMillion": 0.7, "outputPerMillion": 0.7 } },
+    { "id": "glm-5", "pricing": { "inputPerMillion": 1, "outputPerMillion": 3.2 } }
   ],
   "docs": {
     "handlingEn": "Generic",

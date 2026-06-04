@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import type { ProviderView } from "@/types/provider";
 import type { ProviderHealth } from "@/types/stats";
+import type { ProviderRuntimeStatus } from "@/types/route-profile";
 
 interface ProviderCardProps {
   provider: ProviderView;
@@ -14,6 +15,8 @@ interface ProviderCardProps {
   onSetActive: (provider: ProviderView) => void;
   onTest: (provider: ProviderView) => void;
   testing?: boolean;
+  runtime?: ProviderRuntimeStatus;
+  onResetRuntime?: (providerId: string) => void;
 }
 
 export function ProviderCard({
@@ -23,6 +26,8 @@ export function ProviderCard({
   onSetActive,
   onTest,
   testing,
+  runtime,
+  onResetRuntime,
 }: ProviderCardProps) {
   const { t } = useI18n();
   const [health, setHealth] = useState<ProviderHealth | null>(null);
@@ -71,6 +76,19 @@ export function ProviderCard({
     || (provider.supports_cache == null && provider.auto_cache_control !== false && isAnthropicCapable);
   const cacheUnsupported = provider.supports_cache === false && isAnthropicCapable;
 
+  // ── 故障自愈运行时状态 ──
+  // 数据由父页周期刷新（usePolling）拉取并下传；只在「有问题」时亮出，
+  // 平时卡片保持干净。cooldown 剩余秒为加载时刻快照，靠周期刷新更新。
+  const cooldownMs = runtime?.cooldown_until
+    ? new Date(runtime.cooldown_until).getTime() - Date.now()
+    : 0;
+  const inCooldown = cooldownMs > 0;
+  const runtimeIssue =
+    runtime &&
+    (!runtime.available ||
+      runtime.quota_exhausted ||
+      inCooldown ||
+      runtime.consecutive_failures > 0);
 
   return (
     <div className={`rounded-xl border bg-card p-5 ${provider.is_active ? "border-accent/40 border-l-2 border-l-accent" : "border-border"}`} style={{ boxShadow: "var(--shadow-sm)" }}>
@@ -128,6 +146,42 @@ export function ProviderCard({
               {t("providers.pass_through_prefix")} {c.label}
             </span>
           ))}
+        </div>
+      )}
+
+      {/* ── 故障自愈状态 — 仅异常时显示 ── */}
+      {runtimeIssue && runtime && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
+          {runtime.quota_exhausted ? (
+            <StatusBadge variant="error">{t("providers.runtime_quota")}</StatusBadge>
+          ) : inCooldown ? (
+            <StatusBadge variant="warning">
+              {t("providers.runtime_cooldown")} {Math.ceil(cooldownMs / 1000)}s
+            </StatusBadge>
+          ) : !runtime.available ? (
+            <StatusBadge variant="error">{t("providers.runtime_unavailable")}</StatusBadge>
+          ) : null}
+          {runtime.consecutive_failures > 0 && (
+            <span className="text-text-muted">
+              {t("providers.runtime_failures")} {runtime.consecutive_failures}
+            </span>
+          )}
+          {runtime.last_error && (
+            <span
+              className="max-w-[180px] truncate text-text-muted"
+              title={`${runtime.last_error_code ?? ""} ${runtime.last_error}`.trim()}
+            >
+              {runtime.last_error_code ?? runtime.last_error}
+            </span>
+          )}
+          {onResetRuntime && (
+            <button
+              onClick={() => onResetRuntime(provider.id)}
+              className="text-accent transition-colors hover:underline"
+            >
+              {t("providers.runtime_reset")}
+            </button>
+          )}
         </div>
       )}
 

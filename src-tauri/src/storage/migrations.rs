@@ -192,6 +192,18 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         conn.execute_batch("ALTER TABLE providers ADD COLUMN supports_cache INTEGER;")?;
     }
 
+    // Migration: route_profiles.selection_strategy —— failover 候选排序策略。
+    // 'priority'（默认，手工顺序）/ 'cheapest'（单价升序）/ 'fastest'（近期延迟升序）。
+    // 默认 'priority' 保证旧路由行为不变。
+    let has_sel_strategy: bool = conn
+        .prepare("SELECT selection_strategy FROM route_profiles LIMIT 0")
+        .is_ok();
+    if !has_sel_strategy {
+        conn.execute_batch(
+            "ALTER TABLE route_profiles ADD COLUMN selection_strategy TEXT NOT NULL DEFAULT 'priority';",
+        )?;
+    }
+
     // Migration: add model_capabilities column to providers
     // Stores per-model capability matrix as JSON: {"model_id": ["text","vision","reasoning",...]}
     // Routing layer uses this to pick the right model when request features (image/audio/...)

@@ -8,7 +8,8 @@ pub fn list_all(conn: &Connection) -> Result<Vec<RouteProfileView>, AppError> {
         "SELECT rp.id, rp.name, rp.input_protocol, rp.mode,
                 rp.active_provider_id, rp.enabled, rp.is_default, rp.created_at, rp.updated_at,
                 p.name as provider_name,
-                (SELECT COUNT(*) FROM route_profile_providers WHERE route_profile_id = rp.id) as cnt
+                (SELECT COUNT(*) FROM route_profile_providers WHERE route_profile_id = rp.id) as cnt,
+                rp.selection_strategy
          FROM route_profiles rp
          LEFT JOIN providers p ON p.id = rp.active_provider_id
          ORDER BY rp.is_default DESC, rp.created_at ASC",
@@ -27,6 +28,7 @@ pub fn list_all(conn: &Connection) -> Result<Vec<RouteProfileView>, AppError> {
             updated_at: row.get(8)?,
             active_provider_name: row.get(9)?,
             providers_count: row.get(10)?,
+            selection_strategy: row.get(11)?,
         })
     })?;
 
@@ -35,13 +37,14 @@ pub fn list_all(conn: &Connection) -> Result<Vec<RouteProfileView>, AppError> {
 
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<RouteProfile, AppError> {
     conn.query_row(
-        "SELECT id, name, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at
+        "SELECT id, name, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at, selection_strategy
          FROM route_profiles WHERE id = ?1",
         [id],
         |row| Ok(RouteProfile {
             id: row.get(0)?, name: row.get(1)?,
             input_protocol: row.get(2)?, mode: row.get(3)?, active_provider_id: row.get(4)?,
             enabled: row.get(5)?, is_default: row.get(6)?, created_at: row.get(7)?, updated_at: row.get(8)?,
+            selection_strategy: row.get(9)?,
         }),
     ).map_err(|e| match e {
         rusqlite::Error::QueryReturnedNoRows => AppError::new("ROUTE_PROFILE_NOT_FOUND", format!("Route profile '{id}' not found")),
@@ -54,13 +57,14 @@ pub fn get_default_for_protocol(
     input_protocol: &str,
 ) -> Result<Option<RouteProfile>, AppError> {
     let result = conn.query_row(
-        "SELECT id, name, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at
+        "SELECT id, name, input_protocol, mode, active_provider_id, enabled, is_default, created_at, updated_at, selection_strategy
          FROM route_profiles WHERE is_default = 1 AND input_protocol = ?1 AND enabled = 1 LIMIT 1",
         [input_protocol],
         |row| Ok(RouteProfile {
             id: row.get(0)?, name: row.get(1)?,
             input_protocol: row.get(2)?, mode: row.get(3)?, active_provider_id: row.get(4)?,
             enabled: row.get(5)?, is_default: row.get(6)?, created_at: row.get(7)?, updated_at: row.get(8)?,
+            selection_strategy: row.get(9)?,
         }),
     );
     match result {
@@ -92,11 +96,14 @@ pub fn update(
     let now = chrono::Utc::now().to_rfc3339();
     let name = input.name.unwrap_or(existing.name);
     let mode = input.mode.unwrap_or(existing.mode);
+    let selection_strategy = input
+        .selection_strategy
+        .unwrap_or(existing.selection_strategy);
     let enabled = input.enabled.unwrap_or(existing.enabled);
 
     conn.execute(
-        "UPDATE route_profiles SET name=?1, mode=?2, enabled=?3, updated_at=?4 WHERE id=?5",
-        params![&name, &mode, enabled, &now, id],
+        "UPDATE route_profiles SET name=?1, mode=?2, selection_strategy=?3, enabled=?4, updated_at=?5 WHERE id=?6",
+        params![&name, &mode, &selection_strategy, enabled, &now, id],
     )?;
     get_by_id(conn, id)
 }
@@ -390,6 +397,7 @@ mod tests {
             UpdateRouteProfileInput {
                 name: Some("Updated".to_string()),
                 mode: None,
+                selection_strategy: None,
                 enabled: None,
             },
         )

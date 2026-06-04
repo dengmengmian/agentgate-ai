@@ -239,6 +239,45 @@ fn build_candidates(
     Ok(candidates)
 }
 
+/// 按 route profile 的 selection_strategy 对 failover 候选稳定排序。
+/// "cheapest"：模型单价(input+output)升序；"fastest"：近 24h 平均延迟升序；
+/// 其它（含 "priority"）：保持手工顺序不动。查不到价格/延迟的候选排末尾，
+/// 平手按原 priority。
+fn sort_candidates_by_strategy(
+    conn: &Connection,
+    candidates: &mut [ProviderCandidate],
+    strategy: &str,
+) {
+    match strategy {
+        "cheapest" => candidates.sort_by(|a, b| {
+            candidate_unit_cost(conn, a)
+                .partial_cmp(&candidate_unit_cost(conn, b))
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(a.priority.cmp(&b.priority))
+        }),
+        "fastest" => {
+            let lat =
+                storage::request_logs::avg_latency_by_provider(conn, 24).unwrap_or_default();
+            candidates.sort_by(|a, b| {
+                let la = lat.get(&a.provider_name).copied().unwrap_or(f64::MAX);
+                let lb = lat.get(&b.provider_name).copied().unwrap_or(f64::MAX);
+                la.partial_cmp(&lb)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then(a.priority.cmp(&b.priority))
+            });
+        }
+        _ => {}
+    }
+}
+
+/// 候选模型单价排序键：input+output 单价之和($/1M)。查不到价时返回 MAX 排末尾。
+/// provider 用实例名，与成本计算/日志写入一致。
+fn candidate_unit_cost(conn: &Connection, c: &ProviderCandidate) -> f64 {
+    storage::pricing::get_price(conn, &c.provider_name, &c.model)
+        .map(|(input, output)| input + output)
+        .unwrap_or(f64::MAX)
+}
+
 fn select_global_fallback(
     conn: &Connection,
     requested_model: Option<&str>,
@@ -298,13 +337,19 @@ pub fn select_for_failover(
         }
 
         let analysis = request.map(analyze_request);
-        let candidates =
+        let mut candidates =
             build_candidates(&conn, &rp_providers, requested_model, analysis.as_ref())?;
         if candidates.is_empty() {
             return Err(AppError::new(
                 "NO_PROVIDER_CANDIDATE",
                 "No available provider candidate",
             ));
+        }
+
+        // Failover 模式按 selection_strategy 重排候选（cheapest/fastest）；
+        // manual 模式按 active_id 选、priority 维持原序，都不需要重排。
+        if profile.mode != "manual" && profile.selection_strategy != "priority" {
+            sort_candidates_by_strategy(&conn, &mut candidates, &profile.selection_strategy);
         }
 
         // Manual mode: use active_provider_id; Failover mode: first non-cooldown
@@ -497,6 +542,44 @@ mod tests {
             failover_on_status_codes: vec![402, 429, 500, 502, 503, 504],
             failover_on_error_keywords: vec!["rate limit".to_string(), "timeout".to_string()],
         }
+    }
+
+    #[test]
+    fn sort_cheapest_orders_by_unit_price() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE model_pricing (id TEXT PRIMARY KEY, provider TEXT, model_pattern TEXT,
+                input_price REAL, output_price REAL, is_custom INTEGER, updated_at TEXT);
+             INSERT INTO model_pricing VALUES ('1','cheap','m', 1.0, 1.0, 0, '');
+             INSERT INTO model_pricing VALUES ('2','pricey','m', 50.0, 50.0, 0, '');",
+        )
+        .unwrap();
+
+        let mk = |name: &str, priority: i64| {
+            let mut c = candidate_with_defaults();
+            c.provider_id = name.to_string();
+            c.provider_name = name.to_string();
+            c.model = "m".to_string();
+            c.priority = priority;
+            c
+        };
+
+        // 手工顺序贵的在前；cheapest 把便宜的排到前面。
+        let mut cands = vec![mk("pricey", 1), mk("cheap", 2)];
+        sort_candidates_by_strategy(&conn, &mut cands, "cheapest");
+        assert_eq!(cands[0].provider_name, "cheap");
+        assert_eq!(cands[1].provider_name, "pricey");
+
+        // priority 策略不动，保持手工顺序。
+        let mut cands2 = vec![mk("pricey", 1), mk("cheap", 2)];
+        sort_candidates_by_strategy(&conn, &mut cands2, "priority");
+        assert_eq!(cands2[0].provider_name, "pricey");
+
+        // 查不到价的候选排到末尾。
+        let mut cands3 = vec![mk("cheap", 1), mk("unknown", 2)];
+        sort_candidates_by_strategy(&conn, &mut cands3, "cheapest");
+        assert_eq!(cands3[0].provider_name, "cheap");
+        assert_eq!(cands3[1].provider_name, "unknown");
     }
 
     #[test]

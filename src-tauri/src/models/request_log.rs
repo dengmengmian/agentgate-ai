@@ -77,6 +77,21 @@ pub struct SessionUsageSummary {
     pub cost: f64,
 }
 
+/// 成本仪表盘用：按某维度（模型 / 客户端）聚合的成本与用量。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CostBreakdown {
+    /// 维度值：模型名 或 客户端名。
+    pub key: String,
+    /// 该维度下出现过的一个 provider（按客户端聚合时仅供参考）。
+    pub provider: Option<String>,
+    pub request_count: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub cache_read_tokens: i64,
+    pub cache_write_tokens: i64,
+    pub cost: f64,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

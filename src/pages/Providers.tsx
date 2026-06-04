@@ -17,11 +17,13 @@ import type {
   CreateProviderInput,
   UpdateProviderInput,
 } from "@/types/provider";
+import type { ProviderRuntimeStatus } from "@/types/route-profile";
 
 export function Providers() {
   const { t } = useI18n();
   const navigate = useNavigate();
   const [providers, setProviders] = useState<ProviderView[]>([]);
+  const [runtimeMap, setRuntimeMap] = useState<Record<string, ProviderRuntimeStatus>>({});
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ProviderView | null>(null);
@@ -45,14 +47,29 @@ export function Providers() {
 
   const loadProviders = useCallback(async () => {
     try {
-      const data = await api.listProviders();
+      // runtime status 单独拉取，失败不影响 provider 列表渲染。
+      const [data, statuses] = await Promise.all([
+        api.listProviders(),
+        api.listProviderRuntimeStatus().catch(() => [] as ProviderRuntimeStatus[]),
+      ]);
       setProviders(data);
+      setRuntimeMap(Object.fromEntries(statuses.map((s) => [s.provider_id, s])));
     } catch (err) {
       toast("error", (err as api.AppError).message);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const handleResetRuntime = useCallback(async (providerId: string) => {
+    try {
+      await api.resetProviderRuntimeStatus(providerId);
+      toast("success", t("routes.cooldown_reset"));
+      loadProviders();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  }, [loadProviders, t]);
 
   useEffect(() => {
     loadProviders();
@@ -229,6 +246,8 @@ export function Providers() {
               onSetActive={handleSetActive}
               onTest={handleTest}
               testing={testingId === provider.id}
+              runtime={runtimeMap[provider.id]}
+              onResetRuntime={handleResetRuntime}
             />
           ))}
         </div>

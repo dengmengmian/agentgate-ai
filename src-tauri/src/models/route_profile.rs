@@ -6,6 +6,8 @@ pub struct RouteProfile {
     pub name: String,
     pub input_protocol: String,
     pub mode: String, // "manual" | "failover"
+    /// failover 候选排序策略："priority"（默认）| "cheapest" | "fastest"
+    pub selection_strategy: String,
     pub active_provider_id: Option<String>,
     pub enabled: bool,
     pub is_default: bool,
@@ -24,6 +26,7 @@ mod tests {
             name: "Default".to_string(),
             input_protocol: "openai_responses".to_string(),
             mode: "manual".to_string(),
+            selection_strategy: "priority".to_string(),
             active_provider_id: Some("p1".to_string()),
             enabled: true,
             is_default: true,
@@ -44,6 +47,7 @@ mod tests {
             name: "Default".to_string(),
             input_protocol: "openai_responses".to_string(),
             mode: "manual".to_string(),
+            selection_strategy: "priority".to_string(),
             active_provider_id: Some("p1".to_string()),
             active_provider_name: Some("OpenAI".to_string()),
             enabled: true,
@@ -110,6 +114,7 @@ pub struct RouteProfileView {
     pub name: String,
     pub input_protocol: String,
     pub mode: String,
+    pub selection_strategy: String,
     pub active_provider_id: Option<String>,
     pub active_provider_name: Option<String>,
     pub enabled: bool,
@@ -158,6 +163,7 @@ pub struct CreateRouteProfileInput {
 pub struct UpdateRouteProfileInput {
     pub name: Option<String>,
     pub mode: Option<String>,
+    pub selection_strategy: Option<String>,
     pub enabled: Option<bool>,
 }
 

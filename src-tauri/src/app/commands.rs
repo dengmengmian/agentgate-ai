@@ -1132,6 +1132,41 @@ pub fn aggregate_request_logs_by_session(
     storage::request_logs::aggregate_by_session(&conn, limit.unwrap_or(100))
 }
 
+/// days 为 None 时统计全量；Some(n) 时只统计近 n 天（与 Dashboard rangeDays 对齐）。
+fn cost_since(days: Option<i64>) -> Option<String> {
+    days.map(|d| (chrono::Utc::now() - chrono::Duration::days(d.max(1))).to_rfc3339())
+}
+
+/// 按模型聚合成本——成本仪表盘「钱花在哪个模型」用。
+#[tauri::command]
+pub fn aggregate_cost_by_model(
+    days: Option<i64>,
+    limit: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::models::request_log::CostBreakdown>, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    let since = cost_since(days);
+    storage::request_logs::aggregate_cost_by_model(&conn, since.as_deref(), limit.unwrap_or(50))
+}
+
+/// 按客户端聚合成本——成本仪表盘「哪个客户端花得多」用。
+#[tauri::command]
+pub fn aggregate_cost_by_client(
+    days: Option<i64>,
+    limit: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::models::request_log::CostBreakdown>, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    let since = cost_since(days);
+    storage::request_logs::aggregate_cost_by_client(&conn, since.as_deref(), limit.unwrap_or(50))
+}
+
 /// 扫描 ~/.claude/projects 下的 Claude Code 会话日志并写入 request_logs。
 /// 幂等：已同步过的 message_id 会被跳过。
 #[tauri::command]
@@ -1282,6 +1317,7 @@ pub fn get_route_profile(
             name: profile.name,
             input_protocol: profile.input_protocol,
             mode: profile.mode,
+            selection_strategy: profile.selection_strategy,
             active_provider_id: profile.active_provider_id,
             active_provider_name: active_name,
             enabled: profile.enabled,
@@ -1312,6 +1348,7 @@ pub fn create_route_profile(
         name: profile.name,
         input_protocol: profile.input_protocol,
         mode: profile.mode,
+        selection_strategy: profile.selection_strategy,
         active_provider_id: profile.active_provider_id,
         active_provider_name: None,
         enabled: profile.enabled,
@@ -1343,6 +1380,7 @@ pub fn update_route_profile(
         name: profile.name,
         input_protocol: profile.input_protocol,
         mode: profile.mode,
+        selection_strategy: profile.selection_strategy,
         active_provider_id: profile.active_provider_id,
         active_provider_name: None,
         enabled: profile.enabled,
@@ -1388,6 +1426,7 @@ pub fn set_route_profile_mode(
         crate::models::route_profile::UpdateRouteProfileInput {
             name: None,
             mode: Some(mode),
+            selection_strategy: None,
             enabled: None,
         },
     )?;

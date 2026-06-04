@@ -390,6 +390,107 @@ pub fn aggregate_by_session(
     Ok(out)
 }
 
+/// 按某维度（model / client）聚合成本与用量——成本仪表盘用。
+/// `group_col` 仅接受内部白名单值，杜绝 SQL 注入。
+fn aggregate_cost_grouped(
+    conn: &Connection,
+    group_col: &str,
+    since: Option<&str>,
+    limit: i64,
+) -> Result<Vec<crate::models::request_log::CostBreakdown>, AppError> {
+    // 白名单校验：列名直接拼进 SQL，绝不允许外部值。
+    debug_assert!(matches!(group_col, "model" | "client"));
+    let limit = limit.clamp(1, 1000);
+    // since 为 None 时统计全量；为 Some 时只统计该时间点之后（与 Dashboard 的
+    // rangeDays 区间口径一致）。
+    let sql = format!(
+        "SELECT {col} AS k,
+            MAX(provider) AS provider,
+            COUNT(*) AS request_count,
+            COALESCE(SUM(input_tokens), 0) AS input_tokens,
+            COALESCE(SUM(output_tokens), 0) AS output_tokens,
+            COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
+            COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
+            COALESCE(SUM(cost), 0.0) AS cost
+        FROM request_logs
+        WHERE {col} IS NOT NULL AND {col} != ''
+          AND (?1 IS NULL OR timestamp >= ?1)
+        GROUP BY {col}
+        ORDER BY cost DESC, request_count DESC
+        LIMIT ?2",
+        col = group_col
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+    let rows = stmt.query_map(rusqlite::params![since, limit], |r| {
+        Ok(crate::models::request_log::CostBreakdown {
+            key: r.get(0)?,
+            provider: r.get(1)?,
+            request_count: r.get(2)?,
+            input_tokens: r.get(3)?,
+            output_tokens: r.get(4)?,
+            cache_read_tokens: r.get(5)?,
+            cache_write_tokens: r.get(6)?,
+            cost: r.get(7)?,
+        })
+    })?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
+/// 按模型聚合成本，按成本倒序。成本仪表盘「钱花在哪个模型」用。
+/// since=None 统计全量；Some 时只统计该时间之后。
+pub fn aggregate_cost_by_model(
+    conn: &Connection,
+    since: Option<&str>,
+    limit: i64,
+) -> Result<Vec<crate::models::request_log::CostBreakdown>, AppError> {
+    aggregate_cost_grouped(conn, "model", since, limit)
+}
+
+/// 按客户端聚合成本，按成本倒序。成本仪表盘「哪个客户端花得多」用。
+pub fn aggregate_cost_by_client(
+    conn: &Connection,
+    since: Option<&str>,
+    limit: i64,
+) -> Result<Vec<crate::models::request_log::CostBreakdown>, AppError> {
+    aggregate_cost_grouped(conn, "client", since, limit)
+}
+
+/// 各 provider 近 N 小时成功请求(2xx)的平均延迟(ms)——延迟感知路由用。
+/// key 为 provider 名（与日志写入一致）。只算 **网关来源** 的成功请求：客户端会话
+/// 同步导入的 latency 是客户端自记、不反映网关到上游的真实延迟，不能用于路由决策
+/// （与 get_provider_health 的 source='gateway' 口径一致）。
+pub fn avg_latency_by_provider(
+    conn: &Connection,
+    lookback_hours: i64,
+) -> Result<std::collections::HashMap<String, f64>, AppError> {
+    let since =
+        (chrono::Utc::now() - chrono::Duration::hours(lookback_hours.max(1))).to_rfc3339();
+    let mut stmt = conn.prepare(
+        "SELECT provider, AVG(latency_ms)
+         FROM request_logs
+         WHERE provider IS NOT NULL AND provider != ''
+           AND source = 'gateway'
+           AND latency_ms IS NOT NULL
+           AND status_code >= 200 AND status_code < 300
+           AND timestamp >= ?1
+         GROUP BY provider",
+    )?;
+    let rows = stmt.query_map([&since], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, f64>(1)?))
+    })?;
+    let mut out = std::collections::HashMap::new();
+    for r in rows {
+        let (k, v) = r?;
+        out.insert(k, v);
+    }
+    Ok(out)
+}
+
 /// Pull `(cache_write_tokens, cache_read_tokens)` out of any supported upstream
 /// usage shape. Returns `(None, None)` when neither is present so the row
 /// keeps "unknown" semantics rather than misleading zeroes.
@@ -880,6 +981,62 @@ mod tests {
         assert_eq!(stats.providers[0].name, "LiveProvider");
         assert_eq!(stats.daily[0].total, 1);
         assert_eq!(stats.daily[0].input_tokens, 1010);
+    }
+
+    #[test]
+    fn cost_breakdown_by_model_and_client() {
+        let conn = empty_logs_db();
+        let ins = |rid: &str, client: &str, model: &str, cost: f64| {
+            insert(
+                &conn, rid, client, "P", model, "/v1/x", 200, 10,
+                None, None, None, None, None, None, None, None,
+                Some(100), Some(20), Some(cost), None, None, Some("gateway"), None, None,
+            )
+            .unwrap();
+        };
+        ins("r1", "Codex", "gpt-live", 0.01);
+        ins("r2", "Codex", "gpt-live", 0.02);
+        ins("r3", "Claude Code", "deepseek-v4", 0.05);
+
+        // 按模型：deepseek(0.05) 成本最高排第一；gpt-live 两条合并 0.03。
+        let by_model = aggregate_cost_by_model(&conn, None, 100).unwrap();
+        assert_eq!(by_model.len(), 2);
+        assert_eq!(by_model[0].key, "deepseek-v4");
+        assert!((by_model[0].cost - 0.05).abs() < 1e-9);
+        assert_eq!(by_model[0].request_count, 1);
+        assert_eq!(by_model[1].key, "gpt-live");
+        assert!((by_model[1].cost - 0.03).abs() < 1e-9);
+        assert_eq!(by_model[1].request_count, 2);
+        assert_eq!(by_model[1].input_tokens, 200);
+
+        // 按客户端：Claude Code(0.05) 排第一；Codex 两条合并。
+        let by_client = aggregate_cost_by_client(&conn, None, 100).unwrap();
+        assert_eq!(by_client.len(), 2);
+        assert_eq!(by_client[0].key, "Claude Code");
+        assert!((by_client[0].cost - 0.05).abs() < 1e-9);
+        assert_eq!(by_client[1].key, "Codex");
+        assert_eq!(by_client[1].request_count, 2);
+    }
+
+    #[test]
+    fn avg_latency_only_counts_successful_recent() {
+        let conn = empty_logs_db();
+        let ins = |rid: &str, provider: &str, status: i64, latency: i64| {
+            insert(
+                &conn, rid, "Codex", provider, "m", "/v1/x", status, latency,
+                None, None, None, None, None, None, None, None,
+                None, None, None, None, None, Some("gateway"), None, None,
+            )
+            .unwrap();
+        };
+        ins("r1", "fast", 200, 100);
+        ins("r2", "fast", 200, 200); // 均值 150
+        ins("r3", "slow", 200, 900);
+        ins("r4", "slow", 500, 1);   // 失败，不计入
+
+        let map = avg_latency_by_provider(&conn, 24).unwrap();
+        assert!((map["fast"] - 150.0).abs() < 1e-9);
+        assert!((map["slow"] - 900.0).abs() < 1e-9); // 失败的 r4 被排除
     }
 
     #[test]

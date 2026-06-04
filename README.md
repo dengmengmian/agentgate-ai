@@ -5,8 +5,8 @@
 <h1 align="center">AgentGate</h1>
 
 <p align="center">
-  <b>Local AI Gateway for Codex, Claude Code, Gemini CLI, OpenCode & AtomCode</b><br>
-  Convert when needed, pass through when possible; one local entry point for 24 providers
+  <b>Run Codex, Claude Code & Gemini CLI on cheaper models — without breaking them.</b><br>
+  Automatic failover · cost tracking · one-click setup. One local gateway, 24 providers.
 </p>
 
 <p align="center">

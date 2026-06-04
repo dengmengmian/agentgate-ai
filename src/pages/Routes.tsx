@@ -97,6 +97,12 @@ export function Routes() {
     catch (err) { toast("error", (err as api.AppError).message); }
   };
 
+  const handleStrategyChange = async (strategy: string) => {
+    if (!detail) return;
+    try { await api.updateRouteProfile(detail.profile.id, { selection_strategy: strategy }); load(); }
+    catch (err) { toast("error", (err as api.AppError).message); }
+  };
+
   const handleSetActive = async (providerId: string) => {
     if (!detail) return;
     try { await api.setRouteActiveProvider(detail.profile.id, providerId); toast("success", t("routes.active_updated")); load(); }
@@ -315,6 +321,21 @@ export function Routes() {
                   <span className="rounded-md bg-card-secondary px-2.5 py-1 text-text-secondary">
                     {t("routes.active")}: <span className="text-text-primary">{detail.profile.active_provider_name ?? t("common.none")}</span>
                   </span>
+                  {detail.profile.mode === "failover" && (
+                    <span className="flex items-center gap-1 rounded-md bg-card-secondary px-2.5 py-1 text-text-secondary">
+                      {t("routes.strategy")}:
+                      <select
+                        value={detail.profile.selection_strategy}
+                        onChange={(e) => handleStrategyChange(e.target.value)}
+                        className="bg-transparent text-text-primary outline-none"
+                        title={t("routes.strategy_hint")}
+                      >
+                        <option value="priority">{t("routes.strategy_priority")}</option>
+                        <option value="cheapest">{t("routes.strategy_cheapest")}</option>
+                        <option value="fastest">{t("routes.strategy_fastest")}</option>
+                      </select>
+                    </span>
+                  )}
                 </div>
               </div>
 

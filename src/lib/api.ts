@@ -173,6 +173,20 @@ export async function aggregateRequestLogsBySession(
   return cmd("aggregate_request_logs_by_session", { limit });
 }
 
+export async function aggregateCostByModel(
+  days?: number,
+  limit?: number,
+): Promise<import("@/types/request-log").CostBreakdown[]> {
+  return cmd("aggregate_cost_by_model", { days, limit });
+}
+
+export async function aggregateCostByClient(
+  days?: number,
+  limit?: number,
+): Promise<import("@/types/request-log").CostBreakdown[]> {
+  return cmd("aggregate_cost_by_client", { days, limit });
+}
+
 export interface SyncResult {
   files_scanned: number;
   imported: number;

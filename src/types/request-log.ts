@@ -67,3 +67,15 @@ export interface SessionUsageSummary {
   cache_write_tokens: number;
   cost: number;
 }
+
+// 成本仪表盘：按模型 / 按客户端聚合的成本分解。
+export interface CostBreakdown {
+  key: string;                // 模型名 或 客户端名
+  provider: string | null;
+  request_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  cost: number;
+}

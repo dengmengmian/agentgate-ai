@@ -7,6 +7,7 @@ import {
   BarChart3,
   Rocket,
   ArrowRight,
+  Coins,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { RecentRequests } from "@/components/dashboard/RecentRequests";
@@ -18,7 +19,7 @@ import { formatLatency } from "@/lib/utils";
 import * as api from "@/lib/api";
 import type { GatewayStatus } from "@/types/gateway";
 import type { ToolConfigView } from "@/types/tool";
-import type { RequestLogListItem } from "@/types/request-log";
+import type { RequestLogListItem, CostBreakdown } from "@/types/request-log";
 import type { RequestStats } from "@/types/stats";
 
 /// 极简 deep equal：JSON 字符串化对比。dashboard 数据 payload 不大
@@ -45,6 +46,32 @@ function formatCost(n: number): string {
   if (n < 0.01) return `$${n.toFixed(4)}`;
   if (n < 1) return `$${n.toFixed(3)}`;
   return `$${n.toFixed(2)}`;
+}
+
+// 成本分解小列表：每行 名称 + 占比条 + 请求数 + 成本，按成本倒序（后端已排）。
+function CostList({ title, rows }: { title: string; rows: CostBreakdown[] }) {
+  const max = rows.reduce((m, r) => Math.max(m, r.cost), 0) || 1;
+  return (
+    <div>
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-secondary">{title}</div>
+      {rows.length === 0 ? (
+        <p className="text-[11px] text-text-muted">—</p>
+      ) : (
+        <div className="space-y-1.5">
+          {rows.map((r) => (
+            <div key={r.key} className="flex items-center gap-2 text-[11px]">
+              <span className="w-28 shrink-0 truncate font-mono text-text-primary" title={r.key}>{r.key}</span>
+              <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-card-secondary">
+                <div className="absolute inset-y-0 left-0 rounded-full bg-accent/60" style={{ width: `${(r.cost / max) * 100}%` }} />
+              </div>
+              <span className="shrink-0 tabular-nums text-text-muted">{r.request_count}</span>
+              <span className="w-16 shrink-0 text-right font-mono tabular-nums text-text-primary">{formatCost(r.cost)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Single metric in a horizontal strip: label above, value below, no card chrome.
@@ -96,18 +123,22 @@ export function Dashboard() {
   const [recentLogs, setRecentLogs] = useState<RequestLogListItem[]>([]);
   const [stats, setStats] = useState<RequestStats | null>(null);
   const [providerCount, setProviderCount] = useState<number | null>(null);
+  const [costByModel, setCostByModel] = useState<CostBreakdown[]>([]);
+  const [costByClient, setCostByClient] = useState<CostBreakdown[]>([]);
   const [rangeDays, setRangeDays] = useState<RangeDays>(7);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [s, tl, l, st, ps] = await Promise.all([
+        const [s, tl, l, st, ps, cm, cc] = await Promise.all([
           api.getGatewayStatus(),
           api.listTools(),
           api.listRequestLogs({ limit: 5 }),
           api.getRequestStatsRange(rangeDays),
           api.listProviders(),
+          api.aggregateCostByModel(rangeDays, 8),
+          api.aggregateCostByClient(rangeDays, 8),
         ]);
         if (!cancelled) {
           // 首次请求 celebration：lifetime total 从 0 翻到 ≥1 时 toast 一次。
@@ -129,6 +160,8 @@ export function Dashboard() {
           setProviderCount(prev => prev === ps.length ? prev : ps.length);
           setRecentLogs(prev => shallowEqual(prev, l) ? prev : l);
           setStats(prev => shallowEqual(prev, st) ? prev : st);
+          setCostByModel(prev => shallowEqual(prev, cm) ? prev : cm);
+          setCostByClient(prev => shallowEqual(prev, cc) ? prev : cc);
         }
       } catch (err) {
         if (!cancelled) toast("error", (err as api.AppError).message);
@@ -413,6 +446,20 @@ export function Dashboard() {
             })()}
           </div>
         </>
+      )}
+
+      {/* ── 3.5 成本分解：钱花在哪个模型 / 哪个客户端。仅有数据时显示。 ── */}
+      {(costByModel.length > 0 || costByClient.length > 0) && (
+        <div className="rounded-xl border border-border bg-card p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
+            <Coins className="h-4 w-4 text-text-muted" />
+            {t("stats.cost_breakdown")}
+          </h3>
+          <div className="grid gap-6 sm:grid-cols-2">
+            <CostList title={t("stats.cost_by_model")} rows={costByModel} />
+            <CostList title={t("stats.cost_by_client")} rows={costByClient} />
+          </div>
+        </div>
       )}
 
       {/* ── 4. Recent requests with inline tool status header chip. ── */}
