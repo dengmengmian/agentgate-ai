@@ -4340,7 +4340,7 @@ fn protocol_for_log_route(route: &str) -> Option<&'static str> {
     }
 }
 
-fn enrich_trace_with_route_decision(
+pub(crate) fn enrich_trace_with_route_decision(
     conn: &Connection,
     route: &str,
     provider_name: &str,

@@ -440,7 +440,7 @@ async fn handle_stream(
                 Some(&truncate(&sanitized_sse, MAX_SSE_LOG)),
                 None,
                 None,
-                Some(&trace),
+                Some(&with_route_decision(&conn, &route_owned, &provider_name, &model_clone, &raw_req, &trace)),
                 inp,
                 out,
                 cost,
@@ -473,6 +473,23 @@ fn lock_db(db: &Arc<Mutex<Connection>>) -> Option<std::sync::MutexGuard<'_, Conn
         Ok(guard) => Some(guard),
         Err(poisoned) => Some(poisoned.into_inner()),
     }
+}
+
+/// 给直通日志的 trace 补 route_decision（按协议反推默认 profile），让「按策略」统计
+/// 能拿到数据——直通路径之前不写路由决策。纯日志旁路：enrich 失败保留原 trace，
+/// 绝不碰转发/转换/路由。
+fn with_route_decision(
+    conn: &Connection,
+    route: &str,
+    provider: &str,
+    model: &str,
+    raw_request: &str,
+    trace: &str,
+) -> String {
+    crate::gateway::routes::enrich_trace_with_route_decision(
+        conn, route, provider, model, raw_request, Some(trace),
+    )
+    .unwrap_or_else(|| trace.to_string())
 }
 
 /// 从 Chat Completions 流式响应尾部 SSE 文本里解析最后一条非 null 的 usage，
@@ -537,6 +554,7 @@ fn log_to_db(
     latency_ms: i64,
 ) {
     if let Some(conn) = lock_db(db) {
+        let enriched = with_route_decision(&conn, route, provider, model, raw_request, trace_json);
         let _ = crate::storage::request_logs::insert(
             &conn,
             request_id,
@@ -557,7 +575,7 @@ fn log_to_db(
             None,
             None,
             error_message,
-            Some(trace_json),
+            Some(&enriched),
             None,
             None,
             None,
@@ -726,7 +744,7 @@ pub async fn handle_anthropic(
                     Some(&truncate(&sanitized_sse, MAX_SSE_LOG)),
                     None,
                     None,
-                    Some(&trace),
+                    Some(&with_route_decision(&conn, "/v1/messages", &provider_name, &model, &raw_req, &trace)),
                     None,
                     None,
                     None,
