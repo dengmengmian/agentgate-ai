@@ -97,12 +97,13 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 
 **Cost Tracking & Multi-Key Pooling**
 - 22+ built-in model prices, auto-calculate cost per request
-- Dashboard: total/today/average cost cards
+- Dashboard: total/today/average cost cards, plus cost breakdown **by model and by client**, scoped to a time range (7/30 days)
 - Settings: inline price editing, custom price overrides
 - Multi-API-key per provider: round-robin rotation, auto-switch on 429
 
 **Smart Routing**
 - Task-level routing conditions: route by input size, images, tools, system keywords
+- Failover selection strategy per route: **priority** (default) / **cheapest** (by model unit price) / **fastest** (by recent gateway latency)
 - Preset scenes: Image Requests / Reasoning / Background / Long Text / Tool-Heavy
 - Prompt cache injection for Anthropic (auto `cache_control`, ~90% input cost savings)
 - Cache support auto-detection on provider test
@@ -140,6 +141,7 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 - Codex Desktop compatibility: routes model requests to third-party APIs while preserving the official OpenAI provider path, signed-in account state, and plugin/account feature compatibility
 - Claude Code: one-click config + toggle between official and AgentGate
 - OpenCode: one-click config
+- Claude Desktop (macOS): point its third-party inference gateway at AgentGate; one-click apply with history rollback
 - Global instruction files: edit `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` from inside AgentGate with 4 built-in templates (minimal rules / TDD / code review / security audit); overwrite or append, with auto-snapshot and one-click rollback
 - Local gateway access token (`ag_local_*`) authentication
 
@@ -156,6 +158,8 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 
 **Diagnostics & Observability**
 - Request logs, token stats, cost estimates, and provider runtime status
+- Provider failure state visible on cards: cooldown / consecutive failures / quota exhausted, with one-click reset
+- Active health probing (optional, off by default): periodic 1-token probe per provider, shown on the card — display-only, never affects routing
 - Self-check and redacted diagnostic bundle export
 - Capability degradation events: image stripping, web_search downgrade, MCP advisory, and omitted tool-output images
 
