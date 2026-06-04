@@ -5,9 +5,11 @@ import { formatTimestamp } from "@/lib/utils";
 import { toast } from "@/components/common/Toast";
 import { sourceLabel } from "@/components/logs/RequestLogTable";
 import * as api from "@/lib/api";
-import type { SessionUsageSummary, ConversationMessage } from "@/types/request-log";
+import type { SessionUsageSummary, ConversationMessage, RequestLogFilter } from "@/types/request-log";
 
 interface SessionGroupViewProps {
+  /// 当前筛选条件——会话视图跟着客户端/来源/模型等筛选走。
+  filter: RequestLogFilter;
   /// 点击某行 session 时回调——父组件可以切回「列表」视图并过滤到该 session。
   onPickSession: (sessionId: string) => void;
 }
@@ -17,7 +19,7 @@ interface SessionGroupViewProps {
 /// 数据来源：`aggregate_request_logs_by_session` Tauri command，对 request_logs
 /// 按 `session_id` GROUP BY，跨 gateway / 各客户端本地日志聚合。同一 session_id
 /// 同时跨多源时 source 字段返回 'mixed'。
-export function SessionGroupView({ onPickSession }: SessionGroupViewProps) {
+export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProps) {
   const [rows, setRows] = useState<SessionUsageSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [convo, setConvo] = useState<{ sessionId: string; source: string } | null>(null);
@@ -27,7 +29,7 @@ export function SessionGroupView({ onPickSession }: SessionGroupViewProps) {
     (async () => {
       setLoading(true);
       try {
-        const data = await api.aggregateRequestLogsBySession(100);
+        const data = await api.aggregateRequestLogsBySession(filter, 100);
         if (!cancelled) setRows(data);
       } catch (err) {
         if (!cancelled) toast("error", (err as api.AppError).message);
@@ -36,7 +38,9 @@ export function SessionGroupView({ onPickSession }: SessionGroupViewProps) {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+    // filter 是对象,用 JSON 比较避免每次 render 重跑
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(filter)]);
 
   if (loading) {
     return (

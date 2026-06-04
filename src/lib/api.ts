@@ -178,9 +178,10 @@ export async function clearRequestLogs(): Promise<boolean> {
 }
 
 export async function aggregateRequestLogsBySession(
+  filter: RequestLogFilter,
   limit?: number,
 ): Promise<import("@/types/request-log").SessionUsageSummary[]> {
-  return cmd("aggregate_request_logs_by_session", { limit });
+  return cmd("aggregate_request_logs_by_session", { filter, limit });
 }
 
 export async function aggregateCostByModel(

@@ -1146,6 +1146,7 @@ pub fn clear_request_logs(state: State<'_, AppState>) -> Result<bool, AppError> 
 /// 返回最近 `limit` 个会话，按最后活跃时间倒序排列。
 #[tauri::command]
 pub fn aggregate_request_logs_by_session(
+    filter: RequestLogFilter,
     limit: Option<i64>,
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::models::request_log::SessionUsageSummary>, AppError> {
@@ -1153,7 +1154,7 @@ pub fn aggregate_request_logs_by_session(
         .db
         .lock()
         .map_err(|_| AppError::internal("DB lock failed"))?;
-    storage::request_logs::aggregate_by_session(&conn, limit.unwrap_or(100))
+    storage::request_logs::aggregate_by_session(&conn, &filter, limit.unwrap_or(100))
 }
 
 /// days 为 None 时统计全量；Some(n) 时只统计近 n 天（与 Dashboard rangeDays 对齐）。

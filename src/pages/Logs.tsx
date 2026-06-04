@@ -317,6 +317,17 @@ export function Logs() {
 
       {viewMode === "session" ? (
         <SessionGroupView
+          filter={{
+            keyword: keyword || undefined,
+            status: statusFilter || undefined,
+            provider: providerFilter || undefined,
+            model: modelFilter || undefined,
+            route_profile_id: routeProfileFilter || undefined,
+            error_type: errorTypeFilter || undefined,
+            client: clientFilter || undefined,
+            source: sourceFilter || undefined,
+            session_id: sessionIdFilter || undefined,
+          }}
           onPickSession={(sid) => {
             setViewMode("list");
             setSessionIdFilter(sid);

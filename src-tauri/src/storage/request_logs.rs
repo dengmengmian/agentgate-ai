@@ -442,12 +442,16 @@ pub fn external_ids_for_source(
 /// 同一个 session_id 跨 gateway + client_session 多来源时，source 字段返回 'mixed'。
 pub fn aggregate_by_session(
     conn: &Connection,
+    filter: &RequestLogFilter,
     limit: i64,
 ) -> Result<Vec<crate::models::request_log::SessionUsageSummary>, AppError> {
     let limit = limit.clamp(1, 1000);
     // GROUP_CONCAT(DISTINCT source) 让我们事后判断「单源 vs 混合」——SQLite 不支持
     // CASE WHEN COUNT(DISTINCT source) > 1，所以用字符串聚合解决。
-    let sql = "SELECT
+    // filter 走和 list 一样的行级 WHERE：只保留匹配的行再 GROUP BY，即「含匹配请求
+    // 的会话」——让会话视图跟着客户端/来源/模型等筛选条件走。
+    let mut sql = String::from(
+        "SELECT
         session_id,
         GROUP_CONCAT(DISTINCT source) AS sources,
         MAX(provider) AS provider,
@@ -461,13 +465,20 @@ pub fn aggregate_by_session(
         COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
         COALESCE(SUM(cost), 0.0) AS cost
         FROM request_logs
-        WHERE session_id IS NOT NULL AND session_id != ''
-        GROUP BY session_id
-        ORDER BY last_seen DESC
-        LIMIT ?1";
+        WHERE session_id IS NOT NULL AND session_id != ''",
+    );
+    let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+    let mut idx = 1;
+    apply_log_filter(filter, &mut sql, &mut param_values, &mut idx);
+    sql.push_str(&format!(
+        " GROUP BY session_id ORDER BY last_seen DESC LIMIT ?{idx}"
+    ));
+    param_values.push(Box::new(limit));
 
-    let mut stmt = conn.prepare(sql)?;
-    let rows = stmt.query_map([limit], |r| {
+    let mut stmt = conn.prepare(&sql)?;
+    let params_ref: Vec<&dyn rusqlite::types::ToSql> =
+        param_values.iter().map(|p| p.as_ref()).collect();
+    let rows = stmt.query_map(params_ref.as_slice(), |r| {
         let sources: String = r.get::<_, Option<String>>(1)?.unwrap_or_default();
         let single_source = !sources.contains(',');
         Ok(crate::models::request_log::SessionUsageSummary {
