@@ -156,7 +156,8 @@ export function Logs() {
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={t("logs.search")}
-            className="form-input !w-40 shrink-0"
+            className="form-input shrink-0"
+            style={{ width: "11rem" }}
           />
           <select
             value={statusFilter}
