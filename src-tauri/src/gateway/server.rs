@@ -105,6 +105,10 @@ pub async fn start(
         // 请求该有的语义。错误通过 bytes_stream() 的 Err(reqwest::Error)
         // 自然冒泡，下游各 SSE 处理器用 e.is_timeout() 识别后给中文文案。
         .read_timeout(std::time::Duration::from_secs(60))
+        // 建连超时：上游 IP 可达但 TCP 不响应（安全组拦截 / BGP 黑洞）时，不设此项
+        // 会挂到 OS 默认（常 2min+），叠加重试会让网关长时间卡死。只管"建连"阶段，
+        // 建连后交给 read_timeout，不影响 streaming 的长输出。
+        .connect_timeout(std::time::Duration::from_secs(10))
         // Drop idle keep-alive connections after 30s. Without this, the pool
         // hands out connections the remote has already RST'd after a long
         // pause (e.g. Claude Code stays open for minutes between user
