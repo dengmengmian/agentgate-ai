@@ -454,6 +454,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "routes.scene_long_text": { en: "Long Text (>100K chars)", zh: "长文本（>100K 字符）" },
   "routes.scene_tools": { en: "Tool-Heavy Requests", zh: "工具密集型请求" },
   "routes.scene_custom": { en: "Custom...", zh: "自定义..." },
+  "routes.custom_conditions_hint": { en: "Use custom rules only when you know the request signal is stable. Keyword matching only checks the system prompt.", zh: "仅在请求特征稳定时使用自定义规则。关键词只匹配系统提示词。" },
   "routes.show_advanced_conditions": { en: "Advanced rules", zh: "高级规则" },
   "routes.hide_advanced_conditions": { en: "Hide advanced rules", zh: "收起高级规则" },
   "routes.back_to_presets": { en: "Back to presets", zh: "返回预设" },

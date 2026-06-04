@@ -13,12 +13,9 @@ import {
   Pencil,
   Check,
   Filter,
-  SlidersHorizontal,
   Image as ImageIcon,
-  Brain,
   FileText,
   Wrench,
-  GitBranch,
   Route,
   type LucideIcon,
 } from "lucide-react";
@@ -625,16 +622,13 @@ function SummaryTile({ label, value, hint }: { label: string; value: string; hin
 type ConditionPreset = {
   key: string;
   icon: LucideIcon;
-  group: "primary" | "advanced";
   conditions: RoutingConditions;
 };
 
 const CONDITION_PRESETS: ConditionPreset[] = [
-  { key: "images", icon: ImageIcon, group: "primary", conditions: { has_images: true } },
-  { key: "long_text", icon: FileText, group: "primary", conditions: { min_input_chars: 100000 } },
-  { key: "tools", icon: Wrench, group: "primary", conditions: { has_tools: true } },
-  { key: "reasoning", icon: Brain, group: "advanced", conditions: { system_keywords: ["reason", "think", "analyze", "深度", "推理"] } },
-  { key: "background", icon: GitBranch, group: "advanced", conditions: { system_keywords: ["background", "subagent", "后台"] } },
+  { key: "images", icon: ImageIcon, conditions: { has_images: true } },
+  { key: "long_text", icon: FileText, conditions: { min_input_chars: 100000 } },
+  { key: "tools", icon: Wrench, conditions: { has_tools: true } },
 ];
 
 function strategyLabel(strategy: string, t: (key: string) => string): string {
@@ -666,8 +660,7 @@ function hasCustomOnlyConditions(c: RoutingConditions): boolean {
   if (c.max_input_chars != null) return true;
   if (c.has_images === false || c.has_tools === false) return true;
   if (c.min_input_chars != null && c.min_input_chars !== 100000) return true;
-  const knownKeywords = new Set(["reason", "think", "analyze", "深度", "推理", "background", "subagent", "后台"]);
-  return Boolean(c.system_keywords?.some(k => !knownKeywords.has(k)));
+  return Boolean(c.system_keywords?.length);
 }
 
 function detectCheckedPresets(c: RoutingConditions): Set<string> {
@@ -675,8 +668,6 @@ function detectCheckedPresets(c: RoutingConditions): Set<string> {
   if (c.has_images === true) checked.add("images");
   if (c.has_tools === true) checked.add("tools");
   if (c.min_input_chars && c.min_input_chars >= 100000) checked.add("long_text");
-  if (c.system_keywords?.some(k => ["reason", "think", "analyze", "推理"].includes(k))) checked.add("reasoning");
-  if (c.system_keywords?.some(k => ["background", "subagent", "后台"].includes(k))) checked.add("background");
   return checked;
 }
 
@@ -685,10 +676,6 @@ function mergePresetConditions(checked: Set<string>): RoutingConditions {
   if (checked.has("images")) c.has_images = true;
   if (checked.has("tools")) c.has_tools = true;
   if (checked.has("long_text")) c.min_input_chars = 100000;
-  const allKeywords: string[] = [];
-  if (checked.has("reasoning")) allKeywords.push("reason", "think", "analyze", "深度", "推理");
-  if (checked.has("background")) allKeywords.push("background", "subagent", "后台");
-  if (allKeywords.length > 0) c.system_keywords = allKeywords;
   return c;
 }
 
@@ -700,10 +687,6 @@ function ConditionsDialog({ target, onSave, onClose }: {
   const { t } = useI18n();
   const [checked, setChecked] = useState(() => detectCheckedPresets(target.current));
   const [showCustom, setShowCustom] = useState(() => hasCustomOnlyConditions(target.current));
-  const [showAdvanced, setShowAdvanced] = useState(() => {
-    const initial = detectCheckedPresets(target.current);
-    return initial.has("reasoning") || initial.has("background") || hasCustomOnlyConditions(target.current);
-  });
   const [modelOverride, setModelOverride] = useState(target.current.model_override ?? "");
 
   // Custom fields (only used in custom mode)
@@ -742,8 +725,6 @@ function ConditionsDialog({ target, onSave, onClose }: {
   };
 
   const hasAny = checked.size > 0 || showCustom || modelOverride.trim().length > 0;
-  const primaryPresets = CONDITION_PRESETS.filter(p => p.group === "primary");
-  const advancedPresets = CONDITION_PRESETS.filter(p => p.group === "advanced");
   const isResponsesProfile = target.inputProtocol === "openai_responses";
 
   return (
@@ -768,7 +749,7 @@ function ConditionsDialog({ target, onSave, onClose }: {
           {!showCustom && (
             <>
               <div className="grid grid-cols-2 gap-2">
-                {primaryPresets.map(p => {
+                {CONDITION_PRESETS.map(p => {
                   const Icon = p.icon;
                   return (
                     <label key={p.key} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors ${checked.has(p.key) ? "border-accent bg-accent-soft text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
@@ -778,30 +759,9 @@ function ConditionsDialog({ target, onSave, onClose }: {
                   );
                 })}
               </div>
-
-              <button onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center gap-1.5 text-[11px] text-accent hover:text-accent/80">
-                <SlidersHorizontal className="h-3 w-3" />
-                {showAdvanced ? t("routes.hide_advanced_conditions") : t("routes.show_advanced_conditions")}
+              <button onClick={() => setShowCustom(true)} className="text-[11px] text-accent hover:text-accent/80">
+                {t("routes.scene_custom")}
               </button>
-
-              {showAdvanced && (
-                <div className="space-y-2 rounded-md border border-border/50 bg-card-secondary p-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    {advancedPresets.map(p => {
-                      const Icon = p.icon;
-                      return (
-                        <label key={p.key} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors ${checked.has(p.key) ? "border-accent bg-accent-soft text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
-                          <input type="checkbox" checked={checked.has(p.key)} onChange={() => toggle(p.key)} className="accent-accent" />
-                          <Icon className="h-3.5 w-3.5" /> {t(`routes.scene_${p.key}`)}
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <button onClick={() => setShowCustom(true)} className="text-[11px] text-accent hover:text-accent/80">
-                    {t("routes.scene_custom")}
-                  </button>
-                </div>
-              )}
             </>
           )}
 
@@ -815,6 +775,7 @@ function ConditionsDialog({ target, onSave, onClose }: {
           {/* Custom fields */}
           {showCustom && (
             <div className="space-y-3 rounded-md border border-border/50 bg-card-secondary p-3">
+              <p className="text-[10px] text-text-muted">{t("routes.custom_conditions_hint")}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="mb-1 block text-[10px] text-text-muted">{t("routes.min_chars")}</label>
