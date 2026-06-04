@@ -1085,6 +1085,16 @@ pub fn list_request_logs(
     storage::request_logs::list(&conn, filter)
 }
 
+/// 日志里出现过的去重模型名——Logs 页「模型」筛选下拉用。
+#[tauri::command]
+pub fn list_log_models(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::request_logs::distinct_models(&conn)
+}
+
 #[tauri::command]
 pub fn count_request_logs(
     filter: RequestLogFilter,

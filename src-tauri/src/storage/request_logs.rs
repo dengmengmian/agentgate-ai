@@ -74,6 +74,21 @@ pub fn list(
     Ok(items)
 }
 
+/// 日志里出现过的去重模型名，给 Logs 页的「模型」筛选下拉用。
+pub fn distinct_models(conn: &Connection) -> Result<Vec<String>, AppError> {
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT model FROM request_logs
+         WHERE model IS NOT NULL AND model != '' AND model != '<synthetic>'
+         ORDER BY model",
+    )?;
+    let rows = stmt.query_map([], |r| r.get::<_, String>(0))?;
+    let mut out = Vec::new();
+    for r in rows {
+        out.push(r?);
+    }
+    Ok(out)
+}
+
 /// 把 RequestLogFilter 的过滤条件转 WHERE 子句。count / list / aggregate_by_session
 /// 共享，保证过滤语义一致。
 fn apply_log_filter(

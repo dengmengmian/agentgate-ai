@@ -153,6 +153,10 @@ export async function listRequestLogs(
   return cmd("list_request_logs", { filter });
 }
 
+export async function listLogModels(): Promise<string[]> {
+  return cmd("list_log_models");
+}
+
 export async function countRequestLogs(filter: RequestLogFilter): Promise<number> {
   return cmd("count_request_logs", { filter });
 }

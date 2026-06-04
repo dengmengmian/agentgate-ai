@@ -256,6 +256,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "logs.search": { en: "Search...", zh: "搜索..." },
   "logs.all": { en: "All", zh: "全部" },
   "logs.all_providers": { en: "All providers", zh: "全部供应商" },
+  "logs.all_models": { en: "All models", zh: "全部模型" },
   "logs.all_clients": { en: "All clients", zh: "全部客户端" },
   "logs.all_routes": { en: "All routes", zh: "全部路由" },
   "logs.all_error_types": { en: "All error types", zh: "全部错误类型" },

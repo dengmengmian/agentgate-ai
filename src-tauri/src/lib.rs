@@ -261,6 +261,7 @@ pub fn run() {
             commands::restart_gateway,
             // Logs
             commands::list_request_logs,
+            commands::list_log_models,
             commands::count_request_logs,
             commands::get_request_log_detail,
             commands::clear_request_logs,

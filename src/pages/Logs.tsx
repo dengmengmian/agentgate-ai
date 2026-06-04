@@ -40,6 +40,7 @@ export function Logs() {
   const [viewMode, setViewMode] = useState<"list" | "session">("list");
   const [providerOptions, setProviderOptions] = useState<ProviderView[]>([]);
   const [routeProfileOptions, setRouteProfileOptions] = useState<RouteProfileView[]>([]);
+  const [modelOptions, setModelOptions] = useState<string[]>([]);
 
   // Pagination
   const [page, setPage] = useState(1); // 1-indexed
@@ -50,6 +51,7 @@ export function Logs() {
   useEffect(() => {
     api.listProviders().then(setProviderOptions).catch(() => {});
     api.listRouteProfiles().then(setRouteProfileOptions).catch(() => {});
+    api.listLogModels().then(setModelOptions).catch(() => {});
   }, []);
 
   // Reset to page 1 whenever filters change.
@@ -176,13 +178,17 @@ export function Logs() {
               {providerOptions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
             </select>
           )}
-          <input
-            type="text"
-            value={modelFilter}
-            onChange={(e) => setModelFilter(e.target.value)}
-            placeholder={t("logs.filter_model")}
-            className="form-input !w-40 shrink-0"
-          />
+          {modelOptions.length > 0 && (
+            <select
+              value={modelFilter}
+              onChange={(e) => setModelFilter(e.target.value)}
+              className="form-input !w-40 shrink-0"
+              title={t("logs.filter_model")}
+            >
+              <option value="">{t("logs.all_models")}</option>
+              {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+            </select>
+          )}
           {routeProfileOptions.length > 0 && (
             <select
               value={routeProfileFilter}
