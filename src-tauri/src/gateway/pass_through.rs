@@ -351,6 +351,9 @@ async fn handle_stream(
         }
 
         let mut stream = boot.stream;
+        // 末尾缓冲：usage chunk 在流末尾，而 sse_log 到上限就丢后面、会截掉 usage。
+        // 单独保留最后 ~16KB 专门解析 usage（够装最后的 usage chunk）。旁路，不碰转发。
+        let mut usage_tail = String::new();
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
                 Ok(bytes) => {
@@ -360,6 +363,15 @@ async fn handle_stream(
                         let to_add = text.len().min(MAX_SSE_LOG - sse_size);
                         sse_log.push_str(&text[..to_add]);
                         sse_size += to_add;
+                    }
+                    usage_tail.push_str(&text);
+                    if usage_tail.len() > 16384 {
+                        let cut = usage_tail.len() - 16384;
+                        let mut b = cut;
+                        while b < usage_tail.len() && !usage_tail.is_char_boundary(b) {
+                            b += 1;
+                        }
+                        usage_tail.drain(..b);
                     }
                     // tx.send 在 client 已断开（mpsc receiver drop）时返回 Err。
                     // 显式 break——不然 reqwest 仍在从上游读，浪费 token + 占
@@ -395,6 +407,23 @@ async fn handle_stream(
 
         let sanitized_sse = sanitize(&sse_log, &api_key);
         if let Some(conn) = lock_db(&db_clone) {
+            // 旁路解析直通响应里的 token usage（流已原样转发，这里只读不改），
+            // 有则记 token + 算成本；解析不出保持现状（None）。
+            let (inp, out) = match parse_chat_usage(&usage_tail) {
+                Some((i, o)) => (Some(i), Some(o)),
+                None => (None, None),
+            };
+            let cost = if inp.is_some() || out.is_some() {
+                crate::storage::pricing::calculate_cost_for_request(
+                    &conn,
+                    &provider_name,
+                    &model_clone,
+                    inp,
+                    out,
+                )
+            } else {
+                None
+            };
             let _ = crate::storage::request_logs::insert(
                 &conn,
                 &req_id,
@@ -412,9 +441,9 @@ async fn handle_stream(
                 None,
                 None,
                 Some(&trace),
-                None,
-                None,
-                None, // no cost / tokens parsed on stream pass-through
+                inp,
+                out,
+                cost,
                 None,
                 None, // no cache tokens
                 Some("gateway"),
@@ -444,6 +473,33 @@ fn lock_db(db: &Arc<Mutex<Connection>>) -> Option<std::sync::MutexGuard<'_, Conn
         Ok(guard) => Some(guard),
         Err(poisoned) => Some(poisoned.into_inner()),
     }
+}
+
+/// 从 Chat Completions 流式响应尾部 SSE 文本里解析最后一条非 null 的 usage，
+/// 返回 (prompt_tokens, completion_tokens)。直通模式不转换流，这里只**旁路**读
+/// usage 做 token/成本统计——不碰转发、解析失败返回 None 保持现状。
+fn parse_chat_usage(sse_tail: &str) -> Option<(i64, i64)> {
+    for line in sse_tail.lines().rev() {
+        let data = line
+            .strip_prefix("data:")
+            .map(str::trim)
+            .unwrap_or_else(|| line.trim());
+        if data.is_empty() || data == "[DONE]" || !data.contains("\"usage\"") {
+            continue;
+        }
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
+            if let Some(usage) = v.get("usage").filter(|u| !u.is_null()) {
+                let inp = usage.get("prompt_tokens").and_then(serde_json::Value::as_i64);
+                let out = usage
+                    .get("completion_tokens")
+                    .and_then(serde_json::Value::as_i64);
+                if inp.is_some() || out.is_some() {
+                    return Some((inp.unwrap_or(0), out.unwrap_or(0)));
+                }
+            }
+        }
+    }
+    None
 }
 
 fn sanitize(text: &str, api_key: &str) -> String {
@@ -736,6 +792,20 @@ pub async fn handle_anthropic(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_usage_picks_final_non_null_chunk() {
+        let sse = "data: {\"choices\":[{\"delta\":{\"content\":\"hi\"}}],\"usage\":null}\n\n\
+                   data: {\"choices\":[],\"usage\":{\"prompt_tokens\":100,\"completion_tokens\":42}}\n\n\
+                   data: [DONE]\n\n";
+        assert_eq!(parse_chat_usage(sse), Some((100, 42)));
+    }
+
+    #[test]
+    fn parse_usage_none_when_all_null() {
+        let sse = "data: {\"usage\":null}\n\ndata: [DONE]\n\n";
+        assert_eq!(parse_chat_usage(sse), None);
+    }
 
     #[test]
     fn native_model_mapping_wins() {
