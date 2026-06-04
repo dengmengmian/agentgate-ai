@@ -1,7 +1,42 @@
-use crate::protocol::chat_completions::ChatCompletionsRequest;
+use crate::protocol::chat_completions::{ChatCompletionsRequest, ChatMessage};
 use serde_json::Value;
 
 pub struct MiniMaxProvider;
+
+/// 合并多条 system 消息为单条前置——MiniMax 只接受 1 条 system 且须在所有
+/// user/assistant 之前。仅在所有 system 都是纯文本时合并（用双换行拼接），
+/// 含多模态 system 时保持原样避免丢数据。
+fn merge_system_messages(messages: &mut Vec<ChatMessage>) {
+    let count = messages.iter().filter(|m| m.role == "system").count();
+    if count <= 1 {
+        return;
+    }
+    let all_text = messages
+        .iter()
+        .filter(|m| m.role == "system")
+        .all(|m| m.content.as_ref().map_or(true, Value::is_string));
+    if !all_text {
+        return;
+    }
+    let merged = messages
+        .iter()
+        .filter(|m| m.role == "system")
+        .filter_map(|m| m.content.as_ref().and_then(Value::as_str))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    messages.retain(|m| m.role != "system");
+    messages.insert(
+        0,
+        ChatMessage {
+            role: "system".into(),
+            content: Some(Value::String(merged)),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        },
+    );
+}
 
 impl super::ProviderTransform for MiniMaxProvider {
     fn finalize_request(&self, req: &mut ChatCompletionsRequest, _tools: &Option<Vec<Value>>) {
@@ -9,6 +44,30 @@ impl super::ProviderTransform for MiniMaxProvider {
         req.reasoning_effort = None;
         // MiniMax doesn't support response_format
         req.response_format = None;
+
+        // 以下针对 MiniMax 严格 API 的兼容（参考 mimo2codex minimaxCompat）：
+        // 1. tool_choice="auto" 是默认值，MiniMax 拒显式传 → 省略
+        if req.tool_choice.as_ref().and_then(Value::as_str) == Some("auto") {
+            req.tool_choice = None;
+        }
+        // 2. tools[].function.strict === null → 删（MiniMax 要么不传要么 boolean）
+        if let Some(tools) = req.tools.as_mut() {
+            for t in tools.iter_mut() {
+                if let Some(func) = t.get_mut("function").and_then(Value::as_object_mut) {
+                    if func.get("strict").is_some_and(Value::is_null) {
+                        func.remove("strict");
+                    }
+                }
+            }
+        }
+        // 3. assistant 消息 content===null → 删字段（MiniMax 拒 null content）
+        for m in req.messages.iter_mut() {
+            if m.role == "assistant" && matches!(m.content, Some(Value::Null)) {
+                m.content = None;
+            }
+        }
+        // 4. 多条 system 合并为单条前置（MiniMax 只接受 1 条且须最前）
+        merge_system_messages(&mut req.messages);
     }
 
     fn provider_type(&self) -> &str {
@@ -85,6 +144,67 @@ mod tests {
         r.response_format = Some(serde_json::json!({"type": "json_object"}));
         MiniMaxProvider.finalize_request(&mut r, &None);
         assert!(r.response_format.is_none());
+    }
+
+    fn msg(role: &str, content: serde_json::Value) -> ChatMessage {
+        ChatMessage {
+            role: role.into(),
+            content: Some(content),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    #[test]
+    fn minimax_strips_tool_choice_auto() {
+        let mut r = req();
+        r.tool_choice = Some(serde_json::json!("auto"));
+        MiniMaxProvider.finalize_request(&mut r, &None);
+        assert!(r.tool_choice.is_none());
+    }
+
+    #[test]
+    fn minimax_keeps_explicit_tool_choice() {
+        let mut r = req();
+        r.tool_choice = Some(serde_json::json!("required"));
+        MiniMaxProvider.finalize_request(&mut r, &None);
+        assert_eq!(r.tool_choice, Some(serde_json::json!("required")));
+    }
+
+    #[test]
+    fn minimax_strips_null_strict() {
+        let mut r = req();
+        r.tools = Some(vec![serde_json::json!({
+            "type": "function",
+            "function": {"name": "f", "strict": null}
+        })]);
+        MiniMaxProvider.finalize_request(&mut r, &None);
+        assert!(r.tools.unwrap()[0]["function"].get("strict").is_none());
+    }
+
+    #[test]
+    fn minimax_drops_null_assistant_content() {
+        let mut r = req();
+        r.messages = vec![msg("assistant", serde_json::Value::Null)];
+        MiniMaxProvider.finalize_request(&mut r, &None);
+        assert!(r.messages[0].content.is_none());
+    }
+
+    #[test]
+    fn minimax_merges_system_messages() {
+        let mut r = req();
+        r.messages = vec![
+            msg("system", serde_json::json!("a")),
+            msg("user", serde_json::json!("hi")),
+            msg("system", serde_json::json!("b")),
+        ];
+        MiniMaxProvider.finalize_request(&mut r, &None);
+        let systems: Vec<_> = r.messages.iter().filter(|m| m.role == "system").collect();
+        assert_eq!(systems.len(), 1);
+        assert_eq!(systems[0].content.as_ref().unwrap().as_str().unwrap(), "a\n\nb");
+        assert_eq!(r.messages[0].role, "system");
     }
 
     #[test]
