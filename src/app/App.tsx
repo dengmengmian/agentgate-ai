@@ -6,6 +6,7 @@ import { UpdateChecker } from "@/components/common/UpdateChecker";
 import { Dashboard } from "@/pages/Dashboard";
 import { Tools } from "@/pages/Tools";
 import { Providers } from "@/pages/Providers";
+import { ProviderDetail } from "@/pages/ProviderDetail";
 import { Routes as RoutesPage } from "@/pages/Routes";
 import { Gateway } from "@/pages/Gateway";
 import { Logs } from "@/pages/Logs";
@@ -24,6 +25,7 @@ export function App() {
             <Route path="/quick-setup" element={<QuickSetup />} />
             <Route path="/tools" element={<Tools />} />
             <Route path="/providers" element={<Providers />} />
+            <Route path="/providers/:id" element={<ProviderDetail />} />
             <Route path="/routes" element={<RoutesPage />} />
             <Route path="/gateway" element={<Gateway />} />
             <Route path="/logs" element={<Logs />} />

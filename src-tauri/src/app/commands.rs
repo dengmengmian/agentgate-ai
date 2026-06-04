@@ -1167,6 +1167,27 @@ pub fn aggregate_cost_by_client(
     storage::request_logs::aggregate_cost_by_client(&conn, since.as_deref(), limit.unwrap_or(50))
 }
 
+/// Provider 详情页：按模型聚合成功率/成本，并返回最近延迟点。
+#[tauri::command]
+pub fn aggregate_provider_detail_stats(
+    provider: String,
+    days: Option<i64>,
+    limit: Option<i64>,
+    state: State<'_, AppState>,
+) -> Result<crate::models::request_log::ProviderDetailStats, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    let since = cost_since(days);
+    storage::request_logs::aggregate_provider_detail_stats(
+        &conn,
+        &provider,
+        since.as_deref(),
+        limit.unwrap_or(50),
+    )
+}
+
 #[tauri::command]
 pub fn aggregate_route_profile_stats(
     days: Option<i64>,
@@ -1702,9 +1723,7 @@ pub fn detect_claude_desktop() -> crate::tools::claude_desktop::ClaudeDesktopSta
 /// 生成指向 AgentGate 网关的 3p profile JSON（pretty），仅供和用户机器上实际的
 /// Claude Desktop 3p 配置对比、确认 schema，不写任何文件。
 #[tauri::command]
-pub fn preview_claude_desktop_profile(
-    state: State<'_, AppState>,
-) -> Result<String, AppError> {
+pub fn preview_claude_desktop_profile(state: State<'_, AppState>) -> Result<String, AppError> {
     let (host, port) = {
         let conn = state
             .db

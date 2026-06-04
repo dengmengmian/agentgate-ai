@@ -15,6 +15,7 @@ interface ProviderCardProps {
   onDelete: (provider: ProviderView) => void;
   onSetActive: (provider: ProviderView) => void;
   onTest: (provider: ProviderView) => void;
+  onDetails?: (provider: ProviderView) => void;
   testing?: boolean;
   runtime?: ProviderRuntimeStatus;
   onResetRuntime?: (providerId: string) => void;
@@ -26,6 +27,7 @@ export function ProviderCard({
   onDelete,
   onSetActive,
   onTest,
+  onDetails,
   testing,
   runtime,
   onResetRuntime,
@@ -253,6 +255,11 @@ export function ProviderCard({
             {testing ? <Loader2 className="h-3 w-3 animate-spin" /> : <ExternalLink className="h-3 w-3" />}
             {t("providers.test")}
           </button>
+          {onDetails && (
+            <button onClick={() => onDetails(provider)} className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
+              <ExternalLink className="h-3 w-3" />{t("common.details")}
+            </button>
+          )}
           {!provider.is_active && (
             <button onClick={() => onSetActive(provider)} className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
               <Star className="h-3 w-3" />{t("providers.set_active")}

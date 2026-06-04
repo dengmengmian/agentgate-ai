@@ -187,6 +187,14 @@ export async function aggregateCostByClient(
   return cmd("aggregate_cost_by_client", { days, limit });
 }
 
+export async function aggregateProviderDetailStats(
+  provider: string,
+  days?: number,
+  limit?: number,
+): Promise<import("@/types/request-log").ProviderDetailStats> {
+  return cmd("aggregate_provider_detail_stats", { provider, days, limit });
+}
+
 export async function aggregateRouteProfileStats(
   days?: number,
 ): Promise<import("@/types/route-profile").RouteProfileStats[]> {

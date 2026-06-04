@@ -71,6 +71,10 @@ export function Providers() {
     }
   }, [loadProviders, t]);
 
+  const handleDetails = useCallback((provider: ProviderView) => {
+    navigate(`/providers/${provider.id}`);
+  }, [navigate]);
+
   useEffect(() => {
     loadProviders();
   }, [loadProviders]);
@@ -245,6 +249,7 @@ export function Providers() {
               onDelete={setDeleteTarget}
               onSetActive={handleSetActive}
               onTest={handleTest}
+              onDetails={handleDetails}
               testing={testingId === provider.id}
               runtime={runtimeMap[provider.id]}
               onResetRuntime={handleResetRuntime}

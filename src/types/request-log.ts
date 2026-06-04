@@ -79,3 +79,26 @@ export interface CostBreakdown {
   cache_write_tokens: number;
   cost: number;
 }
+
+export interface ProviderLatencyPoint {
+  timestamp: string;
+  model: string | null;
+  latency_ms: number;
+  status_code: number | null;
+}
+
+export interface ProviderModelStats {
+  model: string;
+  request_count: number;
+  success_count: number;
+  error_count: number;
+  success_rate: number;
+  avg_latency_ms: number;
+  cost: number;
+}
+
+export interface ProviderDetailStats {
+  provider: string;
+  latency_points: ProviderLatencyPoint[];
+  model_stats: ProviderModelStats[];
+}

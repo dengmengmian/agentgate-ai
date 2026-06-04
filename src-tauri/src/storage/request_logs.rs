@@ -514,6 +514,102 @@ pub fn aggregate_route_profile_stats(
     Ok(out)
 }
 
+pub fn aggregate_provider_detail_stats(
+    conn: &Connection,
+    provider_name: &str,
+    since: Option<&str>,
+    limit: i64,
+) -> Result<crate::models::request_log::ProviderDetailStats, AppError> {
+    let limit = limit.clamp(1, 200);
+
+    let mut model_sql = String::from(
+        "SELECT
+            model,
+            COUNT(*) AS request_count,
+            COALESCE(SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END), 0) AS success_count,
+            COALESCE(SUM(CASE WHEN status_code < 200 OR status_code >= 400 THEN 1 ELSE 0 END), 0) AS error_count,
+            COALESCE(AVG(latency_ms), 0) AS avg_latency_ms,
+            COALESCE(SUM(cost), 0.0) AS cost
+         FROM request_logs
+         WHERE source = 'gateway'
+           AND provider = ?1
+           AND model IS NOT NULL
+           AND model != ''",
+    );
+    if since.is_some() {
+        model_sql.push_str(" AND timestamp >= ?2");
+    }
+    model_sql.push_str(" GROUP BY model ORDER BY cost DESC, request_count DESC");
+
+    let mut model_stmt = conn.prepare(&model_sql)?;
+    let map_model = |r: &rusqlite::Row<'_>| {
+        let request_count: i64 = r.get(1)?;
+        let success_count: i64 = r.get(2)?;
+        Ok(crate::models::request_log::ProviderModelStats {
+            model: r.get(0)?,
+            request_count,
+            success_count,
+            error_count: r.get(3)?,
+            success_rate: if request_count > 0 {
+                success_count as f64 / request_count as f64
+            } else {
+                0.0
+            },
+            avg_latency_ms: r.get::<_, f64>(4)?.round() as i64,
+            cost: r.get(5)?,
+        })
+    };
+    let model_rows = if let Some(since) = since {
+        model_stmt.query_map(rusqlite::params![provider_name, since], map_model)?
+    } else {
+        model_stmt.query_map(rusqlite::params![provider_name], map_model)?
+    };
+    let mut model_stats = Vec::new();
+    for row in model_rows {
+        model_stats.push(row?);
+    }
+
+    let mut latency_sql = String::from(
+        "SELECT timestamp, model, latency_ms, status_code
+         FROM request_logs
+         WHERE source = 'gateway'
+           AND provider = ?1
+           AND latency_ms IS NOT NULL",
+    );
+    if since.is_some() {
+        latency_sql.push_str(" AND timestamp >= ?2");
+    }
+    latency_sql.push_str(" ORDER BY timestamp DESC LIMIT ?");
+    let limit_index = if since.is_some() { "3" } else { "2" };
+    latency_sql.push_str(limit_index);
+
+    let mut latency_stmt = conn.prepare(&latency_sql)?;
+    let map_latency = |r: &rusqlite::Row<'_>| {
+        Ok(crate::models::request_log::ProviderLatencyPoint {
+            timestamp: r.get(0)?,
+            model: r.get(1)?,
+            latency_ms: r.get(2)?,
+            status_code: r.get(3)?,
+        })
+    };
+    let latency_rows = if let Some(since) = since {
+        latency_stmt.query_map(rusqlite::params![provider_name, since, limit], map_latency)?
+    } else {
+        latency_stmt.query_map(rusqlite::params![provider_name, limit], map_latency)?
+    };
+    let mut latency_points = Vec::new();
+    for row in latency_rows {
+        latency_points.push(row?);
+    }
+    latency_points.reverse();
+
+    Ok(crate::models::request_log::ProviderDetailStats {
+        provider: provider_name.to_string(),
+        latency_points,
+        model_stats,
+    })
+}
+
 /// 各 provider 近 N 小时成功请求(2xx)的平均延迟(ms)——延迟感知路由用。
 /// key 为 provider 名（与日志写入一致）。只算 **网关来源** 的成功请求：客户端会话
 /// 同步导入的 latency 是客户端自记、不反映网关到上游的真实延迟，不能用于路由决策
@@ -1129,6 +1225,137 @@ mod tests {
         assert!((stats[0].success_rate - 0.5).abs() < 1e-9);
         assert_eq!(stats[0].avg_latency_ms, 200);
         assert!((stats[0].cost - 0.05).abs() < 1e-9);
+    }
+
+    #[test]
+    fn aggregate_provider_detail_stats_by_model_and_latency() {
+        let conn = empty_logs_db();
+        insert(
+            &conn,
+            "r1",
+            "Codex",
+            "P",
+            "m1",
+            "/v1/responses",
+            200,
+            100,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(100),
+            Some(20),
+            Some(0.03),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
+        )
+        .unwrap();
+        insert(
+            &conn,
+            "r2",
+            "Codex",
+            "P",
+            "m1",
+            "/v1/responses",
+            500,
+            300,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("boom"),
+            None,
+            Some(50),
+            Some(10),
+            Some(0.02),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
+        )
+        .unwrap();
+        insert(
+            &conn,
+            "r3",
+            "Codex",
+            "P",
+            "m2",
+            "/v1/responses",
+            200,
+            500,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(70),
+            Some(30),
+            Some(0.05),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
+        )
+        .unwrap();
+        insert(
+            &conn,
+            "r4",
+            "Codex",
+            "Other",
+            "m1",
+            "/v1/responses",
+            200,
+            1,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(1),
+            Some(1),
+            Some(9.0),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
+        )
+        .unwrap();
+
+        let stats = aggregate_provider_detail_stats(&conn, "P", None, 20).unwrap();
+
+        assert_eq!(stats.model_stats.len(), 2);
+        assert_eq!(stats.model_stats[0].model, "m1");
+        assert_eq!(stats.model_stats[0].request_count, 2);
+        assert_eq!(stats.model_stats[0].success_count, 1);
+        assert_eq!(stats.model_stats[0].error_count, 1);
+        assert!((stats.model_stats[0].success_rate - 0.5).abs() < 1e-9);
+        assert_eq!(stats.model_stats[0].avg_latency_ms, 200);
+        assert!((stats.model_stats[0].cost - 0.05).abs() < 1e-9);
+        assert_eq!(stats.model_stats[1].model, "m2");
+        assert_eq!(stats.model_stats[1].request_count, 1);
+        assert_eq!(stats.model_stats[1].success_count, 1);
+        assert!((stats.model_stats[1].success_rate - 1.0).abs() < 1e-9);
+        assert!((stats.model_stats[1].cost - 0.05).abs() < 1e-9);
+        assert_eq!(stats.latency_points.len(), 3);
+        assert!(stats.latency_points.iter().all(|p| p.latency_ms > 0));
     }
 
     #[test]

@@ -92,6 +92,32 @@ pub struct CostBreakdown {
     pub cost: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderLatencyPoint {
+    pub timestamp: String,
+    pub model: Option<String>,
+    pub latency_ms: i64,
+    pub status_code: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderModelStats {
+    pub model: String,
+    pub request_count: i64,
+    pub success_count: i64,
+    pub error_count: i64,
+    pub success_rate: f64,
+    pub avg_latency_ms: i64,
+    pub cost: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderDetailStats {
+    pub provider: String,
+    pub latency_points: Vec<ProviderLatencyPoint>,
+    pub model_stats: Vec<ProviderModelStats>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

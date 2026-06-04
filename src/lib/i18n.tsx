@@ -193,6 +193,18 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.probe_fail": { en: "Probe failed", zh: "探测失败" },
   "providers.vision_supported": { en: "Vision", zh: "支持视觉" },
   "providers.vision_not_supported": { en: "No Vision", zh: "不支持视觉" },
+  "providers.detail.back": { en: "Back to providers", zh: "返回供应商" },
+  "providers.detail.not_found": { en: "Provider not found", zh: "未找到供应商" },
+  "providers.detail.requests_24h": { en: "24h Requests", zh: "24h 请求" },
+  "providers.detail.cost_7d": { en: "7d Cost", zh: "7 天成本" },
+  "providers.detail.latency_trend": { en: "Latency Trend", zh: "延迟趋势" },
+  "providers.detail.empty_latency": { en: "No gateway latency data yet.", zh: "暂无网关延迟数据。" },
+  "providers.detail.model_stats": { en: "Model Stats", zh: "模型统计" },
+  "providers.detail.model": { en: "Model", zh: "模型" },
+  "providers.detail.requests": { en: "Requests", zh: "请求数" },
+  "providers.detail.cost": { en: "Cost", zh: "成本" },
+  "providers.detail.empty_models": { en: "No model-level gateway traffic yet.", zh: "暂无模型维度网关请求。" },
+  "providers.detail.empty_errors": { en: "No recent errors.", zh: "暂无最近错误。" },
 
   // ── Gateway ──
   "gateway.local_gateway": { en: "Local Gateway", zh: "本地网关" },
