@@ -2004,6 +2004,9 @@ pub async fn handle_gemini_generate(
                     let _ = tx.send(prefix_text).await;
                 }
                 let mut stream = boot.stream;
+                // 区分两种提前结束：客户端断开(tx.send 失败)是正常的，请求其实成功了；
+                // 上游流 Err 才是真失败，必须记成非 2xx，否则日志层假成功、污染成本/健康统计。
+                let mut stream_err: Option<String> = None;
                 while let Some(chunk) = stream.next().await {
                     match chunk {
                         Ok(b) => {
@@ -2012,36 +2015,56 @@ pub async fn handle_gemini_generate(
                                 .await
                                 .is_err()
                             {
-                                break;
+                                break; // 客户端断开，正常结束
                             }
                         }
-                        Err(_) => break,
+                        Err(e) => {
+                            stream_err = Some(e.to_string());
+                            break;
+                        }
                     }
                 }
                 let latency = start.elapsed().as_millis() as i64;
                 let trace =
                     json!({"mode": "native_pass_through", "protocol": "gemini", "stream": true})
                         .to_string();
-                log_request_success(
-                    &db,
-                    &client_type_owned,
-                    "/v1beta/generateContent",
-                    &req_id,
-                    &raw_req,
-                    "",
-                    "",
-                    "",
-                    None,
-                    &provider_name,
-                    &model_clone,
-                    200,
-                    latency,
-                    Some(&trace),
-                    None,
-                    None,
-                    None,
-                    None,
-                );
+                if let Some(msg) = stream_err {
+                    let err = AppError::new(
+                        "UPSTREAM_STREAM_ERROR",
+                        format!("Gemini 上游流中断: {msg}"),
+                    );
+                    log_request_error(
+                        &db,
+                        &client_type_owned,
+                        "/v1beta/generateContent",
+                        &req_id,
+                        &raw_req,
+                        None,
+                        &err,
+                        latency,
+                    );
+                } else {
+                    log_request_success(
+                        &db,
+                        &client_type_owned,
+                        "/v1beta/generateContent",
+                        &req_id,
+                        &raw_req,
+                        "",
+                        "",
+                        "",
+                        None,
+                        &provider_name,
+                        &model_clone,
+                        200,
+                        latency,
+                        Some(&trace),
+                        None,
+                        None,
+                        None,
+                        None,
+                    );
+                }
             });
             let stream = ReceiverStream::new(rx);
             let body = Body::from_stream(tokio_stream::StreamExt::map(stream, |s| {
