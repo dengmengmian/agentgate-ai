@@ -4246,6 +4246,67 @@ fn trace_with_degradation_events(
     trace.to_string()
 }
 
+fn protocol_for_log_route(route: &str) -> Option<&'static str> {
+    match route {
+        "/v1/responses" => Some("openai_responses"),
+        "/v1/chat/completions" => Some("openai_chat_completions"),
+        "/v1/messages" => Some("anthropic_messages"),
+        _ => None,
+    }
+}
+
+fn enrich_trace_with_route_decision(
+    conn: &Connection,
+    route: &str,
+    provider_name: &str,
+    model: &str,
+    trace_json: Option<&str>,
+) -> Option<String> {
+    let mut trace = trace_json
+        .and_then(|s| serde_json::from_str::<Value>(s).ok())
+        .unwrap_or_else(|| json!({}));
+    if trace.get("route_decision").is_some() {
+        return Some(trace.to_string());
+    }
+
+    let protocol = protocol_for_log_route(route)?;
+    let profile = crate::storage::route_profiles::get_default_for_protocol(conn, protocol)
+        .ok()
+        .flatten()?;
+    let providers = crate::storage::route_profiles::list_providers(conn, &profile.id).ok()?;
+    let selected = providers.iter().find(|p| p.provider_name == provider_name);
+    let matched_conditions = selected
+        .and_then(|p| p.routing_conditions.as_ref())
+        .and_then(|s| serde_json::from_str::<Value>(s).ok());
+
+    trace["route_decision"] = json!({
+        "profile_id": profile.id,
+        "profile_name": profile.name,
+        "mode": profile.mode,
+        "selected_provider_id": selected.map(|p| p.provider_id.as_str()),
+        "selected_provider_name": provider_name,
+        "selected_model": model,
+        "selected_priority": selected.map(|p| p.priority),
+        "matched_conditions": matched_conditions,
+        "candidates": providers.iter().map(|p| {
+            json!({
+                "provider_id": p.provider_id,
+                "provider_name": p.provider_name,
+                "priority": p.priority,
+                "model": p.model_override,
+                "in_cooldown": p.cooldown_until.as_ref().map(|until| {
+                    chrono::DateTime::parse_from_rfc3339(until)
+                        .map(|cd| cd > chrono::Utc::now())
+                        .unwrap_or(false)
+                }).unwrap_or(false),
+                "supports_vision": p.supports_vision,
+                "has_conditions": p.routing_conditions.is_some(),
+            })
+        }).collect::<Vec<_>>(),
+    });
+    Some(trace.to_string())
+}
+
 fn log_request_error(
     db: &Arc<Mutex<Connection>>,
     client_type: &str,
@@ -4319,6 +4380,8 @@ fn log_request_success(
             input_tokens,
             output_tokens,
         );
+        let trace_json =
+            enrich_trace_with_route_decision(&conn, route, provider, model, trace_json);
         let _ = crate::storage::request_logs::insert(
             &conn,
             request_id,
@@ -4343,7 +4406,7 @@ fn log_request_success(
             None,
             tool_calls,
             None,
-            trace_json,
+            trace_json.as_deref(),
             input_tokens,
             output_tokens,
             cost,

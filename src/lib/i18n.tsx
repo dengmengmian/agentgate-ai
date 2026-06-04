@@ -237,6 +237,12 @@ const translations: Record<string, Record<Locale, string>> = {
   "logs.tool_calls": { en: "Tool Calls", zh: "工具调用" },
   "logs.trace": { en: "Trace", zh: "追踪" },
   "logs.tokens": { en: "Tokens", zh: "令牌" },
+  "logs.route_decision": { en: "Route Decision", zh: "路由命中" },
+  "logs.route_profile": { en: "Route Profile", zh: "路由策略" },
+  "logs.selected_provider": { en: "Selected Provider", zh: "选中供应商" },
+  "logs.selected_model": { en: "Selected Model", zh: "选中模型" },
+  "logs.matched_conditions": { en: "Matched Conditions", zh: "命中条件" },
+  "logs.route_candidates": { en: "Candidates", zh: "候选列表" },
 
   // ── Tools ──
   "tools.codex": { en: "Codex", zh: "Codex" },

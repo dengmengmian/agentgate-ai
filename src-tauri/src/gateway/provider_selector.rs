@@ -30,6 +30,7 @@ pub struct ProviderCandidate {
     pub provider_name: String,
     pub priority: i64,
     pub model: String,
+    pub routing_conditions: Option<String>,
     pub in_cooldown: bool,
     pub supports_vision: Option<bool>,
     pub cooldown_seconds: i64,
@@ -231,6 +232,7 @@ fn build_candidates(
             provider_name: rpp.provider_name.clone(),
             priority: rpp.priority,
             model,
+            routing_conditions: rpp.routing_conditions.clone(),
             in_cooldown,
             supports_vision,
             cooldown_seconds: rpp.cooldown_seconds,
@@ -505,6 +507,40 @@ pub fn degradation_chain_for_model(provider: &Provider, requested_model: &str) -
     result
 }
 
+pub fn route_decision_trace(selection: &ProviderSelection) -> Value {
+    let selected_conditions = selection
+        .candidates
+        .iter()
+        .find(|c| c.provider_id == selection.provider.id)
+        .and_then(|c| c.routing_conditions.as_ref())
+        .and_then(|s| serde_json::from_str::<Value>(s).ok());
+
+    serde_json::json!({
+        "route_decision": {
+            "profile_id": selection.route_profile_id,
+            "profile_name": selection.route_profile_name,
+            "mode": selection.mode,
+            "reason": selection.reason,
+            "selected_provider_id": selection.provider.id,
+            "selected_provider_name": selection.provider.name,
+            "selected_model": selection.model,
+            "selected_priority": selection.priority,
+            "matched_conditions": selected_conditions,
+            "candidates": selection.candidates.iter().map(|c| {
+                serde_json::json!({
+                    "provider_id": c.provider_id,
+                    "provider_name": c.provider_name,
+                    "priority": c.priority,
+                    "model": c.model,
+                    "in_cooldown": c.in_cooldown,
+                    "supports_vision": c.supports_vision,
+                    "has_conditions": c.routing_conditions.is_some(),
+                })
+            }).collect::<Vec<_>>(),
+        }
+    })
+}
+
 /// Check if we should failover based on error status/message and the candidate's config.
 pub fn should_failover(
     status_code: Option<u16>,
@@ -539,12 +575,38 @@ mod tests {
             provider_name: "Test".to_string(),
             priority: 0,
             model: "gpt-4".to_string(),
+            routing_conditions: None,
             in_cooldown: false,
             supports_vision: None,
             cooldown_seconds: 60,
             failover_on_status_codes: vec![402, 429, 500, 502, 503, 504],
             failover_on_error_keywords: vec!["rate limit".to_string(), "timeout".to_string()],
         }
+    }
+
+    #[test]
+    fn route_decision_trace_includes_selected_provider_and_candidates() {
+        let mut selection = ProviderSelection {
+            route_profile_id: "rp1".to_string(),
+            route_profile_name: "Codex Default".to_string(),
+            mode: "failover".to_string(),
+            provider: mimo_provider_with_matrix("mimo-v2.5-pro"),
+            model: "mimo-v2.5-pro".to_string(),
+            priority: 1,
+            reason: "Failover mode selected first available provider".to_string(),
+            candidates: vec![candidate_with_defaults()],
+        };
+        selection.provider.id = "p1".to_string();
+        selection.provider.name = "MiMo".to_string();
+
+        let trace = route_decision_trace(&selection);
+
+        assert_eq!(trace["route_decision"]["profile_id"], "rp1");
+        assert_eq!(trace["route_decision"]["profile_name"], "Codex Default");
+        assert_eq!(trace["route_decision"]["selected_provider_id"], "p1");
+        assert_eq!(trace["route_decision"]["selected_provider_name"], "MiMo");
+        assert_eq!(trace["route_decision"]["selected_model"], "mimo-v2.5-pro");
+        assert_eq!(trace["route_decision"]["candidates"][0]["provider_name"], "Test");
     }
 
     #[test]

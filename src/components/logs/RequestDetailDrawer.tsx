@@ -8,6 +8,21 @@ import { useI18n } from "@/lib/i18n";
 import { sourceLabel } from "@/components/logs/RequestLogTable";
 import type { RequestLogDetail } from "@/types/request-log";
 
+interface RouteDecisionTrace {
+  profile_name?: string;
+  mode?: string;
+  selected_provider_name?: string;
+  selected_model?: string;
+  matched_conditions?: Record<string, unknown> | null;
+  candidates?: Array<{
+    provider_name?: string;
+    priority?: number;
+    model?: string | null;
+    in_cooldown?: boolean;
+    has_conditions?: boolean;
+  }>;
+}
+
 interface RequestDetailDrawerProps {
   request: RequestLogDetail | null;
   onClose: () => void;
@@ -24,6 +39,7 @@ export function RequestDetailDrawer({
   const isError =
     request.status_code !== null &&
     (request.status_code >= 400 || request.status_code < 200);
+  const routeDecision = parseRouteDecision(request.trace_json);
 
   return (
     <DetailDrawer
@@ -100,6 +116,8 @@ export function RequestDetailDrawer({
           />
         )}
 
+        {routeDecision && <RouteDecisionCard decision={routeDecision} />}
+
         {request.raw_request && (
           <JsonCodeBlock title={t("logs.raw_request")} content={request.raw_request} />
         )}
@@ -120,5 +138,73 @@ export function RequestDetailDrawer({
         )}
       </div>
     </DetailDrawer>
+  );
+}
+
+function parseRouteDecision(traceJson: string | null): RouteDecisionTrace | null {
+  if (!traceJson) return null;
+  try {
+    const parsed = JSON.parse(traceJson) as { route_decision?: RouteDecisionTrace };
+    return parsed.route_decision ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function formatConditions(conditions: Record<string, unknown> | null | undefined): string {
+  if (!conditions || Object.keys(conditions).length === 0) return "—";
+  return Object.entries(conditions)
+    .map(([key, value]) => {
+      if (Array.isArray(value)) return `${key}: ${value.join(", ")}`;
+      return `${key}: ${String(value)}`;
+    })
+    .join(" · ");
+}
+
+function RouteDecisionCard({ decision }: { decision: RouteDecisionTrace }) {
+  const { t } = useI18n();
+
+  return (
+    <div className="rounded-lg border border-border bg-card-secondary p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h4 className="text-xs font-semibold text-text-primary">{t("logs.route_decision")}</h4>
+        {decision.mode && <StatusBadge variant="muted">{decision.mode}</StatusBadge>}
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <div>
+          <span className="text-text-muted">{t("logs.route_profile")}</span>
+          <p className="text-text-primary">{decision.profile_name ?? "—"}</p>
+        </div>
+        <div>
+          <span className="text-text-muted">{t("logs.selected_provider")}</span>
+          <p className="text-text-primary">{decision.selected_provider_name ?? "—"}</p>
+        </div>
+        <div>
+          <span className="text-text-muted">{t("logs.selected_model")}</span>
+          <p className="font-mono text-text-primary">{decision.selected_model ?? "—"}</p>
+        </div>
+        <div>
+          <span className="text-text-muted">{t("logs.matched_conditions")}</span>
+          <p className="text-text-primary">{formatConditions(decision.matched_conditions)}</p>
+        </div>
+      </div>
+      {decision.candidates && decision.candidates.length > 0 && (
+        <div className="mt-3 space-y-1">
+          <span className="text-[11px] text-text-muted">{t("logs.route_candidates")}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {decision.candidates.map((candidate, idx) => (
+              <span
+                key={`${candidate.provider_name ?? "candidate"}-${idx}`}
+                className="rounded-md border border-border bg-card px-2 py-1 text-[11px] text-text-secondary"
+              >
+                {candidate.priority ?? idx + 1}. {candidate.provider_name ?? "—"}
+                {candidate.in_cooldown ? ` · ${t("routes.cooldown")}` : ""}
+                {candidate.has_conditions ? ` · ${t("routes.has_conditions")}` : ""}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
