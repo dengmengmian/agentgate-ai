@@ -6,7 +6,8 @@ use crate::models::route_profile::ProviderRuntimeStatus;
 pub fn get(conn: &Connection, provider_id: &str) -> Result<ProviderRuntimeStatus, AppError> {
     let result = conn.query_row(
         "SELECT provider_id, available, consecutive_failures, last_error, last_error_code,
-                last_error_at, cooldown_until, quota_exhausted, updated_at
+                last_error_at, cooldown_until, quota_exhausted, updated_at,
+                last_probe_ok, last_probe_at, last_probe_latency_ms, last_probe_error
          FROM provider_runtime_status WHERE provider_id = ?1",
         [provider_id],
         |row| {
@@ -20,6 +21,10 @@ pub fn get(conn: &Connection, provider_id: &str) -> Result<ProviderRuntimeStatus
                 cooldown_until: row.get(6)?,
                 quota_exhausted: row.get(7)?,
                 updated_at: row.get(8)?,
+                last_probe_ok: row.get(9)?,
+                last_probe_at: row.get(10)?,
+                last_probe_latency_ms: row.get(11)?,
+                last_probe_error: row.get(12)?,
             })
         },
     );
@@ -42,6 +47,10 @@ pub fn get(conn: &Connection, provider_id: &str) -> Result<ProviderRuntimeStatus
                 last_error_at: None,
                 cooldown_until: None,
                 quota_exhausted: false,
+                last_probe_ok: None,
+                last_probe_at: None,
+                last_probe_latency_ms: None,
+                last_probe_error: None,
                 updated_at: now,
             })
         }
@@ -52,7 +61,8 @@ pub fn get(conn: &Connection, provider_id: &str) -> Result<ProviderRuntimeStatus
 pub fn list_all(conn: &Connection) -> Result<Vec<ProviderRuntimeStatus>, AppError> {
     let mut stmt = conn.prepare(
         "SELECT provider_id, available, consecutive_failures, last_error, last_error_code,
-                last_error_at, cooldown_until, quota_exhausted, updated_at
+                last_error_at, cooldown_until, quota_exhausted, updated_at,
+                last_probe_ok, last_probe_at, last_probe_latency_ms, last_probe_error
          FROM provider_runtime_status ORDER BY provider_id",
     )?;
     let rows = stmt.query_map([], |row| {
@@ -66,6 +76,10 @@ pub fn list_all(conn: &Connection) -> Result<Vec<ProviderRuntimeStatus>, AppErro
             cooldown_until: row.get(6)?,
             quota_exhausted: row.get(7)?,
             updated_at: row.get(8)?,
+            last_probe_ok: row.get(9)?,
+            last_probe_at: row.get(10)?,
+            last_probe_latency_ms: row.get(11)?,
+            last_probe_error: row.get(12)?,
         })
     })?;
     rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
@@ -134,6 +148,31 @@ pub fn reset_all(conn: &Connection) -> Result<(), AppError> {
     conn.execute(
         "UPDATE provider_runtime_status SET available=1, consecutive_failures=0, last_error=NULL, last_error_code=NULL, last_error_at=NULL, cooldown_until=NULL, quota_exhausted=0, updated_at=?1",
         [&now],
+    )?;
+    Ok(())
+}
+
+/// 记录一次主动健康探测结果。只写 last_probe_* 列，**绝不碰** available / cooldown /
+/// consecutive_failures —— 探测仅用于展示，不影响路由（这是该功能的核心约束）。
+pub fn record_probe(
+    conn: &Connection,
+    provider_id: &str,
+    ok: bool,
+    latency_ms: i64,
+    error: Option<&str>,
+) -> Result<(), AppError> {
+    let now = chrono::Utc::now().to_rfc3339();
+    conn.execute(
+        "INSERT INTO provider_runtime_status
+           (provider_id, available, consecutive_failures, quota_exhausted,
+            last_probe_ok, last_probe_at, last_probe_latency_ms, last_probe_error, updated_at)
+         VALUES (?1, 1, 0, 0, ?2, ?3, ?4, ?5, ?3)
+         ON CONFLICT(provider_id) DO UPDATE SET
+           last_probe_ok = ?2,
+           last_probe_at = ?3,
+           last_probe_latency_ms = ?4,
+           last_probe_error = ?5",
+        params![provider_id, ok, &now, latency_ms, error],
     )?;
     Ok(())
 }
@@ -211,6 +250,25 @@ mod tests {
         let s2 = get(&conn, "p2").unwrap();
         assert!(s1.available);
         assert!(s2.available);
+    }
+
+    #[test]
+    fn record_probe_only_touches_probe_columns() {
+        let conn = setup_db();
+        // 先制造真实失败：available=0 + cooldown
+        mark_failure(&conn, "p1", "ERROR", "fail", 60).unwrap();
+        // 探测成功不应翻转 available 或清 cooldown（仅展示，不改路由）
+        record_probe(&conn, "p1", true, 123, None).unwrap();
+        let s = get(&conn, "p1").unwrap();
+        assert!(!s.available, "探测不应改 available");
+        assert!(s.cooldown_until.is_some(), "探测不应清 cooldown");
+        assert_eq!(s.last_probe_ok, Some(true));
+        assert_eq!(s.last_probe_latency_ms, Some(123));
+        // 探测失败记录 error
+        record_probe(&conn, "p1", false, 0, Some("timeout")).unwrap();
+        let s2 = get(&conn, "p1").unwrap();
+        assert_eq!(s2.last_probe_ok, Some(false));
+        assert_eq!(s2.last_probe_error, Some("timeout".to_string()));
     }
 
     #[test]

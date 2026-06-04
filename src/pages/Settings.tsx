@@ -81,9 +81,13 @@ export function Settings() {
     } catch (err) { toast("error", (err as api.AppError).message); }
   };
 
-  // 全局 refiner 总闸更新（3 个独立开关共用一个 handler，通过 key 区分）
+  // 全局网关开关更新（多个独立开关共用一个 handler，通过 key 区分）
   const handleUpdateRefinerGlobal = async (
-    key: "body_filter_global" | "thinking_rectifier_global" | "error_mapper_global",
+    key:
+      | "body_filter_global"
+      | "thinking_rectifier_global"
+      | "error_mapper_global"
+      | "health_probe_enabled",
     val: boolean,
   ) => {
     try {
@@ -252,6 +256,16 @@ export function Settings() {
                     <ToggleSwitch
                       checked={settings.error_mapper_global}
                       onChange={(v) => handleUpdateRefinerGlobal("error_mapper_global", v)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1 pr-4">
+                      <p className="text-sm text-text-primary">主动健康探测</p>
+                      <p className="text-xs text-text-muted">每 10 分钟对启用的供应商发 1-token 探测，结果显示在供应商卡片（仅展示，不影响路由）。会消耗少量额度。</p>
+                    </div>
+                    <ToggleSwitch
+                      checked={settings.health_probe_enabled}
+                      onChange={(v) => handleUpdateRefinerGlobal("health_probe_enabled", v)}
                     />
                   </div>
                 </div>

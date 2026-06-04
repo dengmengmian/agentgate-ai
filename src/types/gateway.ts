@@ -21,6 +21,8 @@ export interface GatewaySettings {
   body_filter_global: boolean;
   thinking_rectifier_global: boolean;
   error_mapper_global: boolean;
+  /// 后台主动健康探测开关（默认关）
+  health_probe_enabled: boolean;
   updated_at: string;
 }
 
@@ -35,4 +37,5 @@ export interface UpdateGatewaySettingsInput {
   body_filter_global?: boolean;
   thinking_rectifier_global?: boolean;
   error_mapper_global?: boolean;
+  health_probe_enabled?: boolean;
 }

@@ -79,5 +79,10 @@ export interface ProviderRuntimeStatus {
   last_error_at: string | null;
   cooldown_until: string | null;
   quota_exhausted: boolean;
+  // 主动健康探测结果（仅展示，不参与路由）
+  last_probe_ok: boolean | null;
+  last_probe_at: string | null;
+  last_probe_latency_ms: number | null;
+  last_probe_error: string | null;
   updated_at: string;
 }

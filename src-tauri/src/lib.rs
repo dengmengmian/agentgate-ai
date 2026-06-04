@@ -102,6 +102,7 @@ pub fn run() {
 
             let cleanup_db = state.db.clone();
             let session_sync_db = state.db.clone();
+            let health_probe_db = state.db.clone();
             app.manage(state);
 
             // ── Ensure local access token exists ──
@@ -132,6 +133,12 @@ pub fn run() {
             // 日志增量扫出 token 用量，写入 request_logs（source='*_session'），
             // 让绕过网关的请求也能在 Dashboard 和 Logs 里看到。
             crate::session_sync::periodic::spawn(session_sync_db);
+
+            // ── 后台主动健康探测 ──
+            // 默认关（gateway_settings.health_probe_enabled）；开启后每 10 分钟对启用
+            // 的 provider 发 1-token 探测，结果写 provider_runtime_status.last_probe_*，
+            // 仅用于展示，不影响路由。
+            crate::diagnostics::health_probe::spawn(health_probe_db);
 
             // ── System Tray ──
             setup_tray(app)?;

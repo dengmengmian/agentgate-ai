@@ -7,7 +7,7 @@ pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
     conn.query_row(
         "SELECT id, host, port, active_provider_id, input_protocol, output_protocol,
                 auto_start, log_retention_days, body_filter_global, thinking_rectifier_global,
-                error_mapper_global, updated_at
+                error_mapper_global, updated_at, health_probe_enabled
          FROM gateway_settings WHERE id = 1",
         [],
         |row| {
@@ -24,6 +24,7 @@ pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
                 thinking_rectifier_global: row.get(9)?,
                 error_mapper_global: row.get(10)?,
                 updated_at: row.get(11)?,
+                health_probe_enabled: row.get(12)?,
             })
         },
     )
@@ -63,12 +64,16 @@ pub fn update(
     let error_mapper_global = input
         .error_mapper_global
         .unwrap_or(existing.error_mapper_global);
+    let health_probe_enabled = input
+        .health_probe_enabled
+        .unwrap_or(existing.health_probe_enabled);
 
     conn.execute(
         "UPDATE gateway_settings SET host=?1, port=?2, active_provider_id=?3,
                 input_protocol=?4, output_protocol=?5, auto_start=?6,
                 log_retention_days=?7, body_filter_global=?8,
-                thinking_rectifier_global=?9, error_mapper_global=?10, updated_at=?11
+                thinking_rectifier_global=?9, error_mapper_global=?10,
+                health_probe_enabled=?11, updated_at=?12
          WHERE id = 1",
         params![
             &host,
@@ -81,6 +86,7 @@ pub fn update(
             body_filter_global,
             thinking_rectifier_global,
             error_mapper_global,
+            health_probe_enabled,
             &now,
         ],
     )?;

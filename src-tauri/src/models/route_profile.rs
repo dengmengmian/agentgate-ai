@@ -99,6 +99,10 @@ mod tests {
             last_error_at: None,
             cooldown_until: None,
             quota_exhausted: false,
+            last_probe_ok: None,
+            last_probe_at: None,
+            last_probe_latency_ms: None,
+            last_probe_error: None,
             updated_at: "2024-01-01".to_string(),
         };
         let json = serde_json::to_string(&status).unwrap();
@@ -187,5 +191,10 @@ pub struct ProviderRuntimeStatus {
     pub last_error_at: Option<String>,
     pub cooldown_until: Option<String>,
     pub quota_exhausted: bool,
+    /// 主动健康探测结果（后台定期探测，仅展示，不参与路由决策）
+    pub last_probe_ok: Option<bool>,
+    pub last_probe_at: Option<String>,
+    pub last_probe_latency_ms: Option<i64>,
+    pub last_probe_error: Option<String>,
     pub updated_at: String,
 }

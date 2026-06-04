@@ -204,6 +204,30 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
         )?;
     }
 
+    // Migration: provider_runtime_status 加主动健康探测列。
+    // 这些列只反映后台探测结果，仅用于展示，绝不参与路由（available/cooldown 才参与）。
+    let has_probe: bool = conn
+        .prepare("SELECT last_probe_ok FROM provider_runtime_status LIMIT 0")
+        .is_ok();
+    if !has_probe {
+        conn.execute_batch(
+            "ALTER TABLE provider_runtime_status ADD COLUMN last_probe_ok INTEGER;
+             ALTER TABLE provider_runtime_status ADD COLUMN last_probe_at TEXT;
+             ALTER TABLE provider_runtime_status ADD COLUMN last_probe_latency_ms INTEGER;
+             ALTER TABLE provider_runtime_status ADD COLUMN last_probe_error TEXT;",
+        )?;
+    }
+
+    // Migration: gateway_settings.health_probe_enabled —— 后台健康探测开关，默认关。
+    let has_hp: bool = conn
+        .prepare("SELECT health_probe_enabled FROM gateway_settings LIMIT 0")
+        .is_ok();
+    if !has_hp {
+        conn.execute_batch(
+            "ALTER TABLE gateway_settings ADD COLUMN health_probe_enabled INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
+
     // Migration: add model_capabilities column to providers
     // Stores per-model capability matrix as JSON: {"model_id": ["text","vision","reasoning",...]}
     // Routing layer uses this to pick the right model when request features (image/audio/...)

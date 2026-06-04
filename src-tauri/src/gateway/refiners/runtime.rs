@@ -166,6 +166,7 @@ mod tests {
             body_filter_global: bf,
             thinking_rectifier_global: tr,
             error_mapper_global: em,
+            health_probe_enabled: false,
             updated_at: "now".into(),
         }
     }

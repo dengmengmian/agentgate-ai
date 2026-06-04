@@ -20,6 +20,9 @@ pub struct GatewaySettings {
     pub body_filter_global: bool,
     pub thinking_rectifier_global: bool,
     pub error_mapper_global: bool,
+    /// 后台主动健康探测开关（默认关——开启后按间隔发 1-token 探测，消耗少量额度；
+    /// 结果仅用于展示，不影响路由）。
+    pub health_probe_enabled: bool,
     pub updated_at: String,
 }
 
@@ -35,6 +38,7 @@ pub struct UpdateGatewaySettingsInput {
     pub body_filter_global: Option<bool>,
     pub thinking_rectifier_global: Option<bool>,
     pub error_mapper_global: Option<bool>,
+    pub health_probe_enabled: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -93,6 +97,7 @@ mod tests {
             body_filter_global: false,
             thinking_rectifier_global: false,
             error_mapper_global: false,
+            health_probe_enabled: false,
             updated_at: "2024-01-01T00:00:00Z".into(),
         };
         let json = serde_json::to_string(&s).unwrap();

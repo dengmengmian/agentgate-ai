@@ -185,6 +185,20 @@ export function ProviderCard({
         </div>
       )}
 
+      {/* ── 主动健康探测结果 — 开了探测才有数据 ── */}
+      {runtime?.last_probe_ok != null && (
+        <div className="mb-3 flex items-center gap-1.5 text-[11px] text-text-muted">
+          <span className={`inline-block h-1.5 w-1.5 rounded-full ${runtime.last_probe_ok ? "bg-green-400" : "bg-red-400"}`} />
+          {runtime.last_probe_ok ? (
+            <span>{t("providers.probe_ok")} · {runtime.last_probe_latency_ms}ms</span>
+          ) : (
+            <span className="max-w-[220px] truncate" title={runtime.last_probe_error ?? ""}>
+              {t("providers.probe_fail")}{runtime.last_probe_error ? ` · ${runtime.last_probe_error}` : ""}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* ── Health Stats — compact inline ── */}
       {health && health.h24_total > 0 && (
         <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-text-muted">
