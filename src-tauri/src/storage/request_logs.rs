@@ -190,6 +190,28 @@ fn apply_error_type_filter(error_type: &str, sql: &mut String) {
         "server_error" => {
             sql.push_str(" AND status_code >= 500");
         }
+        "network_error" => {
+            // 网络层失败（连接拒绝、超时、DNS、发请求失败）——通常没有 HTTP 状态码。
+            sql.push_str(
+                " AND (lower(COALESCE(error_message, '')) LIKE '%timeout%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%timed out%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%connection%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%error sending request%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%network%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%dns%')",
+            );
+        }
+        "protocol_error" => {
+            // 协议转换 / 解析失败（AgentGate 转换层或上游响应结构异常）。best-effort：
+            // 靠 error_message 文本匹配，AgentGate 未把错误类型单独存为字段。
+            sql.push_str(
+                " AND (lower(COALESCE(error_message, '')) LIKE '%parse%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%convert%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%conversion%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%schema%'
+                    OR lower(COALESCE(error_message, '')) LIKE '%unsupported%')",
+            );
+        }
         "other_error" => {
             sql.push_str(
                 " AND (status_code >= 400 OR status_code < 200)
@@ -1296,6 +1318,34 @@ mod tests {
         let unpriced = by_model.iter().find(|x| x.key == "no-price-model").unwrap();
         assert!(priced.has_price, "有价模型应标 has_price=true");
         assert!(!unpriced.has_price, "缺价模型应标 has_price=false");
+    }
+
+    #[test]
+    fn error_type_filter_network_and_protocol() {
+        let conn = empty_logs_db();
+        let ins = |rid: &str, status: i64, err: &str| {
+            insert(
+                &conn, rid, "C", "P", "m", "/x", status, 10,
+                None, None, None, None, None, None, Some(err), None,
+                None, None, None, None, None, Some("gateway"), None, None,
+            )
+            .unwrap();
+        };
+        ins("r1", 0, "error sending request: connection refused"); // 网络
+        ins("r2", 400, "failed to parse upstream response schema"); // 协议
+        ins("r3", 401, "unauthorized"); // 认证
+
+        let f = |et: &str| RequestLogFilter {
+            client: None, provider: None, model: None, route_profile_id: None,
+            status: None, error_type: Some(et.to_string()), keyword: None,
+            source: None, session_id: None, limit: Some(20), offset: Some(0),
+        };
+        let net = list(&conn, f("network_error")).unwrap();
+        assert_eq!(net.len(), 1);
+        assert_eq!(net[0].request_id, "r1");
+        let proto = list(&conn, f("protocol_error")).unwrap();
+        assert_eq!(proto.len(), 1);
+        assert_eq!(proto[0].request_id, "r2");
     }
 
     #[test]

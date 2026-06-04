@@ -268,6 +268,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "logs.error_type.rate_limited": { en: "Rate limited", zh: "限流" },
   "logs.error_type.quota_or_balance": { en: "Quota / balance", zh: "额度 / 余额" },
   "logs.error_type.server_error": { en: "Server error", zh: "服务端错误" },
+  "logs.error_type.network_error": { en: "Network", zh: "网络" },
+  "logs.error_type.protocol_error": { en: "Protocol/parse", zh: "协议转换" },
   "logs.error_type.other_error": { en: "Other error", zh: "其他错误" },
   "logs.success": { en: "Success", zh: "成功" },
   "logs.error": { en: "Error", zh: "错误" },

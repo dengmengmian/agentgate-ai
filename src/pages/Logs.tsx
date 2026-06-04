@@ -207,6 +207,8 @@ export function Logs() {
             <option value="rate_limited">{t("logs.error_type.rate_limited")}</option>
             <option value="quota_or_balance">{t("logs.error_type.quota_or_balance")}</option>
             <option value="server_error">{t("logs.error_type.server_error")}</option>
+            <option value="network_error">{t("logs.error_type.network_error")}</option>
+            <option value="protocol_error">{t("logs.error_type.protocol_error")}</option>
             <option value="other_error">{t("logs.error_type.other_error")}</option>
           </select>
           <select
