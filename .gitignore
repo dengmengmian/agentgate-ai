@@ -55,3 +55,4 @@ last_request.json
 docs/ROADMAP.md
 agentgate-promo
 docs/NEXT_STEPS.md
+.playwright-cli/

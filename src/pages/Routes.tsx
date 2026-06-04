@@ -19,6 +19,7 @@ import {
   FileText,
   Wrench,
   GitBranch,
+  Route,
   type LucideIcon,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -350,10 +351,109 @@ export function Routes() {
                 </div>
               </div>
 
-              {/* Provider chain */}
+              {/* Strategy overview */}
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
+                <SummaryTile
+                  label={t("routes.overview_protocol")}
+                  value={protocolLabel(detail.profile.input_protocol)}
+                  hint={detail.profile.is_default ? t("routes.default_profile") : t("routes.custom_profile")}
+                />
+                <SummaryTile
+                  label={t("routes.overview_mode")}
+                  value={detail.profile.mode === "failover" ? t("routes.mode_failover") : t("routes.mode_manual")}
+                  hint={detail.profile.mode === "failover" ? t("routes.failover_hint") : t("routes.manual_hint")}
+                />
+                <SummaryTile
+                  label={t("routes.overview_primary")}
+                  value={detail.profile.active_provider_name ?? t("common.none")}
+                  hint={t("routes.primary_hint")}
+                />
+                <SummaryTile
+                  label={t("routes.overview_fallback")}
+                  value={detail.profile.mode === "failover" ? `${Math.max(detail.providers.length - 1, 0)} ${t("routes.fallback_count")}` : t("routes.not_enabled")}
+                  hint={detail.profile.mode === "failover" ? t("routes.fallback_hint") : t("routes.no_fallback_hint")}
+                />
+              </div>
+
+              {/* Conditions */}
+              <div className="rounded-xl border border-border bg-card p-5">
+                <div className="mb-3">
+                  <h4 className="text-xs font-semibold text-text-primary">{t("routes.conditions_section")}</h4>
+                  <p className="mt-0.5 text-[11px] text-text-muted">{t("routes.conditions_section_hint")}</p>
+                </div>
+                {detail.providers.some((rp) => rp.routing_conditions) ? (
+                  <div className="space-y-2">
+                    {detail.providers.filter((rp) => rp.routing_conditions).map((rp) => (
+                      <div key={rp.id} className="flex items-center justify-between rounded-md border border-border/50 bg-card-secondary px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-text-primary">{rp.provider_name}</p>
+                          <p className="mt-0.5 text-[11px] text-text-muted">{describeRoutingConditions(rp.routing_conditions, t)}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            let current: RoutingConditions = {};
+                            try { if (rp.routing_conditions) current = JSON.parse(rp.routing_conditions); } catch {}
+                            setConditionsTarget({ profileId: detail.profile.id, providerId: rp.provider_id, providerName: rp.provider_name, inputProtocol: detail.profile.input_protocol, current });
+                          }}
+                          className="ml-3 rounded p-1 text-text-muted hover:bg-border hover:text-accent"
+                          title={t("routes.edit_conditions")}
+                        >
+                          <Filter className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="rounded-md border border-border/50 bg-card-secondary px-4 py-3 text-[11px] text-text-muted">
+                    {t("routes.no_conditions_summary")}
+                  </p>
+                )}
+              </div>
+
+              {/* Fallback */}
+              <div className="rounded-xl border border-border bg-card p-5">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-semibold text-text-primary">{t("routes.fallback_section")}</h4>
+                    <p className="mt-0.5 text-[11px] text-text-muted">
+                      {detail.profile.mode === "failover" ? t("routes.fallback_section_hint") : t("routes.fallback_disabled_hint")}
+                    </p>
+                  </div>
+                  {detail.profile.mode === "failover" && (
+                    <StatusBadge variant="accent">{t("routes.strategy")}: {strategyLabel(detail.profile.selection_strategy, t)}</StatusBadge>
+                  )}
+                </div>
+                {detail.profile.mode === "failover" ? (
+                  detail.providers.length > 1 ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {detail.providers.map((rp, idx) => (
+                        <div key={rp.id} className="flex items-center gap-2">
+                          <span className={`rounded-md border px-3 py-1.5 text-xs ${idx === 0 ? "border-accent/30 bg-accent/5 text-accent" : "border-border bg-card-secondary text-text-secondary"}`}>
+                            {idx === 0 ? t("routes.primary_provider") : `${t("routes.fallback_provider")} ${idx}`} · {rp.provider_name}
+                          </span>
+                          {idx < detail.providers.length - 1 && <Route className="h-3.5 w-3.5 text-text-muted" />}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-[11px] text-warning">
+                      {t("routes.fallback_needs_more")}
+                    </p>
+                  )
+                ) : (
+                  <p className="rounded-md border border-border/50 bg-card-secondary px-4 py-3 text-[11px] text-text-muted">
+                    {t("routes.manual_no_fallback")}
+                  </p>
+                )}
+              </div>
+
+              {/* Provider order */}
               <div className="rounded-xl border border-border bg-card p-5">
                 <div className="mb-3 flex items-center justify-between">
-                  <h4 className="text-xs font-semibold text-text-primary">{t("routes.provider_chain")}</h4>
+                  <div>
+                    <h4 className="text-xs font-semibold text-text-primary">{t("routes.provider_order")}</h4>
+                    <p className="mt-0.5 text-[11px] text-text-muted">{t("routes.provider_order_hint")}</p>
+                  </div>
                   {detail.profile.active_provider_name && (
                     <span className="text-[11px] text-text-muted">
                       {t("routes.active")}: <span className="text-text-primary">{detail.profile.active_provider_name}</span>
@@ -512,6 +612,16 @@ export function Routes() {
   );
 }
 
+function SummaryTile({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <p className="text-[10px] uppercase tracking-wide text-text-muted">{label}</p>
+      <p className="mt-1 truncate text-sm font-semibold text-text-primary" title={value}>{value}</p>
+      <p className="mt-1 text-[11px] text-text-muted">{hint}</p>
+    </div>
+  );
+}
+
 type ConditionPreset = {
   key: string;
   icon: LucideIcon;
@@ -526,6 +636,31 @@ const CONDITION_PRESETS: ConditionPreset[] = [
   { key: "reasoning", icon: Brain, group: "advanced", conditions: { system_keywords: ["reason", "think", "analyze", "深度", "推理"] } },
   { key: "background", icon: GitBranch, group: "advanced", conditions: { system_keywords: ["background", "subagent", "后台"] } },
 ];
+
+function strategyLabel(strategy: string, t: (key: string) => string): string {
+  if (strategy === "cheapest") return t("routes.strategy_cheapest");
+  if (strategy === "fastest") return t("routes.strategy_fastest");
+  return t("routes.strategy_priority");
+}
+
+function describeRoutingConditions(json: string | null, t: (key: string) => string): string {
+  if (!json) return t("routes.no_conditions_summary");
+  try {
+    const c: RoutingConditions = JSON.parse(json);
+    const parts: string[] = [];
+    if (c.has_images === true) parts.push(t("routes.condition_images_required"));
+    if (c.has_images === false) parts.push(t("routes.condition_images_excluded"));
+    if (c.has_tools === true) parts.push(t("routes.condition_tools_required"));
+    if (c.has_tools === false) parts.push(t("routes.condition_tools_excluded"));
+    if (c.min_input_chars) parts.push(`${t("routes.condition_min_chars")} ${(c.min_input_chars / 1000).toFixed(0)}K`);
+    if (c.max_input_chars) parts.push(`${t("routes.condition_max_chars")} ${(c.max_input_chars / 1000).toFixed(0)}K`);
+    if (c.system_keywords?.length) parts.push(`${t("routes.condition_keywords")} ${c.system_keywords.join(", ")}`);
+    if (c.model_override) parts.push(`${t("routes.condition_use_model")} ${c.model_override}`);
+    return parts.length > 0 ? parts.join(" · ") : t("routes.no_conditions_summary");
+  } catch {
+    return t("routes.invalid_conditions");
+  }
+}
 
 function hasCustomOnlyConditions(c: RoutingConditions): boolean {
   if (c.max_input_chars != null) return true;
