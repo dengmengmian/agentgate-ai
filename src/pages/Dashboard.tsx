@@ -480,10 +480,12 @@ export function Dashboard() {
             <Coins className="h-4 w-4 text-text-muted" />
             {t("stats.cost_breakdown")}
           </h3>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <div className={`grid gap-6 sm:grid-cols-2${costByStrategy.length > 0 ? " lg:grid-cols-3" : ""}`}>
             <CostList title={t("stats.cost_by_model")} rows={costByModel} />
             <CostList title={t("stats.cost_by_client")} rows={costByClient} />
-            <CostList title={t("stats.cost_by_strategy")} rows={costByStrategy} />
+            {costByStrategy.length > 0 && (
+              <CostList title={t("stats.cost_by_strategy")} rows={costByStrategy} />
+            )}
           </div>
         </div>
       )}
