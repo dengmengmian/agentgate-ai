@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyProviderErrorStatus, getProviderCooldownSummary } from "./providerHealth";
+import { classifyProviderErrorStatus, getProviderCooldownSummary, getProviderSignalSummary } from "./providerHealth";
 
 describe("classifyProviderErrorStatus", () => {
   it("classifies plain 429 as rate limited", () => {
@@ -53,5 +53,54 @@ describe("getProviderCooldownSummary", () => {
         Date.parse("2026-06-04T12:00:00.000Z"),
       )?.reason,
     ).toBe("upstream timeout");
+  });
+});
+
+describe("getProviderSignalSummary", () => {
+  it("normalizes runtime cooldown, probe, and traffic into one summary", () => {
+    const summary = getProviderSignalSummary(
+      {
+        cooldown_until: "2026-06-04T12:01:30.000Z",
+        last_error: "rate limit exceeded",
+        last_error_code: "RATE_LIMIT",
+        quota_exhausted: false,
+        available: false,
+        consecutive_failures: 2,
+        last_probe_ok: true,
+        last_probe_latency_ms: 320,
+        last_probe_error: null,
+      },
+      {
+        h24_total: 10,
+        h24_success_rate: 90,
+      },
+      Date.parse("2026-06-04T12:00:00.000Z"),
+    );
+
+    expect(summary.runtime).toEqual({ status: "cooldown", variant: "warning" });
+    expect(summary.probe).toEqual({ status: "ok", variant: "success", latencyMs: 320, error: null });
+    expect(summary.traffic).toEqual({ status: "degraded", variant: "warning" });
+  });
+
+  it("prioritizes quota exhaustion before cooldown", () => {
+    const summary = getProviderSignalSummary(
+      {
+        cooldown_until: "2026-06-04T12:01:30.000Z",
+        last_error: "quota",
+        last_error_code: "INSUFFICIENT_QUOTA",
+        quota_exhausted: true,
+        available: false,
+        consecutive_failures: 1,
+        last_probe_ok: false,
+        last_probe_latency_ms: null,
+        last_probe_error: "quota",
+      },
+      { h24_total: 0, h24_success_rate: 0 },
+      Date.parse("2026-06-04T12:00:00.000Z"),
+    );
+
+    expect(summary.runtime).toEqual({ status: "quota_exhausted", variant: "error" });
+    expect(summary.probe).toEqual({ status: "failed", variant: "error", latencyMs: null, error: "quota" });
+    expect(summary.traffic).toEqual({ status: "no_traffic", variant: "muted" });
   });
 });

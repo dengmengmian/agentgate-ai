@@ -4,7 +4,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { CapabilityIcons } from "@/components/common/CapabilityIcons";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
-import { getProviderCooldownSummary, summarizeProviderErrorStatuses, type ProviderErrorStatus } from "@/lib/providerHealth";
+import { getProviderCooldownSummary, getProviderSignalSummary, summarizeProviderErrorStatuses, type ProviderErrorStatus } from "@/lib/providerHealth";
 import type { ProviderView } from "@/types/provider";
 import type { ProviderHealth } from "@/types/stats";
 import type { ProviderRuntimeStatus } from "@/types/route-profile";
@@ -82,15 +82,10 @@ export function ProviderCard({
   // 平时卡片保持干净。cooldown 剩余秒为加载时刻快照，靠周期刷新更新。
   const cooldownSummary = getProviderCooldownSummary(runtime);
   const inCooldown = !!cooldownSummary;
-  const runtimeIssue =
-    runtime &&
-    (!runtime.available ||
-      runtime.quota_exhausted ||
-      inCooldown ||
-      runtime.consecutive_failures > 0);
   const h24Failures = health ? Math.max(health.h24_total - health.h24_success, 0) : 0;
   const latestError = health?.recent_errors[0];
   const errorStatuses = summarizeProviderErrorStatuses(health?.recent_errors ?? []);
+  const signalSummary = getProviderSignalSummary(runtime, health);
   const errorStatusVariant: Record<ProviderErrorStatus, "error" | "warning" | "muted"> = {
     rate_limited: "warning",
     quota_exhausted: "error",
@@ -158,100 +153,69 @@ export function ProviderCard({
         </div>
       )}
 
-      {/* ── 故障自愈状态 — 仅异常时显示 ── */}
-      {runtimeIssue && runtime && (
-        <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px]">
-          {runtime.quota_exhausted ? (
-            <StatusBadge variant="error">{t("providers.runtime_quota")}</StatusBadge>
-          ) : inCooldown ? (
-            <StatusBadge variant="warning">
-              {t("providers.runtime_cooldown")} {cooldownSummary.remainingSeconds}s
-            </StatusBadge>
-          ) : !runtime.available ? (
-            <StatusBadge variant="error">{t("providers.runtime_unavailable")}</StatusBadge>
-          ) : null}
-          {cooldownSummary && (
-            <span
-              className="max-w-[260px] truncate text-text-muted"
-              title={cooldownSummary.reason ?? undefined}
-            >
-              {t("providers.runtime_recovers_at")} {new Date(cooldownSummary.recoverAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-              {cooldownSummary.reason ? ` · ${t("providers.runtime_reason")} ${cooldownSummary.reason}` : ""}
-            </span>
-          )}
-          {runtime.consecutive_failures > 0 && (
-            <span className="text-text-muted">
-              {t("providers.runtime_failures")} {runtime.consecutive_failures}
-            </span>
-          )}
-          {runtime.last_error && (
-            <span
-              className="max-w-[180px] truncate text-text-muted"
-              title={`${runtime.last_error_code ?? ""} ${runtime.last_error}`.trim()}
-            >
-              {runtime.last_error_code ?? runtime.last_error}
-            </span>
-          )}
-          {onResetRuntime && (
-            <button
-              onClick={() => onResetRuntime(provider.id)}
-              className="text-accent transition-colors hover:underline"
-            >
-              {t("providers.runtime_reset")}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* ── 主动健康探测结果 — 开了探测才有数据 ── */}
-      {runtime?.last_probe_ok != null && (
-        <div className="mb-3 flex items-center gap-1.5 text-[11px] text-text-muted">
-          <span className={`inline-block h-1.5 w-1.5 rounded-full ${runtime.last_probe_ok ? "bg-green-400" : "bg-red-400"}`} />
-          {runtime.last_probe_ok ? (
-            <span>{t("providers.probe_ok")} · {runtime.last_probe_latency_ms}ms</span>
-          ) : (
-            <span className="max-w-[220px] truncate" title={runtime.last_probe_error ?? ""}>
-              {t("providers.probe_fail")}{runtime.last_probe_error ? ` · ${runtime.last_probe_error}` : ""}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* ── Health Stats — compact inline ── */}
-      {health && health.h24_total > 0 && (
+      {/* ── Operational status: runtime + probe + real traffic in one vocabulary ── */}
+      {(runtime || health) && (
         <div className="mb-3 space-y-1.5 rounded-md border border-border/50 bg-card-secondary/40 px-3 py-2 text-[11px] text-text-muted">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="font-medium text-text-secondary">{t("providers.health")}</span>
-            <span className="flex items-center gap-1">
-              <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.h1_success_rate >= 95 ? "bg-green-400" : health.h1_success_rate >= 80 ? "bg-yellow-400" : "bg-red-400"}`} />
-              1h {health.h1_success_rate}%
-            </span>
-            <span className="flex items-center gap-1">
-              <span className={`inline-block h-1.5 w-1.5 rounded-full ${health.h24_success_rate >= 95 ? "bg-green-400" : health.h24_success_rate >= 80 ? "bg-yellow-400" : "bg-red-400"}`} />
-              24h {health.h24_success_rate}%
-            </span>
-            <span>{health.h1_avg_latency_ms}ms avg</span>
-            <span>P95 {health.h1_p95_latency_ms}ms</span>
-            <span>{h24Failures} {t("providers.health_failures")}</span>
+            <span className="font-medium text-text-secondary">{t("providers.operational_status")}</span>
+            <StatusBadge variant={signalSummary.runtime.variant} className="px-1.5 py-0 text-[10px]">
+              {t(`providers.runtime_status.${signalSummary.runtime.status}`)}
+              {inCooldown && cooldownSummary ? ` ${cooldownSummary.remainingSeconds}s` : ""}
+            </StatusBadge>
+            <StatusBadge variant={signalSummary.probe.variant} className="px-1.5 py-0 text-[10px]">
+              {t("providers.probe")} · {t(`providers.probe_status.${signalSummary.probe.status}`)}
+              {signalSummary.probe.latencyMs != null ? ` ${signalSummary.probe.latencyMs}ms` : ""}
+            </StatusBadge>
+            <StatusBadge variant={signalSummary.traffic.variant} className="px-1.5 py-0 text-[10px]">
+              {t("providers.traffic")} · {t(`providers.traffic_status.${signalSummary.traffic.status}`)}
+            </StatusBadge>
+            {health && health.h24_total > 0 && (
+              <>
+                <span>1h {health.h1_success_rate}%</span>
+                <span>24h {health.h24_success_rate}%</span>
+                <span>{health.h1_avg_latency_ms}ms avg</span>
+                <span>P95 {health.h1_p95_latency_ms}ms</span>
+                <span>{h24Failures} {t("providers.health_failures")}</span>
+              </>
+            )}
             {errorStatuses.map((status) => (
               <StatusBadge key={status} variant={errorStatusVariant[status]} className="px-1.5 py-0 text-[10px]">
                 {t(`providers.error_status.${status}`)}
               </StatusBadge>
             ))}
+            {onResetRuntime && runtime && signalSummary.runtime.status !== "available" && signalSummary.runtime.status !== "unknown" && (
+              <button
+                onClick={() => onResetRuntime(provider.id)}
+                className="text-accent transition-colors hover:underline"
+              >
+                {t("providers.runtime_reset")}
+              </button>
+            )}
           </div>
+          {cooldownSummary && (
+            <div className="truncate" title={cooldownSummary.reason ?? undefined}>
+              {t("providers.runtime_recovers_at")} {new Date(cooldownSummary.recoverAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              {cooldownSummary.reason ? ` · ${t("providers.runtime_reason")} ${cooldownSummary.reason}` : ""}
+            </div>
+          )}
+          {runtime?.consecutive_failures ? (
+            <div>{t("providers.runtime_failures")} {runtime.consecutive_failures}</div>
+          ) : null}
+          {signalSummary.probe.error && (
+            <div className="truncate" title={signalSummary.probe.error}>
+              {t("providers.probe")}: {signalSummary.probe.error}
+            </div>
+          )}
+          {runtime?.last_error && (
+            <div className="truncate" title={`${runtime.last_error_code ?? ""} ${runtime.last_error}`.trim()}>
+              {t("providers.runtime_reason")}: {runtime.last_error_code ?? runtime.last_error}
+            </div>
+          )}
           {latestError && (
             <div className="truncate text-[11px] text-text-muted" title={`${latestError.status_code} ${latestError.message}`}>
               {t("providers.health_recent_errors")}: {latestError.status_code} · {latestError.message}
             </div>
           )}
-        </div>
-      )}
-
-      {/* ── No recent traffic: keep a small neutral hint instead of hiding health entirely ── */}
-      {health && health.h24_total === 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border/50 bg-card-secondary/40 px-3 py-2 text-[11px] text-text-muted">
-          <span className="font-medium text-text-secondary">{t("providers.health")}</span>
-          <span>{t("providers.health_no_recent")}</span>
         </div>
       )}
 
