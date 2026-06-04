@@ -637,6 +637,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "stats.cost_breakdown": { en: "Cost Breakdown", zh: "成本分解" },
   "stats.cost_by_model": { en: "By model", zh: "按模型" },
   "stats.cost_by_client": { en: "By client", zh: "按客户端" },
+  "stats.cost_by_strategy": { en: "By strategy", zh: "按策略" },
   "stats.total_label": { en: "Cumulative", zh: "累计" },
   "stats.success_rate_label": { en: "success", zh: "成功" },
   "stats.avg_per_request": { en: "avg", zh: "均" },

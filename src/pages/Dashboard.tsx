@@ -129,13 +129,14 @@ export function Dashboard() {
   const [providerCount, setProviderCount] = useState<number | null>(null);
   const [costByModel, setCostByModel] = useState<CostBreakdown[]>([]);
   const [costByClient, setCostByClient] = useState<CostBreakdown[]>([]);
+  const [costByStrategy, setCostByStrategy] = useState<CostBreakdown[]>([]);
   const [rangeDays, setRangeDays] = useState<RangeDays>(7);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
       try {
-        const [s, tl, l, st, ps, cm, cc] = await Promise.all([
+        const [s, tl, l, st, ps, cm, cc, rs, rp] = await Promise.all([
           api.getGatewayStatus(),
           api.listTools(),
           api.listRequestLogs({ limit: 5 }),
@@ -143,7 +144,26 @@ export function Dashboard() {
           api.listProviders(),
           api.aggregateCostByModel(rangeDays, 8),
           api.aggregateCostByClient(rangeDays, 8),
+          api.aggregateRouteProfileStats(rangeDays).catch(() => []),
+          api.listRouteProfiles().catch(() => []),
         ]);
+        // 按策略成本：route_profile stats(含 cost/请求数) + profile 名字，转成
+        // 和按模型/客户端一致的 CostBreakdown 形态复用 CostList。
+        const nameMap = Object.fromEntries(rp.map((p) => [p.id, p.name]));
+        const byStrategy: CostBreakdown[] = rs
+          .map((x) => ({
+            key: nameMap[x.route_profile_id] ?? x.route_profile_id,
+            provider: null,
+            request_count: x.request_count,
+            input_tokens: 0,
+            output_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            cost: x.cost,
+            has_price: true,
+          }))
+          .filter((x) => x.request_count > 0)
+          .sort((a, b) => b.cost - a.cost);
         if (!cancelled) {
           // 首次请求 celebration：lifetime total 从 0 翻到 ≥1 时 toast 一次。
           // 用 localStorage 标记"已庆祝过"——避免清日志后再次触发。
@@ -166,6 +186,7 @@ export function Dashboard() {
           setStats(prev => shallowEqual(prev, st) ? prev : st);
           setCostByModel(prev => shallowEqual(prev, cm) ? prev : cm);
           setCostByClient(prev => shallowEqual(prev, cc) ? prev : cc);
+          setCostByStrategy(prev => shallowEqual(prev, byStrategy) ? prev : byStrategy);
         }
       } catch (err) {
         if (!cancelled) toast("error", (err as api.AppError).message);
@@ -459,9 +480,10 @@ export function Dashboard() {
             <Coins className="h-4 w-4 text-text-muted" />
             {t("stats.cost_breakdown")}
           </h3>
-          <div className="grid gap-6 sm:grid-cols-2">
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             <CostList title={t("stats.cost_by_model")} rows={costByModel} />
             <CostList title={t("stats.cost_by_client")} rows={costByClient} />
+            <CostList title={t("stats.cost_by_strategy")} rows={costByStrategy} />
           </div>
         </div>
       )}
