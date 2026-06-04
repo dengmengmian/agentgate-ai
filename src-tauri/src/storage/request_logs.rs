@@ -504,11 +504,22 @@ fn aggregate_cost_grouped(
             cache_read_tokens: r.get(5)?,
             cache_write_tokens: r.get(6)?,
             cost: r.get(7)?,
+            has_price: true, // 占位，按模型聚合时下面用 pricing 表覆盖
         })
     })?;
     let mut out = Vec::new();
     for r in rows {
-        out.push(r?);
+        let mut item = r?;
+        // 仅按模型聚合时判断该模型有没有价：用于 UI 区分"真免费"和"缺价算不出"。
+        if group_col == "model" {
+            item.has_price = crate::storage::pricing::get_price(
+                conn,
+                item.provider.as_deref().unwrap_or(""),
+                &item.key,
+            )
+            .is_some();
+        }
+        out.push(item);
     }
     Ok(out)
 }
@@ -1258,6 +1269,33 @@ mod tests {
         let by_model = aggregate_cost_by_model(&conn, None, 100).unwrap();
         assert_eq!(by_model.len(), 1, "token=0 的条目应被过滤");
         assert_eq!(by_model[0].key, "real-model");
+    }
+
+    #[test]
+    fn cost_breakdown_marks_missing_price() {
+        let conn = empty_logs_db();
+        conn.execute_batch(
+            "CREATE TABLE model_pricing (id TEXT PRIMARY KEY, provider TEXT, model_pattern TEXT,
+                input_price REAL, output_price REAL, is_custom INTEGER, updated_at TEXT);
+             INSERT INTO model_pricing VALUES ('1','p','priced-model', 1.0, 2.0, 0, '');",
+        )
+        .unwrap();
+        let ins = |rid: &str, model: &str| {
+            insert(
+                &conn, rid, "Codex", "P", model, "/v1/x", 200, 10,
+                None, None, None, None, None, None, None, None,
+                Some(100), Some(20), Some(0.0), None, None, Some("gateway"), None, None,
+            )
+            .unwrap();
+        };
+        ins("r1", "priced-model");
+        ins("r2", "no-price-model");
+
+        let by_model = aggregate_cost_by_model(&conn, None, 100).unwrap();
+        let priced = by_model.iter().find(|x| x.key == "priced-model").unwrap();
+        let unpriced = by_model.iter().find(|x| x.key == "no-price-model").unwrap();
+        assert!(priced.has_price, "有价模型应标 has_price=true");
+        assert!(!unpriced.has_price, "缺价模型应标 has_price=false");
     }
 
     #[test]

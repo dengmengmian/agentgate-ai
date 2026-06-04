@@ -96,6 +96,9 @@ pub struct CostBreakdown {
     pub cache_read_tokens: i64,
     pub cache_write_tokens: i64,
     pub cost: f64,
+    /// 该模型在价格表里有没有价（仅按模型聚合时有意义）。用于 UI 区分
+    /// "$0 是真免费" vs "$0 是缺价算不出"，避免假成功。按客户端聚合时恒为 true。
+    pub has_price: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -84,6 +84,7 @@ export interface CostBreakdown {
   cache_read_tokens: number;
   cache_write_tokens: number;
   cost: number;
+  has_price: boolean;   // 该模型价格表里有没有价；false 时 UI 标"无价格"而非误导的 $0
 }
 
 export interface ProviderLatencyPoint {

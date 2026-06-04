@@ -65,7 +65,11 @@ function CostList({ title, rows }: { title: string; rows: CostBreakdown[] }) {
                 <div className="absolute inset-y-0 left-0 rounded-full bg-accent/60" style={{ width: `${(r.cost / max) * 100}%` }} />
               </div>
               <span className="shrink-0 tabular-nums text-text-muted">{r.request_count}</span>
-              <span className="w-16 shrink-0 text-right font-mono tabular-nums text-text-primary">{formatCost(r.cost)}</span>
+              {r.has_price ? (
+                <span className="w-16 shrink-0 text-right font-mono tabular-nums text-text-primary">{formatCost(r.cost)}</span>
+              ) : (
+                <span className="w-16 shrink-0 text-right text-[10px] text-text-muted/60" title="价格表里没有这个模型的价，成本算不出（不是免费）">无价格</span>
+              )}
             </div>
           ))}
         </div>
