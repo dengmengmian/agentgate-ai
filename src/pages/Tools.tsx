@@ -16,6 +16,7 @@ import {
   XCircle,
   Loader2,
   Monitor,
+  Eye,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
@@ -468,35 +469,39 @@ export function Tools() {
             />
           )}
           {selectedClientId === "claude_desktop" && (
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-semibold text-text-primary">Claude Desktop</h3>
-                <p className="mt-1 text-xs text-text-muted">把 Claude Desktop 的第三方推理网关指向 AgentGate。仅 macOS；需先在 Claude Desktop 里启用过一次第三方网关。</p>
-              </div>
+            <div className="rounded-xl border border-border bg-card p-5">
+              <DetailHeader
+                Icon={Monitor}
+                name="Claude Desktop"
+                desc="把第三方推理网关指向 AgentGate（仅 macOS，需先启用过一次第三方网关）"
+                badge={
+                  <StatusBadge variant={claudeDesktopStatus?.has_agentgate_profile ? "success" : claudeDesktopStatus?.installed ? "warning" : "muted"}>
+                    {claudeDesktopStatus?.has_agentgate_profile ? "已接入 AgentGate" : claudeDesktopStatus?.installed ? "未接入" : "未检测到"}
+                  </StatusBadge>
+                }
+              />
+
               {!claudeDesktopStatus?.supported ? (
                 <p className="text-xs text-error">当前平台不支持（仅 macOS）。</p>
               ) : !claudeDesktopStatus?.installed ? (
                 <p className="text-xs text-text-muted">未检测到 Claude Desktop。</p>
               ) : (
                 <>
-                  <div className="flex items-center gap-2 text-xs">
-                    <StatusBadge variant={claudeDesktopStatus.has_agentgate_profile ? "success" : "muted"}>
-                      {claudeDesktopStatus.has_agentgate_profile ? "已接入 AgentGate" : "未接入"}
-                    </StatusBadge>
-                    {claudeDesktopStatus.deployment_mode && (
-                      <span className="text-text-muted">模式 {claudeDesktopStatus.deployment_mode}</span>
-                    )}
+                  <div className="mb-4 text-xs">
+                    <span className="text-text-muted">配置文件（3p profile）</span>
+                    <p className="break-all font-mono text-[11px] text-text-secondary">{claudeDesktopStatus.profile_path}</p>
                   </div>
-                  <p className="break-all font-mono text-[11px] text-text-muted">{claudeDesktopStatus.profile_path}</p>
+
                   <div className="flex flex-wrap gap-2">
                     <button onClick={handleApplyClaudeDesktop} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
-                    <button onClick={handlePreviewClaudeDesktop} className="btn-secondary">预览 profile</button>
+                    <button onClick={handlePreviewClaudeDesktop} className="btn-secondary"><Eye className="h-3 w-3" />预览 profile</button>
                     <ClientHistoryButton clientId="claude_desktop" clientName="Claude Desktop" onRollbackDone={load} />
                   </div>
+
                   {cdPreview && (
-                    <pre className="max-h-60 overflow-auto rounded-md bg-card-secondary p-3 text-[11px] text-text-primary">{cdPreview}</pre>
+                    <pre className="mt-3 max-h-60 overflow-auto rounded-md bg-card-secondary p-3 text-[11px] text-text-primary">{cdPreview}</pre>
                   )}
-                  <p className="text-[11px] text-text-muted">应用后请重启 Claude Desktop 生效。要还原，用上面的历史回滚。</p>
+                  <p className="mt-3 text-[11px] text-text-muted">应用后请重启 Claude Desktop 生效。要还原，用上面的历史回滚。</p>
                 </>
               )}
             </div>
