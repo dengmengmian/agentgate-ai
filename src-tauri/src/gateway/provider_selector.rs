@@ -145,11 +145,14 @@ fn build_candidates(
         let mut condition_model_override: Option<String> = None;
         if let (Some(ref cond_json), Some(ref req_analysis)) = (&rpp.routing_conditions, &analysis)
         {
-            if let Ok(conditions) = serde_json::from_str::<RoutingConditions>(cond_json) {
-                if !matches_conditions(&conditions, req_analysis) {
-                    continue; // Skip this provider — conditions not met
+            match serde_json::from_str::<RoutingConditions>(cond_json) {
+                Ok(conditions) => {
+                    if !matches_conditions(&conditions, req_analysis) {
+                        continue;
+                    }
+                    condition_model_override = conditions.model_override.clone();
                 }
-                condition_model_override = conditions.model_override.clone();
+                Err(_) => continue,
             }
         }
 
@@ -967,6 +970,39 @@ mod tests {
             &cond,
             &test_analysis(100, false, false, "background task")
         ));
+    }
+
+    #[test]
+    fn build_candidates_skips_invalid_routing_conditions() {
+        let conn = Connection::open_in_memory().unwrap();
+        let provider = RouteProfileProviderView {
+            id: "rpp1".to_string(),
+            provider_id: "p1".to_string(),
+            provider_name: "BrokenConditions".to_string(),
+            provider_type: "openai".to_string(),
+            provider_protocol: "openai_responses".to_string(),
+            has_anthropic_url: false,
+            supports_vision: None,
+            model_capabilities: None,
+            priority: 1,
+            enabled: true,
+            model_override: Some("gpt-4".to_string()),
+            cooldown_seconds: 600,
+            failover_on_status_codes: None,
+            failover_on_error_keywords: None,
+            routing_conditions: Some("{bad-json".to_string()),
+            runtime_available: true,
+            cooldown_until: None,
+            consecutive_failures: 0,
+        };
+        let analysis = test_analysis(100, false, false, "");
+
+        let candidates = build_candidates(&conn, &[provider], None, Some(&analysis)).unwrap();
+
+        assert!(
+            candidates.is_empty(),
+            "invalid routing_conditions must not widen the provider match"
+        );
     }
 
     #[test]

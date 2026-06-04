@@ -13,6 +13,13 @@ import {
   Pencil,
   Check,
   Filter,
+  SlidersHorizontal,
+  Image as ImageIcon,
+  Brain,
+  FileText,
+  Wrench,
+  GitBranch,
+  type LucideIcon,
 } from "lucide-react";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { CapabilityIcons } from "@/components/common/CapabilityIcons";
@@ -49,7 +56,7 @@ export function Routes() {
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState("");
   const [addProviderId, setAddProviderId] = useState("");
-  const [conditionsTarget, setConditionsTarget] = useState<{ profileId: string; providerId: string; providerName: string; current: RoutingConditions } | null>(null);
+  const [conditionsTarget, setConditionsTarget] = useState<{ profileId: string; providerId: string; providerName: string; inputProtocol: string; current: RoutingConditions } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -257,7 +264,7 @@ export function Routes() {
             <div className="flex-1 space-y-4">
               {/* Header */}
               <div className="rounded-xl border border-border bg-card p-5">
-                <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div>
                     {editingName ? (
                       <div className="flex items-center gap-2">
@@ -287,17 +294,44 @@ export function Routes() {
                       {protocolLabel(detail.profile.input_protocol)}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={handleToggleMode}
-                      className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-                    >
-                      {detail.profile.mode === "manual" ? (
-                        <><Zap className="h-3 w-3" />{t("routes.enable_failover")}</>
-                      ) : (
-                        <><Shield className="h-3 w-3" />{t("routes.switch_manual")}</>
-                      )}
-                    </button>
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <div className="flex rounded-md border border-border bg-card-secondary p-0.5">
+                      <button
+                        onClick={() => detail.profile.mode !== "manual" && handleToggleMode()}
+                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          detail.profile.mode === "manual"
+                            ? "bg-card text-text-primary shadow-sm"
+                            : "text-text-muted hover:text-text-primary"
+                        }`}
+                      >
+                        <Shield className="h-3 w-3" />{t("routes.mode_manual")}
+                      </button>
+                      <button
+                        onClick={() => detail.profile.mode !== "failover" && handleToggleMode()}
+                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          detail.profile.mode === "failover"
+                            ? "bg-card text-accent shadow-sm"
+                            : "text-text-muted hover:text-text-primary"
+                        }`}
+                      >
+                        <Zap className="h-3 w-3" />{t("routes.mode_failover")}
+                      </button>
+                    </div>
+                    {detail.profile.mode === "failover" && (
+                      <label className="flex items-center gap-1.5 rounded-md border border-border bg-card-secondary px-2.5 py-1 text-[11px] text-text-secondary">
+                        {t("routes.strategy")}
+                        <select
+                          value={detail.profile.selection_strategy}
+                          onChange={(e) => handleStrategyChange(e.target.value)}
+                          className="bg-transparent text-text-primary outline-none"
+                          title={t("routes.strategy_hint")}
+                        >
+                          <option value="priority">{t("routes.strategy_priority")}</option>
+                          <option value="cheapest">{t("routes.strategy_cheapest")}</option>
+                          <option value="fastest">{t("routes.strategy_fastest")}</option>
+                        </select>
+                      </label>
+                    )}
                     {!detail.profile.is_default && profiles.filter(p => p.input_protocol === detail.profile.input_protocol).length > 1 && (
                       <button
                         onClick={() => handleSetDefault(detail.profile.id)}
@@ -314,34 +348,18 @@ export function Routes() {
                     </button>
                   </div>
                 </div>
-                <div className="flex gap-3 text-[11px]">
-                  <span className="rounded-md bg-card-secondary px-2.5 py-1 text-text-secondary">
-                    {t("routes.mode")}: <span className={detail.profile.mode === "failover" ? "text-accent" : "text-text-primary"}>{detail.profile.mode === "failover" ? t("routes.mode_failover") : t("routes.mode_manual")}</span>
-                  </span>
-                  <span className="rounded-md bg-card-secondary px-2.5 py-1 text-text-secondary">
-                    {t("routes.active")}: <span className="text-text-primary">{detail.profile.active_provider_name ?? t("common.none")}</span>
-                  </span>
-                  {detail.profile.mode === "failover" && (
-                    <span className="flex items-center gap-1 rounded-md bg-card-secondary px-2.5 py-1 text-text-secondary">
-                      {t("routes.strategy")}:
-                      <select
-                        value={detail.profile.selection_strategy}
-                        onChange={(e) => handleStrategyChange(e.target.value)}
-                        className="bg-transparent text-text-primary outline-none"
-                        title={t("routes.strategy_hint")}
-                      >
-                        <option value="priority">{t("routes.strategy_priority")}</option>
-                        <option value="cheapest">{t("routes.strategy_cheapest")}</option>
-                        <option value="fastest">{t("routes.strategy_fastest")}</option>
-                      </select>
-                    </span>
-                  )}
-                </div>
               </div>
 
               {/* Provider chain */}
               <div className="rounded-xl border border-border bg-card p-5">
-                <h4 className="mb-3 text-xs font-semibold text-text-primary">{t("routes.provider_chain")}</h4>
+                <div className="mb-3 flex items-center justify-between">
+                  <h4 className="text-xs font-semibold text-text-primary">{t("routes.provider_chain")}</h4>
+                  {detail.profile.active_provider_name && (
+                    <span className="text-[11px] text-text-muted">
+                      {t("routes.active")}: <span className="text-text-primary">{detail.profile.active_provider_name}</span>
+                    </span>
+                  )}
+                </div>
                 <div className="space-y-2">
                   {detail.providers.map((rp, idx) => {
                     const isActive = rp.provider_id === detail.profile.active_provider_id;
@@ -399,7 +417,7 @@ export function Routes() {
                                   if (c.system_keywords?.length) parts.push(`keywords: ${c.system_keywords.join(",")}`);
                                   if (c.model_override) parts.push(`→ ${c.model_override}`);
                                   return parts.length > 0 ? <> · <span className="text-accent">{parts.join(" + ")}</span></> : null;
-                                } catch { return null; }
+                                } catch { return <> · <span className="text-error">{t("routes.invalid_conditions")}</span></>; }
                               })()}
                             </p>
                           </div>
@@ -408,27 +426,27 @@ export function Routes() {
                           <button onClick={() => {
                             let current: RoutingConditions = {};
                             try { if (rp.routing_conditions) current = JSON.parse(rp.routing_conditions); } catch {}
-                            setConditionsTarget({ profileId: detail.profile.id, providerId: rp.provider_id, providerName: rp.provider_name, current });
+                            setConditionsTarget({ profileId: detail.profile.id, providerId: rp.provider_id, providerName: rp.provider_name, inputProtocol: detail.profile.input_protocol, current });
                           }} className="rounded p-1 text-text-muted hover:bg-border hover:text-accent" title={t("routes.edit_conditions")}>
                             <Filter className="h-3.5 w-3.5" />
                           </button>
                           {!isActive && (
-                            <button onClick={() => handleSetActive(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary" title="Set as active">
+                            <button onClick={() => handleSetActive(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary" title={t("routes.set_active")}>
                               <Star className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <button onClick={() => handleReorder(rp.provider_id, "up")} disabled={idx === 0} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30">
+                          <button onClick={() => handleReorder(rp.provider_id, "up")} disabled={idx === 0} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30" title={t("routes.move_up")}>
                             <ChevronUp className="h-3.5 w-3.5" />
                           </button>
-                          <button onClick={() => handleReorder(rp.provider_id, "down")} disabled={idx === detail.providers.length - 1} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30">
+                          <button onClick={() => handleReorder(rp.provider_id, "down")} disabled={idx === detail.providers.length - 1} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30" title={t("routes.move_down")}>
                             <ChevronDown className="h-3.5 w-3.5" />
                           </button>
                           {isCooldown && (
-                            <button onClick={() => handleResetCooldown(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-border hover:text-warning" title="Reset cooldown">
+                            <button onClick={() => handleResetCooldown(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-border hover:text-warning" title={t("routes.reset_cooldown")}>
                               <RotateCcw className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <button onClick={() => handleRemoveProvider(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-error/20 hover:text-error">
+                          <button onClick={() => handleRemoveProvider(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-error/20 hover:text-error" title={t("common.delete")}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -494,13 +512,28 @@ export function Routes() {
   );
 }
 
-const CONDITION_PRESETS: { key: string; icon: string; conditions: RoutingConditions }[] = [
-  { key: "images", icon: "🖼", conditions: { has_images: true } },
-  { key: "reasoning", icon: "🧠", conditions: { system_keywords: ["reason", "think", "analyze", "深度", "推理"] } },
-  { key: "background", icon: "🏃", conditions: { system_keywords: ["background", "subagent", "后台"] } },
-  { key: "long_text", icon: "📄", conditions: { min_input_chars: 100000 } },
-  { key: "tools", icon: "🔧", conditions: { has_tools: true } },
+type ConditionPreset = {
+  key: string;
+  icon: LucideIcon;
+  group: "primary" | "advanced";
+  conditions: RoutingConditions;
+};
+
+const CONDITION_PRESETS: ConditionPreset[] = [
+  { key: "images", icon: ImageIcon, group: "primary", conditions: { has_images: true } },
+  { key: "long_text", icon: FileText, group: "primary", conditions: { min_input_chars: 100000 } },
+  { key: "tools", icon: Wrench, group: "primary", conditions: { has_tools: true } },
+  { key: "reasoning", icon: Brain, group: "advanced", conditions: { system_keywords: ["reason", "think", "analyze", "深度", "推理"] } },
+  { key: "background", icon: GitBranch, group: "advanced", conditions: { system_keywords: ["background", "subagent", "后台"] } },
 ];
+
+function hasCustomOnlyConditions(c: RoutingConditions): boolean {
+  if (c.max_input_chars != null) return true;
+  if (c.has_images === false || c.has_tools === false) return true;
+  if (c.min_input_chars != null && c.min_input_chars !== 100000) return true;
+  const knownKeywords = new Set(["reason", "think", "analyze", "深度", "推理", "background", "subagent", "后台"]);
+  return Boolean(c.system_keywords?.some(k => !knownKeywords.has(k)));
+}
 
 function detectCheckedPresets(c: RoutingConditions): Set<string> {
   const checked = new Set<string>();
@@ -525,13 +558,17 @@ function mergePresetConditions(checked: Set<string>): RoutingConditions {
 }
 
 function ConditionsDialog({ target, onSave, onClose }: {
-  target: { providerName: string; current: RoutingConditions };
+  target: { providerName: string; inputProtocol: string; current: RoutingConditions };
   onSave: (c: RoutingConditions) => void;
   onClose: () => void;
 }) {
   const { t } = useI18n();
   const [checked, setChecked] = useState(() => detectCheckedPresets(target.current));
-  const [showCustom, setShowCustom] = useState(false);
+  const [showCustom, setShowCustom] = useState(() => hasCustomOnlyConditions(target.current));
+  const [showAdvanced, setShowAdvanced] = useState(() => {
+    const initial = detectCheckedPresets(target.current);
+    return initial.has("reasoning") || initial.has("background") || hasCustomOnlyConditions(target.current);
+  });
   const [modelOverride, setModelOverride] = useState(target.current.model_override ?? "");
 
   // Custom fields (only used in custom mode)
@@ -569,7 +606,10 @@ function ConditionsDialog({ target, onSave, onClose }: {
     onSave(c);
   };
 
-  const hasAny = checked.size > 0 || showCustom;
+  const hasAny = checked.size > 0 || showCustom || modelOverride.trim().length > 0;
+  const primaryPresets = CONDITION_PRESETS.filter(p => p.group === "primary");
+  const advancedPresets = CONDITION_PRESETS.filter(p => p.group === "advanced");
+  const isResponsesProfile = target.inputProtocol === "openai_responses";
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center">
@@ -583,23 +623,59 @@ function ConditionsDialog({ target, onSave, onClose }: {
         </div>
         <div className="space-y-3 p-5">
           <p className="text-[11px] text-text-muted">{t("routes.conditions_hint")}</p>
+          {!isResponsesProfile && (
+            <p className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] text-warning">
+              {t("routes.conditions_protocol_note")}
+            </p>
+          )}
 
           {/* Multi-select scene checkboxes */}
           {!showCustom && (
-            <div className="grid grid-cols-2 gap-2">
-              {CONDITION_PRESETS.map(p => (
-                <label key={p.key} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors ${checked.has(p.key) ? "border-accent bg-accent-soft text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
-                  <input type="checkbox" checked={checked.has(p.key)} onChange={() => toggle(p.key)} className="accent-accent" />
-                  {p.icon} {t(`routes.scene_${p.key}`)}
-                </label>
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                {primaryPresets.map(p => {
+                  const Icon = p.icon;
+                  return (
+                    <label key={p.key} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors ${checked.has(p.key) ? "border-accent bg-accent-soft text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
+                      <input type="checkbox" checked={checked.has(p.key)} onChange={() => toggle(p.key)} className="accent-accent" />
+                      <Icon className="h-3.5 w-3.5" /> {t(`routes.scene_${p.key}`)}
+                    </label>
+                  );
+                })}
+              </div>
+
+              <button onClick={() => setShowAdvanced(!showAdvanced)} className="flex items-center gap-1.5 text-[11px] text-accent hover:text-accent/80">
+                <SlidersHorizontal className="h-3 w-3" />
+                {showAdvanced ? t("routes.hide_advanced_conditions") : t("routes.show_advanced_conditions")}
+              </button>
+
+              {showAdvanced && (
+                <div className="space-y-2 rounded-md border border-border/50 bg-card-secondary p-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    {advancedPresets.map(p => {
+                      const Icon = p.icon;
+                      return (
+                        <label key={p.key} className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors ${checked.has(p.key) ? "border-accent bg-accent-soft text-accent" : "border-border text-text-secondary hover:border-accent/50"}`}>
+                          <input type="checkbox" checked={checked.has(p.key)} onChange={() => toggle(p.key)} className="accent-accent" />
+                          <Icon className="h-3.5 w-3.5" /> {t(`routes.scene_${p.key}`)}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <button onClick={() => setShowCustom(true)} className="text-[11px] text-accent hover:text-accent/80">
+                    {t("routes.scene_custom")}
+                  </button>
+                </div>
+              )}
+            </>
           )}
 
           {/* Toggle custom mode */}
-          <button onClick={() => setShowCustom(!showCustom)} className="text-[11px] text-accent hover:text-accent/80">
-            {showCustom ? `← ${t("routes.back_to_presets")}` : `⚙️ ${t("routes.scene_custom")}`}
-          </button>
+          {showCustom && (
+            <button onClick={() => setShowCustom(false)} className="text-[11px] text-accent hover:text-accent/80">
+              {t("routes.back_to_presets")}
+            </button>
+          )}
 
           {/* Custom fields */}
           {showCustom && (
