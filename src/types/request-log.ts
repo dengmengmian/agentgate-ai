@@ -87,6 +87,13 @@ export interface CostBreakdown {
   has_price: boolean;   // 该模型价格表里有没有价；false 时 UI 标"无价格"而非误导的 $0
 }
 
+// 会话详情:一条对话消息(读自客户端本地日志)。
+export interface ConversationMessage {
+  role: string;       // user / assistant
+  text: string;
+  timestamp: string | null;
+}
+
 export interface ProviderLatencyPoint {
   timestamp: string;
   model: string | null;

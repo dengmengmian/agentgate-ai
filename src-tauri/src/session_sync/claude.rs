@@ -191,6 +191,102 @@ fn collect_session_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
+/// 会话里的一条对话消息——会话详情视图渲染气泡用。
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ConversationMessage {
+    pub role: String, // user / assistant
+    pub text: String,
+    pub timestamp: Option<String>,
+}
+
+/// 从 content（string 或 Anthropic content block 数组）提取可读文本。
+/// tool_use → `[Tool: name]`，tool_result → `[Tool result] ...`。
+fn extract_content_text(content: Option<&Value>) -> String {
+    match content {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(items)) => {
+            let mut parts = Vec::new();
+            for item in items {
+                match item.get("type").and_then(|v| v.as_str()).unwrap_or("") {
+                    "text" => {
+                        if let Some(s) = item.get("text").and_then(|v| v.as_str()) {
+                            parts.push(s.to_string());
+                        }
+                    }
+                    "tool_use" => {
+                        let name = item.get("name").and_then(|v| v.as_str()).unwrap_or("tool");
+                        parts.push(format!("[Tool: {name}]"));
+                    }
+                    "tool_result" => {
+                        let inner = extract_content_text(item.get("content"));
+                        parts.push(if inner.is_empty() {
+                            "[Tool result]".to_string()
+                        } else {
+                            format!("[Tool result] {inner}")
+                        });
+                    }
+                    _ => {}
+                }
+            }
+            parts.join("\n")
+        }
+        _ => String::new(),
+    }
+}
+
+/// 按 session_id 在 ~/.claude/projects/*/ 下找到对应 jsonl 文件。
+fn find_session_file(session_id: &str) -> Option<PathBuf> {
+    let dir = claude_projects_dir();
+    for proj in fs::read_dir(&dir).ok()?.flatten() {
+        let candidate = proj.path().join(format!("{session_id}.jsonl"));
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+/// 读取某个 Claude Code 会话的完整对话（user / assistant 消息）。
+pub fn read_conversation(session_id: &str) -> Result<Vec<ConversationMessage>, AppError> {
+    let path = find_session_file(session_id).ok_or_else(|| {
+        AppError::new("SESSION_NOT_FOUND", "找不到该会话的本地日志文件")
+    })?;
+    let content = fs::read_to_string(&path)
+        .map_err(|e| AppError::new("SESSION_READ_FAILED", format!("读取会话日志失败: {e}")))?;
+
+    let mut msgs = Vec::new();
+    for line in content.lines() {
+        let event: Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue, // 坏行跳过
+        };
+        let typ = event.get("type").and_then(|v| v.as_str()).unwrap_or("");
+        if typ != "user" && typ != "assistant" {
+            continue;
+        }
+        let message = event.get("message");
+        let role = message
+            .and_then(|m| m.get("role"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(typ)
+            .to_string();
+        let timestamp = event
+            .get("timestamp")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let text = extract_content_text(message.and_then(|m| m.get("content")));
+        if text.trim().is_empty() {
+            continue;
+        }
+        msgs.push(ConversationMessage {
+            role,
+            text,
+            timestamp,
+        });
+    }
+    Ok(msgs)
+}
+
 /// Sync all Claude session logs into request_logs. Idempotent: messages
 /// already present (by external_id) are skipped.
 pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {

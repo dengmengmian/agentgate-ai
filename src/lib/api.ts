@@ -157,6 +157,12 @@ export async function listLogModels(): Promise<string[]> {
   return cmd("list_log_models");
 }
 
+export async function getSessionConversation(
+  sessionId: string,
+): Promise<import("@/types/request-log").ConversationMessage[]> {
+  return cmd("get_session_conversation", { sessionId });
+}
+
 export async function countRequestLogs(filter: RequestLogFilter): Promise<number> {
   return cmd("count_request_logs", { filter });
 }
