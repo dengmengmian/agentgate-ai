@@ -1,5 +1,7 @@
-import { Info } from "lucide-react";
+import { useState } from "react";
+import { Info, MessageSquare } from "lucide-react";
 import { DetailDrawer } from "@/components/layout/DetailDrawer";
+import { ConversationModal } from "@/components/logs/ConversationModal";
 import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
 import { ErrorExplanationCard } from "@/components/common/ErrorExplanationCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
@@ -61,6 +63,7 @@ export function RequestDetailDrawer({
   onClose,
 }: RequestDetailDrawerProps) {
   const { t } = useI18n();
+  const [convoOpen, setConvoOpen] = useState(false);
 
   if (!request) return null;
 
@@ -90,6 +93,29 @@ export function RequestDetailDrawer({
               如需完整链路，请让对应客户端走 AgentGate 网关。
             </div>
           </div>
+        )}
+
+        {/* 7.4 日志→会话:有 session_id 就给一个入口直接看整段会话对话 */}
+        {request.session_id && (
+          <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-card-secondary px-3 py-2">
+            <div className="min-w-0">
+              <span className="text-[11px] text-text-muted">所属会话</span>
+              <p className="truncate font-mono text-[11px] text-text-primary" title={request.session_id}>{request.session_id}</p>
+            </div>
+            <button
+              onClick={() => setConvoOpen(true)}
+              className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-text-secondary transition-colors hover:text-accent"
+            >
+              <MessageSquare className="h-3.5 w-3.5" /> 查看会话对话
+            </button>
+          </div>
+        )}
+        {convoOpen && request.session_id && (
+          <ConversationModal
+            sessionId={request.session_id}
+            source={request.source ?? ""}
+            onClose={() => setConvoOpen(false)}
+          />
         )}
 
         <div className="grid grid-cols-2 gap-3 text-xs">
