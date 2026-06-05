@@ -5,7 +5,7 @@ import { ConversationModal } from "@/components/logs/ConversationModal";
 import { JsonCodeBlock } from "@/components/common/JsonCodeBlock";
 import { ErrorExplanationCard } from "@/components/common/ErrorExplanationCard";
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { formatTimestamp, formatLatency } from "@/lib/utils";
+import { formatTimestamp, formatOptionalLatency } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { sourceLabel } from "@/components/logs/RequestLogTable";
 import type { RequestLogDetail } from "@/types/request-log";
@@ -148,7 +148,7 @@ export function RequestDetailDrawer({
           <div>
             <span className="text-text-muted">{t("logs.latency")}</span>
             <p className="font-mono text-text-primary">
-              {request.latency_ms !== null ? formatLatency(request.latency_ms) : "—"}
+              {formatOptionalLatency(request.latency_ms)}
             </p>
           </div>
           <div>

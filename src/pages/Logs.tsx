@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
+import { formatOptionalLatency } from "@/lib/utils";
 import * as api from "@/lib/api";
 import type { RequestLogListItem } from "@/types/request-log";
 import type { RequestLogDetail } from "@/types/request-log";
@@ -41,6 +42,8 @@ export function Logs() {
   const [providerOptions, setProviderOptions] = useState<ProviderView[]>([]);
   const [routeProfileOptions, setRouteProfileOptions] = useState<RouteProfileView[]>([]);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [showSyncActions, setShowSyncActions] = useState(false);
 
   // Pagination
   const [page, setPage] = useState(1); // 1-indexed
@@ -93,6 +96,25 @@ export function Logs() {
   }, [loadLogs]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const knownStatusLogs = logs.filter((log) => log.status_code !== null);
+  const pageErrorCount = knownStatusLogs.filter((log) => {
+    const status = log.status_code ?? 0;
+    return status < 200 || status >= 400;
+  }).length;
+  const pageSuccessCount = knownStatusLogs.filter((log) => {
+    const status = log.status_code ?? 0;
+    return status >= 200 && status < 400;
+  }).length;
+  const pageSuccessRate = knownStatusLogs.length > 0
+    ? `${Math.round((pageSuccessCount / knownStatusLogs.length) * 100)}%`
+    : "—";
+  const pageRecordedLatencies = logs
+    .map((log) => log.latency_ms)
+    .filter((latency): latency is number => latency !== null && latency > 0);
+  const pageAvgLatency = pageRecordedLatencies.length > 0
+    ? Math.round(pageRecordedLatencies.reduce((sum, latency) => sum + latency, 0) / pageRecordedLatencies.length)
+    : null;
+  const advancedFilterCount = [errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter].filter(Boolean).length;
 
   const handleSelect = async (item: RequestLogListItem) => {
     try {
@@ -146,111 +168,129 @@ export function Logs() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="shrink-0 text-xs text-text-muted whitespace-nowrap">
-            共 {total.toLocaleString()} {t("logs.requests")}
-          </p>
-          <input
-            type="text"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder={t("logs.search")}
-            className="form-input shrink-0"
-            style={{ width: "11rem" }}
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="form-input !w-28 shrink-0"
-          >
-            <option value="">{t("logs.all")}</option>
-            <option value="success">{t("logs.success")}</option>
-            <option value="error">{t("logs.error")}</option>
-          </select>
-          {providerOptions.length > 1 && (
+      <div className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          <LogSummaryItem label="筛选命中" value={total.toLocaleString()} hint={t("logs.requests")} />
+          <LogSummaryItem label="本页错误" value={pageErrorCount.toLocaleString()} hint={`${knownStatusLogs.length.toLocaleString()} 条有状态`} />
+          <LogSummaryItem label="本页成功率" value={pageSuccessRate} hint={`${pageSuccessCount.toLocaleString()} 条成功`} />
+          <LogSummaryItem label="本页平均延迟" value={formatOptionalLatency(pageAvgLatency)} hint={`${pageRecordedLatencies.length.toLocaleString()} 条有记录`} />
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder={t("logs.search")}
+              className="form-input min-w-[13rem] flex-1"
+            />
             <select
-              value={providerFilter}
-              onChange={(e) => setProviderFilter(e.target.value)}
-              className="form-input !w-36 shrink-0"
-              title={t("logs.filter_provider")}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="form-input !w-28 shrink-0"
             >
-              <option value="">{t("logs.all_providers")}</option>
-              {providerOptions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              <option value="">{t("logs.all")}</option>
+              <option value="success">{t("logs.success")}</option>
+              <option value="error">{t("logs.error")}</option>
             </select>
-          )}
-          {modelOptions.length > 0 && (
-            <select
-              value={modelFilter}
-              onChange={(e) => setModelFilter(e.target.value)}
-              className="form-input !w-40 shrink-0"
-              title={t("logs.filter_model")}
-            >
-              <option value="">{t("logs.all_models")}</option>
-              {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
-            </select>
-          )}
-          {routeProfileOptions.length > 0 && (
-            <select
-              value={routeProfileFilter}
-              onChange={(e) => setRouteProfileFilter(e.target.value)}
-              className="form-input !w-40 shrink-0"
-              title={t("logs.filter_route_profile")}
-            >
-              <option value="">{t("logs.all_routes")}</option>
-              {routeProfileOptions.map((profile) => (
-                <option key={profile.id} value={profile.id}>{profile.name}</option>
-              ))}
-            </select>
-          )}
-          <select
-            value={errorTypeFilter}
-            onChange={(e) => setErrorTypeFilter(e.target.value)}
-            className="form-input !w-36 shrink-0"
-            title={t("logs.filter_error_type")}
-          >
-            <option value="">{t("logs.all_error_types")}</option>
-            <option value="auth_failed">{t("logs.error_type.auth_failed")}</option>
-            <option value="rate_limited">{t("logs.error_type.rate_limited")}</option>
-            <option value="quota_or_balance">{t("logs.error_type.quota_or_balance")}</option>
-            <option value="server_error">{t("logs.error_type.server_error")}</option>
-            <option value="network_error">{t("logs.error_type.network_error")}</option>
-            <option value="protocol_error">{t("logs.error_type.protocol_error")}</option>
-            <option value="other_error">{t("logs.error_type.other_error")}</option>
-          </select>
-          <select
-            value={clientFilter}
-            onChange={(e) => setClientFilter(e.target.value)}
-            className="form-input !w-32 shrink-0"
-            title={t("logs.filter_client")}
-          >
-            <option value="">{t("logs.all_clients")}</option>
-            {KNOWN_CLIENTS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <select
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value)}
-            className="form-input !w-32 shrink-0"
-            title="按来源过滤：网关 / 各客户端本地日志"
-          >
-            <option value="">全部来源</option>
-            <option value="gateway">{sourceLabel("gateway")}</option>
-            <option value="session_log">客户端日志（全部）</option>
-            <option value="claude_session">{sourceLabel("claude_session")}</option>
-            <option value="codex_session">{sourceLabel("codex_session")}</option>
-            <option value="gemini_session">{sourceLabel("gemini_session")}</option>
-          </select>
-          {sessionIdFilter && (
+            {providerOptions.length > 1 && (
+              <select
+                value={providerFilter}
+                onChange={(e) => setProviderFilter(e.target.value)}
+                className="form-input !w-36 shrink-0"
+                title={t("logs.filter_provider")}
+              >
+                <option value="">{t("logs.all_providers")}</option>
+                {providerOptions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+              </select>
+            )}
+            {modelOptions.length > 0 && (
+              <select
+                value={modelFilter}
+                onChange={(e) => setModelFilter(e.target.value)}
+                className="form-input !w-40 shrink-0"
+                title={t("logs.filter_model")}
+              >
+                <option value="">{t("logs.all_models")}</option>
+                {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+            )}
+            {routeProfileOptions.length > 0 && (
+              <select
+                value={routeProfileFilter}
+                onChange={(e) => setRouteProfileFilter(e.target.value)}
+                className="form-input !w-40 shrink-0"
+                title={t("logs.filter_route_profile")}
+              >
+                <option value="">{t("logs.all_routes")}</option>
+                {routeProfileOptions.map((profile) => (
+                  <option key={profile.id} value={profile.id}>{profile.name}</option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
-              onClick={() => setSessionIdFilter("")}
-              className="max-w-[260px] truncate rounded-md bg-card-secondary px-2.5 py-1.5 font-mono text-[11px] text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-              title={sessionIdFilter}
+              onClick={() => setShowAdvancedFilters((v) => !v)}
+              className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${showAdvancedFilters ? "bg-card-secondary text-text-primary" : "text-text-muted hover:bg-card-secondary hover:text-text-primary"}`}
             >
-              session:{sessionIdFilter}
+              {showAdvancedFilters ? "收起筛选" : `高级筛选${advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}`}
             </button>
+          </div>
+
+          {showAdvancedFilters && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+              <select
+                value={errorTypeFilter}
+                onChange={(e) => setErrorTypeFilter(e.target.value)}
+                className="form-input !w-36 shrink-0"
+                title={t("logs.filter_error_type")}
+              >
+                <option value="">{t("logs.all_error_types")}</option>
+                <option value="auth_failed">{t("logs.error_type.auth_failed")}</option>
+                <option value="rate_limited">{t("logs.error_type.rate_limited")}</option>
+                <option value="quota_or_balance">{t("logs.error_type.quota_or_balance")}</option>
+                <option value="server_error">{t("logs.error_type.server_error")}</option>
+                <option value="network_error">{t("logs.error_type.network_error")}</option>
+                <option value="protocol_error">{t("logs.error_type.protocol_error")}</option>
+                <option value="other_error">{t("logs.error_type.other_error")}</option>
+              </select>
+              <select
+                value={clientFilter}
+                onChange={(e) => setClientFilter(e.target.value)}
+                className="form-input !w-32 shrink-0"
+                title={t("logs.filter_client")}
+              >
+                <option value="">{t("logs.all_clients")}</option>
+                {KNOWN_CLIENTS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select
+                value={sourceFilter}
+                onChange={(e) => setSourceFilter(e.target.value)}
+                className="form-input !w-36 shrink-0"
+                title="按来源过滤：网关 / 各客户端本地日志"
+              >
+                <option value="">全部来源</option>
+                <option value="gateway">{sourceLabel("gateway")}</option>
+                <option value="session_log">客户端日志（全部）</option>
+                <option value="claude_session">{sourceLabel("claude_session")}</option>
+                <option value="codex_session">{sourceLabel("codex_session")}</option>
+                <option value="gemini_session">{sourceLabel("gemini_session")}</option>
+              </select>
+              {sessionIdFilter && (
+                <button
+                  type="button"
+                  onClick={() => setSessionIdFilter("")}
+                  className="max-w-[260px] truncate rounded-md bg-card-secondary px-2.5 py-1.5 font-mono text-[11px] text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+                  title={sessionIdFilter}
+                >
+                  session:{sessionIdFilter}
+                </button>
+              )}
+            </div>
           )}
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
           {/* 列表/会话两种视图切换——列表按时间逐条，会话按 session_id 聚合 */}
           <div className="flex shrink-0 items-center rounded-md bg-card-secondary p-0.5">
@@ -272,33 +312,6 @@ export function Logs() {
             </button>
           </div>
           <button
-            onClick={handleSyncClaude}
-            disabled={syncing !== null}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
-            title="扫描 ~/.claude/projects/ 下的会话日志，补齐绕过网关使用 Claude Code 时的用量记录"
-          >
-            <Download className={`h-3 w-3 ${syncing === "claude" ? "animate-pulse" : ""}`} />
-            同步 Claude
-          </button>
-          <button
-            onClick={handleSyncCodex}
-            disabled={syncing !== null}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
-            title="扫描 ~/.codex/sessions/ 下的会话日志，补齐绕过网关使用 Codex 时的用量记录"
-          >
-            <Download className={`h-3 w-3 ${syncing === "codex" ? "animate-pulse" : ""}`} />
-            同步 Codex
-          </button>
-          <button
-            onClick={handleSyncGemini}
-            disabled={syncing !== null}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
-            title="扫描 ~/.gemini/tmp/ 下的会话日志，补齐绕过网关使用 Gemini CLI 时的用量记录"
-          >
-            <Download className={`h-3 w-3 ${syncing === "gemini" ? "animate-pulse" : ""}`} />
-            同步 Gemini
-          </button>
-          <button
             onClick={loadLogs}
             disabled={loading}
             className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
@@ -307,12 +320,52 @@ export function Logs() {
             {t("common.refresh")}
           </button>
           <button
+            type="button"
+            onClick={() => setShowSyncActions((v) => !v)}
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${showSyncActions ? "bg-card-secondary text-text-primary" : "text-text-muted hover:bg-card-secondary hover:text-text-primary"}`}
+          >
+            <Download className="h-3 w-3" />
+            同步日志
+          </button>
+          <button
             onClick={() => setConfirmClear(true)}
-            className="shrink-0 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+            className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-card-secondary hover:text-text-primary"
           >
             {t("logs.clear")}
           </button>
         </div>
+
+        {showSyncActions && (
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card p-3">
+            <button
+              onClick={handleSyncClaude}
+              disabled={syncing !== null}
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
+              title="扫描 ~/.claude/projects/ 下的会话日志，补齐绕过网关使用 Claude Code 时的用量记录"
+            >
+              <Download className={`h-3 w-3 ${syncing === "claude" ? "animate-pulse" : ""}`} />
+              同步 Claude
+            </button>
+            <button
+              onClick={handleSyncCodex}
+              disabled={syncing !== null}
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
+              title="扫描 ~/.codex/sessions/ 下的会话日志，补齐绕过网关使用 Codex 时的用量记录"
+            >
+              <Download className={`h-3 w-3 ${syncing === "codex" ? "animate-pulse" : ""}`} />
+              同步 Codex
+            </button>
+            <button
+              onClick={handleSyncGemini}
+              disabled={syncing !== null}
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
+              title="扫描 ~/.gemini/tmp/ 下的会话日志，补齐绕过网关使用 Gemini CLI 时的用量记录"
+            >
+              <Download className={`h-3 w-3 ${syncing === "gemini" ? "animate-pulse" : ""}`} />
+              同步 Gemini
+            </button>
+          </div>
+        )}
       </div>
 
       {viewMode === "session" ? (
@@ -389,6 +442,18 @@ export function Logs() {
         onConfirm={handleClear}
         onCancel={() => setConfirmClear(false)}
       />
+    </div>
+  );
+}
+
+function LogSummaryItem({ label, value, hint }: { label: string; value: string; hint: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-card px-4 py-3">
+      <div className="text-[11px] font-medium text-text-muted">{label}</div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="font-mono text-lg font-semibold text-text-primary">{value}</span>
+        <span className="truncate text-[11px] text-text-muted">{hint}</span>
+      </div>
     </div>
   );
 }

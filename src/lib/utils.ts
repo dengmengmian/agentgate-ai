@@ -33,6 +33,11 @@ export function formatLatency(ms: number): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+export function formatOptionalLatency(ms: number | null): string {
+  if (ms === null || ms <= 0) return "—";
+  return formatLatency(ms);
+}
+
 export function formatUptime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);

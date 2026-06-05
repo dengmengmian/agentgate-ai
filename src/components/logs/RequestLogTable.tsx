@@ -1,5 +1,5 @@
 import { StatusBadge } from "@/components/common/StatusBadge";
-import { formatTimestamp, formatLatency } from "@/lib/utils";
+import { formatTimestamp, formatOptionalLatency } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import type { RequestLogListItem } from "@/types/request-log";
 
@@ -60,7 +60,7 @@ export function RequestLogTable({ requests, onSelect }: RequestLogTableProps) {
                   </StatusBadge>
                 </td>
                 <td className="px-5 py-2.5 text-right font-mono text-text-secondary">
-                  {req.latency_ms !== null ? formatLatency(req.latency_ms) : "—"}
+                  {formatOptionalLatency(req.latency_ms)}
                 </td>
               </tr>
             );

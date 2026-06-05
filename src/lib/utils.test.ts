@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cn, formatTimestamp, formatDate, formatLatency, formatUptime } from "./utils";
+import { cn, formatTimestamp, formatDate, formatLatency, formatOptionalLatency, formatUptime } from "./utils";
 
 describe("cn", () => {
   it("merges class names", () => {
@@ -51,6 +51,18 @@ describe("formatLatency", () => {
     expect(formatLatency(1000)).toBe("1.0s");
     expect(formatLatency(1500)).toBe("1.5s");
     expect(formatLatency(20000)).toBe("20.0s");
+  });
+});
+
+describe("formatOptionalLatency", () => {
+  it("shows dash for missing or unrecorded latency", () => {
+    expect(formatOptionalLatency(null)).toBe("—");
+    expect(formatOptionalLatency(0)).toBe("—");
+  });
+
+  it("formats positive latency", () => {
+    expect(formatOptionalLatency(500)).toBe("500ms");
+    expect(formatOptionalLatency(1500)).toBe("1.5s");
   });
 });
 
