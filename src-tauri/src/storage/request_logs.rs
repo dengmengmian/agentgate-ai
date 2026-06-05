@@ -603,16 +603,31 @@ pub fn aggregate_route_profile_stats(
 ) -> Result<Vec<crate::models::route_profile::RouteProfileStats>, AppError> {
     let mut sql = String::from(
         "SELECT
-            json_extract(trace_json, '$.route_decision.profile_id') AS profile_id,
+            COALESCE(
+                json_extract(request_logs.trace_json, '$.route_decision.profile_id'),
+                legacy_profile.id
+            ) AS profile_id,
             COUNT(*) AS request_count,
             SUM(CASE WHEN status_code >= 200 AND status_code < 300 THEN 1 ELSE 0 END) AS success_count,
             SUM(CASE WHEN status_code < 200 OR status_code >= 400 THEN 1 ELSE 0 END) AS error_count,
             COALESCE(AVG(latency_ms), 0) AS avg_latency_ms,
             COALESCE(SUM(cost), 0.0) AS cost
          FROM request_logs
+         LEFT JOIN route_profiles legacy_profile
+           ON json_extract(request_logs.trace_json, '$.route_decision.profile_id') IS NULL
+          AND legacy_profile.enabled = 1
+          AND legacy_profile.is_default = 1
+          AND legacy_profile.input_protocol = CASE request_logs.route
+              WHEN '/v1/responses' THEN 'openai_responses'
+              WHEN '/v1/chat/completions' THEN 'openai_chat_completions'
+              WHEN '/v1/messages' THEN 'anthropic_messages'
+              ELSE NULL
+          END
          WHERE source = 'gateway'
-           AND trace_json IS NOT NULL
-           AND json_extract(trace_json, '$.route_decision.profile_id') IS NOT NULL",
+           AND (
+             json_extract(request_logs.trace_json, '$.route_decision.profile_id') IS NOT NULL
+             OR legacy_profile.id IS NOT NULL
+           )",
     );
     if since.is_some() {
         sql.push_str(" AND timestamp >= ?1");
@@ -1162,6 +1177,17 @@ mod tests {
                 source TEXT,
                 session_id TEXT,
                 external_id TEXT
+            );
+            CREATE TABLE route_profiles (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                client_type TEXT,
+                input_protocol TEXT NOT NULL,
+                mode TEXT NOT NULL,
+                enabled INTEGER NOT NULL,
+                is_default INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             );",
         )
         .unwrap();
@@ -1463,6 +1489,40 @@ mod tests {
         assert_eq!(stats[0].success_count, 1);
         assert_eq!(stats[0].error_count, 1);
         assert!((stats[0].success_rate - 0.5).abs() < 1e-9);
+        assert_eq!(stats[0].avg_latency_ms, 200);
+        assert!((stats[0].cost - 0.05).abs() < 1e-9);
+    }
+
+    #[test]
+    fn aggregate_route_profile_stats_maps_legacy_gateway_logs_to_default_profile() {
+        let conn = empty_logs_db();
+        conn.execute(
+            "INSERT INTO route_profiles (id, name, client_type, input_protocol, mode, enabled, is_default, created_at, updated_at)
+             VALUES ('rp-chat', 'Chat Completions Default', '', 'openai_chat_completions', 'manual', 1, 1, '', '')",
+            [],
+        )
+        .unwrap();
+
+        insert(
+            &conn, "r1", "OpenCode", "DeepSeek", "deepseek-v4-pro", "/v1/chat/completions", 200, 100,
+            None, None, None, None, None, None, None, Some(r#"{"mode":"native_pass_through_model_mapping"}"#),
+            Some(100), Some(20), Some(0.03), None, None, Some("gateway"), None, None,
+        )
+        .unwrap();
+        insert(
+            &conn, "r2", "OpenCode", "DeepSeek", "deepseek-v4-pro", "/v1/chat/completions", 500, 300,
+            None, None, None, None, None, None, Some("boom"), Some(r#"{"mode":"native_pass_through_model_mapping"}"#),
+            Some(50), Some(10), Some(0.02), None, None, Some("gateway"), None, None,
+        )
+        .unwrap();
+
+        let stats = aggregate_route_profile_stats(&conn, None).unwrap();
+
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].route_profile_id, "rp-chat");
+        assert_eq!(stats[0].request_count, 2);
+        assert_eq!(stats[0].success_count, 1);
+        assert_eq!(stats[0].error_count, 1);
         assert_eq!(stats[0].avg_latency_ms, 200);
         assert!((stats[0].cost - 0.05).abs() < 1e-9);
     }
