@@ -193,6 +193,16 @@ pub fn list(conn: &Connection, client_id: &str) -> Result<Vec<HistoryEntry>, App
     Ok(rows)
 }
 
+/// 曾经 apply 过配置的客户端 id 列表——用于「配置漂移」判断：detected 但接入过
+/// 的客户端说明配置被改回去了，提示重新应用。
+pub fn distinct_clients(conn: &Connection) -> Result<Vec<String>, AppError> {
+    let mut stmt = conn.prepare("SELECT DISTINCT client_id FROM client_apply_history")?;
+    let rows = stmt
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
 pub fn get(conn: &Connection, id: &str) -> Result<HistoryEntry, AppError> {
     conn.query_row(
         "SELECT id, client_id, action, snapshot_json, summary, is_initial,

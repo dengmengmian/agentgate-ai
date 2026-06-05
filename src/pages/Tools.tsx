@@ -63,6 +63,7 @@ export function Tools() {
   const [atomCodeStatus, setAtomCodeStatus] = useState<AtomCodeConfigStatus | null>(null);
   const [claudeDesktopStatus, setClaudeDesktopStatus] = useState<ClaudeDesktopStatus | null>(null);
   const [cdPreview, setCdPreview] = useState("");
+  const [historyClients, setHistoryClients] = useState<string[]>([]);
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null);
   const [startingGateway, setStartingGateway] = useState(false);
 
@@ -110,7 +111,7 @@ export function Tools() {
 
   const load = useCallback(async () => {
     try {
-      const [c, cc, oc, gc, ac, cd, gw] = await Promise.all([
+      const [c, cc, oc, gc, ac, cd, gw, hist] = await Promise.all([
         api.detectCodexConfig(),
         api.detectClaudeCodeEnv(),
         api.detectOpenCodeConfig(),
@@ -118,6 +119,7 @@ export function Tools() {
         api.detectAtomCodeConfig(),
         api.detectClaudeDesktop().catch(() => null),
         api.getGatewayStatus(),
+        api.clientsWithApplyHistory().catch(() => [] as string[]),
       ]);
       setCodexStatus(c);
       setClaudeEnv(cc);
@@ -126,6 +128,7 @@ export function Tools() {
       setAtomCodeStatus(ac);
       setClaudeDesktopStatus(cd);
       setGatewayStatus(gw);
+      setHistoryClients(hist);
       const snippet = await api.generateCodexConfig();
       setCodexConfig(snippet);
     } catch (err) {
@@ -301,7 +304,14 @@ export function Tools() {
     desc: string;
     icon: React.ComponentType<{ className?: string }>;
     presence: ClientPresence;
+    drifted: boolean;
   }[] = useMemo(() => {
+    // 配置漂移:接入过(在 apply 历史里)但当前掉成 detected,说明配置被改回去了。
+    // 注意 Gemini CLI 在 apply 历史里 client_id 存的是 "gemini",和前端 id 不一致。
+    const drifted = (id: ClientId, presence: ClientPresence) => {
+      const histId = id === "gemini_cli" ? "gemini" : id;
+      return presence === "detected" && historyClients.includes(histId);
+    };
     const codexPresence: ClientPresence = codexStatus?.has_agentgate
       ? "active"
       : codexStatus?.exists
@@ -333,14 +343,14 @@ export function Tools() {
         ? "detected"
         : "absent";
     return [
-      { id: "codex", name: t("tools.codex"), desc: t("tools.codex_desc"), icon: Code, presence: codexPresence },
-      { id: "claude_code", name: t("tools.claude_code"), desc: t("tools.claude_code_desc"), icon: Terminal, presence: claudePresence },
-      { id: "opencode", name: t("tools.opencode"), desc: t("tools.opencode_desc"), icon: Braces, presence: opencodePresence },
-      { id: "gemini_cli", name: t("tools.gemini_cli"), desc: t("tools.gemini_cli_desc"), icon: Sparkles, presence: geminiPresence },
-      { id: "atomcode", name: t("tools.atomcode"), desc: t("tools.atomcode_desc"), icon: Atom, presence: atomPresence },
-      { id: "claude_desktop", name: "Claude Desktop", desc: "接入 Claude Desktop（实验·macOS）", icon: Monitor, presence: claudeDesktopPresence },
+      { id: "codex", name: t("tools.codex"), desc: t("tools.codex_desc"), icon: Code, presence: codexPresence, drifted: drifted("codex", codexPresence) },
+      { id: "claude_code", name: t("tools.claude_code"), desc: t("tools.claude_code_desc"), icon: Terminal, presence: claudePresence, drifted: drifted("claude_code", claudePresence) },
+      { id: "opencode", name: t("tools.opencode"), desc: t("tools.opencode_desc"), icon: Braces, presence: opencodePresence, drifted: drifted("opencode", opencodePresence) },
+      { id: "gemini_cli", name: t("tools.gemini_cli"), desc: t("tools.gemini_cli_desc"), icon: Sparkles, presence: geminiPresence, drifted: drifted("gemini_cli", geminiPresence) },
+      { id: "atomcode", name: t("tools.atomcode"), desc: t("tools.atomcode_desc"), icon: Atom, presence: atomPresence, drifted: drifted("atomcode", atomPresence) },
+      { id: "claude_desktop", name: "Claude Desktop", desc: "接入 Claude Desktop（实验·macOS）", icon: Monitor, presence: claudeDesktopPresence, drifted: drifted("claude_desktop", claudeDesktopPresence) },
     ];
-  }, [codexStatus, claudeEnv, openCodeStatus, geminiStatus, atomCodeStatus, claudeDesktopStatus, t]);
+  }, [codexStatus, claudeEnv, openCodeStatus, geminiStatus, atomCodeStatus, claudeDesktopStatus, historyClients, t]);
 
   if (loading) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
 
@@ -385,6 +395,16 @@ export function Tools() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
         {/* Left list */}
         <aside className="rounded-xl border border-border bg-card p-2">
+          {/* 4.1 状态总汇 + 4.2 漂移提示 */}
+          <div className="flex items-center justify-between px-2.5 py-1.5 text-[10px] text-text-muted">
+            <span>客户端</span>
+            <span>已接入 {clientRows.filter((r) => r.presence === "active").length}/{clientRows.length}</span>
+          </div>
+          {clientRows.some((r) => r.drifted) && (
+            <div className="mb-1 px-2.5 text-[10px] text-warning">
+              {clientRows.filter((r) => r.drifted).length} 个配置已变，建议重新应用
+            </div>
+          )}
           <ul className="space-y-1">
             {clientRows.map((row) => {
               const Icon = row.icon;
@@ -407,9 +427,9 @@ export function Tools() {
                       <div className="truncate text-xs font-medium">{row.name}</div>
                       <div className={
                         "truncate text-[10px] " +
-                        (selected ? "text-accent/80" : "text-text-muted")
+                        (row.drifted ? "text-warning" : selected ? "text-accent/80" : "text-text-muted")
                       }>
-                        {presenceLabel(row.presence, t)}
+                        {row.drifted ? "配置已变·重新应用" : presenceLabel(row.presence, t)}
                       </div>
                     </div>
                   </button>

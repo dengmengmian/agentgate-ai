@@ -2098,6 +2098,19 @@ pub fn restart_codex_desktop() -> Result<crate::tools::codex_restart::CodexResta
     crate::tools::codex_restart::restart()
 }
 
+/// 曾经 apply 过配置的客户端 id 列表。前端用来判断「配置漂移」：客户端 detected
+/// 但 id 在这个列表里，说明接入过又被改回去了，提示重新应用。
+#[tauri::command]
+pub fn clients_with_apply_history(
+    state: State<'_, AppState>,
+) -> Result<Vec<String>, AppError> {
+    let conn = state
+        .db
+        .lock()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::apply_history::distinct_clients(&conn)
+}
+
 /// 列出某客户端的 apply/disable/toggle 历史（按时间倒序）。前端用来
 /// 渲染历史抽屉。
 #[tauri::command]

@@ -328,6 +328,7 @@ pub fn run() {
             commands::restart_codex_desktop,
             // Client apply history
             commands::list_client_apply_history,
+            commands::clients_with_apply_history,
             commands::rollback_client_apply,
             // Route Profiles
             commands::list_route_profiles,

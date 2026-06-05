@@ -450,6 +450,11 @@ export async function listClientApplyHistory(
   return cmd("list_client_apply_history", { clientId });
 }
 
+/// 曾经 apply 过配置的客户端 id 列表（用于配置漂移判断）。
+export async function clientsWithApplyHistory(): Promise<string[]> {
+  return cmd("clients_with_apply_history");
+}
+
 export async function rollbackClientApply(
   historyId: string
 ): Promise<ClientApplyHistoryEntry> {
