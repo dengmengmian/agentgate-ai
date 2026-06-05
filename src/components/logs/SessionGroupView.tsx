@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Loader2, Layers, X, MessageSquare, Copy } from "lucide-react";
+import { Loader2, Layers, X, MessageSquare, Copy, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { formatTimestamp } from "@/lib/utils";
 import { toast } from "@/components/common/Toast";
 import { sourceLabel } from "@/components/logs/RequestLogTable";
@@ -23,6 +24,19 @@ export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProp
   const [rows, setRows] = useState<SessionUsageSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [convo, setConvo] = useState<{ sessionId: string; source: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api.deleteSession(deleteTarget);
+      setRows((prev) => prev.filter((r) => r.session_id !== deleteTarget));
+      toast("success", "会话已删除");
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+    setDeleteTarget(null);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -92,7 +106,14 @@ export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProp
                   >
                     <MessageSquare className="h-3.5 w-3.5" />
                   </button>
-                  <div className="truncate max-w-[260px]" title={row.session_id}>{row.session_id}</div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(row.session_id); }}
+                    className="shrink-0 text-text-muted transition-colors hover:text-error"
+                    title="删除会话"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                  <div className="truncate max-w-[240px]" title={row.session_id}>{row.session_id}</div>
                 </div>
                 {row.model && (
                   <div className="font-mono text-[10px] text-text-muted truncate" title={row.model}>{row.model}</div>
@@ -124,6 +145,15 @@ export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProp
     {convo && (
       <ConversationModal sessionId={convo.sessionId} source={convo.source} onClose={() => setConvo(null)} />
     )}
+    <ConfirmDialog
+      open={!!deleteTarget}
+      title="删除会话"
+      message="将删除该会话的统计记录，并删除 Claude / Codex 的本地日志文件。删除后客户端无法再恢复该会话，且不可撤销。"
+      confirmLabel="删除"
+      variant="danger"
+      onConfirm={handleDelete}
+      onCancel={() => setDeleteTarget(null)}
+    />
     </>
   );
 }

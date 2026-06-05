@@ -1109,6 +1109,22 @@ pub fn get_session_conversation(
     crate::session_sync::codex::read_conversation(&session_id)
 }
 
+/// 删除某个会话：删 request_logs 行 + 删 Claude/Codex 本地 jsonl 文件。
+/// 一个会话只在一处客户端，另一处 delete_session_file 返回 Ok(false)；删除失败传播 Err。
+#[tauri::command]
+pub fn delete_session(session_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
+    {
+        let conn = state
+            .db
+            .lock()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::request_logs::delete_by_session(&conn, &session_id)?;
+    }
+    crate::session_sync::claude::delete_session_file(&session_id)?;
+    crate::session_sync::codex::delete_session_file(&session_id)?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn count_request_logs(
     filter: RequestLogFilter,

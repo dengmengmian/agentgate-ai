@@ -89,6 +89,12 @@ pub fn distinct_models(conn: &Connection) -> Result<Vec<String>, AppError> {
     Ok(out)
 }
 
+/// 删除某个会话在 request_logs 里的全部行，返回删除行数。
+pub fn delete_by_session(conn: &Connection, session_id: &str) -> Result<usize, AppError> {
+    let n = conn.execute("DELETE FROM request_logs WHERE session_id = ?1", [session_id])?;
+    Ok(n)
+}
+
 /// 把 RequestLogFilter 的过滤条件转 WHERE 子句。count / list / aggregate_by_session
 /// 共享，保证过滤语义一致。
 fn apply_log_filter(
@@ -1372,6 +1378,34 @@ mod tests {
         let proto = list(&conn, f("protocol_error")).unwrap();
         assert_eq!(proto.len(), 1);
         assert_eq!(proto[0].request_id, "r2");
+    }
+
+    #[test]
+    fn delete_by_session_removes_only_that_session() {
+        let conn = empty_logs_db();
+        let ins = |rid: &str, sess: &str| {
+            insert(
+                &conn, rid, "C", "P", "m", "/x", 200, 10,
+                None, None, None, None, None, None, None, None,
+                Some(10), Some(5), Some(0.0), None, None, Some("gateway"), Some(sess), None,
+            )
+            .unwrap();
+        };
+        ins("r1", "s1");
+        ins("r2", "s1");
+        ins("r3", "s2");
+
+        let n = delete_by_session(&conn, "s1").unwrap();
+        assert_eq!(n, 2, "应只删 s1 的两行");
+
+        let all = RequestLogFilter {
+            client: None, provider: None, model: None, route_profile_id: None,
+            status: None, error_type: None, keyword: None, source: None,
+            session_id: None, limit: Some(100), offset: Some(0),
+        };
+        let remaining = list(&conn, all).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].request_id, "r3");
     }
 
     #[test]

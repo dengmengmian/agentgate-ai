@@ -189,20 +189,40 @@ fn parse_file(path: &Path, result: &mut SyncResult) -> Vec<ParsedRow> {
     rows
 }
 
-/// 读取某个 Codex 会话的完整对话。Codex 日志是 event 流，对话文本在
-/// `event_msg` 的 `user_message` / `agent_message` 的 `payload.message`。
-pub fn read_conversation(
-    session_id: &str,
-) -> Result<Vec<crate::session_sync::claude::ConversationMessage>, AppError> {
-    use crate::session_sync::claude::ConversationMessage;
-    let dir = codex_sessions_dir();
-    let path = collect_session_files(&dir)
+/// 按 session_id 在 ~/.codex/sessions 下找到对应 jsonl（文件名含 session_id）。
+fn find_session_file(session_id: &str) -> Option<PathBuf> {
+    collect_session_files(&codex_sessions_dir())
         .into_iter()
         .find(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
                 .map_or(false, |n| n.contains(session_id))
         })
+}
+
+/// 删除某个 Codex 会话的本地 jsonl 文件。文件不存在返回 Ok(false)；删除失败返回 Err。
+pub fn delete_session_file(session_id: &str) -> Result<bool, AppError> {
+    match find_session_file(session_id) {
+        Some(path) => {
+            fs::remove_file(&path).map_err(|e| {
+                AppError::new(
+                    "SESSION_DELETE_FAILED",
+                    format!("删除 Codex 会话日志失败: {e}"),
+                )
+            })?;
+            Ok(true)
+        }
+        None => Ok(false),
+    }
+}
+
+/// 读取某个 Codex 会话的完整对话。Codex 日志是 event 流，对话文本在
+/// `event_msg` 的 `user_message` / `agent_message` 的 `payload.message`。
+pub fn read_conversation(
+    session_id: &str,
+) -> Result<Vec<crate::session_sync::claude::ConversationMessage>, AppError> {
+    use crate::session_sync::claude::ConversationMessage;
+    let path = find_session_file(session_id)
         .ok_or_else(|| AppError::new("SESSION_NOT_FOUND", "找不到该 Codex 会话的本地日志"))?;
     let content = fs::read_to_string(&path)
         .map_err(|e| AppError::new("SESSION_READ_FAILED", format!("读取会话日志失败: {e}")))?;

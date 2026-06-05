@@ -287,6 +287,23 @@ pub fn read_conversation(session_id: &str) -> Result<Vec<ConversationMessage>, A
     Ok(msgs)
 }
 
+/// 删除某个 Claude Code 会话的本地 jsonl 文件。文件不存在返回 Ok(false)（可能是别的
+/// 客户端的会话或网关会话）；删除失败（如权限）返回 Err，不静默吞。
+pub fn delete_session_file(session_id: &str) -> Result<bool, AppError> {
+    match find_session_file(session_id) {
+        Some(path) => {
+            fs::remove_file(&path).map_err(|e| {
+                AppError::new(
+                    "SESSION_DELETE_FAILED",
+                    format!("删除 Claude 会话日志失败: {e}"),
+                )
+            })?;
+            Ok(true)
+        }
+        None => Ok(false),
+    }
+}
+
 /// Sync all Claude session logs into request_logs. Idempotent: messages
 /// already present (by external_id) are skipped.
 pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {

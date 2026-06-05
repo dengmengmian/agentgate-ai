@@ -163,6 +163,10 @@ export async function getSessionConversation(
   return cmd("get_session_conversation", { sessionId });
 }
 
+export async function deleteSession(sessionId: string): Promise<void> {
+  return cmd("delete_session", { sessionId });
+}
+
 export async function countRequestLogs(filter: RequestLogFilter): Promise<number> {
   return cmd("count_request_logs", { filter });
 }

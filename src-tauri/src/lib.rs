@@ -263,6 +263,7 @@ pub fn run() {
             commands::list_request_logs,
             commands::list_log_models,
             commands::get_session_conversation,
+            commands::delete_session,
             commands::count_request_logs,
             commands::get_request_log_detail,
             commands::clear_request_logs,
