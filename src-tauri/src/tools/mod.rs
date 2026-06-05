@@ -6,6 +6,7 @@ pub mod codex_restart;
 pub mod gemini_cli;
 pub mod instructions;
 pub mod instructions_templates;
+pub mod mcp;
 pub mod opencode;
 pub mod process_detect;
 pub mod toml_merge;

@@ -440,6 +440,7 @@ pub fn run() {
             // Client apply history
             commands::list_client_apply_history,
             commands::clients_with_apply_history,
+            commands::list_mcp_servers,
             commands::rollback_client_apply,
             // Route Profiles
             commands::list_route_profiles,

@@ -2100,6 +2100,13 @@ pub fn restart_codex_desktop() -> Result<crate::tools::codex_restart::CodexResta
     crate::tools::codex_restart::restart()
 }
 
+/// 读取各客户端(Codex / Claude Code)现有的 MCP server 配置，汇总展示。
+/// 以客户端文件为真相源，只读不写；env 只返回 key 不返回 value。
+#[tauri::command]
+pub fn list_mcp_servers() -> Result<Vec<crate::tools::mcp::McpServer>, AppError> {
+    Ok(crate::tools::mcp::list_all())
+}
+
 /// 曾经 apply 过配置的客户端 id 列表。前端用来判断「配置漂移」：客户端 detected
 /// 但 id 在这个列表里，说明接入过又被改回去了，提示重新应用。
 #[tauri::command]

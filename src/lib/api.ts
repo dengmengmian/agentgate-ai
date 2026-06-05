@@ -455,6 +455,19 @@ export async function clientsWithApplyHistory(): Promise<string[]> {
   return cmd("clients_with_apply_history");
 }
 
+/// 一条 MCP server 配置（读自客户端文件）。env 只含 key，不含敏感 value。
+export interface McpServer {
+  client: string; // "codex" / "claude_code"
+  name: string;
+  command: string | null;
+  args: string[];
+  env_keys: string[];
+}
+
+export async function listMcpServers(): Promise<McpServer[]> {
+  return cmd("list_mcp_servers");
+}
+
 export async function rollbackClientApply(
   historyId: string
 ): Promise<ClientApplyHistoryEntry> {

@@ -13,6 +13,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "nav.diagnostics": { en: "Diagnostics", zh: "诊断" },
   "nav.quick_setup": { en: "Quick Setup", zh: "快速配置" },
   "nav.instructions": { en: "Instructions", zh: "全局指令" },
+  "nav.mcp": { en: "MCP", zh: "MCP" },
   "nav.settings": { en: "Settings", zh: "设置" },
   "nav.collapse": { en: "Collapse sidebar", zh: "折叠侧边栏" },
   "nav.expand": { en: "Expand sidebar", zh: "展开侧边栏" },
