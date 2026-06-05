@@ -8,12 +8,15 @@ import {
   AlertCircle,
   Sparkles,
   ChevronDown,
+  Eye,
+  Pencil,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { toast } from "@/components/common/Toast";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { ClientHistoryButton } from "@/components/tools/ClientHistoryButton";
+import { MarkdownContent } from "@/components/common/MarkdownContent";
 
 /// 用户全局指令文件（~/.claude/CLAUDE.md、~/.codex/AGENTS.md）管理页。
 /// - 编辑器全宽优先；模板做成工具栏里的下拉菜单，避免窄屏下把内容挤到屏外。
@@ -27,6 +30,7 @@ export function Instructions() {
   const [saving, setSaving] = useState(false);
   const [templates, setTemplates] = useState<api.InstructionsTemplate[]>([]);
   const [templateMenuOpen, setTemplateMenuOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"edit" | "preview">("preview");
   const templateMenuRef = useRef<HTMLDivElement | null>(null);
   const [pending, setPending] = useState<{
     tpl: api.InstructionsTemplate;
@@ -201,6 +205,25 @@ export function Instructions() {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <div className="flex items-center rounded-md bg-card-secondary p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode("edit")}
+                className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "edit" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+              >
+                <Pencil className="h-3 w-3" />
+                编辑
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("preview")}
+                className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "preview" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+              >
+                <Eye className="h-3 w-3" />
+                预览
+              </button>
+            </div>
+
             {/* Template dropdown */}
             <div className="relative" ref={templateMenuRef}>
               <button
@@ -302,16 +325,26 @@ export function Instructions() {
           </div>
         </div>
 
-        {/* Textarea —— flex-1 + min-h-0 让它吃满 section 剩余高度。
-            resize-none 禁掉手动拖拽：高度已经跟着视口走，无谓的 resize 反而
-            会破坏布局。 */}
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={t("instructions.editor.placeholder")}
-          spellCheck={false}
-          className="w-full min-h-0 flex-1 resize-none bg-transparent p-4 font-mono text-xs leading-relaxed text-text-primary outline-none placeholder:text-text-muted"
-        />
+        {viewMode === "edit" ? (
+          /* Textarea —— flex-1 + min-h-0 让它吃满 section 剩余高度。
+              resize-none 禁掉手动拖拽：高度已经跟着视口走，无谓的 resize 反而
+              会破坏布局。 */
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={t("instructions.editor.placeholder")}
+            spellCheck={false}
+            className="w-full min-h-0 flex-1 resize-none bg-transparent p-4 font-mono text-xs leading-relaxed text-text-primary outline-none placeholder:text-text-muted"
+          />
+        ) : (
+          <div className="min-h-0 flex-1 overflow-auto p-4 text-sm text-text-primary">
+            {draft.trim() ? (
+              <MarkdownContent content={draft} />
+            ) : (
+              <p className="text-xs text-text-muted">{t("instructions.editor.placeholder")}</p>
+            )}
+          </div>
+        )}
       </section>
 
       <ConfirmDialog

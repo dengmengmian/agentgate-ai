@@ -118,56 +118,12 @@ export function RequestDetailDrawer({
           />
         )}
 
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <div>
-            <span className="text-text-muted">{t("logs.time")}</span>
-            <p className="font-mono text-text-primary">
-              {formatTimestamp(request.timestamp)}
-            </p>
-          </div>
-          <div>
-            <span className="text-text-muted">{t("logs.status")}</span>
-            <p className="mt-0.5">
-              <StatusBadge variant={isError ? "error" : "success"}>
-                {request.status_code ?? "—"}
-              </StatusBadge>
-            </p>
-          </div>
-          <div>
-            <span className="text-text-muted">{t("logs.client")}</span>
-            <p className="text-text-primary">{request.client ?? "—"}</p>
-          </div>
-          <div>
-            <span className="text-text-muted">{t("logs.provider")}</span>
-            <p className="text-text-primary">{request.provider ?? "—"}</p>
-          </div>
-          <div>
-            <span className="text-text-muted">{t("logs.model")}</span>
-            <p className="font-mono text-text-primary">{request.model ?? "—"}</p>
-          </div>
-          <div>
-            <span className="text-text-muted">{t("logs.latency")}</span>
-            <p className="font-mono text-text-primary">
-              {formatOptionalLatency(request.latency_ms)}
-            </p>
-          </div>
-          <div>
-            <span className="text-text-muted">{t("logs.route")}</span>
-            <p className="font-mono text-text-primary">{request.route ?? "—"}</p>
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-border bg-card-secondary p-4">
-          <h4 className="mb-3 text-xs font-semibold text-text-primary">{t("logs.usage_and_cost")}</h4>
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <Metric label={t("logs.tokens_input")} value={request.input_tokens?.toLocaleString() ?? "—"} />
-            <Metric label={t("logs.tokens_output")} value={request.output_tokens?.toLocaleString() ?? "—"} />
-            <Metric label={t("logs.tokens_total")} value={totalTokens > 0 ? totalTokens.toLocaleString() : "—"} />
-            <Metric label={t("logs.cost")} value={formatCost(request.cost)} />
-            <Metric label={t("logs.cache_write")} value={request.cache_write_tokens?.toLocaleString() ?? "—"} />
-            <Metric label={t("logs.cache_read")} value={request.cache_read_tokens?.toLocaleString() ?? "—"} />
-          </div>
-        </div>
+        <RouteCostSummary
+          request={request}
+          trace={trace}
+          isError={isError}
+          totalTokens={totalTokens}
+        />
 
         {request.error_message && (
           <ErrorExplanationCard
@@ -224,6 +180,113 @@ function Metric({ label, value }: { label: string; value: string }) {
     <div>
       <span className="text-text-muted">{label}</span>
       <p className="font-mono text-text-primary">{value}</p>
+    </div>
+  );
+}
+
+function RouteCostSummary({
+  request,
+  trace,
+  isError,
+  totalTokens,
+}: {
+  request: RequestLogDetail;
+  trace: RequestTrace | null;
+  isError: boolean;
+  totalTokens: number;
+}) {
+  const { t } = useI18n();
+  const decision = trace?.route_decision;
+  const mapper = trace?.error_mapper;
+  const breaker = trace?.circuit_breaker;
+  const degradation = trace?.degradation;
+  const fallbackChain = decision?.fallback_chain ?? [];
+  const selectedProvider =
+    decision?.selected_provider_name ?? request.provider ?? "—";
+  const selectedModel = decision?.selected_model ?? request.model ?? "—";
+
+  return (
+    <div className="rounded-lg border border-border bg-card-secondary p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <h4 className="text-xs font-semibold text-text-primary">链路与成本</h4>
+          <p className="mt-1 text-[11px] text-text-muted">
+            {formatTimestamp(request.timestamp)} · {request.client ?? "—"}
+          </p>
+        </div>
+        <StatusBadge variant={isError ? "error" : "success"}>
+          {request.status_code ?? "—"}
+        </StatusBadge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-xs">
+        <Metric label={t("logs.route")} value={decision?.profile_name ?? request.route ?? "—"} />
+        <Metric label={t("logs.provider")} value={selectedProvider} />
+        <Metric label={t("logs.model")} value={selectedModel} />
+        <Metric label={t("logs.latency")} value={formatOptionalLatency(request.latency_ms)} />
+        <Metric label={t("logs.tokens_input")} value={request.input_tokens?.toLocaleString() ?? "—"} />
+        <Metric label={t("logs.tokens_output")} value={request.output_tokens?.toLocaleString() ?? "—"} />
+        <Metric label={t("logs.tokens_total")} value={totalTokens > 0 ? totalTokens.toLocaleString() : "—"} />
+        <Metric label={t("logs.cost")} value={formatCost(request.cost)} />
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+        <Metric label={t("logs.cache_write")} value={request.cache_write_tokens?.toLocaleString() ?? "—"} />
+        <Metric label={t("logs.cache_read")} value={request.cache_read_tokens?.toLocaleString() ?? "—"} />
+      </div>
+
+      {decision?.matched_conditions && Object.keys(decision.matched_conditions).length > 0 && (
+        <div className="mt-3 rounded-md border border-border bg-card px-3 py-2 text-xs">
+          <span className="text-text-muted">{t("logs.matched_conditions")}</span>
+          <p className="mt-1 text-text-primary">{formatConditions(decision.matched_conditions)}</p>
+        </div>
+      )}
+
+      {fallbackChain.length > 0 && (
+        <div className="mt-3 space-y-1">
+          <span className="text-[11px] text-text-muted">{t("logs.fallback_chain")}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {fallbackChain.map((step, idx) => (
+              <span
+                key={`${step.provider_name ?? "fallback"}-${idx}`}
+                className={`rounded-md border px-2 py-1 text-[11px] ${
+                  step.selected
+                    ? "border-accent/40 bg-accent/10 text-accent"
+                    : "border-border bg-card text-text-secondary"
+                }`}
+              >
+                {step.step ?? idx + 1}. {step.role === "primary" ? t("logs.fallback_primary") : t("logs.fallback_backup")} · {step.provider_name ?? "—"}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(isError || mapper || breaker || degradation) && (
+        <div className="mt-3 space-y-2 rounded-md border border-error/20 bg-error/5 px-3 py-2 text-xs">
+          <div>
+            <span className="text-text-muted">{t("logs.error_final")}</span>
+            <p className="mt-1 text-text-primary">
+              HTTP {request.status_code ?? "—"}{request.error_message ? ` · ${request.error_message}` : ""}
+            </p>
+          </div>
+          {mapper && (
+            <p className="text-text-secondary">
+              {t("logs.error_mapper")}：{mapper.upstream_code ?? "upstream"} → {mapper.mapped_code ?? "mapped"}
+            </p>
+          )}
+          {breaker && (
+            <p className="text-text-secondary">
+              {t("logs.circuit_breaker")}：{breaker.observed_state ?? "—"}{breaker.transition ? ` · ${breaker.transition}` : ""}
+            </p>
+          )}
+          {degradation && (
+            <p className="text-text-secondary">
+              {t("logs.model_degradation")}：{degradation.requested_model ?? "—"} → {degradation.picked ?? "—"}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

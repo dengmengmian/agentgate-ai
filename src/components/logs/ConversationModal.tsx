@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { Loader2, X, Copy } from "lucide-react";
+import { Loader2, X, Copy, Terminal, FileText } from "lucide-react";
 import { formatTimestamp } from "@/lib/utils";
 import { toast } from "@/components/common/Toast";
+import { MarkdownContent } from "@/components/common/MarkdownContent";
 import * as api from "@/lib/api";
 import type { ConversationMessage } from "@/types/request-log";
 
@@ -10,6 +11,15 @@ export function resumeCommand(sessionId: string, source: string): string | null 
   if (source === "codex_session") return `codex resume ${sessionId}`;
   if (source === "gateway") return null;
   return `claude --resume ${sessionId}`; // claude_session / mixed / 默认
+}
+
+type ConversationMessageKind = "chat" | "tool_call" | "tool_result";
+
+export function getConversationMessageKind(text: string): ConversationMessageKind {
+  const trimmed = text.trim();
+  if (/^\[Tool:\s*.+\]$/.test(trimmed)) return "tool_call";
+  if (/^\[Tool result\]/.test(trimmed)) return "tool_result";
+  return "chat";
 }
 
 /// 会话对话弹窗：读 Claude Code / Codex 本地日志，渲染对话气泡 + 恢复命令。
@@ -42,7 +52,7 @@ export function ConversationModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-6" onClick={onClose}>
-      <div className="flex max-h-[82vh] w-full max-w-3xl flex-col rounded-xl border border-border bg-card" onClick={(e) => e.stopPropagation()}>
+      <div className="flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-text-primary">会话对话</h3>
@@ -51,18 +61,21 @@ export function ConversationModal({
           <button onClick={onClose} className="shrink-0 text-text-muted hover:text-text-primary"><X className="h-4 w-4" /></button>
         </div>
         {cmd && (
-          <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-2">
-            <code className="truncate font-mono text-[11px] text-text-secondary">{cmd}</code>
+          <div className="flex items-center justify-between gap-3 border-b border-border bg-card-secondary/50 px-5 py-2.5">
+            <div className="flex min-w-0 items-center gap-2">
+              <Terminal className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+              <code className="truncate font-mono text-[11px] text-text-secondary">{cmd}</code>
+            </div>
             <button
               onClick={() => { navigator.clipboard.writeText(cmd); toast("success", "已复制恢复命令"); }}
-              className="shrink-0 text-text-muted transition-colors hover:text-accent"
+              className="shrink-0 rounded-md p-1.5 text-text-muted transition-colors hover:bg-card hover:text-accent"
               title="复制"
             >
               <Copy className="h-3.5 w-3.5" />
             </button>
           </div>
         )}
-        <div className="flex-1 space-y-3 overflow-y-auto p-5">
+        <div className="flex-1 space-y-4 overflow-y-auto bg-background/30 p-5">
           {loading ? (
             <div className="flex items-center gap-2 text-xs text-text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" />加载中…</div>
           ) : err ? (
@@ -80,13 +93,47 @@ export function ConversationModal({
 
 function MessageBubble({ msg }: { msg: ConversationMessage }) {
   const isUser = msg.role === "user";
+  const kind = getConversationMessageKind(msg.text);
+  const meta = (
+    <div className="mb-1 text-[10px] text-text-muted">
+      {isUser ? "用户" : "AI"}{msg.timestamp ? ` · ${formatTimestamp(msg.timestamp)}` : ""}
+    </div>
+  );
+
+  if (kind === "tool_call") {
+    const toolName = msg.text.trim().replace(/^\[Tool:\s*/, "").replace(/\]$/, "");
+    return (
+      <div className="flex flex-col items-start">
+        {meta}
+        <div className="flex max-w-[72%] items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-text-secondary">
+          <Terminal className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+          <span>工具调用</span>
+          <span className="rounded bg-card-secondary px-1.5 py-0.5 font-mono text-[10px] text-text-primary">{toolName}</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (kind === "tool_result") {
+    return (
+      <div className="flex flex-col items-start">
+        {meta}
+        <div className="w-full max-w-[92%] rounded-lg border border-border bg-card">
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[11px] font-medium text-text-muted">
+            <FileText className="h-3.5 w-3.5" />
+            工具结果
+          </div>
+          <pre className="max-h-[22rem] overflow-auto whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-[11px] leading-relaxed text-text-secondary">{msg.text.replace(/^\[Tool result\]\s*/, "")}</pre>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}>
-      <div className="mb-1 text-[10px] text-text-muted">
-        {isUser ? "用户" : "AI"}{msg.timestamp ? ` · ${formatTimestamp(msg.timestamp)}` : ""}
-      </div>
-      <div className={`max-w-[85%] whitespace-pre-wrap break-words rounded-lg px-3 py-2 text-xs ${isUser ? "bg-accent/10 text-text-primary" : "bg-card-secondary text-text-primary"}`}>
-        {msg.text}
+      {meta}
+      <div className={`max-w-[76%] break-words rounded-xl px-3.5 py-2.5 text-sm leading-relaxed shadow-sm ${isUser ? "bg-accent/10 text-text-primary" : "bg-card text-text-primary"}`}>
+        <MarkdownContent content={msg.text} />
       </div>
     </div>
   );
