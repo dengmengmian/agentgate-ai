@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2, Settings2, Database, Info, PawPrint, ChevronDown, ChevronRight } from "lucide-react";
+import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2, Settings2, Database, Info, PawPrint, ChevronDown, ChevronRight, Share2, Upload } from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
@@ -455,6 +455,19 @@ const PET_PREVIEWS: Record<PetType, React.ComponentType<{ state: "idle" }>> = {
   coder: CoderPet,
 };
 
+/// 把配置 JSON 编码成一行可复制的「分享码」(UTF-8 → base64),方便发给对方粘贴导入。
+function encodeShareCode(json: string): string {
+  const bytes = new TextEncoder().encode(json);
+  let bin = "";
+  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  return btoa(bin);
+}
+function decodeShareCode(code: string): string {
+  const bin = atob(code.trim());
+  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
 /// 配置导入/导出 section。语义是 replace（导入 = 覆盖），所以导入前用
 /// ConfirmDialog 弹窗确认。API key 默认**不导出**——把含密钥的 JSON 文件
 /// 随手发到群里/截图/丢仓库是常见泄密路径，所以默认安全；用户明确勾选
@@ -464,6 +477,7 @@ function ConfigBackupSection() {
   const [includeSecrets, setIncludeSecrets] = useState(false);
   const [pendingImportJson, setPendingImportJson] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  const [shareCodeInput, setShareCodeInput] = useState("");
 
   const handleExport = async () => {
     try {
@@ -479,6 +493,29 @@ function ConfigBackupSection() {
       toast("success", includeSecrets ? "已导出（含密钥）" : "已导出（不含密钥）");
     } catch (err) {
       toast("error", (err as api.AppError).message);
+    }
+  };
+
+  // 分享码绝不带密钥——它就是给"发给别人"用的,带 key 等于泄密。
+  const handleCopyShareCode = async () => {
+    try {
+      const json = await api.exportConfigJson(false);
+      await navigator.clipboard.writeText(encodeShareCode(json));
+      toast("success", "已复制分享码（不含密钥），发给对方粘贴导入即可");
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
+
+  const handleImportShareCode = () => {
+    const code = shareCodeInput.trim();
+    if (!code) return;
+    try {
+      const json = decodeShareCode(code);
+      JSON.parse(json); // 校验是合法 JSON，再走和文件导入一样的确认弹窗
+      setPendingImportJson(json);
+    } catch {
+      toast("error", "分享码无效或已损坏");
     }
   };
 
@@ -505,6 +542,7 @@ function ConfigBackupSection() {
         }`
       );
       setPendingImportJson(null);
+      setShareCodeInput("");
       // 让上层数据刷新——最稳的是 reload 一次。
       window.location.reload();
     } catch (err) {
@@ -539,6 +577,10 @@ function ConfigBackupSection() {
             <Download className="h-3.5 w-3.5" />
             导出配置
           </button>
+          <button onClick={handleCopyShareCode} className="btn-secondary inline-flex items-center gap-1.5 text-xs">
+            <Share2 className="h-3.5 w-3.5" />
+            复制分享码
+          </button>
           <label className="btn-secondary inline-flex cursor-pointer items-center gap-1.5 text-xs">
             <FolderOpen className="h-3.5 w-3.5" />
             选择文件导入
@@ -553,6 +595,28 @@ function ConfigBackupSection() {
               }}
             />
           </label>
+        </div>
+
+        {/* 分享码导入：对方「复制分享码」后,把那串文本粘到这里导入 */}
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="text-xs text-text-muted">或者粘贴别人发来的分享码导入（不含密钥，导入后需自己填 API key）：</p>
+          <div className="flex items-start gap-2">
+            <textarea
+              value={shareCodeInput}
+              onChange={(e) => setShareCodeInput(e.target.value)}
+              placeholder="粘贴分享码…"
+              rows={2}
+              className="form-input flex-1 resize-none font-mono text-[11px]"
+            />
+            <button
+              onClick={handleImportShareCode}
+              disabled={!shareCodeInput.trim()}
+              className="btn-secondary inline-flex shrink-0 items-center gap-1.5 text-xs disabled:opacity-40"
+            >
+              <Upload className="h-3.5 w-3.5" />
+              导入
+            </button>
+          </div>
         </div>
       </div>
 
