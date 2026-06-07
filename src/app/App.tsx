@@ -1,4 +1,6 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useEffect } from "react";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { listen } from "@tauri-apps/api/event";
 import { I18nProvider } from "@/lib/i18n";
 import { AppShell } from "@/components/layout/AppShell";
 import { ToastContainer } from "@/components/common/Toast";
@@ -15,10 +17,27 @@ import { Settings } from "@/pages/Settings";
 import { QuickSetup } from "@/pages/QuickSetup";
 import { Instructions } from "@/pages/Instructions";
 
+/// 宠物右键菜单会发页面导航事件,这里统一跳过去。
+function PetEventBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const unSettings = listen("pet-open-settings", () => navigate("/settings?tab=pet"));
+    const unGateway = listen("pet-open-gateway", () => navigate("/gateway"));
+    const unLogs = listen("pet-open-logs", () => navigate("/logs?source=gateway"));
+    return () => {
+      unSettings.then((fn) => fn());
+      unGateway.then((fn) => fn());
+      unLogs.then((fn) => fn());
+    };
+  }, [navigate]);
+  return null;
+}
+
 export function App() {
   return (
     <I18nProvider>
       <BrowserRouter>
+        <PetEventBridge />
         <Routes>
           <Route element={<AppShell />}>
             <Route path="/" element={<Dashboard />} />

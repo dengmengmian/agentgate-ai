@@ -18,6 +18,15 @@ export interface UpdatePetSettingsInput {
 
 export interface PetGatewayInfo {
   state: "running" | "stopped" | "active";
+  running?: boolean;
+  host?: string;
+  port?: number;
+  active_provider?: {
+    id: string;
+    name: string;
+    default_model?: string | null;
+  } | null;
+  latest_model?: string | null;
   last_error?: {
     message: string;
     provider?: string;
@@ -25,6 +34,11 @@ export interface PetGatewayInfo {
   } | null;
   today?: {
     requests: number;
+    errors?: number;
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_tokens?: number;
+    cache_write_tokens?: number;
     cost: number;
   };
 }

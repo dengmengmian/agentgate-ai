@@ -7,7 +7,11 @@
     "core:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-position",
+    "core:window:allow-set-size",
+    "core:window:allow-set-ignore-cursor-events",
     "core:window:allow-outer-position",
+    "core:window:allow-outer-size",
+    "core:window:allow-inner-size",
     "core:window:allow-is-visible",
     "core:window:allow-show",
     "core:window:allow-hide"

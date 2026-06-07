@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::WebviewWindowBuilder;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 use app::commands;
 use app::state::AppState;
@@ -23,8 +23,8 @@ use models::gateway::GatewayRuntimeState;
 
 const PET_DEFAULT_X: f64 = 100.0;
 const PET_DEFAULT_Y: f64 = 100.0;
-const PET_WIDTH: f64 = 220.0;
-const PET_HEIGHT: f64 = 240.0;
+const PET_WIDTH: f64 = 140.0;
+const PET_HEIGHT: f64 = 200.0;
 
 fn pet_position_on_screen(monitors: &[tauri::Monitor], x: f64, y: f64) -> bool {
     if !x.is_finite() || !y.is_finite() {
@@ -78,6 +78,111 @@ fn move_pet_to_visible_area(app: &tauri::AppHandle, pet_win: &tauri::WebviewWind
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 宠物原生右键菜单(show_pet_context_menu)的事件走全局 handler。
+        // tray menu 的事件被 TrayIconBuilder::on_menu_event 优先接走,
+        // 所以这里只处理 pet_ 前缀。
+        .on_menu_event(|app, event| {
+            let id = event.id().as_ref().to_string();
+
+            // 动态: pet_switch:<pet_type>
+            if let Some(pet_type) = id.strip_prefix("pet_switch:") {
+                let pet_type = pet_type.to_string();
+                let app_handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let state: tauri::State<'_, AppState> = app_handle.state();
+                    let input = crate::models::pet::UpdatePetSettingsInput {
+                        pet_type: Some(pet_type),
+                        visible: None,
+                        pos_x: None,
+                        pos_y: None,
+                    };
+                    let _ = commands::update_pet_settings(input, app_handle.clone(), state);
+                });
+                return;
+            }
+
+            match id.as_str() {
+                "pet_start_gateway" => {
+                    let app_handle = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let state: tauri::State<'_, AppState> = app_handle.state();
+                        let _ = commands::start_gateway(app_handle.clone(), state).await;
+                    });
+                }
+                "pet_stop_gateway" => {
+                    let app_handle = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let state: tauri::State<'_, AppState> = app_handle.state();
+                        let _ = commands::stop_gateway(app_handle.clone(), state).await;
+                    });
+                }
+                "pet_restart_gateway" => {
+                    let app_handle = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let state: tauri::State<'_, AppState> = app_handle.state();
+                        let _ = commands::restart_gateway(app_handle.clone(), state).await;
+                    });
+                }
+                "pet_toggle_click_through" => {
+                    let state: tauri::State<'_, AppState> = app.state();
+                    let new_value = {
+                        let mut lock = match state.pet_click_through.lock() {
+                            Ok(l) => l,
+                            Err(_) => return,
+                        };
+                        *lock = !*lock;
+                        *lock
+                    };
+                    let _ = app.emit("pet-click-through-changed", new_value);
+                }
+                "pet_open_settings" => {
+                    let _ = commands::pet_open_settings(app.clone());
+                }
+                "pet_open_gateway" => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.unminimize();
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                    let _ = app.emit("pet-open-gateway", ());
+                }
+                "pet_open_logs" => {
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.unminimize();
+                        let _ = w.show();
+                        let _ = w.set_focus();
+                    }
+                    let _ = app.emit("pet-open-logs", ());
+                }
+                "pet_reset_memory" => {
+                    let state: tauri::State<'_, AppState> = app.state();
+                    let _ = commands::save_pet_memory("{}".into(), state);
+                    let _ = app.emit("pet-memory-reset", ());
+                }
+                "pet_hide" => {
+                    if let Some(pet_win) = app.get_webview_window("pet") {
+                        let _ = pet_win.hide();
+                    }
+                    let app_handle = app.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let state: tauri::State<'_, AppState> = app_handle.state();
+                        let lock = state.db.lock();
+                        if let Ok(conn) = lock {
+                            let _ = storage::pet_settings::update(
+                                &conn,
+                                crate::models::pet::UpdatePetSettingsInput {
+                                    pet_type: None,
+                                    visible: Some(false),
+                                    pos_x: None,
+                                    pos_y: None,
+                                },
+                            );
+                        }
+                    });
+                }
+                _ => {}
+            }
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -98,6 +203,7 @@ pub fn run() {
             let state = AppState {
                 db: Arc::new(Mutex::new(conn)),
                 gateway_runtime: Arc::new(Mutex::new(GatewayRuntimeState::default())),
+                pet_click_through: Arc::new(Mutex::new(false)),
             };
 
             let cleanup_db = state.db.clone();
@@ -201,7 +307,12 @@ pub fn run() {
                 // CSS 不用分流。
                 #[cfg(not(target_os = "windows"))]
                 {
-                    builder = builder.transparent(true);
+                    // transparent(true) 启用窗口级合成,但在 macOS 上 NSWindow 的
+                    // contentView 仍可能带浅色 fill(尤其系统"减少透明度"开时)。
+                    // 显式叠一层 RGBA(0,0,0,0) 把底色彻底打掉。
+                    builder = builder
+                        .transparent(true)
+                        .background_color(tauri::window::Color(0, 0, 0, 0));
                 }
                 #[cfg(target_os = "windows")]
                 {
@@ -368,9 +479,14 @@ pub fn run() {
             commands::update_pet_settings,
             commands::set_pet_visible,
             commands::get_pet_gateway_state,
+            commands::get_pet_gateway_state_lite,
             commands::get_pet_memory,
             commands::save_pet_memory,
             commands::pet_chat,
+            commands::pet_open_settings,
+            commands::get_pet_click_through,
+            commands::set_pet_click_through,
+            commands::show_pet_context_menu,
             // Config Import / Export
             commands::export_config_json,
             commands::import_config_json,
@@ -523,6 +639,26 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                             );
                         });
                     }
+                }
+                "toggle_pet_click_through" => {
+                    // 翻转 AppState 里的值并 emit changed,所有 webview(pet / settings)同步。
+                    // 也顺手把宠物窗口拉出来,否则 webview 不跑没法应用 setIgnoreCursorEvents。
+                    if let Some(pet_win) = app.get_webview_window("pet") {
+                        if !pet_win.is_visible().unwrap_or(false) {
+                            move_pet_to_visible_area(&app, &pet_win);
+                            let _ = pet_win.show();
+                        }
+                    }
+                    let state: tauri::State<'_, AppState> = app.state();
+                    let new_value = {
+                        let mut lock = match state.pet_click_through.lock() {
+                            Ok(l) => l,
+                            Err(_) => return,
+                        };
+                        *lock = !*lock;
+                        *lock
+                    };
+                    let _ = app.emit("pet-click-through-changed", new_value);
                 }
                 "quit" => {
                     // Stop gateway before quitting

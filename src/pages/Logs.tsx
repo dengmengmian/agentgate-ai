@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { ScrollText, RefreshCcw, ChevronLeft, ChevronRight, LayoutList, Layers, Download } from "lucide-react";
 import { RequestLogTable, sourceLabel } from "@/components/logs/RequestLogTable";
 import { RequestDetailDrawer } from "@/components/logs/RequestDetailDrawer";
@@ -18,9 +19,11 @@ import type { RouteProfileView } from "@/types/route-profile";
 const KNOWN_CLIENTS = ["Codex", "Claude Code", "OpenCode", "Gemini CLI", "AtomCode", "Generic"];
 
 const PAGE_SIZE = 100;
+const VALID_SOURCE_FILTERS = new Set(["gateway", "session_log", "claude_session", "codex_session", "gemini_session"]);
 
 export function Logs() {
   const { t } = useI18n();
+  const [searchParams] = useSearchParams();
   const [logs, setLogs] = useState<RequestLogListItem[]>([]);
   const [selected, setSelected] = useState<RequestLogDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,6 +59,11 @@ export function Logs() {
     api.listRouteProfiles().then(setRouteProfileOptions).catch(() => {});
     api.listLogModels().then(setModelOptions).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const source = searchParams.get("source");
+    if (source && VALID_SOURCE_FILTERS.has(source)) setSourceFilter(source);
+  }, [searchParams]);
 
   // Reset to page 1 whenever filters change.
   useEffect(() => {

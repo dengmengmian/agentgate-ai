@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
+import { listen } from "@tauri-apps/api/event";
 import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2, Settings2, Database, Info, PawPrint, ChevronDown, ChevronRight, Share2, Upload } from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -34,15 +36,45 @@ const TABS: { id: Tab; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "about", icon: Info },
 ];
 
+const VALID_TABS: readonly Tab[] = ["general", "security", "data", "pet", "about"];
+
 export function Settings() {
   const { t, locale, setLocale } = useI18n();
-  const [tab, setTab] = useState<Tab>("general");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = (() => {
+    const q = searchParams.get("tab") as Tab | null;
+    return q && VALID_TABS.includes(q) ? q : "general";
+  })();
+  const [tab, setTabState] = useState<Tab>(initialTab);
+  // 同一个 Settings 页面已经挂载时,从宠物菜单跳进来 query 变了但组件不重挂——
+  // 监听 query 主动切 tab。
+  useEffect(() => {
+    const q = searchParams.get("tab") as Tab | null;
+    if (q && VALID_TABS.includes(q)) setTabState(q);
+  }, [searchParams]);
+  const setTab = useCallback((next: Tab) => {
+    setTabState(next);
+    if (searchParams.get("tab")) {
+      const sp = new URLSearchParams(searchParams);
+      sp.delete("tab");
+      setSearchParams(sp, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
   const [theme, setThemeState] = useState(() => localStorage.getItem("agentgate_theme") || "light");
   const [settings, setSettings] = useState<GatewaySettingsType | null>(null);
   const [auth, setAuth] = useState<GatewayAuthSettings | null>(null);
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [pricing, setPricing] = useState<ModelPricing[]>([]);
   const [petSettings, setPetSettings] = useState<PetSettingsType | null>(null);
+  const [petClickThrough, setPetClickThroughState] = useState(false);
+  useEffect(() => {
+    api.getPetClickThrough().then(setPetClickThroughState).catch(() => {});
+    const un = listen<boolean>("pet-click-through-changed", (e) => setPetClickThroughState(e.payload));
+    return () => { un.then((fn) => fn()); };
+  }, []);
+  const handlePetClickThroughChange = useCallback((v: boolean) => {
+    api.setPetClickThrough(v).catch((err) => toast("error", (err as api.AppError).message));
+  }, []);
   const [appVersion, setAppVersion] = useState("");
   useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
 
@@ -378,6 +410,15 @@ export function Settings() {
                 <p className="text-xs text-text-muted">{t("settings.pet.visible_desc")}</p>
               </div>
               <ToggleSwitch checked={petSettings.visible} onChange={handlePetVisibleChange} />
+            </div>
+
+            {/* Click-through toggle */}
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-text-primary">{t("settings.pet.click_through")}</p>
+                <p className="text-xs text-text-muted">{t("settings.pet.click_through_desc")}</p>
+              </div>
+              <ToggleSwitch checked={petClickThrough} onChange={handlePetClickThroughChange} />
             </div>
 
             {/* Pet type selection */}

@@ -238,6 +238,15 @@ fn build_menu(
         },
     )
     .build(app)?;
+    let toggle_pet_click_through = MenuItemBuilder::with_id(
+        "toggle_pet_click_through",
+        if zh {
+            "宠物鼠标穿透"
+        } else {
+            "Pet Click-through"
+        },
+    )
+    .build(app)?;
     let quit = MenuItemBuilder::with_id("quit", if zh { "退出" } else { "Quit" }).build(app)?;
 
     let menu = MenuBuilder::new(app)
@@ -254,6 +263,7 @@ fn build_menu(
         .item(&restart_gw)
         .separator()
         .item(&toggle_pet)
+        .item(&toggle_pet_click_through)
         .separator()
         .item(&quit)
         .build()?;

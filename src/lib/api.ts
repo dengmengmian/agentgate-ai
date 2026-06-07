@@ -693,6 +693,11 @@ export async function getPetGatewayState(): Promise<PetGatewayInfo> {
   return cmd("get_pet_gateway_state");
 }
 
+/// 轻量版:只 state + last_error(走索引)。10s 轮询用。
+export async function getPetGatewayStateLite(): Promise<Pick<PetGatewayInfo, "state" | "last_error">> {
+  return cmd("get_pet_gateway_state_lite");
+}
+
 export async function getPetMemory(): Promise<string> {
   return cmd("get_pet_memory");
 }
@@ -703,6 +708,22 @@ export async function savePetMemory(memory: string): Promise<boolean> {
 
 export async function petChat(messages: Array<{ role: string; content: string }>): Promise<string> {
   return cmd("pet_chat", { messages });
+}
+
+export async function petOpenSettings(): Promise<boolean> {
+  return cmd("pet_open_settings");
+}
+
+export async function getPetClickThrough(): Promise<boolean> {
+  return cmd("get_pet_click_through");
+}
+
+export async function setPetClickThrough(value: boolean): Promise<boolean> {
+  return cmd("set_pet_click_through", { value });
+}
+
+export async function showPetContextMenu(): Promise<void> {
+  return cmd("show_pet_context_menu");
 }
 
 // ── Config Import / Export ─────────────────────────────────────

@@ -698,6 +698,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "settings.pet.desc": { en: "A floating pet on your desktop that reacts to gateway activity", zh: "浮动在桌面上的宠物，可随网关活动做出反应" },
   "settings.pet.visible": { en: "Show Pet", zh: "显示宠物" },
   "settings.pet.visible_desc": { en: "Show or hide the desktop pet", zh: "显示或隐藏桌面宠物" },
+  "settings.pet.click_through": { en: "Click-through", zh: "鼠标穿透" },
+  "settings.pet.click_through_desc": { en: "When on, clicks pass through the pet window to the app below. The in-pet menu can't be clicked in this mode — use this toggle to recover.", zh: "开启后点击会穿过宠物窗口到下方应用。此时右键菜单点不到——用这个开关恢复。" },
   "settings.pet.type": { en: "Pet Type", zh: "宠物类型" },
   "settings.pet.type_desc": { en: "Choose your desktop companion", zh: "选择你的桌面伙伴" },
   "settings.pet.robot": { en: "Gateway Bot", zh: "网关机器人" },

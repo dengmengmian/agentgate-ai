@@ -3516,6 +3516,7 @@ async fn handle_anthropic_fallback_stream(
 ///   - Cursor:                "Cursor/..."
 ///   - Cherry Studio:         "Cherry-Studio"
 ///   - Continue.dev:          "continue"
+///   - AgentGate Pet:         "AgentGate-Pet/..."
 ///   - generic SDKs:          "Python/requests", "node-fetch", "axios", etc.
 pub(crate) fn detect_client_from_ua(headers: &HeaderMap, route_default: &str) -> String {
     let ua = headers
@@ -3528,6 +3529,9 @@ pub(crate) fn detect_client_from_ua(headers: &HeaderMap, route_default: &str) ->
     }
     let lower = ua.to_ascii_lowercase();
     // Order matters: more specific matches first.
+    if lower.contains("agentgate-pet") {
+        return "Pet".to_string();
+    }
     if lower.contains("claude-code")
         || lower.contains("claude-cli")
         || lower.contains("claude code")
@@ -4004,6 +4008,13 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("user-agent", "codex-cli/1.0".parse().unwrap());
         assert_eq!(detect_client_from_ua(&headers, "Default"), "Codex");
+    }
+
+    #[test]
+    fn test_detect_client_from_ua_agentgate_pet() {
+        let mut headers = HeaderMap::new();
+        headers.insert("user-agent", "AgentGate-Pet/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&headers, "Default"), "Pet");
     }
 
     #[test]
