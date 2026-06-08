@@ -56,6 +56,8 @@ flate2 = "1"
 zstd = "0.13"
 brotli = "8"
 toml_edit = "0.22"
+# 本地 ZIP 导入 skill 用：从内存字节解压，做 zip-slip 防护。
+zip = { version = "2", default-features = false, features = ["deflate"] }
 open = "5"
 rand = "0.9"
 tauri-plugin-updater = "2.10.1"

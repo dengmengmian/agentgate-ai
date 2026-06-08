@@ -441,6 +441,11 @@ pub fn run() {
             commands::list_client_apply_history,
             commands::clients_with_apply_history,
             commands::list_mcp_servers,
+            commands::upsert_mcp_server,
+            commands::delete_mcp_server,
+            commands::sync_mcp_server,
+            commands::export_mcp_servers,
+            commands::import_mcp_servers,
             commands::rollback_client_apply,
             // Route Profiles
             commands::list_route_profiles,
@@ -496,6 +501,15 @@ pub fn run() {
             commands::read_global_instructions,
             commands::write_global_instructions,
             commands::apply_instructions_template,
+            commands::export_instructions,
+            commands::import_instructions,
+            // Local skills (~/.claude/skills)
+            commands::list_skills,
+            commands::set_skill_enabled,
+            commands::delete_skill,
+            commands::import_skill_from_zip,
+            commands::export_skills,
+            commands::import_skills,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

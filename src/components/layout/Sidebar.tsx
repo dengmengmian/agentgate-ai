@@ -14,6 +14,7 @@ import {
   PanelLeftOpen,
   FileText,
   Plug,
+  BookOpen,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ const navItems = [
   { to: "/diagnostics", labelKey: "nav.diagnostics", icon: Stethoscope },
   { to: "/instructions", labelKey: "nav.instructions", icon: FileText },
   { to: "/mcp", labelKey: "nav.mcp", icon: Plug },
+  { to: "/skills", labelKey: "nav.skills", icon: BookOpen },
   { to: "/settings", labelKey: "nav.settings", icon: Settings },
 ];
 

@@ -10,6 +10,7 @@ mod gemini;
 mod kimi;
 mod mimo;
 mod minimax;
+mod sensenova;
 
 pub use anthropic::AnthropicProvider;
 pub use deepseek::DeepSeekProvider;
@@ -18,6 +19,7 @@ pub use gemini::GeminiProvider;
 pub use kimi::KimiProvider;
 pub use mimo::MimoProvider;
 pub use minimax::MiniMaxProvider;
+pub use sensenova::SenseNovaProvider;
 
 /// Per-provider hooks for transforming Responses API → Chat Completions API.
 ///
@@ -80,6 +82,41 @@ pub trait ProviderTransform: Send + Sync {
     fn enhance_error(&self, status: u16, body_snippet: &str) -> Option<String> {
         detect_common_400(status, body_snippet)
     }
+}
+
+/// 合并多条 system 消息为单条前置——部分严格 provider（MiniMax / SenseNova）
+/// 只接受 1 条 system 且须在所有 user/assistant 之前。仅在所有 system 都是
+/// 纯文本时合并（用双换行拼接），含多模态 system 时保持原样避免丢数据。
+pub(super) fn merge_system_messages(messages: &mut Vec<ChatMessage>) {
+    let count = messages.iter().filter(|m| m.role == "system").count();
+    if count <= 1 {
+        return;
+    }
+    let all_text = messages
+        .iter()
+        .filter(|m| m.role == "system")
+        .all(|m| m.content.as_ref().map_or(true, Value::is_string));
+    if !all_text {
+        return;
+    }
+    let merged = messages
+        .iter()
+        .filter(|m| m.role == "system")
+        .filter_map(|m| m.content.as_ref().and_then(Value::as_str))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    messages.retain(|m| m.role != "system");
+    messages.insert(
+        0,
+        ChatMessage {
+            role: "system".into(),
+            content: Some(Value::String(merged)),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        },
+    );
 }
 
 /// 公共 400 模式检测：context_overflow → malformed_json_field 串联。
@@ -340,6 +377,8 @@ pub fn for_config(config: &ProviderConfig) -> Box<dyn ProviderTransform + Send +
         Box::new(KimiProvider)
     } else if pt == "minimax" || pt.contains("minimax") {
         Box::new(MiniMaxProvider)
+    } else if pt == "sensenova" || pt.contains("sensenova") {
+        Box::new(SenseNovaProvider)
     } else if pt == "anthropic" || pt == "claude" {
         Box::new(AnthropicProvider)
     } else if pt == "google_gemini" {
@@ -393,6 +432,12 @@ mod tests {
     fn for_config_minimax() {
         let t = for_config(&config("minimax"));
         assert_eq!(t.provider_type(), "minimax");
+    }
+
+    #[test]
+    fn for_config_sensenova() {
+        let t = for_config(&config("sensenova"));
+        assert_eq!(t.provider_type(), "sensenova");
     }
 
     #[test]

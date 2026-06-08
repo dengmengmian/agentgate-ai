@@ -175,6 +175,26 @@ pub fn snapshot_paths(scope: InstructionsScope) -> Vec<(&'static str, PathBuf)> 
     vec![(scope.file_name(), scope.path())]
 }
 
+/// 指令备份（6.5）：把两个 scope 的全局指令内容打包成一份 JSON，便于迁移。
+/// 沿用「不新增重复导出格式」原则——结构跟 SkillsExport 一样朴素。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstructionsBackup {
+    pub version: u32,
+    /// `~/.claude/CLAUDE.md` 原文，文件不存在为空串。
+    pub claude: String,
+    /// `~/.codex/AGENTS.md` 原文，文件不存在为空串。
+    pub codex: String,
+}
+
+/// 导出两个 scope 的指令内容。
+pub fn export_backup() -> InstructionsBackup {
+    InstructionsBackup {
+        version: 1,
+        claude: read(InstructionsScope::ClaudeGlobal).content,
+        codex: read(InstructionsScope::CodexGlobal).content,
+    }
+}
+
 fn scope_string(scope: InstructionsScope) -> String {
     match scope {
         InstructionsScope::ClaudeGlobal => "claude_global".to_string(),

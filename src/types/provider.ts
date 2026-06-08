@@ -156,6 +156,8 @@ export const PROVIDER_TYPES = [
   { value: "baichuan", label: "百川 (Baichuan)" },
   { value: "stepfun", label: "阶跃星辰 (StepFun)" },
   { value: "yi", label: "零一万物 (01.AI)" },
+  { value: "sensenova", label: "商汤日日新 (SenseNova)" },
+  { value: "modelscope", label: "魔搭 (ModelScope)" },
   // Aggregators
   { value: "openrouter", label: "OpenRouter" },
   // Custom

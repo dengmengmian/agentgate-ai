@@ -745,6 +745,36 @@ export const GENERATED_PROVIDER_CATALOG = {
       "authHeader": "bearer"
     }
   },
+  "sensenova": {
+    "schemaVersion": 1,
+    "order": 135,
+    "type": "sensenova",
+    "displayName": "SenseNova",
+    "displayNameZh": "商汤日日新 SenseNova",
+    "aliases": [
+      "sensenova"
+    ],
+    "protocols": [
+      "openai_chat_completions"
+    ],
+    "endpoints": {
+      "baseUrl": "https://token.sensenova.cn"
+    },
+    "defaultModel": "sensenova-6.7-flash-lite",
+    "supportedModels": [
+      "sensenova-6.7-flash-lite"
+    ],
+    "models": [],
+    "docs": {
+      "handlingEn": "Drops null strict / response_format / non-function tools, merges system messages",
+      "handlingZh": "清理 strict:null / response_format / 非 function 工具,合并 system 消息"
+    },
+    "sync": {
+      "envVar": "SENSENOVA_API_KEY",
+      "modelsUrl": "https://token.sensenova.cn/v1/models",
+      "authHeader": "bearer"
+    }
+  },
   "yi": {
     "schemaVersion": 1,
     "order": 140,
@@ -772,6 +802,36 @@ export const GENERATED_PROVIDER_CATALOG = {
     "sync": {
       "envVar": "YI_API_KEY",
       "modelsUrl": "https://api.lingyiwanwu.com/v1/models",
+      "authHeader": "bearer"
+    }
+  },
+  "modelscope": {
+    "schemaVersion": 1,
+    "order": 145,
+    "type": "modelscope",
+    "displayName": "ModelScope",
+    "displayNameZh": "魔搭 ModelScope",
+    "aliases": [
+      "modelscope"
+    ],
+    "protocols": [
+      "openai_chat_completions"
+    ],
+    "endpoints": {
+      "baseUrl": "https://api-inference.modelscope.cn"
+    },
+    "defaultModel": "deepseek-ai/DeepSeek-V3",
+    "supportedModels": [
+      "deepseek-ai/DeepSeek-V3"
+    ],
+    "models": [],
+    "docs": {
+      "handlingEn": "Generic",
+      "handlingZh": "通用"
+    },
+    "sync": {
+      "envVar": "MODELSCOPE_API_KEY",
+      "modelsUrl": "https://api-inference.modelscope.cn/v1/models",
       "authHeader": "bearer"
     }
   },
@@ -1206,12 +1266,26 @@ export const GENERATED_PROVIDER_PRESETS = {
     ],
     "defaultModel": "step-2-16k"
   },
+  "sensenova": {
+    "baseUrl": "https://token.sensenova.cn",
+    "protocols": [
+      "openai_chat_completions"
+    ],
+    "defaultModel": "sensenova-6.7-flash-lite"
+  },
   "yi": {
     "baseUrl": "https://api.lingyiwanwu.com",
     "protocols": [
       "openai_chat_completions"
     ],
     "defaultModel": "yi-large"
+  },
+  "modelscope": {
+    "baseUrl": "https://api-inference.modelscope.cn",
+    "protocols": [
+      "openai_chat_completions"
+    ],
+    "defaultModel": "deepseek-ai/DeepSeek-V3"
   },
   "xai": {
     "baseUrl": "https://api.x.ai",

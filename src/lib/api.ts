@@ -455,17 +455,105 @@ export async function clientsWithApplyHistory(): Promise<string[]> {
   return cmd("clients_with_apply_history");
 }
 
-/// 一条 MCP server 配置（读自客户端文件）。env 只含 key，不含敏感 value。
-export interface McpServer {
+export type McpValidationStatus = "valid" | "warning" | "invalid" | "unknown";
+
+export interface McpEnvVar {
+  key: string;
+  value?: string;
+  is_sensitive: boolean;
+  has_value: boolean;
+}
+
+export interface McpServerSource {
   client: string; // "codex" / "claude_code"
+  source: string; // "client_config" / "manual" / "imported"
+  config_path: string;
+  raw_name: string;
+}
+
+export interface McpValidationIssue {
+  code: string;
+  message: string;
+  field?: string;
+}
+
+export interface McpValidationState {
+  status: McpValidationStatus;
+  issues: McpValidationIssue[];
+}
+
+/// 一条 MCP server 配置（读自客户端文件）。env 不含敏感 value。
+export interface McpServer {
+  id: string;
   name: string;
-  command: string | null;
+  transport: string;
+  command: string;
   args: string[];
-  env_keys: string[];
+  env: McpEnvVar[];
+  enabled_clients: string[];
+  sources: McpServerSource[];
+  validation: McpValidationState;
+}
+
+export interface UpsertMcpServerInput {
+  client: string;
+  name: string;
+  command: string;
+  args: string[];
+  env: Array<{ key: string; value: string }>;
+}
+
+export interface SyncMcpServerInput {
+  from_client: string;
+  name: string;
+  to_clients: string[];
+}
+
+export interface McpExportEnv {
+  key: string;
+  value?: string;
+  has_value: boolean;
+  is_sensitive: boolean;
+}
+
+export interface McpExportServer {
+  name: string;
+  command: string;
+  args: string[];
+  env: McpExportEnv[];
+  clients: string[];
+}
+
+export interface McpExportPayload {
+  version: number;
+  servers: McpExportServer[];
 }
 
 export async function listMcpServers(): Promise<McpServer[]> {
   return cmd("list_mcp_servers");
+}
+
+export async function upsertMcpServer(input: UpsertMcpServerInput): Promise<McpServer> {
+  return cmd("upsert_mcp_server", { input });
+}
+
+export async function deleteMcpServer(client: string, name: string): Promise<boolean> {
+  return cmd("delete_mcp_server", { client, name });
+}
+
+export async function syncMcpServer(input: SyncMcpServerInput): Promise<McpServer[]> {
+  return cmd("sync_mcp_server", { input });
+}
+
+export async function exportMcpServers(includeSecrets: boolean): Promise<string> {
+  return cmd("export_mcp_servers", { includeSecrets });
+}
+
+export async function importMcpServers(
+  payload: string,
+  targetClients: string[],
+): Promise<McpServer[]> {
+  return cmd("import_mcp_servers", { payload, targetClients });
 }
 
 export async function rollbackClientApply(
@@ -483,9 +571,17 @@ export interface InstructionsTemplate {
   id: string;
   title: string;
   description: string;
+  /// 分组：general / coding / review / debug / security / docs
+  category: string;
   /// `"claude"` / `"codex"` / `"all"`
   scopes: string[];
   content: string;
+}
+
+export interface InstructionsBackup {
+  version: number;
+  claude: string;
+  codex: string;
 }
 
 export interface InstructionsStatus {
@@ -519,6 +615,71 @@ export async function applyInstructionsTemplate(
   mode: InstructionsApplyMode
 ): Promise<InstructionsStatus> {
   return cmd("apply_instructions_template", { scope, templateId, mode });
+}
+
+export async function exportInstructions(): Promise<InstructionsBackup> {
+  return cmd("export_instructions");
+}
+
+export async function importInstructions(payload: string): Promise<InstructionsStatus[]> {
+  return cmd("import_instructions", { payload });
+}
+
+// ── Local Skills (~/.claude/skills) ────────────────────────────
+
+export interface Skill {
+  /// 来源客户端：claude / codex
+  source: string;
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  path: string;
+}
+
+export interface SkillFile {
+  rel_path: string;
+  content: string;
+}
+
+export interface SkillsExport {
+  version: number;
+  skills: {
+    source: string;
+    name: string;
+    description: string;
+    enabled: boolean;
+    files: SkillFile[];
+  }[];
+  skipped_files: string[];
+}
+
+export async function listSkills(): Promise<Skill[]> {
+  return cmd("list_skills");
+}
+
+export async function setSkillEnabled(
+  source: string,
+  id: string,
+  enabled: boolean,
+): Promise<Skill> {
+  return cmd("set_skill_enabled", { source, id, enabled });
+}
+
+export async function deleteSkill(source: string, id: string): Promise<boolean> {
+  return cmd("delete_skill", { source, id });
+}
+
+export async function importSkillFromZip(source: string, bytes: number[]): Promise<Skill> {
+  return cmd("import_skill_from_zip", { source, bytes });
+}
+
+export async function exportSkills(): Promise<SkillsExport> {
+  return cmd("export_skills");
+}
+
+export async function importSkills(payload: string): Promise<Skill[]> {
+  return cmd("import_skills", { payload });
 }
 
 // ── Route Profiles ─────────────────────────────────────────────

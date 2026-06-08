@@ -13,6 +13,9 @@ pub struct InstructionsTemplate {
     pub id: &'static str,
     pub title: &'static str,
     pub description: &'static str,
+    /// 分组：general / coding / review / debug / security / docs。
+    /// 前端按 category 折叠分组展示。
+    pub category: &'static str,
     /// "claude" / "codex" / "all"
     pub scopes: &'static [&'static str],
     pub content: &'static str,
@@ -105,11 +108,47 @@ const SECURITY_AUDIT: &str = r#"## 安全审计模式
 - 不要堆砌「最佳实践」清单，只列出本次代码里**真实存在**的问题。
 "#;
 
+const DEBUG: &str = r#"## 调试模式
+
+定位 bug 按以下顺序，不要一上来就改代码：
+
+1. **复现**：先用一个最小可复现步骤稳定触发问题，复现不了不动手。
+2. **锁定**：用一个能复现的测试把 bug 钉住，确认它现在是红的。
+3. **二分**：从「输入 → 输出」链路二分缩小范围，定位到具体函数 / 分支。
+4. **根因**：说清楚为什么会错，而不是「加个 if 就好了」。
+5. **修复**：最小改动让锁定的测试转绿，且不破坏其他测试。
+6. **回归**：保留那个测试，防止同类问题再次发生。
+
+## 禁止
+
+- 不靠猜测式 try/catch 或兜底默认值掩盖根因。
+- 不在没复现的情况下「盲改」。
+- 不把日志删掉假装问题消失。
+"#;
+
+const DOCS: &str = r#"## 文档写作模式
+
+写文档 / 注释 / README 时遵循：
+
+1. **结论先行**：先说这个模块/函数是干什么的、给谁用，再展开细节。
+2. **面向下一个读者**：解释「为什么这么做」，而不是逐行复述「做了什么」。
+3. **可运行示例**：给最小可复制的用法示例，示例必须真实可跑。
+4. **边界写清**：参数范围、错误情况、副作用、线程安全性要显式写出。
+5. **保持同步**：改代码就同步改文档，过期文档比没文档更糟。
+
+## 禁止
+
+- 不写「这个函数返回结果」这类零信息注释。
+- 不堆砌套话和营销词。
+- 不在文档里承诺代码里没实现的行为。
+"#;
+
 pub const TEMPLATES: &[InstructionsTemplate] = &[
     InstructionsTemplate {
         id: "minimal-zh",
         title: "极简中文规范",
         description: "结论先行、最小改动、不擅自重构的中文工作规范。",
+        category: "general",
         scopes: &["all"],
         content: MINIMAL_ZH,
     },
@@ -117,6 +156,7 @@ pub const TEMPLATES: &[InstructionsTemplate] = &[
         id: "tdd",
         title: "TDD 模式",
         description: "强制先写测试、再写实现、再重构的工作流。",
+        category: "coding",
         scopes: &["all"],
         content: TDD,
     },
@@ -124,15 +164,33 @@ pub const TEMPLATES: &[InstructionsTemplate] = &[
         id: "code-review",
         title: "代码评审模式",
         description: "按正确性 / 安全 / 性能 / 可读性 / 风格顺序评审，区分必改/建议/疑问。",
+        category: "review",
         scopes: &["all"],
         content: CODE_REVIEW,
+    },
+    InstructionsTemplate {
+        id: "debug",
+        title: "调试模式",
+        description: "先复现、用测试锁定、二分定位根因，再最小修复并留回归测试。",
+        category: "debug",
+        scopes: &["all"],
+        content: DEBUG,
     },
     InstructionsTemplate {
         id: "security-audit",
         title: "安全审计模式",
         description: "按输入、注入、认证、授权、密钥、加密、依赖、错误信息清单审计。",
+        category: "security",
         scopes: &["all"],
         content: SECURITY_AUDIT,
+    },
+    InstructionsTemplate {
+        id: "docs",
+        title: "文档写作模式",
+        description: "结论先行、面向下一个读者、给可运行示例、改代码同步改文档。",
+        category: "docs",
+        scopes: &["all"],
+        content: DOCS,
     },
 ];
 

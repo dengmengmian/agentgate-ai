@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Run Codex, Claude Code & Gemini CLI on cheaper models — without breaking them.</b><br>
-  Automatic failover · cost tracking · one-click setup. One local gateway, 24 providers.
+  Automatic failover · cost tracking · one-click setup. One local gateway, 25 providers.
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@
 
 ---
 
-AgentGate is a **local model gateway** for AI coding agents. It gives Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode one local endpoint, then routes requests to 24 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
+AgentGate is a **local model gateway** for AI coding agents. It gives Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode one local endpoint, then routes requests to 25 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
 
 It is built for real integration problems:
 
@@ -120,8 +120,8 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 - Providers that don't support images at the chosen model strip the image content at the provider-specific layer, avoiding upstream 400/404
 
 **Multi-Provider Management**
-- **24 built-in presets** (auto-fill base URL / protocols / Anthropic endpoint / default model):
-  - **Domestic**: Xiaomi MiMo, DeepSeek, Kimi/Moonshot, MiniMax, GLM (Zhipu BigModel), DashScope (Aliyun Qwen), SiliconFlow, Volcengine (Doubao), Baichuan, StepFun, Yi (01.AI)
+- **25 built-in presets** (auto-fill base URL / protocols / Anthropic endpoint / default model):
+  - **Domestic**: Xiaomi MiMo, DeepSeek, Kimi/Moonshot, MiniMax, GLM (Zhipu BigModel), DashScope (Aliyun Qwen), SiliconFlow, Volcengine (Doubao), Baichuan, StepFun, SenseNova, ModelScope, Yi (01.AI)
   - **International**: OpenAI, Anthropic (Claude), Google Gemini, xAI (Grok), Mistral, Groq, Together, Fireworks, Cerebras, Perplexity, Cohere
   - **Aggregator**: OpenRouter
   - **Custom**: any OpenAI-compatible endpoint (vLLM / Ollama / LiteLLM / local proxies)
@@ -142,7 +142,9 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 - Claude Code: one-click config + toggle between official and AgentGate
 - OpenCode: one-click config
 - Claude Desktop (macOS): point its third-party inference gateway at AgentGate; one-click apply with history rollback
-- Global instruction files: edit `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` from inside AgentGate with 4 built-in templates (minimal rules / TDD / code review / security audit); overwrite or append, with auto-snapshot and one-click rollback
+- Global instruction files: edit `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` from inside AgentGate with 6 built-in templates grouped by purpose (general / coding / review / debug / security / docs); overwrite or append, with auto-snapshot, one-click rollback, and JSON backup/restore
+- MCP servers: read, add, edit, delete, and sync MCP server configs across Codex and Claude Code from one panel; env values are never shown in the list; JSON import/export with keys excluded by default
+- Local skills: list, enable/disable, and delete skills under `~/.claude/skills` and `~/.codex/skills`; install from a local `.zip` (zip-slip guarded, no network download) and JSON backup/restore
 - Local gateway access token (`ag_local_*`) authentication
 
 **Desktop Experience**
@@ -616,7 +618,9 @@ Providers marked **Provider-specific handling** have dedicated transform code in
 | Volcengine (Doubao) | `volcengine` | Chat | Generic |
 | Baichuan | `baichuan` | Chat | Generic |
 | StepFun | `stepfun` | Chat | Generic |
+| SenseNova | `sensenova` | Chat | Drops null strict / response_format / non-function tools, merges system messages |
 | Yi (01.AI) | `yi` | Chat | Generic |
+| ModelScope | `modelscope` | Chat | Generic |
 | xAI (Grok) | `xai` | Chat | Generic |
 | Mistral | `mistral` | Chat | Generic |
 | Groq | `groq` | Chat | Generic |
@@ -796,7 +800,7 @@ AgentGate/
 ├── provider-catalog/             # Provider/model source of truth for generated defaults
 ├── src/                          # Frontend (React)
 │   ├── app/App.tsx               # App entry point
-│   ├── pages/                    # Pages (Overview/Quick Setup/Providers/Routes/Gateway/Clients/Logs/Diagnostics/Settings)
+│   ├── pages/                    # Pages (Overview/Quick Setup/Providers/Routes/Gateway/Clients/Logs/Diagnostics/Instructions/MCP/Skills/Settings)
 │   ├── components/               # UI components (layout/common/dashboard/providers/logs/tools/onboarding)
 │   ├── pet/                      # Desktop pet system (PetApp/Bubble/greetings/9 pet SVG components)
 │   ├── lib/                      # API wrapper, i18n, utilities
@@ -809,7 +813,7 @@ AgentGate/
 │       ├── providers/            # Provider adapters
 │       ├── storage/              # SQLite storage layer
 │       ├── models/               # Data models
-│       ├── tools/                # Client config management (Codex/Claude Code/OpenCode)
+│       ├── tools/                # Client config + MCP / skills / global instructions management
 │       ├── security/             # Authentication & redaction
 │       ├── diagnostics/          # Diagnostics & self-checks
 │       ├── app/                  # Tauri commands & app state

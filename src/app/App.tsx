@@ -17,6 +17,7 @@ import { Settings } from "@/pages/Settings";
 import { QuickSetup } from "@/pages/QuickSetup";
 import { Instructions } from "@/pages/Instructions";
 import { Mcp } from "@/pages/Mcp";
+import { Skills } from "@/pages/Skills";
 
 /// 宠物右键菜单会发页面导航事件,这里统一跳过去。
 function PetEventBridge() {
@@ -52,6 +53,7 @@ export function App() {
             <Route path="/diagnostics" element={<Diagnostics />} />
             <Route path="/instructions" element={<Instructions />} />
             <Route path="/mcp" element={<Mcp />} />
+            <Route path="/skills" element={<Skills />} />
             <Route path="/settings" element={<Settings />} />
           </Route>
         </Routes>

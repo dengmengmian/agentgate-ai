@@ -1,29 +1,248 @@
-import { useEffect, useState } from "react";
-import { Loader2, Plug, Code, Terminal, KeyRound } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  Code,
+  Copy,
+  Download,
+  Edit2,
+  KeyRound,
+  Loader2,
+  MoreHorizontal,
+  Plus,
+  Plug,
+  Save,
+  Search,
+  Terminal,
+  Trash2,
+  Upload,
+  XCircle,
+} from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
+import { DetailDrawer } from "@/components/layout/DetailDrawer";
 import * as api from "@/lib/api";
-import type { McpServer } from "@/lib/api";
+import type { McpServer, McpValidationStatus } from "@/lib/api";
 
-/// MCP 面板(第一步:只读展示)。以客户端文件为真相源,读 Codex / Claude Code 现有的
-/// MCP server,按客户端分组展示。增删改 / 跨客户端复制是后续步骤。
+type Draft = {
+  client: string;
+  originalName?: string;
+  name: string;
+  command: string;
+  argsText: string;
+  envText: string;
+};
+
+type TransferMode = "export" | "import" | null;
+type Filter = "all" | "issues" | "codex" | "claude_code";
+
+const clients = [
+  { id: "codex", label: "Codex", icon: Code },
+  { id: "claude_code", label: "Claude Code", icon: Terminal },
+];
+
+/// MCP 面板。以客户端文件为真相源，读写 Codex / Claude Code 现有 MCP server。
 export function Mcp() {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
+  const [includeSecrets, setIncludeSecrets] = useState(false);
+  const [exportText, setExportText] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importClient, setImportClient] = useState("codex");
+  const [transferMode, setTransferMode] = useState<TransferMode>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [transferring, setTransferring] = useState(false);
 
-  useEffect(() => {
+  const load = () => {
     let cancelled = false;
+    setLoading(true);
     api.listMcpServers()
-      .then((d) => { if (!cancelled) setServers(d); })
-      .catch((err) => { if (!cancelled) toast("error", (err as api.AppError).message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
+      .then((data) => {
+        if (!cancelled) setServers(data);
+      })
+      .catch((err) => {
+        if (!cancelled) toast("error", (err as api.AppError).message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  };
 
-  const groups: { client: string; label: string; icon: typeof Code; items: McpServer[] }[] = [
-    { client: "codex", label: "Codex", icon: Code, items: servers.filter((s) => s.client === "codex") },
-    { client: "claude_code", label: "Claude Code", icon: Terminal, items: servers.filter((s) => s.client === "claude_code") },
-  ];
+  useEffect(() => load(), []);
+
+  const selected = servers.find((server) => server.id === selectedId) ?? null;
+
+  const counts = useMemo(() => {
+    const issues = servers.filter((server) => server.validation.status !== "valid").length;
+    return {
+      all: servers.length,
+      issues,
+      codex: servers.filter((server) => server.enabled_clients.includes("codex")).length,
+      claude_code: servers.filter((server) => server.enabled_clients.includes("claude_code")).length,
+    };
+  }, [servers]);
+
+  const visibleServers = useMemo(() => {
+    const keyword = query.trim().toLowerCase();
+    return servers.filter((server) => {
+      if (filter === "issues" && server.validation.status === "valid") return false;
+      if (filter === "codex" && !server.enabled_clients.includes("codex")) return false;
+      if (filter === "claude_code" && !server.enabled_clients.includes("claude_code")) return false;
+      if (!keyword) return true;
+      const haystack = [
+        server.name,
+        server.command,
+        server.args.join(" "),
+        server.env.map((env) => env.key).join(" "),
+        server.sources.map((source) => source.config_path).join(" "),
+      ].join(" ").toLowerCase();
+      return haystack.includes(keyword);
+    });
+  }, [filter, query, servers]);
+
+  const openCreate = () => {
+    setSelectedId(null);
+    setDraft({ client: "codex", name: "", command: "", argsText: "", envText: "" });
+  };
+
+  const openEdit = (server: McpServer) => {
+    setSelectedId(null);
+    setDraft({
+      client: server.enabled_clients[0] ?? "codex",
+      originalName: server.name,
+      name: server.name,
+      command: server.command,
+      argsText: server.args.join("\n"),
+      envText: server.env.map((env) => `${env.key}=`).join("\n"),
+    });
+  };
+
+  const parseEnv = (text: string) => text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const eq = line.indexOf("=");
+      return eq === -1
+        ? { key: line, value: "" }
+        : { key: line.slice(0, eq).trim(), value: line.slice(eq + 1) };
+    });
+
+  const refreshServers = async () => {
+    const next = await api.listMcpServers();
+    setServers(next);
+    if (selectedId && !next.some((server) => server.id === selectedId)) {
+      setSelectedId(null);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!draft) return;
+    if (!draft.name.trim() || !draft.command.trim()) {
+      toast("error", "name 和 command 必填");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (draft.originalName && draft.originalName !== draft.name) {
+        await api.deleteMcpServer(draft.client, draft.originalName);
+      }
+      await api.upsertMcpServer({
+        client: draft.client,
+        name: draft.name.trim(),
+        command: draft.command.trim(),
+        args: draft.argsText.split("\n").map((item) => item.trim()).filter(Boolean),
+        env: parseEnv(draft.envText),
+      });
+      toast("success", "MCP server 已保存");
+      setDraft(null);
+      await refreshServers();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (server: McpServer) => {
+    const client = server.enabled_clients[0] ?? "codex";
+    if (!window.confirm(`删除 ${server.name}？`)) return;
+    try {
+      await api.deleteMcpServer(client, server.name);
+      toast("success", "MCP server 已删除");
+      setServers((items) => items.filter((item) => item.id !== server.id));
+      if (selectedId === server.id) setSelectedId(null);
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
+
+  const handleSync = async (server: McpServer) => {
+    const fromClient = server.enabled_clients[0] ?? "codex";
+    const toClient = fromClient === "codex" ? "claude_code" : "codex";
+    const toLabel = clientLabel(toClient);
+    if (!window.confirm(`同步 ${server.name} 到 ${toLabel}？同名配置会被覆盖。`)) return;
+    try {
+      await api.syncMcpServer({
+        from_client: fromClient,
+        name: server.name,
+        to_clients: [toClient],
+      });
+      toast("success", `已同步到 ${toLabel}`);
+      await refreshServers();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
+
+  const handleExport = async () => {
+    if (includeSecrets && !window.confirm("导出会包含 env value，确认继续？")) return;
+    setMoreOpen(false);
+    setTransferring(true);
+    try {
+      const text = await api.exportMcpServers(includeSecrets);
+      setExportText(text);
+      setTransferMode("export");
+      toast("success", includeSecrets ? "已导出 MCP 配置（含密钥）" : "已导出 MCP 配置");
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    } finally {
+      setTransferring(false);
+    }
+  };
+
+  const openImport = () => {
+    setMoreOpen(false);
+    setTransferMode((mode) => mode === "import" ? null : "import");
+  };
+
+  const handleImport = async () => {
+    if (!importText.trim()) {
+      toast("error", "请粘贴 MCP 导出 JSON");
+      return;
+    }
+    const targetLabel = clientLabel(importClient);
+    if (!window.confirm(`导入到 ${targetLabel}？同名配置会被覆盖。`)) return;
+    setTransferring(true);
+    try {
+      await api.importMcpServers(importText, [importClient]);
+      toast("success", `已导入到 ${targetLabel}`);
+      await refreshServers();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    } finally {
+      setTransferring(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -35,14 +254,130 @@ export function Mcp() {
   }
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h2 className="text-sm font-semibold text-text-primary">MCP 服务器</h2>
-        <p className="mt-0.5 text-xs text-text-muted">
-          读自各客户端配置文件（Codex <code className="font-mono">config.toml</code> / Claude Code <code className="font-mono">.claude.json</code>）。
-          当前为只读展示，增删改与跨客户端同步后续支持。env 仅显示 key、不显示值。
-        </p>
+    <div className="space-y-4">
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-text-primary">MCP 服务器</h2>
+          <p className="mt-0.5 text-xs text-text-muted">
+            读自 Codex <code className="font-mono">config.toml</code> / Claude Code <code className="font-mono">.claude.json</code>。
+            env 仅显示 key，不显示值。
+          </p>
+        </div>
+        <div className="relative flex shrink-0 items-center gap-2">
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            添加 server
+          </button>
+          <button
+            onClick={() => setMoreOpen((open) => !open)}
+            className="rounded-md border border-border p-1.5 text-text-secondary hover:bg-card-secondary"
+            title="更多"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+          {moreOpen && (
+            <div className="absolute right-0 top-9 z-20 w-52 rounded-lg border border-border bg-card p-2 shadow-lg">
+              <label className="mb-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-text-muted">
+                <input
+                  type="checkbox"
+                  checked={includeSecrets}
+                  onChange={(event) => setIncludeSecrets(event.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-border"
+                />
+                导出包含密钥
+              </label>
+              <button
+                onClick={handleExport}
+                disabled={transferring}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-card-secondary disabled:opacity-60"
+              >
+                {transferring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                导出 JSON
+              </button>
+              <button
+                onClick={openImport}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-card-secondary"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                导入 JSON
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <FilterButton active={filter === "all"} label="全部" count={counts.all} onClick={() => setFilter("all")} />
+          <FilterButton active={filter === "issues"} label="有问题" count={counts.issues} onClick={() => setFilter("issues")} />
+          <FilterButton active={filter === "codex"} label="Codex" count={counts.codex} onClick={() => setFilter("codex")} />
+          <FilterButton active={filter === "claude_code"} label="Claude Code" count={counts.claude_code} onClick={() => setFilter("claude_code")} />
+        </div>
+        <label className="flex min-w-[240px] items-center gap-2 rounded-md border border-border bg-card-secondary px-2.5 py-1.5 text-xs text-text-muted">
+          <Search className="h-3.5 w-3.5" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="w-full bg-transparent text-text-primary outline-none placeholder:text-text-muted"
+            placeholder="搜索 name / command / env"
+          />
+        </label>
       </div>
+
+      {transferMode && (
+        <section className="rounded-lg border border-border bg-card p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-medium text-text-primary">
+                {transferMode === "export" ? "导出 MCP 配置" : "导入 MCP 配置"}
+              </div>
+              <div className="mt-0.5 text-[11px] text-text-muted">
+                {transferMode === "export"
+                  ? includeSecrets ? "当前导出包含 env value。" : "当前导出已隐藏 env value。"
+                  : "粘贴 JSON 后选择目标客户端。"}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {transferMode === "import" && (
+                <>
+                  <select
+                    value={importClient}
+                    onChange={(event) => setImportClient(event.target.value)}
+                    className="rounded-md border border-border bg-card-secondary px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+                  >
+                    <option value="codex">Codex</option>
+                    <option value="claude_code">Claude Code</option>
+                  </select>
+                  <button
+                    onClick={handleImport}
+                    disabled={transferring}
+                    className="flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+                  >
+                    {transferring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                    导入
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setTransferMode(null)}
+                className="rounded p-1 text-text-muted hover:bg-card-secondary hover:text-text-primary"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+          <textarea
+            value={transferMode === "export" ? exportText : importText}
+            onChange={(event) => transferMode === "export" ? setExportText(event.target.value) : setImportText(event.target.value)}
+            rows={6}
+            className="w-full resize-none rounded-md border border-border bg-card-secondary px-2.5 py-2 font-mono text-xs text-text-primary outline-none focus:border-accent"
+            placeholder={transferMode === "export" ? "导出结果会显示在这里" : "粘贴 MCP 导出 JSON"}
+          />
+        </section>
+      )}
 
       {servers.length === 0 ? (
         <EmptyState
@@ -51,38 +386,401 @@ export function Mcp() {
           description="在 Codex 或 Claude Code 里配置过 MCP server 后，这里会自动列出。"
         />
       ) : (
-        <div className="space-y-5">
-          {groups.filter((g) => g.items.length > 0).map((g) => (
-            <section key={g.client}>
-              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-text-secondary">
-                <g.icon className="h-3.5 w-3.5" />
-                {g.label}
-                <span className="text-text-muted">· {g.items.length}</span>
+        <ServerTable
+          servers={visibleServers}
+          selectedId={selectedId}
+          onSelect={(server) => setSelectedId(server.id)}
+          onEdit={openEdit}
+          onSync={handleSync}
+          onDelete={handleDelete}
+        />
+      )}
+
+      <DetailDrawer
+        open={Boolean(selected)}
+        title={selected?.name ?? "MCP server"}
+        onClose={() => setSelectedId(null)}
+      >
+        {selected && (
+          <ServerDetail
+            server={selected}
+            onEdit={() => openEdit(selected)}
+            onSync={() => handleSync(selected)}
+            onDelete={() => handleDelete(selected)}
+          />
+        )}
+      </DetailDrawer>
+
+      <DetailDrawer
+        open={Boolean(draft)}
+        title={draft?.originalName ? "编辑 MCP server" : "添加 MCP server"}
+        onClose={() => setDraft(null)}
+      >
+        {draft && (
+          <DraftForm
+            draft={draft}
+            saving={saving}
+            onChange={setDraft}
+            onSave={handleSave}
+          />
+        )}
+      </DetailDrawer>
+    </div>
+  );
+}
+
+function ServerTable({
+  servers,
+  selectedId,
+  onSelect,
+  onEdit,
+  onSync,
+  onDelete,
+}: {
+  servers: McpServer[];
+  selectedId: string | null;
+  onSelect: (server: McpServer) => void;
+  onEdit: (server: McpServer) => void;
+  onSync: (server: McpServer) => void;
+  onDelete: (server: McpServer) => void;
+}) {
+  if (servers.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-card p-8 text-center text-xs text-text-muted">
+        没有匹配的 MCP server。
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-lg border border-border bg-card">
+      <div className="min-w-[840px]">
+      <div className="grid grid-cols-[120px_minmax(160px,1.2fr)_120px_minmax(240px,2fr)_90px_104px] border-b border-border bg-card-secondary px-4 py-2 text-[11px] font-medium text-text-muted">
+        <div>状态</div>
+        <div>名称</div>
+        <div>客户端</div>
+        <div>command</div>
+        <div>env</div>
+        <div className="text-right">操作</div>
+      </div>
+      <div className="divide-y divide-border">
+        {servers.map((server) => (
+          <div
+            key={server.id}
+            onClick={() => onSelect(server)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") onSelect(server);
+            }}
+            role="button"
+            tabIndex={0}
+            className={`grid w-full grid-cols-[120px_minmax(160px,1.2fr)_120px_minmax(240px,2fr)_90px_104px] items-center gap-0 px-4 py-3 text-left text-xs hover:bg-card-secondary ${
+              selectedId === server.id ? "bg-accent/5" : ""
+            }`}
+          >
+            <StatusPill status={server.validation.status} />
+            <div className="min-w-0">
+              <div className="truncate font-mono font-semibold text-text-primary">{server.name}</div>
+              {server.validation.issues.length > 0 && (
+                <div className="mt-0.5 truncate text-[11px] text-text-muted">
+                  {server.validation.issues[0].message}
+                </div>
+              )}
+            </div>
+            <ClientBadges server={server} />
+            <div className="min-w-0 truncate font-mono text-[11px] text-text-muted" title={`${server.command} ${server.args.join(" ")}`}>
+              {server.command || "未配置 command"} {server.args.join(" ")}
+            </div>
+            <EnvSummary server={server} />
+            <div className="flex justify-end gap-1">
+              <IconButton title="编辑" onClick={(event) => { event.stopPropagation(); onEdit(server); }}>
+                <Edit2 className="h-3.5 w-3.5" />
+              </IconButton>
+              <IconButton title="同步到另一个客户端" onClick={(event) => { event.stopPropagation(); onSync(server); }}>
+                <Copy className="h-3.5 w-3.5" />
+              </IconButton>
+              <IconButton danger title="删除" onClick={(event) => { event.stopPropagation(); onDelete(server); }}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </IconButton>
+            </div>
+          </div>
+        ))}
+      </div>
+      </div>
+    </div>
+  );
+}
+
+function ServerDetail({
+  server,
+  onEdit,
+  onSync,
+  onDelete,
+}: {
+  server: McpServer;
+  onEdit: () => void;
+  onSync: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <StatusPill status={server.validation.status} />
+        <div className="flex items-center gap-1.5">
+          <IconButton title="编辑" onClick={onEdit}>
+            <Edit2 className="h-3.5 w-3.5" />
+          </IconButton>
+          <IconButton title="同步到另一个客户端" onClick={onSync}>
+            <Copy className="h-3.5 w-3.5" />
+          </IconButton>
+          <IconButton danger title="删除" onClick={onDelete}>
+            <Trash2 className="h-3.5 w-3.5" />
+          </IconButton>
+        </div>
+      </div>
+
+      <DetailSection title="客户端">
+        <ClientBadges server={server} />
+      </DetailSection>
+
+      <DetailSection title="command">
+        <CodeBlock value={server.command || "未配置 command"} />
+      </DetailSection>
+
+      <DetailSection title="args">
+        {server.args.length > 0 ? <CodeBlock value={server.args.join("\n")} /> : <MutedText>未配置 args</MutedText>}
+      </DetailSection>
+
+      <DetailSection title="env">
+        {server.env.length > 0 ? (
+          <div className="space-y-1.5">
+            {server.env.map((env) => (
+              <div key={env.key} className="flex items-center justify-between gap-2 rounded-md bg-card-secondary px-2.5 py-1.5">
+                <div className="min-w-0 truncate font-mono text-[11px] text-text-secondary">{env.key}</div>
+                <div className="flex shrink-0 items-center gap-1.5 text-[10px] text-text-muted">
+                  {env.is_sensitive && <span>敏感</span>}
+                  {!env.has_value && <span className="text-warning">missing</span>}
+                </div>
               </div>
-              <div className="space-y-2">
-                {g.items.map((s) => (
-                  <div key={`${s.client}:${s.name}`} className="rounded-xl border border-border bg-card p-4">
-                    <div className="mb-1 font-mono text-xs font-semibold text-text-primary">{s.name}</div>
-                    {s.command && (
-                      <div className="truncate font-mono text-[11px] text-text-muted" title={s.command}>
-                        {s.command} {s.args.join(" ")}
-                      </div>
-                    )}
-                    {s.env_keys.length > 0 && (
-                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                        <KeyRound className="h-3 w-3 text-text-muted" />
-                        {s.env_keys.map((k) => (
-                          <span key={k} className="rounded bg-card-secondary px-1.5 py-0.5 font-mono text-[10px] text-text-secondary">{k}</span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </section>
+            ))}
+          </div>
+        ) : (
+          <MutedText>未配置 env</MutedText>
+        )}
+      </DetailSection>
+
+      <DetailSection title="来源">
+        <div className="space-y-2">
+          {server.sources.map((source) => (
+            <div key={`${source.client}:${source.config_path}`} className="rounded-md bg-card-secondary px-2.5 py-2">
+              <div className="text-[11px] font-medium text-text-secondary">{clientLabel(source.client)}</div>
+              <div className="mt-1 break-all font-mono text-[11px] text-text-muted">{source.config_path}</div>
+            </div>
           ))}
         </div>
+      </DetailSection>
+
+      {server.validation.issues.length > 0 && (
+        <DetailSection title="校验问题">
+          <div className="space-y-2">
+            {server.validation.issues.map((issue) => (
+              <div key={`${issue.code}:${issue.field ?? ""}`} className="rounded-md border border-warning/30 bg-warning/5 px-2.5 py-2 text-[11px] text-text-secondary">
+                {issue.message}
+              </div>
+            ))}
+          </div>
+        </DetailSection>
       )}
     </div>
   );
+}
+
+function DraftForm({
+  draft,
+  saving,
+  onChange,
+  onSave,
+}: {
+  draft: Draft;
+  saving: boolean;
+  onChange: (draft: Draft) => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="space-y-4">
+      <label className="space-y-1 text-[11px] text-text-muted">
+        client
+        <select
+          value={draft.client}
+          disabled={Boolean(draft.originalName)}
+          onChange={(event) => onChange({ ...draft, client: event.target.value })}
+          className="w-full rounded-md border border-border bg-card-secondary px-2.5 py-2 text-xs text-text-primary outline-none focus:border-accent disabled:opacity-60"
+        >
+          <option value="codex">Codex</option>
+          <option value="claude_code">Claude Code</option>
+        </select>
+      </label>
+      <label className="space-y-1 text-[11px] text-text-muted">
+        name
+        <input
+          value={draft.name}
+          onChange={(event) => onChange({ ...draft, name: event.target.value })}
+          className="w-full rounded-md border border-border bg-card-secondary px-2.5 py-2 font-mono text-xs text-text-primary outline-none focus:border-accent"
+        />
+      </label>
+      <label className="space-y-1 text-[11px] text-text-muted">
+        command
+        <input
+          value={draft.command}
+          onChange={(event) => onChange({ ...draft, command: event.target.value })}
+          className="w-full rounded-md border border-border bg-card-secondary px-2.5 py-2 font-mono text-xs text-text-primary outline-none focus:border-accent"
+        />
+      </label>
+      <label className="space-y-1 text-[11px] text-text-muted">
+        args（一行一个）
+        <textarea
+          value={draft.argsText}
+          onChange={(event) => onChange({ ...draft, argsText: event.target.value })}
+          rows={5}
+          className="w-full resize-none rounded-md border border-border bg-card-secondary px-2.5 py-2 font-mono text-xs text-text-primary outline-none focus:border-accent"
+        />
+      </label>
+      <label className="space-y-1 text-[11px] text-text-muted">
+        env（KEY=value，编辑时 value 留空会保留原值）
+        <textarea
+          value={draft.envText}
+          onChange={(event) => onChange({ ...draft, envText: event.target.value })}
+          rows={5}
+          className="w-full resize-none rounded-md border border-border bg-card-secondary px-2.5 py-2 font-mono text-xs text-text-primary outline-none focus:border-accent"
+        />
+      </label>
+      <button
+        onClick={onSave}
+        disabled={saving}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+      >
+        {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+        保存
+      </button>
+    </div>
+  );
+}
+
+function FilterButton({
+  active,
+  label,
+  count,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded-md px-2.5 py-1.5 text-xs ${
+        active
+          ? "bg-accent text-white"
+          : "text-text-secondary hover:bg-card-secondary"
+      }`}
+    >
+      {label}
+      <span className={active ? "ml-1 text-white/80" : "ml-1 text-text-muted"}>{count}</span>
+    </button>
+  );
+}
+
+function StatusPill({ status }: { status: McpValidationStatus }) {
+  const Icon = status === "valid" ? CheckCircle2 : status === "invalid" ? XCircle : AlertTriangle;
+  return (
+    <span className={`inline-flex w-fit items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${
+      status === "valid"
+        ? "bg-success/10 text-success"
+        : status === "invalid"
+          ? "bg-error/10 text-error"
+          : "bg-warning/10 text-warning"
+    }`}>
+      <Icon className="h-3 w-3" />
+      {status}
+    </span>
+  );
+}
+
+function ClientBadges({ server }: { server: McpServer }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      {server.enabled_clients.map((client) => (
+        <span key={client} className="inline-flex items-center gap-1 rounded bg-card-secondary px-1.5 py-0.5 text-[10px] text-text-secondary">
+          {clientIcon(client)}
+          {clientLabel(client)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function EnvSummary({ server }: { server: McpServer }) {
+  const missing = server.env.filter((env) => !env.has_value).length;
+  return (
+    <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
+      <KeyRound className="h-3 w-3" />
+      <span>{server.env.length}</span>
+      {missing > 0 && <span className="text-warning">/{missing} 缺失</span>}
+    </div>
+  );
+}
+
+function IconButton({
+  children,
+  title,
+  danger,
+  onClick,
+}: {
+  children: React.ReactNode;
+  title: string;
+  danger?: boolean;
+  onClick: (event: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      className={`rounded p-1 text-text-muted hover:bg-card-secondary ${
+        danger ? "hover:text-error" : "hover:text-text-primary"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text-muted">{title}</div>
+      {children}
+    </section>
+  );
+}
+
+function CodeBlock({ value }: { value: string }) {
+  return (
+    <pre className="max-h-44 overflow-auto whitespace-pre-wrap break-all rounded-md bg-card-secondary px-3 py-2 font-mono text-[11px] text-text-secondary">
+      {value}
+    </pre>
+  );
+}
+
+function MutedText({ children }: { children: React.ReactNode }) {
+  return <div className="text-xs text-text-muted">{children}</div>;
+}
+
+function clientLabel(client: string) {
+  return clients.find((item) => item.id === client)?.label ?? client;
+}
+
+function clientIcon(client: string) {
+  const Icon = clients.find((item) => item.id === client)?.icon ?? ChevronDown;
+  return <Icon className="h-3 w-3" />;
 }

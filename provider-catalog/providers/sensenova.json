@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 135,
+  "type": "sensenova",
+  "displayName": "SenseNova",
+  "displayNameZh": "商汤日日新 SenseNova",
+  "aliases": ["sensenova"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://token.sensenova.cn"
+  },
+  "defaultModel": "sensenova-6.7-flash-lite",
+  "supportedModels": ["sensenova-6.7-flash-lite"],
+  "models": [],
+  "docs": {
+    "handlingEn": "Drops null strict / response_format / non-function tools, merges system messages",
+    "handlingZh": "清理 strict:null / response_format / 非 function 工具,合并 system 消息"
+  },
+  "sync": {
+    "envVar": "SENSENOVA_API_KEY",
+    "modelsUrl": "https://token.sensenova.cn/v1/models",
+    "authHeader": "bearer"
+  }
+}

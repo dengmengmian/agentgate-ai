@@ -10,6 +10,10 @@ import {
   ChevronDown,
   Eye,
   Pencil,
+  Archive,
+  Upload,
+  Copy,
+  XCircle,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
@@ -36,6 +40,10 @@ export function Instructions() {
     tpl: api.InstructionsTemplate;
     mode: api.InstructionsApplyMode;
   } | null>(null);
+  const [backupMode, setBackupMode] = useState<"export" | "import" | null>(null);
+  const [backupExport, setBackupExport] = useState("");
+  const [backupImport, setBackupImport] = useState("");
+  const [backupPending, setBackupPending] = useState(false);
 
   const loadStatus = useCallback(async (s: api.InstructionsScope) => {
     setLoading(true);
@@ -81,6 +89,47 @@ export function Instructions() {
       ),
     [templates, scopeTag],
   );
+
+  // 模板按 category 分组展示，组顺序固定。
+  const groupedTemplates = useMemo(() => {
+    const order = ["general", "coding", "review", "debug", "security", "docs"];
+    const groups = new Map<string, api.InstructionsTemplate[]>();
+    for (const tpl of visibleTemplates) {
+      const key = tpl.category || "general";
+      (groups.get(key) ?? groups.set(key, []).get(key)!).push(tpl);
+    }
+    return order
+      .filter((cat) => groups.has(cat))
+      .map((cat) => ({ category: cat, items: groups.get(cat)! }));
+  }, [visibleTemplates]);
+
+  const handleExportBackup = async () => {
+    try {
+      const data = await api.exportInstructions();
+      setBackupExport(JSON.stringify(data, null, 2));
+      setBackupMode("export");
+      toast("success", t("instructions.backup.exported"));
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
+
+  const handleImportBackup = async () => {
+    if (!backupImport.trim()) return;
+    if (!window.confirm(t("instructions.backup.import_confirm"))) return;
+    setBackupPending(true);
+    try {
+      await api.importInstructions(backupImport);
+      toast("success", t("instructions.backup.imported"));
+      setBackupMode(null);
+      setBackupImport("");
+      loadStatus(scope);
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    } finally {
+      setBackupPending(false);
+    }
+  };
 
   const dirty = status !== null && draft !== status.content;
 
@@ -255,39 +304,48 @@ export function Instructions() {
                       {t("instructions.templates.empty")}
                     </div>
                   ) : (
-                    <ul className="space-y-1">
-                      {visibleTemplates.map((tpl) => (
-                        // 每条模板做横排：左边名称+描述吃满，右边两个动作按钮。
-                        // 比上下堆叠的卡片密度高一倍，下拉不至于把整屏盖住。
-                        <li
-                          key={tpl.id}
-                          className="flex items-start gap-2 rounded-md p-2 hover:bg-hover"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <div className="text-xs font-medium text-text-primary">
-                              {tpl.title}
-                            </div>
-                            <p className="mt-0.5 text-[11px] leading-snug text-text-muted">
-                              {tpl.description}
-                            </p>
+                    <div className="space-y-2">
+                      {groupedTemplates.map((group) => (
+                        <div key={group.category}>
+                          {/* 分组标题：coding / review / debug / security / docs / general */}
+                          <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
+                            {t(`instructions.tpl_category.${group.category}`)}
                           </div>
-                          <div className="flex shrink-0 flex-col gap-1">
-                            <button
-                              onClick={() => handleApplyTemplate(tpl, "overwrite")}
-                              className="rounded border border-border bg-card-secondary px-2 py-0.5 text-[10px] font-medium text-text-primary hover:bg-hover"
-                            >
-                              {t("instructions.templates.apply_overwrite")}
-                            </button>
-                            <button
-                              onClick={() => handleApplyTemplate(tpl, "append")}
-                              className="rounded border border-border bg-card-secondary px-2 py-0.5 text-[10px] font-medium text-text-primary hover:bg-hover"
-                            >
-                              {t("instructions.templates.apply_append")}
-                            </button>
-                          </div>
-                        </li>
+                          <ul className="space-y-1">
+                            {group.items.map((tpl) => (
+                              // 每条模板做横排：左边名称+描述吃满，右边两个动作按钮。
+                              <li
+                                key={tpl.id}
+                                className="flex items-start gap-2 rounded-md p-2 hover:bg-hover"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-xs font-medium text-text-primary">
+                                    {tpl.title}
+                                  </div>
+                                  <p className="mt-0.5 text-[11px] leading-snug text-text-muted">
+                                    {tpl.description}
+                                  </p>
+                                </div>
+                                <div className="flex shrink-0 flex-col gap-1">
+                                  <button
+                                    onClick={() => handleApplyTemplate(tpl, "overwrite")}
+                                    className="rounded border border-border bg-card-secondary px-2 py-0.5 text-[10px] font-medium text-text-primary hover:bg-hover"
+                                  >
+                                    {t("instructions.templates.apply_overwrite")}
+                                  </button>
+                                  <button
+                                    onClick={() => handleApplyTemplate(tpl, "append")}
+                                    className="rounded border border-border bg-card-secondary px-2 py-0.5 text-[10px] font-medium text-text-primary hover:bg-hover"
+                                  >
+                                    {t("instructions.templates.apply_append")}
+                                  </button>
+                                </div>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   )}
                 </div>
               )}
@@ -304,6 +362,14 @@ export function Instructions() {
                 <RefreshCcw className="h-3 w-3" />
               )}
               {t("instructions.reload")}
+            </button>
+            <button
+              onClick={() => setBackupMode((m) => (m ? null : "import"))}
+              className="btn-secondary"
+              title={t("instructions.backup")}
+            >
+              <Archive className="h-3 w-3" />
+              {t("instructions.backup")}
             </button>
             <ClientHistoryButton
               clientId={historyClientId}
@@ -346,6 +412,67 @@ export function Instructions() {
           </div>
         )}
       </section>
+
+      {/* 备份面板（6.5）：导出两份指令到 JSON，或从备份恢复。 */}
+      {backupMode && (
+        <section className="rounded-lg border border-border bg-card p-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setBackupMode("import")}
+                className={`rounded-md px-2.5 py-1 text-xs ${backupMode === "import" ? "bg-accent-soft text-accent" : "text-text-secondary hover:bg-hover"}`}
+              >
+                {t("instructions.backup.import")}
+              </button>
+              <button
+                onClick={handleExportBackup}
+                className={`rounded-md px-2.5 py-1 text-xs ${backupMode === "export" ? "bg-accent-soft text-accent" : "text-text-secondary hover:bg-hover"}`}
+              >
+                {t("instructions.backup.export")}
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              {backupMode === "export" ? (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(backupExport);
+                    toast("success", "已复制");
+                  }}
+                  className="btn-secondary"
+                >
+                  <Copy className="h-3 w-3" />
+                  复制
+                </button>
+              ) : (
+                <button
+                  onClick={handleImportBackup}
+                  disabled={backupPending || !backupImport.trim()}
+                  className="btn-primary"
+                >
+                  {backupPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                  {t("instructions.backup.import")}
+                </button>
+              )}
+              <button
+                onClick={() => setBackupMode(null)}
+                className="rounded p-1 text-text-muted hover:bg-hover hover:text-text-primary"
+              >
+                <XCircle className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+          <textarea
+            value={backupMode === "export" ? backupExport : backupImport}
+            onChange={(e) =>
+              backupMode === "export" ? setBackupExport(e.target.value) : setBackupImport(e.target.value)
+            }
+            rows={6}
+            spellCheck={false}
+            className="w-full resize-none rounded-md border border-border bg-card-secondary px-2.5 py-2 font-mono text-xs text-text-primary outline-none focus:border-accent"
+            placeholder={backupMode === "export" ? "" : t("instructions.backup.paste")}
+          />
+        </section>
+      )}
 
       <ConfirmDialog
         open={!!pending}

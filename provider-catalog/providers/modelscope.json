@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "order": 145,
+  "type": "modelscope",
+  "displayName": "ModelScope",
+  "displayNameZh": "魔搭 ModelScope",
+  "aliases": ["modelscope"],
+  "protocols": ["openai_chat_completions"],
+  "endpoints": {
+    "baseUrl": "https://api-inference.modelscope.cn"
+  },
+  "defaultModel": "deepseek-ai/DeepSeek-V3",
+  "supportedModels": ["deepseek-ai/DeepSeek-V3"],
+  "models": [],
+  "docs": {
+    "handlingEn": "Generic",
+    "handlingZh": "通用"
+  },
+  "sync": {
+    "envVar": "MODELSCOPE_API_KEY",
+    "modelsUrl": "https://api-inference.modelscope.cn/v1/models",
+    "authHeader": "bearer"
+  }
+}

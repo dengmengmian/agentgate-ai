@@ -2107,6 +2107,43 @@ pub fn list_mcp_servers() -> Result<Vec<crate::tools::mcp::McpServer>, AppError>
     Ok(crate::tools::mcp::list_all())
 }
 
+/// 添加或更新指定客户端的 MCP server。只写入一个客户端配置文件，不做跨客户端同步。
+#[tauri::command]
+pub fn upsert_mcp_server(
+    input: crate::tools::mcp::UpsertMcpServerInput,
+) -> Result<crate::tools::mcp::McpServer, AppError> {
+    crate::tools::mcp::upsert(input)
+}
+
+/// 删除指定客户端的 MCP server。文件或 server 不存在时返回 false。
+#[tauri::command]
+pub fn delete_mcp_server(client: String, name: String) -> Result<bool, AppError> {
+    crate::tools::mcp::delete(&client, &name)
+}
+
+/// 将一个客户端里的 MCP server 显式同步到一个或多个目标客户端。
+#[tauri::command]
+pub fn sync_mcp_server(
+    input: crate::tools::mcp::SyncMcpServerInput,
+) -> Result<Vec<crate::tools::mcp::McpServer>, AppError> {
+    crate::tools::mcp::sync(input)
+}
+
+/// 导出 MCP server 配置。默认由前端传 include_secrets=false，不导出 env value。
+#[tauri::command]
+pub fn export_mcp_servers(include_secrets: bool) -> Result<String, AppError> {
+    crate::tools::mcp::export_config(include_secrets)
+}
+
+/// 从 JSON 文本导入 MCP server 配置到指定客户端。
+#[tauri::command]
+pub fn import_mcp_servers(
+    payload: String,
+    target_clients: Vec<String>,
+) -> Result<Vec<crate::tools::mcp::McpServer>, AppError> {
+    crate::tools::mcp::import_config(&payload, target_clients)
+}
+
 /// 曾经 apply 过配置的客户端 id 列表。前端用来判断「配置漂移」：客户端 detected
 /// 但 id 在这个列表里，说明接入过又被改回去了，提示重新应用。
 #[tauri::command]
@@ -2257,6 +2294,87 @@ pub fn apply_instructions_template(
         &summary,
     );
     crate::tools::instructions::apply_template(s, &template_id, m)
+}
+
+/// 导出两个 scope 的全局指令为一份 JSON 备份（6.5）。
+#[tauri::command]
+pub fn export_instructions() -> Result<crate::tools::instructions::InstructionsBackup, AppError> {
+    Ok(crate::tools::instructions::export_backup())
+}
+
+/// 从备份 JSON 恢复全局指令。每个非空 scope overwrite 写入，写盘前各打一次
+/// snapshot，复用现有回滚机制。返回恢复后的两个 scope 状态。
+#[tauri::command]
+pub fn import_instructions(
+    state: State<'_, AppState>,
+    payload: String,
+) -> Result<Vec<crate::tools::instructions::InstructionsStatus>, AppError> {
+    let backup: crate::tools::instructions::InstructionsBackup = serde_json::from_str(&payload)
+        .map_err(|e| AppError::new("INSTRUCTIONS_IMPORT_BAD_JSON", format!("invalid json: {e}")))?;
+    use crate::tools::instructions::InstructionsScope;
+    let mut out = Vec::new();
+    for (scope, content) in [
+        (InstructionsScope::ClaudeGlobal, backup.claude),
+        (InstructionsScope::CodexGlobal, backup.codex),
+    ] {
+        if content.trim().is_empty() {
+            continue;
+        }
+        record_pre_apply(
+            &state,
+            scope.history_client_id(),
+            "import_backup",
+            crate::tools::instructions::snapshot_paths(scope),
+            "restore from backup",
+        );
+        out.push(crate::tools::instructions::write(scope, &content)?);
+    }
+    Ok(out)
+}
+
+// ── Local Skills (~/.claude/skills) ────────────────────────────
+
+/// 列出本地 skill（读 frontmatter + 启用状态）。
+#[tauri::command]
+pub fn list_skills() -> Result<Vec<crate::tools::skills::Skill>, AppError> {
+    Ok(crate::tools::skills::list_skills())
+}
+
+/// 启用/禁用一个 skill（重命名 manifest）。source 为 claude / codex。
+#[tauri::command]
+pub fn set_skill_enabled(
+    source: String,
+    id: String,
+    enabled: bool,
+) -> Result<crate::tools::skills::Skill, AppError> {
+    crate::tools::skills::set_skill_enabled(&source, &id, enabled)
+}
+
+/// 删除一个 skill 目录（强确认在前端）。
+#[tauri::command]
+pub fn delete_skill(source: String, id: String) -> Result<bool, AppError> {
+    crate::tools::skills::delete_skill(&source, &id)
+}
+
+/// 从本地 ZIP 字节安装一个 skill 到指定来源客户端（前端读文件成字节传入）。
+#[tauri::command]
+pub fn import_skill_from_zip(
+    source: String,
+    bytes: Vec<u8>,
+) -> Result<crate::tools::skills::Skill, AppError> {
+    crate::tools::skills::import_skill_from_zip(&source, &bytes)
+}
+
+/// 导出所有 skill 为可备份 JSON（6.5）。
+#[tauri::command]
+pub fn export_skills() -> Result<crate::tools::skills::SkillsExport, AppError> {
+    Ok(crate::tools::skills::export_skills())
+}
+
+/// 从备份 JSON 恢复 skill（已存在的目录跳过，不覆盖）。
+#[tauri::command]
+pub fn import_skills(payload: String) -> Result<Vec<crate::tools::skills::Skill>, AppError> {
+    crate::tools::skills::import_skills(&payload)
 }
 
 // ── Provider Health Commands ──────────────────────────────────

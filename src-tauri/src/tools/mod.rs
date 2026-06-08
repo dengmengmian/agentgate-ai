@@ -9,4 +9,5 @@ pub mod instructions_templates;
 pub mod mcp;
 pub mod opencode;
 pub mod process_detect;
+pub mod skills;
 pub mod toml_merge;
