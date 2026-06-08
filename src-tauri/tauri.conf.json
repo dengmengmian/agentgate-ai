@@ -39,7 +39,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/dengmengmian/AgentGate/releases/latest/download/latest.json"
+        "https://github.com/dengmengmian/agentgate-ai/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI4NkJFQTc1MUFGNTc0OApSV1JJVjY5UnA3NkdBc0Y5WjNPQ3hLT2R6V1dLaldyVGJsb3dhUTJUQUUxU01GR0lnd3JQTll5Ugo="
     }
