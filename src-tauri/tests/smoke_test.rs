@@ -13,7 +13,10 @@
 //!   AG_SMOKE_TIMEOUT    — per-request timeout seconds (default: 60)
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+
+type DbPool = Pool<SqliteConnectionManager>;
 use std::time::Duration;
 
 use agentgate_lib::gateway::server;
@@ -150,10 +153,10 @@ fn snip(text: &str) -> String {
 /// 隔离在 19090 端口，不与用户 app 同台并发——LIMIT 1 ORDER BY id DESC
 /// 拿到的就是当前测试自己的那条。
 fn fetch_recent_trace(
-    db: &Arc<Mutex<rusqlite::Connection>>,
+    db: &DbPool,
     route: &str,
 ) -> Option<serde_json::Value> {
-    let c = db.lock().ok()?;
+    let c = db.get().ok()?;
     let tj: Option<String> = c
         .query_row(
             "SELECT trace_json FROM request_logs WHERE route = ?1 ORDER BY id DESC LIMIT 1",
@@ -167,14 +170,14 @@ fn fetch_recent_trace(
 /// 把目标 provider 临时设为 active，Drop 时恢复原 active。
 /// 测试用：保证不论 panic / early return / 正常退出，都还原用户的 active 配置。
 struct ActiveProviderGuard {
-    db: Arc<Mutex<rusqlite::Connection>>,
+    db: DbPool,
     original_id: Option<String>,
 }
 
 impl ActiveProviderGuard {
-    fn activate(db: &Arc<Mutex<rusqlite::Connection>>, target_id: &str) -> Result<Self, String> {
+    fn activate(db: &DbPool, target_id: &str) -> Result<Self, String> {
         let original = {
-            let c = db.lock().map_err(|_| "db lock".to_string())?;
+            let c = db.get().map_err(|_| "db pool".to_string())?;
             agentgate_lib::storage::providers::list_all(&c)
                 .map_err(|e| format!("list_all: {}", e.message))?
                 .into_iter()
@@ -182,7 +185,7 @@ impl ActiveProviderGuard {
                 .map(|p| p.id)
         };
         {
-            let c = db.lock().map_err(|_| "db lock".to_string())?;
+            let c = db.get().map_err(|_| "db pool".to_string())?;
             agentgate_lib::storage::providers::set_active(&c, target_id)
                 .map_err(|e| format!("set_active({target_id}): {}", e.message))?;
         }
@@ -196,7 +199,7 @@ impl ActiveProviderGuard {
 impl Drop for ActiveProviderGuard {
     fn drop(&mut self) {
         if let Some(ref id) = self.original_id {
-            if let Ok(c) = self.db.lock() {
+            if let Ok(c) = self.db.get() {
                 let _ = agentgate_lib::storage::providers::set_active(&c, id);
             }
         }
@@ -214,13 +217,16 @@ async fn release_preflight_smoke() {
     println!("\n🔥 AgentGate Release Preflight Smoke Tests");
     println!("   Database: {}", db_file.display());
 
-    // Open real DB (read-only not possible because WAL + migrations need write)
-    let conn = rusqlite::Connection::open(&db_file).expect("open database");
-    let db = Arc::new(Mutex::new(conn));
+    // 走连接池,跟生产路径一致。max_size=4 跟主 init_database 同。
+    let manager = SqliteConnectionManager::file(&db_file);
+    let db: DbPool = Pool::builder()
+        .max_size(4)
+        .build(manager)
+        .expect("build pool");
 
     // Read settings for info
     let settings = {
-        let c = db.lock().unwrap();
+        let c = db.get().unwrap();
         storage::gateway_settings::get(&c).expect("read gateway settings")
     };
     println!(
@@ -394,7 +400,7 @@ async fn release_preflight_smoke() {
 
     // ── 7. Per-provider connectivity (direct upstream ping) ──────────
     let providers = {
-        let c = db.lock().unwrap();
+        let c = db.get().unwrap();
         storage::providers::list_all(&c).unwrap_or_default()
     };
     let enabled: Vec<_> = providers.into_iter().filter(|p| p.enabled).collect();
@@ -1109,7 +1115,7 @@ async fn test_responses_transform_anthropic(
     token: &str,
     base: &str,
     model: &str,
-    db: &Arc<Mutex<rusqlite::Connection>>,
+    db: &DbPool,
 ) -> Result<(), String> {
     let body = serde_json::json!({
         "model": model,
@@ -1145,7 +1151,7 @@ async fn test_responses_transform_gemini(
     token: &str,
     base: &str,
     model: &str,
-    db: &Arc<Mutex<rusqlite::Connection>>,
+    db: &DbPool,
 ) -> Result<(), String> {
     let body = serde_json::json!({
         "model": model,
@@ -1175,7 +1181,7 @@ async fn test_chat_transform_anthropic_non_stream(
     token: &str,
     base: &str,
     model: &str,
-    db: &Arc<Mutex<rusqlite::Connection>>,
+    db: &DbPool,
 ) -> Result<(), String> {
     let body = serde_json::json!({
         "model": model,
@@ -1213,7 +1219,7 @@ async fn test_chat_transform_anthropic_stream(
     token: &str,
     base: &str,
     model: &str,
-    db: &Arc<Mutex<rusqlite::Connection>>,
+    db: &DbPool,
 ) -> Result<(), String> {
     let body = serde_json::json!({
         "model": model,
@@ -1264,7 +1270,7 @@ async fn test_messages_transform_chat_fallback(
     token: &str,
     base: &str,
     model: &str,
-    db: &Arc<Mutex<rusqlite::Connection>>,
+    db: &DbPool,
 ) -> Result<(), String> {
     let body = serde_json::json!({
         "model": model,
@@ -1299,7 +1305,7 @@ async fn test_gemini_input_transform_chat(
     token: &str,
     base: &str,
     model: &str,
-    db: &Arc<Mutex<rusqlite::Connection>>,
+    db: &DbPool,
 ) -> Result<(), String> {
     let body = serde_json::json!({
         "contents": [{"role": "user", "parts": [{"text": "Reply with 'ok'."}]}],
@@ -1333,7 +1339,7 @@ async fn test_passthrough_with_mapping(
     token: &str,
     url: &str,
     body: serde_json::Value,
-    db: &Arc<Mutex<rusqlite::Connection>>,
+    db: &DbPool,
     route: &str,
 ) -> Result<(), String> {
     let (status, text) = smoke_post_json(client, token, url, body).await?;

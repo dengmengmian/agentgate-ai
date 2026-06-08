@@ -5,12 +5,16 @@
 //! the gateway on an OS-assigned port. Tests then hit the gateway over HTTP
 //! exactly like a real client would.
 
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::OnceLock;
 use std::time::Duration;
 
-use rusqlite::{params, Connection};
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+use rusqlite::params;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+
+type DbPool = Pool<SqliteConnectionManager>;
 
 use agentgate_lib::gateway::server;
 use agentgate_lib::security::local_token;
@@ -77,7 +81,7 @@ pub struct GatewayHarness {
     pub gateway_url: String,
     pub token: String,
     pub provider_id: String,
-    pub db: Arc<Mutex<Connection>>,
+    pub db: DbPool,
     shutdown_tx: Option<oneshot::Sender<()>>,
     server_handle: Option<JoinHandle<()>>,
 }
@@ -88,7 +92,13 @@ impl GatewayHarness {
     pub async fn start(spec: ProviderSpec, mock: &MockUpstream) -> Self {
         let token = init_isolated_home_and_token();
 
-        let conn = Connection::open_in_memory().expect("open in-memory db");
+        // 跟生产路径一样:Pool 起步,所有 setup 操作通过 pool.get() 借连接。
+        let manager = SqliteConnectionManager::memory();
+        let pool: DbPool = Pool::builder()
+            .max_size(4)
+            .build(manager)
+            .expect("build in-memory pool");
+        let conn = pool.get().expect("borrow setup conn");
         storage::migrations::run_migrations(&conn).expect("run migrations");
         // Migrations seed real providers (e.g. DeepSeek) + default route
         // profiles wired to them. We want a clean slate so the mock provider
@@ -165,9 +175,10 @@ impl GatewayHarness {
             .expect("add mock provider to route profile");
         }
 
-        let db = Arc::new(Mutex::new(conn));
+        // setup 阶段拿的 conn 在 server::start 前 drop,归还给 pool。
+        drop(conn);
         let (shutdown_tx, server_handle, _counter, port) =
-            server::start("127.0.0.1", 0, db.clone(), None)
+            server::start("127.0.0.1", 0, pool.clone(), None)
                 .await
                 .expect("start gateway");
 
@@ -179,7 +190,7 @@ impl GatewayHarness {
             gateway_url: format!("http://127.0.0.1:{port}"),
             token,
             provider_id,
-            db,
+            db: pool,
             shutdown_tx: Some(shutdown_tx),
             server_handle: Some(server_handle),
         }
@@ -199,7 +210,7 @@ impl GatewayHarness {
         vision_mock: &MockUpstream,
         vision_model: &str,
     ) -> String {
-        let conn = self.db.lock().expect("lock db");
+        let conn = self.db.get().expect("borrow conn");
 
         // Primary becomes explicitly non-vision so vision requests skip it.
         conn.execute(
