@@ -7,6 +7,7 @@ use crate::storage;
 // ── Pet Commands ──────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_pet_settings(
     state: State<'_, AppState>,
 ) -> Result<crate::models::pet::PetSettings, AppError> {
@@ -18,6 +19,7 @@ pub fn get_pet_settings(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_pet_settings(
     input: crate::models::pet::UpdatePetSettingsInput,
     app_handle: tauri::AppHandle,
@@ -33,6 +35,7 @@ pub fn update_pet_settings(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_pet_visible(
     visible: bool,
     app_handle: tauri::AppHandle,

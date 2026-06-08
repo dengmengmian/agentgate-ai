@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct PetSettings {
     pub pet_type: String,
     pub visible: bool,
@@ -8,7 +9,7 @@ pub struct PetSettings {
     pub pos_y: f64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Type)]
 pub struct UpdatePetSettingsInput {
     pub pet_type: Option<String>,
     pub visible: Option<bool>,

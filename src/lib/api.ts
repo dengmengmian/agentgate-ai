@@ -851,6 +851,12 @@ export async function testToolConnection(): Promise<ConnectionTestResult> {
 
 import type { PetSettings, UpdatePetSettingsInput, PetGatewayInfo } from "@/types/pet";
 
+// 注:Rust 端这 3 个 fn 已经加了 #[specta::specta],
+// `src/lib/bindings.ts` 由 cargo test 自动生成,可作为前端类型参考。
+// 当前 api.ts 仍走旧 cmd("...")——pet_type 这种 narrow union 类型
+// 在 bindings 里是 string(Rust DB 字段),手抄 type 更窄,切换前端
+// 需要在边界 cast 或在 Rust 端改 enum,作为后续渐进工作。
+
 export async function getPetSettings(): Promise<PetSettings> {
   return cmd("get_pet_settings");
 }
