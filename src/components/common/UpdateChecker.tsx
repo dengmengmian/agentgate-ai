@@ -20,8 +20,10 @@ export function UpdateChecker() {
           setUpdateAvailable(true);
           setVersion(update.version);
         }
-      } catch {
-        // Silently ignore update check failures
+      } catch (e) {
+        // 自动检查失败不弹 UI（启动时网络抖动很常见，弹窗反而打扰），
+        // 但记录到 console 便于排查 —— 不再完全静默吞掉。
+        console.error("[updater] check failed:", e);
       }
     }
 
@@ -55,9 +57,12 @@ export function UpdateChecker() {
       setProgress(t("update.relaunching"));
       await new Promise((r) => setTimeout(r, 800));
       await relaunch();
-    } catch {
+    } catch (e) {
+      // 用户主动点了"更新"，失败必须反馈，不能静默清空。保留卡片 + 错误文案，
+      // installing 复位让按钮恢复，用户可重试或选稍后。
+      console.error("[updater] install failed:", e);
       setInstalling(false);
-      setProgress("");
+      setProgress(t("update.install_failed"));
     }
   }
 
