@@ -56,3 +56,6 @@ docs/ROADMAP.md
 agentgate-promo
 docs/NEXT_STEPS.md
 .playwright-cli/
+
+# OpenSpec 规划文档(本地用,不入库)
+openspec/

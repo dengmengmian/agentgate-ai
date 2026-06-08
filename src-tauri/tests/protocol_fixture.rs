@@ -151,6 +151,147 @@ async fn l1_messages_to_chat_fallback_transform() {
     harness.shutdown().await;
 }
 
+// ── L3: vision-aware failover routing ───────────────────────────────────
+//
+// Regression for the asymmetry where /v1/chat/completions and /v1/messages
+// did NOT skip vision-incapable providers for image requests (only
+// /v1/responses did). An image request must route to the vision-capable
+// candidate and never touch the non-vision primary.
+
+#[tokio::test]
+async fn messages_image_routes_to_vision_provider() {
+    // Primary (non-vision) + vision candidate, failover mode. An image-bearing
+    // /v1/messages request must land on the vision provider's upstream.
+    let primary_mock = MockUpstream::start().await;
+    primary_mock.stub_chat_completions_ok("novis-model", "ok").await;
+    let vision_mock = MockUpstream::start().await;
+    vision_mock.stub_chat_completions_ok("vis-model", "ok").await;
+
+    let harness =
+        GatewayHarness::start(ProviderSpec::chat_only("custom", "novis-model"), &primary_mock).await;
+    harness.add_vision_failover_candidate(&vision_mock, "vis-model");
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/messages"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "model": "novis-model",
+            "max_tokens": 16,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    { "type": "text", "text": "describe this" },
+                    { "type": "image", "source": { "type": "base64", "media_type": "image/png", "data": "iVBORw0KGgo=" } }
+                ]
+            }]
+        }))
+        .send()
+        .await
+        .expect("send /v1/messages");
+    assert!(res.status().is_success(), "gateway returned {}", res.status());
+
+    let vision_hits = vision_mock.received().await;
+    let primary_hits = primary_mock.received().await;
+    assert_eq!(
+        vision_hits.len(),
+        1,
+        "image request must reach the vision provider"
+    );
+    assert_eq!(
+        primary_hits.len(),
+        0,
+        "non-vision primary must be skipped for image requests"
+    );
+
+    harness.shutdown().await;
+}
+
+#[tokio::test]
+async fn chat_completions_image_routes_to_vision_provider() {
+    // Same guarantee on the /v1/chat/completions entry.
+    let primary_mock = MockUpstream::start().await;
+    primary_mock.stub_chat_completions_ok("novis-model", "ok").await;
+    let vision_mock = MockUpstream::start().await;
+    vision_mock.stub_chat_completions_ok("vis-model", "ok").await;
+
+    let harness =
+        GatewayHarness::start(ProviderSpec::chat_only("custom", "novis-model"), &primary_mock).await;
+    harness.add_vision_failover_candidate(&vision_mock, "vis-model");
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/chat/completions"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "model": "novis-model",
+            "max_tokens": 16,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    { "type": "text", "text": "describe this" },
+                    { "type": "image_url", "image_url": { "url": "data:image/png;base64,iVBORw0KGgo=" } }
+                ]
+            }]
+        }))
+        .send()
+        .await
+        .expect("send /v1/chat/completions");
+    assert!(res.status().is_success(), "gateway returned {}", res.status());
+
+    let vision_hits = vision_mock.received().await;
+    let primary_hits = primary_mock.received().await;
+    assert_eq!(
+        vision_hits.len(),
+        1,
+        "image request must reach the vision provider"
+    );
+    assert_eq!(
+        primary_hits.len(),
+        0,
+        "non-vision primary must be skipped for image requests"
+    );
+
+    harness.shutdown().await;
+}
+
+#[tokio::test]
+async fn messages_text_only_stays_on_primary() {
+    // Control: a text-only /v1/messages request must NOT be rerouted — it stays
+    // on the primary even though a vision candidate exists.
+    let primary_mock = MockUpstream::start().await;
+    primary_mock.stub_chat_completions_ok("novis-model", "ok").await;
+    let vision_mock = MockUpstream::start().await;
+    vision_mock.stub_chat_completions_ok("vis-model", "ok").await;
+
+    let harness =
+        GatewayHarness::start(ProviderSpec::chat_only("custom", "novis-model"), &primary_mock).await;
+    harness.add_vision_failover_candidate(&vision_mock, "vis-model");
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/messages"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "model": "novis-model",
+            "max_tokens": 16,
+            "messages": [{ "role": "user", "content": "just text" }]
+        }))
+        .send()
+        .await
+        .expect("send /v1/messages");
+    assert!(res.status().is_success(), "gateway returned {}", res.status());
+
+    let primary_hits = primary_mock.received().await;
+    assert_eq!(
+        primary_hits.len(),
+        1,
+        "text-only request must stay on the primary provider"
+    );
+
+    harness.shutdown().await;
+}
+
 // ── L2: model mapping + agentgate virtual model ─────────────────────────
 
 #[tokio::test]

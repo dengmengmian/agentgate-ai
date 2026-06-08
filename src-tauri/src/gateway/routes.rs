@@ -296,63 +296,14 @@ pub async fn handle_responses(
     // Detect if request contains images (for vision-aware routing)
     let request_has_images = request_contains_images(&req);
 
-    // Build ordered list: selected provider first, then remaining candidates
-    // Skip providers that don't support vision when request has images
-    let mut attempt_order: Vec<&crate::gateway::provider_selector::ProviderCandidate> = Vec::new();
-    // Primary
-    if let Some(primary) = candidates
-        .iter()
-        .find(|c| c.provider_id == selection.provider.id)
-    {
-        if !request_has_images || primary.supports_vision != Some(false) {
-            attempt_order.push(primary);
-        }
-    }
-    // Remaining (for failover)
-    if is_failover {
-        for c in &candidates {
-            if c.provider_id != selection.provider.id && !c.in_cooldown {
-                if request_has_images && c.supports_vision == Some(false) {
-                    continue; // Skip providers that explicitly don't support vision
-                }
-                attempt_order.push(c);
-            }
-        }
-    }
-    // If all candidates were skipped (all lack vision), fall back to original order
-    if attempt_order.is_empty() {
-        if let Some(primary) = candidates
-            .iter()
-            .find(|c| c.provider_id == selection.provider.id)
-        {
-            attempt_order.push(primary);
-        }
-        if is_failover {
-            for c in &candidates {
-                if c.provider_id != selection.provider.id && !c.in_cooldown {
-                    attempt_order.push(c);
-                }
-            }
-        }
-    }
-
-    // Session affinity: if the previous turn of this conversation hit the
-    // upstream prompt cache on a specific provider, move that provider to
-    // the front of attempt_order. Skip when the affinity provider isn't in
-    // the candidate set or is in cooldown — affinity is a hint, not a pin.
-    if let Some(ref sid) = session_id {
-        if let Some(entry) = crate::gateway::session_affinity::lookup(sid) {
-            if let Some(pos) = attempt_order
-                .iter()
-                .position(|c| c.provider_id == entry.provider_id && !c.in_cooldown)
-            {
-                if pos > 0 {
-                    let preferred = attempt_order.remove(pos);
-                    attempt_order.insert(0, preferred);
-                }
-            }
-        }
-    }
+    // 主 provider 优先 + failover 候选 + vision 过滤 + 会话亲和,统一由 failover 模块构建。
+    let attempt_order = crate::gateway::failover::build_attempt_order(
+        &candidates,
+        &selection.provider.id,
+        is_failover,
+        request_has_images,
+        session_id.as_deref(),
+    );
 
     let mut last_error: Option<AppError> = None;
     let mut attempts_trace: Vec<serde_json::Value> = Vec::new();
@@ -812,7 +763,7 @@ async fn handle_non_stream_response(
             }
 
             // Extract token usage from upstream
-            let (in_tok, out_tok) = extract_usage(&upstream_json);
+            let (in_tok, out_tok) = crate::gateway::usage::extract_chat(&upstream_json);
             let (cache_w, cache_r) = chat_resp
                 .usage
                 .as_ref()
@@ -851,10 +802,12 @@ async fn handle_non_stream_response(
                 200,
                 latency,
                 Some(&trace),
-                in_tok,
-                out_tok,
-                cache_w,
-                cache_r,
+                crate::gateway::usage::TokenUsage {
+                    input: in_tok,
+                    output: out_tok,
+                    cache_write: cache_w,
+                    cache_read: cache_r,
+                },
             );
 
             Ok(Json(responses_resp).into_response())
@@ -1151,10 +1104,12 @@ async fn handle_stream_response(
                             200,
                             latency,
                             Some(&trace),
-                            in_tok,
-                            out_tok,
-                            cache_w,
-                            cache_r,
+                            crate::gateway::usage::TokenUsage {
+                                input: in_tok,
+                                output: out_tok,
+                                cache_write: cache_w,
+                                cache_read: cache_r,
+                            },
                         );
                     }
                     Err(err_msg) => {
@@ -1296,7 +1251,7 @@ async fn handle_anthropic_non_stream_response(
                 "output": output
             });
             let latency = start.elapsed().as_millis() as i64;
-            let (in_tok, out_tok) = extract_anthropic_usage(&upstream_json);
+            let (in_tok, out_tok) = crate::gateway::usage::extract_anthropic(&upstream_json);
             let (cache_w, cache_r) = upstream_json
                 .get("usage")
                 .map(crate::storage::request_logs::extract_cache_tokens)
@@ -1331,10 +1286,12 @@ async fn handle_anthropic_non_stream_response(
                 200,
                 latency,
                 Some(&trace),
-                in_tok,
-                out_tok,
-                cache_w,
-                cache_r,
+                crate::gateway::usage::TokenUsage {
+                    input: in_tok,
+                    output: out_tok,
+                    cache_write: cache_w,
+                    cache_read: cache_r,
+                },
             );
 
             Ok(Json(responses_resp).into_response())
@@ -1455,10 +1412,12 @@ async fn handle_anthropic_stream_response(
                             200,
                             latency,
                             Some(&trace),
-                            in_tok,
-                            out_tok,
-                            cache_w,
-                            cache_r,
+                            crate::gateway::usage::TokenUsage {
+                                input: in_tok,
+                                output: out_tok,
+                                cache_write: cache_w,
+                                cache_read: cache_r,
+                            },
                         );
                     }
                     Err(err_msg) => {
@@ -1511,17 +1470,6 @@ async fn handle_anthropic_stream_response(
             Err(GatewayError(err))
         }
     }
-}
-
-fn extract_anthropic_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i64>) {
-    let usage = upstream.get("usage");
-    let input = usage
-        .and_then(|u| u.get("input_tokens"))
-        .and_then(|v| v.as_i64());
-    let output = usage
-        .and_then(|u| u.get("output_tokens"))
-        .and_then(|v| v.as_i64());
-    (input, output)
 }
 
 // ── Gemini API handlers ──────────────────────────────────────
@@ -1612,7 +1560,7 @@ async fn handle_gemini_non_stream_response(
                 "output": output
             });
             let latency = start.elapsed().as_millis() as i64;
-            let (in_tok, out_tok) = extract_gemini_usage(&upstream_json);
+            let (in_tok, out_tok) = crate::gateway::usage::extract_gemini(&upstream_json);
             if let Some(ref sid) = session_id {
                 if let Some(usage) = upstream_json.get("usageMetadata") {
                     crate::gateway::session_affinity::record_if_cache_hit(sid, &provider_id, usage);
@@ -1635,10 +1583,12 @@ async fn handle_gemini_non_stream_response(
                 200,
                 latency,
                 Some(&trace),
-                in_tok,
-                out_tok,
-                None,
-                None,
+                crate::gateway::usage::TokenUsage {
+                    input: in_tok,
+                    output: out_tok,
+                    cache_write: None,
+                    cache_read: None,
+                },
             );
             Ok(Json(responses_resp).into_response())
         }
@@ -1739,10 +1689,12 @@ async fn handle_gemini_stream_response(
                             200,
                             latency,
                             Some(&trace),
-                            in_tok,
-                            out_tok,
-                            None,
-                            None,
+                            crate::gateway::usage::TokenUsage {
+                                input: in_tok,
+                                output: out_tok,
+                                cache_write: None,
+                                cache_read: None,
+                            },
                         );
                     }
                     Err(err_msg) => {
@@ -1794,17 +1746,6 @@ async fn handle_gemini_stream_response(
             Err(GatewayError(err))
         }
     }
-}
-
-fn extract_gemini_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i64>) {
-    let usage = upstream.get("usageMetadata");
-    let input = usage
-        .and_then(|u| u.get("promptTokenCount"))
-        .and_then(|v| v.as_i64());
-    let output = usage
-        .and_then(|u| u.get("candidatesTokenCount"))
-        .and_then(|v| v.as_i64());
-    (input, output)
 }
 
 // ── POST /v1beta/models/:model:generateContent (Gemini CLI input) ──
@@ -2059,10 +2000,7 @@ pub async fn handle_gemini_generate(
                         200,
                         latency,
                         Some(&trace),
-                        None,
-                        None,
-                        None,
-                        None,
+                        crate::gateway::usage::TokenUsage::default(),
                     );
                 }
             });
@@ -2087,7 +2025,7 @@ pub async fn handle_gemini_generate(
             match result {
                 Ok(upstream_json) => {
                     let latency = start.elapsed().as_millis() as i64;
-                    let (in_tok, out_tok) = extract_gemini_usage(&upstream_json);
+                    let (in_tok, out_tok) = crate::gateway::usage::extract_gemini(&upstream_json);
                     let trace = json!({"mode": "native_pass_through", "protocol": "gemini", "stream": false}).to_string();
                     log_request_success(
                         &state.db,
@@ -2104,10 +2042,12 @@ pub async fn handle_gemini_generate(
                         200,
                         latency,
                         Some(&trace),
-                        in_tok,
-                        out_tok,
-                        None,
-                        None,
+                        crate::gateway::usage::TokenUsage {
+                            input: in_tok,
+                            output: out_tok,
+                            cache_write: None,
+                            cache_read: None,
+                        },
                     );
                     return Ok(Json(upstream_json).into_response());
                 }
@@ -2290,10 +2230,7 @@ pub async fn handle_gemini_generate(
                 200,
                 latency,
                 Some(&trace),
-                None,
-                None,
-                None,
-                None,
+                crate::gateway::usage::TokenUsage::default(),
             );
         });
 
@@ -2319,7 +2256,7 @@ pub async fn handle_gemini_generate(
                 let gemini_resp =
                     gemini_to_chat::response_to_gemini(&upstream_json, &resolved_model);
                 let latency = start.elapsed().as_millis() as i64;
-                let (in_tok, out_tok) = extract_usage(&upstream_json);
+                let (in_tok, out_tok) = crate::gateway::usage::extract_chat(&upstream_json);
                 let trace = trace_with_degradation_events(
                     json!({"protocol": "gemini_input"}),
                     &chat_req.diagnostic_events,
@@ -2339,10 +2276,12 @@ pub async fn handle_gemini_generate(
                     200,
                     latency,
                     Some(&trace),
-                    in_tok,
-                    out_tok,
-                    None,
-                    None,
+                    crate::gateway::usage::TokenUsage {
+                        input: in_tok,
+                        output: out_tok,
+                        cache_write: None,
+                        cache_read: None,
+                    },
                 );
                 Ok(Json(gemini_resp).into_response())
             }
@@ -2435,20 +2374,16 @@ pub async fn handle_chat_completions(
     let candidates = selection.candidates.clone();
     let raw_body = sanitize_body(&body);
 
-    let mut attempt_order: Vec<&crate::gateway::provider_selector::ProviderCandidate> = Vec::new();
-    if let Some(primary) = candidates
-        .iter()
-        .find(|c| c.provider_id == selection.provider.id)
-    {
-        attempt_order.push(primary);
-    }
-    if is_failover {
-        for c in &candidates {
-            if c.provider_id != selection.provider.id && !c.in_cooldown {
-                attempt_order.push(c);
-            }
-        }
-    }
+    // 带图请求跳过显式不支持 vision 的 provider(与 /v1/responses 对齐)。
+    // 会话亲和暂不在 chat 入口启用(保持既有行为)。
+    let request_has_images = chat_request_has_images(&body);
+    let attempt_order = crate::gateway::failover::build_attempt_order(
+        &candidates,
+        &selection.provider.id,
+        is_failover,
+        request_has_images,
+        None,
+    );
 
     let mut last_error: Option<AppError> = None;
 
@@ -2730,10 +2665,12 @@ async fn client_chat_to_anthropic_handle(
                 200,
                 latency,
                 Some(&trace),
-                in_tok,
-                out_tok,
-                cache_w,
-                cache_r,
+                crate::gateway::usage::TokenUsage {
+                    input: in_tok,
+                    output: out_tok,
+                    cache_write: cache_w,
+                    cache_read: cache_r,
+                },
             );
             Ok(Json(chat_resp).into_response())
         }
@@ -2967,10 +2904,12 @@ async fn client_chat_to_anthropic_stream(
                     200,
                     latency,
                     Some(&trace),
-                    in_tok,
-                    out_tok,
-                    cache_w,
-                    cache_r,
+                    crate::gateway::usage::TokenUsage {
+                        input: in_tok,
+                        output: out_tok,
+                        cache_write: cache_w,
+                        cache_read: cache_r,
+                    },
                 );
             }
             Some(msg) => {
@@ -3040,7 +2979,7 @@ pub async fn handle_messages(
         .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(str::to_string));
 
     // Select provider — try anthropic_messages protocol first, then openai_responses as fallback
-    let selection = crate::gateway::provider_selector::select_for_failover(
+    let mut selection = crate::gateway::provider_selector::select_for_failover(
         &state.db,
         "anthropic_messages",
         requested_model.as_deref(),
@@ -3067,6 +3006,30 @@ pub async fn handle_messages(
         );
         GatewayError(e)
     })?;
+
+    // 带图请求跳过显式不支持 vision 的 provider(与 /v1/responses 对齐)。
+    // messages 入口无 failover 循环、直接用 selection.provider,故在此就近用统一排序
+    // 选出支持 vision 的候选替换掉选中的 provider/model。
+    if anthropic_request_has_images(&body) {
+        let is_failover = selection.mode == "failover" && selection.candidates.len() > 1;
+        let order = crate::gateway::failover::build_attempt_order(
+            &selection.candidates,
+            &selection.provider.id,
+            is_failover,
+            true,
+            None,
+        );
+        if let Some(top) = order.first() {
+            if top.provider_id != selection.provider.id {
+                let replacement = lock_db(&state.db)
+                    .and_then(|conn| crate::storage::providers::get_by_id(&conn, &top.provider_id).ok());
+                if let Some(provider) = replacement {
+                    selection.model = top.model.clone();
+                    selection.provider = provider;
+                }
+            }
+        }
+    }
 
     let config = ProviderConfig::from_provider(&selection.provider).map_err(|e| {
         log_request_error(
@@ -3218,7 +3181,7 @@ pub async fn handle_messages(
             let response =
                 crate::protocol::anthropic_messages::from_chat_response(&upstream_json, &model);
             let latency = start.elapsed().as_millis() as i64;
-            let (in_tok, out_tok) = extract_usage(&upstream_json);
+            let (in_tok, out_tok) = crate::gateway::usage::extract_chat(&upstream_json);
             let (cache_w, cache_r) = upstream_json
                 .get("usage")
                 .map(crate::storage::request_logs::extract_cache_tokens)
@@ -3242,10 +3205,12 @@ pub async fn handle_messages(
                 200,
                 latency,
                 Some(&trace),
-                in_tok,
-                out_tok,
-                cache_w,
-                cache_r,
+                crate::gateway::usage::TokenUsage {
+                    input: in_tok,
+                    output: out_tok,
+                    cache_write: cache_w,
+                    cache_read: cache_r,
+                },
             );
             Ok(Json(response).into_response())
         }
@@ -3481,10 +3446,12 @@ async fn handle_anthropic_fallback_stream(
             200,
             latency,
             Some(&trace),
-            in_tok,
-            out_tok,
-            cache_w,
-            cache_r,
+            crate::gateway::usage::TokenUsage {
+                input: in_tok,
+                output: out_tok,
+                cache_write: cache_w,
+                cache_read: cache_r,
+            },
         );
     });
 
@@ -4174,6 +4141,60 @@ mod tests {
             "rev iter must skip tool items and find last user message"
         );
     }
+
+    #[test]
+    fn chat_request_has_images_true_for_current_user_image_url() {
+        let body = json!({"messages": [
+            {"role": "user", "content": [
+                {"type": "text", "text": "what is this"},
+                {"type": "image_url", "image_url": {"url": "x"}}
+            ]}
+        ]})
+        .to_string();
+        assert!(chat_request_has_images(&body));
+    }
+
+    #[test]
+    fn chat_request_has_images_false_for_text_only() {
+        let body = json!({"messages": [
+            {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+        ]})
+        .to_string();
+        assert!(!chat_request_has_images(&body));
+    }
+
+    #[test]
+    fn chat_request_has_images_ignores_historic_image() {
+        // 历史 turn 发过图,但当前(最后一条)user 是纯文本 → 不算
+        let body = json!({"messages": [
+            {"role": "user", "content": [{"type": "image_url", "image_url": {"url": "x"}}]},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": [{"type": "text", "text": "and now"}]}
+        ]})
+        .to_string();
+        assert!(!chat_request_has_images(&body));
+    }
+
+    #[test]
+    fn anthropic_request_has_images_true_for_current_user_image_block() {
+        let body = json!({"messages": [
+            {"role": "user", "content": [
+                {"type": "text", "text": "describe"},
+                {"type": "image", "source": {"type": "base64", "data": "x"}}
+            ]}
+        ]})
+        .to_string();
+        assert!(anthropic_request_has_images(&body));
+    }
+
+    #[test]
+    fn anthropic_request_has_images_false_for_text_only() {
+        let body = json!({"messages": [
+            {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+        ]})
+        .to_string();
+        assert!(!anthropic_request_has_images(&body));
+    }
 }
 
 fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayError> {
@@ -4288,6 +4309,45 @@ fn request_contains_images(req: &ResponsesRequest) -> bool {
     }
 }
 
+/// 取 `body.messages` 里最后一条 `role=="user"` 的 content,判断是否含指定 type 的图片块。
+/// 语义与 [`request_contains_images`] 对齐:只看当前 turn,历史图片不算
+/// ——避免某轮发图后整个会话被强制路由到 vision 模型。
+fn last_user_content_has_images(body: &Value, image_types: &[&str]) -> bool {
+    let messages = match body.get("messages").and_then(|m| m.as_array()) {
+        Some(m) => m,
+        None => return false,
+    };
+    let last_user = messages
+        .iter()
+        .rev()
+        .find(|m| m.get("role").and_then(|r| r.as_str()) == Some("user"));
+    let content = match last_user.and_then(|m| m.get("content")) {
+        Some(c) => c,
+        None => return false,
+    };
+    match content {
+        Value::Array(arr) => arr.iter().any(|item| {
+            let t = item.get("type").and_then(|t| t.as_str()).unwrap_or("");
+            image_types.contains(&t)
+        }),
+        _ => false,
+    }
+}
+
+/// Chat Completions 请求体最后一条 user message 是否含图片(`image_url`)。
+fn chat_request_has_images(body: &str) -> bool {
+    serde_json::from_str::<Value>(body)
+        .map(|v| last_user_content_has_images(&v, &["image_url"]))
+        .unwrap_or(false)
+}
+
+/// Anthropic Messages 请求体最后一条 user message 是否含图片(`image` block)。
+fn anthropic_request_has_images(body: &str) -> bool {
+    serde_json::from_str::<Value>(body)
+        .map(|v| last_user_content_has_images(&v, &["image"]))
+        .unwrap_or(false)
+}
+
 fn sanitize_body(body: &str) -> String {
     // Simple api key sanitization in request bodies
     let mut s = body.to_string();
@@ -4319,17 +4379,6 @@ fn truncate_str(s: &str, max: usize) -> String {
         boundary -= 1;
     }
     s[..boundary].to_string()
-}
-
-fn extract_usage(upstream: &serde_json::Value) -> (Option<i64>, Option<i64>) {
-    let usage = upstream.get("usage");
-    let input = usage
-        .and_then(|u| u.get("prompt_tokens").or(u.get("input_tokens")))
-        .and_then(|v| v.as_i64());
-    let output = usage
-        .and_then(|u| u.get("completion_tokens").or(u.get("output_tokens")))
-        .and_then(|v| v.as_i64());
-    (input, output)
 }
 
 fn trace_with_degradation_events(
@@ -4514,11 +4563,14 @@ fn log_request_success(
     status_code: i64,
     latency_ms: i64,
     trace_json: Option<&str>,
-    input_tokens: Option<i64>,
-    output_tokens: Option<i64>,
-    cache_write_tokens: Option<i64>,
-    cache_read_tokens: Option<i64>,
+    usage: crate::gateway::usage::TokenUsage,
 ) {
+    let crate::gateway::usage::TokenUsage {
+        input: input_tokens,
+        output: output_tokens,
+        cache_write: cache_write_tokens,
+        cache_read: cache_read_tokens,
+    } = usage;
     if let Some(conn) = lock_db(db) {
         // Calculate cost from pricing table
         let cost = crate::storage::pricing::calculate_cost_for_request(

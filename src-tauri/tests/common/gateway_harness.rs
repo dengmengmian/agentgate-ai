@@ -185,6 +185,89 @@ impl GatewayHarness {
         }
     }
 
+    /// Turn this single-provider harness into a 2-provider failover scenario
+    /// for vision-routing tests: marks the existing (primary) provider as
+    /// **non-vision** (`supports_vision=0`), inserts a **vision-capable**
+    /// second provider wired to `vision_mock`, and flips the default route
+    /// profiles to `failover` mode so both become candidates. Returns the
+    /// vision provider's id.
+    ///
+    /// Distinct mocks let a test assert *which* provider handled the request:
+    /// an image request must land on `vision_mock`, never the primary's mock.
+    pub fn add_vision_failover_candidate(
+        &self,
+        vision_mock: &MockUpstream,
+        vision_model: &str,
+    ) -> String {
+        let conn = self.db.lock().expect("lock db");
+
+        // Primary becomes explicitly non-vision so vision requests skip it.
+        conn.execute(
+            "UPDATE providers SET supports_vision = 0 WHERE id = ?1",
+            params![self.provider_id],
+        )
+        .expect("mark primary non-vision");
+
+        let vision_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO providers (
+                id, name, provider_type, base_url, api_key, default_model, reasoning_model,
+                supported_models, model_mapping, extra_headers, anthropic_base_url,
+                responses_base_url, protocol, timeout_seconds, status, auto_cache_control,
+                model_capabilities, enabled, is_active, created_at, updated_at, supports_vision
+             ) VALUES (
+                ?1, 'mock-vision', 'custom', ?2, 'sk-test-key', ?3, NULL,
+                NULL, NULL, NULL, NULL,
+                NULL, ?4, 30, 'ok', 0,
+                NULL, 1, 0, ?5, ?5, 1
+             )",
+            params![
+                &vision_id,
+                &vision_mock.url(),
+                vision_model,
+                r#"["openai_chat_completions","anthropic_messages"]"#,
+                &now,
+            ],
+        )
+        .expect("insert vision provider");
+
+        // Wire the vision provider into every default profile at a lower
+        // priority (runs after primary) and switch profiles to failover.
+        let profile_ids: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT id FROM route_profiles WHERE is_default = 1")
+                .expect("prepare profile lookup");
+            stmt.query_map([], |row| row.get::<_, String>(0))
+                .expect("query profiles")
+                .filter_map(|r| r.ok())
+                .collect()
+        };
+        for profile_id in &profile_ids {
+            storage::route_profiles::add_provider(
+                &conn,
+                profile_id,
+                &vision_id,
+                agentgate_lib::models::route_profile::AddProviderToRouteInput {
+                    priority: Some(2),
+                    model_override: None,
+                    cooldown_seconds: Some(0),
+                    failover_on_status_codes: None,
+                    failover_on_error_keywords: None,
+                    routing_conditions: None,
+                },
+            )
+            .expect("add vision provider to route profile");
+            conn.execute(
+                "UPDATE route_profiles SET mode = 'failover' WHERE id = ?1",
+                params![profile_id],
+            )
+            .expect("set failover mode");
+        }
+
+        vision_id
+    }
+
     pub fn client(&self) -> reqwest::Client {
         reqwest::Client::builder()
             .timeout(Duration::from_secs(15))

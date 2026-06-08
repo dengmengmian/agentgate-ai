@@ -1,6 +1,7 @@
 pub mod anthropic_model_suffix;
 pub mod body_decode;
 pub mod circuit_breaker;
+pub mod failover;
 pub mod metrics;
 pub mod pass_through;
 pub mod provider_selector;
@@ -15,3 +16,4 @@ pub mod sse;
 pub mod sse_anthropic;
 pub mod sse_bootstrap;
 pub mod sse_gemini;
+pub mod usage;
