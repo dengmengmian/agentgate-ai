@@ -170,7 +170,7 @@ mod tests {
     #[test]
     fn test_gateway_error_has_type_field() {
         let err = GatewayError(
-            AppError::new("UPSTREAM_STREAM_ERROR", "Provider failed").with_detail("HTTP 502"),
+            AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, "Provider failed").with_detail("HTTP 502"),
         );
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
@@ -179,19 +179,19 @@ mod tests {
     #[test]
     fn test_gateway_error_status_mapping() {
         assert_eq!(
-            GatewayError(AppError::new("RESPONSES_PARSE_ERROR", "bad"))
+            GatewayError(AppError::new(crate::errors::codes::RESPONSES_PARSE_ERROR, "bad"))
                 .into_response()
                 .status(),
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
-            GatewayError(AppError::new("PROVIDER_API_KEY_MISSING", "no key"))
+            GatewayError(AppError::new(crate::errors::codes::PROVIDER_API_KEY_MISSING, "no key"))
                 .into_response()
                 .status(),
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            GatewayError(AppError::new("ACTIVE_PROVIDER_NOT_FOUND", "none"))
+            GatewayError(AppError::new(crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND, "none"))
                 .into_response()
                 .status(),
             StatusCode::SERVICE_UNAVAILABLE
@@ -207,13 +207,13 @@ mod tests {
     #[test]
     fn test_gateway_error_auth_status_codes() {
         assert_eq!(
-            GatewayError(AppError::new("GATEWAY_AUTH_MISSING", "no auth"))
+            GatewayError(AppError::new(crate::errors::codes::GATEWAY_AUTH_MISSING, "no auth"))
                 .into_response()
                 .status(),
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            GatewayError(AppError::new("GATEWAY_AUTH_INVALID", "bad token"))
+            GatewayError(AppError::new(crate::errors::codes::GATEWAY_AUTH_INVALID, "bad token"))
                 .into_response()
                 .status(),
             StatusCode::UNAUTHORIZED

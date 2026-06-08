@@ -191,7 +191,7 @@ pub async fn handle_chat_completions(
 
         if decision.mode != crate::gateway::route_decision::RouteMode::PassThrough {
             last_error = Some(AppError::new(
-                "PROTOCOL_TRANSFORM_NOT_SUPPORTED",
+                crate::errors::codes::PROTOCOL_TRANSFORM_NOT_SUPPORTED,
                 "Not a pass-through provider",
             ));
             continue;
@@ -254,7 +254,7 @@ pub async fn handle_chat_completions(
     }
 
     Err(GatewayError(last_error.unwrap_or_else(|| {
-        AppError::new("FAILOVER_EXHAUSTED", "All providers failed")
+        AppError::new(crate::errors::codes::FAILOVER_EXHAUSTED, "All providers failed")
     })))
 }
 
@@ -283,7 +283,7 @@ async fn client_chat_to_anthropic_handle(
     // 1. 解析 Chat 请求
     let mut chat_req: ChatCompletionsRequest = serde_json::from_str(body).map_err(|e| {
         let err = AppError::new(
-            "CHAT_PARSE_ERROR",
+            crate::errors::codes::CHAT_PARSE_ERROR,
             format!("Failed to parse chat request: {e}"),
         );
         log_request_error(
@@ -625,7 +625,7 @@ async fn client_chat_to_anthropic_stream(
                 );
             }
             Some(msg) => {
-                let err = AppError::new("UPSTREAM_STREAM_ERROR", &msg);
+                let err = AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, &msg);
                 log_request_error_full(
                     &db,
                     &client_type_owned,

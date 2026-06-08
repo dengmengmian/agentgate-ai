@@ -596,7 +596,7 @@ pub fn export_bundle(
     let export_dir = local_token::token_dir().join("diagnostics");
     fs::create_dir_all(&export_dir).map_err(|e| {
         crate::errors::AppError::new(
-            "DIAGNOSTIC_EXPORT_FAILED",
+            crate::errors::codes::DIAGNOSTIC_EXPORT_FAILED,
             format!("Cannot create dir: {e}"),
         )
     })?;
@@ -605,7 +605,7 @@ pub fn export_bundle(
     let bundle_dir = export_dir.join(format!("agentgate-diag-{ts}"));
     fs::create_dir_all(&bundle_dir).map_err(|e| {
         crate::errors::AppError::new(
-            "DIAGNOSTIC_EXPORT_FAILED",
+            crate::errors::codes::DIAGNOSTIC_EXPORT_FAILED,
             format!("Cannot create bundle dir: {e}"),
         )
     })?;

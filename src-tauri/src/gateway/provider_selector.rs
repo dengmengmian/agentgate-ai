@@ -289,7 +289,7 @@ fn select_global_fallback(
 ) -> Result<ProviderSelection, AppError> {
     let settings = storage::gateway_settings::get(conn)?;
     let provider_id = settings.active_provider_id.ok_or_else(|| {
-        AppError::new("ACTIVE_PROVIDER_NOT_FOUND", "No active provider configured")
+        AppError::new(crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND, "No active provider configured")
             .with_suggestion("Set an active provider in the Providers page")
     })?;
 
@@ -335,7 +335,7 @@ pub fn select_for_failover(
         let rp_providers = storage::route_profiles::list_providers(&conn, &profile.id)?;
         if rp_providers.is_empty() {
             return Err(AppError::new(
-                "ROUTE_PROFILE_EMPTY",
+                crate::errors::codes::ROUTE_PROFILE_EMPTY,
                 "Route profile has no providers",
             ));
         }
@@ -345,7 +345,7 @@ pub fn select_for_failover(
             build_candidates(&conn, &rp_providers, requested_model, analysis.as_ref())?;
         if candidates.is_empty() {
             return Err(AppError::new(
-                "NO_PROVIDER_CANDIDATE",
+                crate::errors::codes::NO_PROVIDER_CANDIDATE,
                 "No available provider candidate",
             ));
         }

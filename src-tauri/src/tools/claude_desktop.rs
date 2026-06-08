@@ -53,7 +53,7 @@ pub fn paths() -> Result<DesktopPaths, AppError> {
     #[cfg(not(target_os = "macos"))]
     {
         Err(AppError::new(
-            "CLAUDE_DESKTOP_UNSUPPORTED_OS",
+            crate::errors::codes::CLAUDE_DESKTOP_UNSUPPORTED_OS,
             "Claude Desktop 接入目前仅支持 macOS",
         ))
     }
@@ -166,7 +166,7 @@ fn write_json(path: &PathBuf, value: &Value) -> Result<(), AppError> {
         .map_err(|e| AppError::internal(format!("serialize json: {e}")))?;
     fs::write(path, data).map_err(|e| {
         AppError::new(
-            "CLAUDE_DESKTOP_WRITE_FAILED",
+            crate::errors::codes::CLAUDE_DESKTOP_WRITE_FAILED,
             format!("写入 {} 失败: {e}", path.display()),
         )
     })
@@ -177,7 +177,7 @@ fn write_json(path: &PathBuf, value: &Value) -> Result<(), AppError> {
 fn upsert_applied_profile(meta_path: &PathBuf, id: &str, name: &str) -> Result<(), AppError> {
     let mut meta = read_json(meta_path).unwrap_or_else(|| json!({}));
     let obj = meta.as_object_mut().ok_or_else(|| {
-        AppError::new("CLAUDE_DESKTOP_META_INVALID", "_meta.json 不是 JSON 对象")
+        AppError::new(crate::errors::codes::CLAUDE_DESKTOP_META_INVALID, "_meta.json 不是 JSON 对象")
     })?;
     let mut entries = obj
         .get("entries")
@@ -198,11 +198,11 @@ fn upsert_applied_profile(meta_path: &PathBuf, id: &str, name: &str) -> Result<(
 pub fn apply(host: &str, port: i64, token: &str) -> Result<ClaudeDesktopApplyResult, AppError> {
     let p = paths()?;
     let lib_dir = p.profile.parent().ok_or_else(|| {
-        AppError::new("CLAUDE_DESKTOP_PATH_INVALID", "无法解析 configLibrary 路径")
+        AppError::new(crate::errors::codes::CLAUDE_DESKTOP_PATH_INVALID, "无法解析 configLibrary 路径")
     })?;
     if !lib_dir.exists() {
         return Err(AppError::new(
-            "CLAUDE_DESKTOP_NO_3P",
+            crate::errors::codes::CLAUDE_DESKTOP_NO_3P,
             "未检测到 Claude Desktop 的第三方网关(3p)配置目录。请先在 Claude Desktop 里启用一次第三方推理网关，再回来应用。",
         ));
     }

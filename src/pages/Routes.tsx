@@ -27,8 +27,8 @@ import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
 import * as api from "@/lib/api";
+import { useProviders, useRouteProfiles } from "@/store/global";
 import type { RouteProfileView, RouteProfileDetail, RoutingConditions, RouteProfileStats } from "@/types/route-profile";
-import type { ProviderView } from "@/types/provider";
 
 const PROTOCOL_LABELS: Record<string, string> = {
   openai_responses: "OpenAI Responses (Codex)",
@@ -42,9 +42,9 @@ function protocolLabel(proto: string): string {
 
 export function Routes() {
   const { t } = useI18n();
-  const [profiles, setProfiles] = useState<RouteProfileView[]>([]);
+  const profiles = useRouteProfiles(s => s.items);
+  const providers = useProviders(s => s.items);
   const [detail, setDetail] = useState<RouteProfileDetail | null>(null);
-  const [providers, setProviders] = useState<ProviderView[]>([]);
   const [profileStats, setProfileStats] = useState<Record<string, RouteProfileStats>>({});
   const [loading, setLoading] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<RouteProfileView | null>(null);
@@ -59,13 +59,14 @@ export function Routes() {
 
   const load = useCallback(async () => {
     try {
-      const [p, prov, stats] = await Promise.all([
-        api.listRouteProfiles(),
-        api.listProviders(),
+      // profiles / providers 走全局 store——usePolling 10s 周期会顺带刷新这两份,
+      // 别的页打开时不重复 invoke。
+      const [, , stats] = await Promise.all([
+        useRouteProfiles.getState().refetch(),
+        useProviders.getState().refetch(),
         api.aggregateRouteProfileStats(7),
       ]);
-      setProfiles(p);
-      setProviders(prov);
+      const p = useRouteProfiles.getState().items;
       setProfileStats(Object.fromEntries(stats.map((s) => [s.route_profile_id, s])));
       if (p.length > 0) {
         const currentId = selectedIdRef.current;

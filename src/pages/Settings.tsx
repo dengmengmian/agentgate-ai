@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "@/components/common/Toast";
 import { useI18n, type Locale } from "@/lib/i18n";
 import * as api from "@/lib/api";
+import { useGatewaySettings, usePricing } from "@/store/global";
 import type { GatewaySettings as GatewaySettingsType } from "@/types/gateway";
 import type { GatewayAuthSettings } from "@/types/config";
 import type { ModelPricing } from "@/types/stats";
@@ -61,10 +62,16 @@ export function Settings() {
     }
   }, [searchParams, setSearchParams]);
   const [theme, setThemeState] = useState(() => localStorage.getItem("agentgate_theme") || "light");
-  const [settings, setSettings] = useState<GatewaySettingsType | null>(null);
+  // gateway settings / pricing 走全局 store——跨页只读,Gateway 页改 host:port
+  // 后 store.refetch() 同步给这里。
+  const settings = useGatewaySettings(s => s.value) as GatewaySettingsType | null;
+  const pricing = usePricing(s => s.items);
+  const setPricing = (next: ModelPricing[] | ((prev: ModelPricing[]) => ModelPricing[])) => {
+    const value = typeof next === "function" ? (next as (prev: ModelPricing[]) => ModelPricing[])(usePricing.getState().items) : next;
+    usePricing.getState().setItems(value);
+  };
   const [auth, setAuth] = useState<GatewayAuthSettings | null>(null);
   const [confirmRegen, setConfirmRegen] = useState(false);
-  const [pricing, setPricing] = useState<ModelPricing[]>([]);
   const [petSettings, setPetSettings] = useState<PetSettingsType | null>(null);
   const [petClickThrough, setPetClickThroughState] = useState(false);
   useEffect(() => {
@@ -80,15 +87,15 @@ export function Settings() {
 
   const load = useCallback(async () => {
     try {
-      const [s, a, p, pet] = await Promise.all([
-        api.getGatewaySettings(),
+      // gateway settings / pricing 走 store.refetch()——确保 mutation 后值是新的;
+      // auth / pet 是这页专属、暂不进 store。
+      const [a, pet] = await Promise.all([
         api.getGatewayAuthSettings(),
-        api.listModelPricing(),
         api.getPetSettings(),
+        useGatewaySettings.getState().refetch(),
+        usePricing.getState().refetch(),
       ]);
-      setSettings(s);
       setAuth(a);
-      setPricing(p);
       setPetSettings(pet);
     } catch (err) {
       toast("error", (err as api.AppError).message);

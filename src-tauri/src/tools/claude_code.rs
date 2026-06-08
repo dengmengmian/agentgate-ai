@@ -24,10 +24,10 @@ fn save_official_settings() -> Result<(), AppError> {
     }
     let dir = saved_dir();
     fs::create_dir_all(&dir)
-        .map_err(|e| AppError::new("CLAUDE_SAVE_FAILED", format!("Cannot create dir: {e}")))?;
+        .map_err(|e| AppError::new(crate::errors::codes::CLAUDE_SAVE_FAILED, format!("Cannot create dir: {e}")))?;
     fs::copy(&src, saved_settings_path()).map_err(|e| {
         AppError::new(
-            "CLAUDE_SAVE_FAILED",
+            crate::errors::codes::CLAUDE_SAVE_FAILED,
             format!("Cannot save settings.json: {e}"),
         )
     })?;
@@ -44,13 +44,13 @@ fn restore_official_settings() -> Result<(), AppError> {
     let saved = saved_settings_path();
     if !saved.exists() {
         return Err(AppError::new(
-            "CLAUDE_NO_SAVED_FILES",
+            crate::errors::codes::CLAUDE_NO_SAVED_FILES,
             "No saved official settings found.",
         ));
     }
     fs::copy(&saved, settings_path()).map_err(|e| {
         AppError::new(
-            "CLAUDE_RESTORE_FAILED",
+            crate::errors::codes::CLAUDE_RESTORE_FAILED,
             format!("Cannot restore settings.json: {e}"),
         )
     })?;
@@ -218,7 +218,7 @@ pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigRes
     if let Some(parent) = sp.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             AppError::new(
-                "CLAUDE_CONFIG_WRITE_FAILED",
+                crate::errors::codes::CLAUDE_CONFIG_WRITE_FAILED,
                 format!("Cannot create directory: {e}"),
             )
         })?;
@@ -239,7 +239,7 @@ pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigRes
 
     let mut doc: serde_json::Value = serde_json::from_str(&existing).map_err(|e| {
         AppError::new(
-            "CLAUDE_CONFIG_PARSE_ERROR",
+            crate::errors::codes::CLAUDE_CONFIG_PARSE_ERROR,
             format!("Cannot parse settings.json: {e}"),
         )
     })?;
@@ -250,7 +250,7 @@ pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigRes
 
     let env = doc["env"]
         .as_object_mut()
-        .ok_or_else(|| AppError::new("CLAUDE_CONFIG_PARSE_ERROR", "env field is not an object"))?;
+        .ok_or_else(|| AppError::new(crate::errors::codes::CLAUDE_CONFIG_PARSE_ERROR, "env field is not an object"))?;
 
     env.insert(
         "ANTHROPIC_BASE_URL".to_string(),
@@ -279,7 +279,7 @@ pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigRes
 
     let new_content = serde_json::to_string_pretty(&doc).map_err(|e| {
         AppError::new(
-            "CLAUDE_CONFIG_WRITE_FAILED",
+            crate::errors::codes::CLAUDE_CONFIG_WRITE_FAILED,
             format!("Cannot serialize: {e}"),
         )
     })?;
@@ -287,14 +287,14 @@ pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigRes
     let tmp_path = sp.with_extension("json.tmp");
     fs::write(&tmp_path, &new_content).map_err(|e| {
         AppError::new(
-            "CLAUDE_CONFIG_WRITE_FAILED",
+            crate::errors::codes::CLAUDE_CONFIG_WRITE_FAILED,
             format!("Failed to write temp: {e}"),
         )
     })?;
     fs::rename(&tmp_path, &sp).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
         AppError::new(
-            "CLAUDE_CONFIG_WRITE_FAILED",
+            crate::errors::codes::CLAUDE_CONFIG_WRITE_FAILED,
             format!("Failed to replace: {e}"),
         )
     })?;
@@ -353,12 +353,12 @@ pub fn open_config() -> Result<(), AppError> {
     let sp = settings_path();
     if !sp.exists() {
         return Err(AppError::new(
-            "CLAUDE_CONFIG_NOT_FOUND",
+            crate::errors::codes::CLAUDE_CONFIG_NOT_FOUND,
             "Claude Code settings.json does not exist",
         ));
     }
     open::that(&sp)
-        .map_err(|e| AppError::new("CLAUDE_CONFIG_OPEN_FAILED", format!("Failed to open: {e}")))
+        .map_err(|e| AppError::new(crate::errors::codes::CLAUDE_CONFIG_OPEN_FAILED, format!("Failed to open: {e}")))
 }
 
 pub fn generate_env_snippet(host: &str, port: i64, model: &str) -> String {

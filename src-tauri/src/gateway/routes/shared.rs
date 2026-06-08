@@ -185,7 +185,7 @@ pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
 
     if token.is_empty() {
         return Err(GatewayError(AppError::new(
-            "GATEWAY_AUTH_MISSING",
+            crate::errors::codes::GATEWAY_AUTH_MISSING,
             "Gateway access token is missing",
         ).with_detail("The request does not include Authorization: Bearer <token> or X-Api-Key <token>")
          .with_suggestion("Re-apply the tool configuration from AgentGate or check the token file")));
@@ -193,7 +193,7 @@ pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
 
     if !local_token::validate_token(token) {
         return Err(GatewayError(AppError::new(
-            "GATEWAY_AUTH_INVALID",
+            crate::errors::codes::GATEWAY_AUTH_INVALID,
             "Gateway access token is invalid",
         ).with_suggestion(format!("Token received via '{source}' header does not match. Regenerate the token and re-apply tool configuration"))));
     }
@@ -209,7 +209,7 @@ pub(crate) fn get_active_provider(db: &crate::storage::db::DbPool) -> Result<Pro
 
     let provider_id = settings.active_provider_id.ok_or_else(|| {
         GatewayError(
-            AppError::new("ACTIVE_PROVIDER_NOT_FOUND", "No active provider configured")
+            AppError::new(crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND, "No active provider configured")
                 .with_suggestion("Set an active provider in the Providers page"),
         )
     })?;
@@ -217,7 +217,7 @@ pub(crate) fn get_active_provider(db: &crate::storage::db::DbPool) -> Result<Pro
     let provider = crate::storage::providers::get_by_id(&conn, &provider_id).map_err(|_| {
         GatewayError(
             AppError::new(
-                "ACTIVE_PROVIDER_NOT_FOUND",
+                crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND,
                 "Active provider not found in database",
             )
             .with_suggestion("Set a new active provider in the Providers page"),

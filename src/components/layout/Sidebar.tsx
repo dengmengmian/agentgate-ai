@@ -19,7 +19,7 @@ import {
 import { getVersion } from "@tauri-apps/api/app";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
-import * as api from "@/lib/api";
+import { useProviders } from "@/store/global";
 
 // 顺序按新用户配置任务流：
 // 看运行情况（概览） → 配上游（供应商） → 接客户端（客户端） →
@@ -52,13 +52,27 @@ export function Sidebar() {
   useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
 
   // Show quick setup only if: no providers AND not manually hidden
+  const providers = useProviders(s => s.items);
+  const providersLoading = useProviders(s => s.loading);
   useEffect(() => {
-    if (localStorage.getItem("agentgate_hide_quick_setup") === "1") return;
-    if (localStorage.getItem("agentgate_show_quick_setup") === "1") { setShowQuickSetup(true); return; }
-    api.listProviders().then(providers => {
-      setShowQuickSetup(providers.length === 0);
-    }).catch(() => {});
-  }, []);
+    // store 在别处可能也触发 fetch（如 Providers 页），这里只在没数据时拉。
+    if (providers.length === 0 && !providersLoading) {
+      useProviders.getState().fetch().catch(() => {});
+    }
+  }, [providers.length, providersLoading]);
+  useEffect(() => {
+    if (localStorage.getItem("agentgate_hide_quick_setup") === "1") {
+      setShowQuickSetup(false);
+      return;
+    }
+    if (localStorage.getItem("agentgate_show_quick_setup") === "1") {
+      setShowQuickSetup(true);
+      return;
+    }
+    // 等首次 fetch 真正返回后再决定——loading 期间不闪 quick-setup banner。
+    if (providersLoading) return;
+    setShowQuickSetup(providers.length === 0);
+  }, [providers, providersLoading]);
 
   return (
     <aside className={cn(

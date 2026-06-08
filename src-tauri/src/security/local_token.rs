@@ -62,7 +62,7 @@ pub fn ensure_token() -> Result<String, AppError> {
     if path.exists() {
         let token = fs::read_to_string(&path).map_err(|e| {
             AppError::new(
-                "LOCAL_ACCESS_TOKEN_NOT_FOUND",
+                crate::errors::codes::LOCAL_ACCESS_TOKEN_NOT_FOUND,
                 format!("Cannot read token file: {e}"),
             )
         })?;
@@ -76,7 +76,7 @@ pub fn ensure_token() -> Result<String, AppError> {
     let dir = token_dir();
     fs::create_dir_all(&dir).map_err(|e| {
         AppError::new(
-            "LOCAL_ACCESS_TOKEN_GENERATE_FAILED",
+            crate::errors::codes::LOCAL_ACCESS_TOKEN_GENERATE_FAILED,
             format!("Cannot create token directory: {e}"),
         )
     })?;
@@ -84,7 +84,7 @@ pub fn ensure_token() -> Result<String, AppError> {
     let token = generate_token();
     fs::write(&path, &token).map_err(|e| {
         AppError::new(
-            "LOCAL_ACCESS_TOKEN_GENERATE_FAILED",
+            crate::errors::codes::LOCAL_ACCESS_TOKEN_GENERATE_FAILED,
             format!("Cannot write token file: {e}"),
         )
     })?;
@@ -104,13 +104,13 @@ pub fn read_token() -> Result<String, AppError> {
     let path = token_path();
     if !path.exists() {
         return Err(
-            AppError::new("LOCAL_ACCESS_TOKEN_NOT_FOUND", "Token file does not exist")
+            AppError::new(crate::errors::codes::LOCAL_ACCESS_TOKEN_NOT_FOUND, "Token file does not exist")
                 .with_suggestion("Restart AgentGate to auto-generate a token"),
         );
     }
     let token = fs::read_to_string(&path).map_err(|e| {
         AppError::new(
-            "LOCAL_ACCESS_TOKEN_NOT_FOUND",
+            crate::errors::codes::LOCAL_ACCESS_TOKEN_NOT_FOUND,
             format!("Cannot read token: {e}"),
         )
     })?;
@@ -122,7 +122,7 @@ pub fn regenerate_token() -> Result<String, AppError> {
     let dir = token_dir();
     fs::create_dir_all(&dir).map_err(|e| {
         AppError::new(
-            "LOCAL_ACCESS_TOKEN_REGENERATE_FAILED",
+            crate::errors::codes::LOCAL_ACCESS_TOKEN_REGENERATE_FAILED,
             format!("Cannot create directory: {e}"),
         )
     })?;
@@ -131,7 +131,7 @@ pub fn regenerate_token() -> Result<String, AppError> {
     let path = token_path();
     fs::write(&path, &token).map_err(|e| {
         AppError::new(
-            "LOCAL_ACCESS_TOKEN_REGENERATE_FAILED",
+            crate::errors::codes::LOCAL_ACCESS_TOKEN_REGENERATE_FAILED,
             format!("Cannot write token: {e}"),
         )
     })?;

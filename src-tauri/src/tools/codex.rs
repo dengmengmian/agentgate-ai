@@ -52,19 +52,19 @@ fn saved_auth_path() -> PathBuf {
 fn save_official_files() -> Result<(), AppError> {
     let dir = saved_dir();
     fs::create_dir_all(&dir)
-        .map_err(|e| AppError::new("CODEX_SAVE_FAILED", format!("Cannot create dir: {e}")))?;
+        .map_err(|e| AppError::new(crate::errors::codes::CODEX_SAVE_FAILED, format!("Cannot create dir: {e}")))?;
 
     let cfg = config_path();
     if cfg.exists() {
         fs::copy(&cfg, saved_config_path()).map_err(|e| {
-            AppError::new("CODEX_SAVE_FAILED", format!("Cannot save config.toml: {e}"))
+            AppError::new(crate::errors::codes::CODEX_SAVE_FAILED, format!("Cannot save config.toml: {e}"))
         })?;
     }
 
     let auth = auth_json_path();
     if auth.exists() && !auth_is_polluted(&auth) {
         fs::copy(&auth, saved_auth_path()).map_err(|e| {
-            AppError::new("CODEX_SAVE_FAILED", format!("Cannot save auth.json: {e}"))
+            AppError::new(crate::errors::codes::CODEX_SAVE_FAILED, format!("Cannot save auth.json: {e}"))
         })?;
     }
 
@@ -109,7 +109,7 @@ fn restore_official_files() -> Result<(), AppError> {
     let dir = saved_dir();
     if !dir.exists() {
         return Err(AppError::new(
-            "CODEX_NO_SAVED_FILES",
+            crate::errors::codes::CODEX_NO_SAVED_FILES,
             "No saved official config found. Please log in to Codex again with `codex --login`.",
         ));
     }
@@ -118,7 +118,7 @@ fn restore_official_files() -> Result<(), AppError> {
     if saved_cfg.exists() {
         fs::copy(&saved_cfg, config_path()).map_err(|e| {
             AppError::new(
-                "CODEX_RESTORE_FAILED",
+                crate::errors::codes::CODEX_RESTORE_FAILED,
                 format!("Cannot restore config.toml: {e}"),
             )
         })?;
@@ -128,7 +128,7 @@ fn restore_official_files() -> Result<(), AppError> {
     if saved_auth.exists() {
         fs::copy(&saved_auth, auth_json_path()).map_err(|e| {
             AppError::new(
-                "CODEX_RESTORE_FAILED",
+                crate::errors::codes::CODEX_RESTORE_FAILED,
                 format!("Cannot restore auth.json: {e}"),
             )
         })?;
@@ -348,7 +348,7 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             AppError::new(
-                "CODEX_CONFIG_WRITE_FAILED",
+                crate::errors::codes::CODEX_CONFIG_WRITE_FAILED,
                 format!("Cannot create directory: {e}"),
             )
         })?;
@@ -403,14 +403,14 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     let tmp_path = path.with_extension("toml.tmp");
     fs::write(&tmp_path, &merged).map_err(|e| {
         AppError::new(
-            "CODEX_CONFIG_WRITE_FAILED",
+            crate::errors::codes::CODEX_CONFIG_WRITE_FAILED,
             format!("Failed to write temp file: {e}"),
         )
     })?;
     fs::rename(&tmp_path, &path).map_err(|e| {
         let _ = fs::remove_file(&tmp_path);
         AppError::new(
-            "CODEX_CONFIG_WRITE_FAILED",
+            crate::errors::codes::CODEX_CONFIG_WRITE_FAILED,
             format!("Failed to replace config: {e}"),
         )
     })?;
@@ -467,13 +467,13 @@ pub fn toggle_provider(host: &str, port: i64) -> Result<ToggleResult, AppError> 
         let saved_cfg = saved_config_path();
         if !saved_cfg.exists() {
             return Err(AppError::new(
-                "CODEX_NO_SAVED_FILES",
+                crate::errors::codes::CODEX_NO_SAVED_FILES,
                 "No saved official config found. Please log in to Codex again with `codex --login`.",
             ));
         }
         fs::copy(&saved_cfg, config_path()).map_err(|e| {
             AppError::new(
-                "CODEX_RESTORE_FAILED",
+                crate::errors::codes::CODEX_RESTORE_FAILED,
                 format!("Cannot restore config.toml: {e}"),
             )
         })?;
@@ -519,14 +519,14 @@ pub fn disable() -> Result<ApplyConfigResult, AppError> {
     let saved_cfg = saved_config_path();
     if !saved_cfg.exists() {
         return Err(AppError::new(
-            "CODEX_NO_SAVED_FILES",
+            crate::errors::codes::CODEX_NO_SAVED_FILES,
             "未找到 AgentGate 备份的官方 config.toml — 请先在 Codex 上至少跑过一次官方登录。",
         ));
     }
 
     fs::copy(&saved_cfg, &path).map_err(|e| {
         AppError::new(
-            "CODEX_RESTORE_FAILED",
+            crate::errors::codes::CODEX_RESTORE_FAILED,
             format!("Cannot restore config.toml: {e}"),
         )
     })?;
@@ -564,12 +564,12 @@ pub fn open_config() -> Result<(), AppError> {
     let path = config_path();
     if !path.exists() {
         return Err(AppError::new(
-            "CODEX_CONFIG_NOT_FOUND",
+            crate::errors::codes::CODEX_CONFIG_NOT_FOUND,
             "Codex config file does not exist",
         ));
     }
     open::that(&path)
-        .map_err(|e| AppError::new("CODEX_CONFIG_OPEN_FAILED", format!("Failed to open: {e}")))
+        .map_err(|e| AppError::new(crate::errors::codes::CODEX_CONFIG_OPEN_FAILED, format!("Failed to open: {e}")))
 }
 
 pub(crate) fn extract_toml_value(content: &str, key: &str) -> Option<String> {

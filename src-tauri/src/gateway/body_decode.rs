@@ -58,7 +58,7 @@ pub fn decode(headers: &HeaderMap, body: Bytes) -> Result<String, AppError> {
         multi if multi.contains("zstd") => decompress_zstd(&body)?,
         other => {
             return Err(AppError::new(
-                "UNSUPPORTED_CONTENT_ENCODING",
+                crate::errors::codes::UNSUPPORTED_CONTENT_ENCODING,
                 format!("Request body uses unsupported Content-Encoding: {other}"),
             ));
         }
@@ -66,7 +66,7 @@ pub fn decode(headers: &HeaderMap, body: Bytes) -> Result<String, AppError> {
 
     String::from_utf8(decoded).map_err(|e| {
         AppError::new(
-            "INVALID_REQUEST_BODY",
+            crate::errors::codes::INVALID_REQUEST_BODY,
             format!("Decoded body is not valid UTF-8: {e}"),
         )
     })
@@ -77,7 +77,7 @@ fn decompress_gzip(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut out = Vec::with_capacity(data.len() * 2);
     decoder.read_to_end(&mut out).map_err(|e| {
         AppError::new(
-            "GZIP_DECODE_FAILED",
+            crate::errors::codes::GZIP_DECODE_FAILED,
             format!("Failed to decompress gzip body: {e}"),
         )
     })?;
@@ -89,7 +89,7 @@ fn decompress_deflate(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut out = Vec::with_capacity(data.len() * 2);
     decoder.read_to_end(&mut out).map_err(|e| {
         AppError::new(
-            "DEFLATE_DECODE_FAILED",
+            crate::errors::codes::DEFLATE_DECODE_FAILED,
             format!("Failed to decompress deflate body: {e}"),
         )
     })?;
@@ -101,7 +101,7 @@ fn decompress_brotli(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut out = Vec::with_capacity(data.len() * 3);
     decoder.read_to_end(&mut out).map_err(|e| {
         AppError::new(
-            "BROTLI_DECODE_FAILED",
+            crate::errors::codes::BROTLI_DECODE_FAILED,
             format!("Failed to decompress brotli body: {e}"),
         )
     })?;
@@ -111,14 +111,14 @@ fn decompress_brotli(data: &[u8]) -> Result<Vec<u8>, AppError> {
 fn decompress_zstd(data: &[u8]) -> Result<Vec<u8>, AppError> {
     let mut decoder = zstd::stream::Decoder::new(data).map_err(|e| {
         AppError::new(
-            "ZSTD_DECODE_FAILED",
+            crate::errors::codes::ZSTD_DECODE_FAILED,
             format!("Failed to init zstd decoder: {e}"),
         )
     })?;
     let mut out = Vec::with_capacity(data.len() * 3);
     decoder.read_to_end(&mut out).map_err(|e| {
         AppError::new(
-            "ZSTD_DECODE_FAILED",
+            crate::errors::codes::ZSTD_DECODE_FAILED,
             format!("Failed to decompress zstd body: {e}"),
         )
     })?;

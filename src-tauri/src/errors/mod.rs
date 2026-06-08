@@ -1,6 +1,8 @@
 use serde::Serialize;
 use specta::Type;
 
+pub mod codes;
+
 #[derive(Debug, Serialize, Clone, Type)]
 pub struct AppError {
     pub code: String,

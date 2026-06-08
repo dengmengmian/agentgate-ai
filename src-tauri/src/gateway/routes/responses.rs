@@ -58,7 +58,7 @@ pub async fn handle_responses(
     // 1. Parse request
     let req: ResponsesRequest = serde_json::from_str(&body).map_err(|e| {
         let err = AppError::new(
-            "RESPONSES_PARSE_ERROR",
+            crate::errors::codes::RESPONSES_PARSE_ERROR,
             format!("Failed to parse request: {e}"),
         );
         // Log the error
@@ -393,7 +393,7 @@ pub async fn handle_responses(
 
     // All attempts exhausted
     Err(GatewayError(last_error.unwrap_or_else(|| {
-        AppError::new("FAILOVER_EXHAUSTED", "All providers failed")
+        AppError::new(crate::errors::codes::FAILOVER_EXHAUSTED, "All providers failed")
     })))
 }
 
@@ -925,7 +925,7 @@ async fn handle_stream_response(
                         );
                     }
                     Err(err_msg) => {
-                        let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
+                        let err = AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, &err_msg);
                         log_request_error_full(
                             &db,
                             &client_type,
@@ -1233,7 +1233,7 @@ async fn handle_anthropic_stream_response(
                         );
                     }
                     Err(err_msg) => {
-                        let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
+                        let err = AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, &err_msg);
                         log_request_error_full(
                             &db,
                             &client_type,
@@ -1510,7 +1510,7 @@ async fn handle_gemini_stream_response(
                         );
                     }
                     Err(err_msg) => {
-                        let err = AppError::new("UPSTREAM_STREAM_ERROR", &err_msg);
+                        let err = AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, &err_msg);
                         log_request_error_full(
                             &db,
                             &client_type,

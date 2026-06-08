@@ -277,7 +277,7 @@ pub async fn fetch_provider_models(
         Some(k) if !k.is_empty() => k,
         _ => {
             return Err(AppError::new(
-                "PROVIDER_API_KEY_MISSING",
+                crate::errors::codes::PROVIDER_API_KEY_MISSING,
                 "API key is not set",
             ))
         }
@@ -334,7 +334,7 @@ pub async fn fetch_provider_models(
     }
 
     Err(AppError::new(
-        "PROVIDER_REQUEST_FAILED",
+        crate::errors::codes::PROVIDER_REQUEST_FAILED,
         "Could not fetch models from provider",
     ))
 }

@@ -10,10 +10,9 @@ import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { formatOptionalLatency } from "@/lib/utils";
 import * as api from "@/lib/api";
+import { useProviders, useRouteProfiles } from "@/store/global";
 import type { RequestLogListItem } from "@/types/request-log";
 import type { RequestLogDetail } from "@/types/request-log";
-import type { ProviderView } from "@/types/provider";
-import type { RouteProfileView } from "@/types/route-profile";
 
 // 客户端候选——detect_client_from_ua 用的固定列表。
 const KNOWN_CLIENTS = ["Codex", "Claude Code", "OpenCode", "Gemini CLI", "AtomCode", "Generic"];
@@ -42,8 +41,8 @@ export function Logs() {
   const [sessionIdFilter, setSessionIdFilter] = useState("");
   // 'list'（按时间逐条）/ 'session'（按会话聚合）
   const [viewMode, setViewMode] = useState<"list" | "session">("list");
-  const [providerOptions, setProviderOptions] = useState<ProviderView[]>([]);
-  const [routeProfileOptions, setRouteProfileOptions] = useState<RouteProfileView[]>([]);
+  const providerOptions = useProviders(s => s.items);
+  const routeProfileOptions = useRouteProfiles(s => s.items);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showSyncActions, setShowSyncActions] = useState(false);
@@ -54,9 +53,10 @@ export function Logs() {
 
   // 初次加载 provider 候选——用 name 而不是 id，因为 request_logs.provider
   // 字段存的是 name 字符串（见 routes.rs log_request_success 调用）。
+  // providers / route profiles 走全局 store(其它页可能已经填好,这里直接 fetch 防重入)。
   useEffect(() => {
-    api.listProviders().then(setProviderOptions).catch(() => {});
-    api.listRouteProfiles().then(setRouteProfileOptions).catch(() => {});
+    useProviders.getState().fetch().catch(() => {});
+    useRouteProfiles.getState().fetch().catch(() => {});
     api.listLogModels().then(setModelOptions).catch(() => {});
   }, []);
 

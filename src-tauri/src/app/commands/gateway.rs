@@ -87,7 +87,7 @@ pub async fn start_gateway(
             .map_err(|_| AppError::internal("Runtime lock failed"))?;
         if runtime.running {
             return Err(AppError::new(
-                "GATEWAY_ALREADY_RUNNING",
+                crate::errors::codes::GATEWAY_ALREADY_RUNNING,
                 "Gateway is already running",
             ));
         }
@@ -146,7 +146,7 @@ pub async fn stop_gateway(
             .map_err(|_| AppError::internal("Runtime lock failed"))?;
         if !runtime.running {
             return Err(AppError::new(
-                "GATEWAY_NOT_RUNNING",
+                crate::errors::codes::GATEWAY_NOT_RUNNING,
                 "Gateway is not running",
             ));
         }

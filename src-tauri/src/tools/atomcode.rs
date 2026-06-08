@@ -35,10 +35,10 @@ fn save_official_config() -> Result<(), AppError> {
     }
     let dir = saved_dir();
     fs::create_dir_all(&dir)
-        .map_err(|e| AppError::new("ATOMCODE_SAVE_FAILED", format!("Cannot create dir: {e}")))?;
+        .map_err(|e| AppError::new(crate::errors::codes::ATOMCODE_SAVE_FAILED, format!("Cannot create dir: {e}")))?;
     fs::copy(&src, saved_config_path()).map_err(|e| {
         AppError::new(
-            "ATOMCODE_SAVE_FAILED",
+            crate::errors::codes::ATOMCODE_SAVE_FAILED,
             format!("Cannot save config.toml: {e}"),
         )
     })?;
@@ -53,13 +53,13 @@ fn restore_official_config() -> Result<(), AppError> {
     let saved = saved_config_path();
     if !saved.exists() {
         return Err(AppError::new(
-            "ATOMCODE_NO_SAVED_FILES",
+            crate::errors::codes::ATOMCODE_NO_SAVED_FILES,
             "No saved official config found.",
         ));
     }
     fs::copy(&saved, config_path()).map_err(|e| {
         AppError::new(
-            "ATOMCODE_RESTORE_FAILED",
+            crate::errors::codes::ATOMCODE_RESTORE_FAILED,
             format!("Cannot restore config.toml: {e}"),
         )
     })?;
@@ -131,7 +131,7 @@ pub fn apply(host: &str, port: i64, _model: &str) -> Result<ApplyConfigResult, A
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             AppError::new(
-                "ATOMCODE_CONFIG_WRITE_FAILED",
+                crate::errors::codes::ATOMCODE_CONFIG_WRITE_FAILED,
                 format!("Cannot create directory: {e}"),
             )
         })?;
@@ -167,14 +167,14 @@ pub fn apply(host: &str, port: i64, _model: &str) -> Result<ApplyConfigResult, A
     let tmp = path.with_extension("toml.tmp");
     fs::write(&tmp, &merged).map_err(|e| {
         AppError::new(
-            "ATOMCODE_CONFIG_WRITE_FAILED",
+            crate::errors::codes::ATOMCODE_CONFIG_WRITE_FAILED,
             format!("Failed to write: {e}"),
         )
     })?;
     fs::rename(&tmp, &path).map_err(|e| {
         let _ = fs::remove_file(&tmp);
         AppError::new(
-            "ATOMCODE_CONFIG_WRITE_FAILED",
+            crate::errors::codes::ATOMCODE_CONFIG_WRITE_FAILED,
             format!("Failed to replace: {e}"),
         )
     })?;
@@ -211,13 +211,13 @@ pub fn open_config() -> Result<(), AppError> {
     let path = config_path();
     if !path.exists() {
         return Err(AppError::new(
-            "ATOMCODE_CONFIG_NOT_FOUND",
+            crate::errors::codes::ATOMCODE_CONFIG_NOT_FOUND,
             "AtomCode config.toml does not exist",
         ));
     }
     open::that(&path).map_err(|e| {
         AppError::new(
-            "ATOMCODE_CONFIG_OPEN_FAILED",
+            crate::errors::codes::ATOMCODE_CONFIG_OPEN_FAILED,
             format!("Failed to open: {e}"),
         )
     })

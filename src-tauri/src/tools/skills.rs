@@ -95,7 +95,7 @@ fn skills_dir_for(source: &str) -> Option<PathBuf> {
 /// 校验来源合法并返回其根目录。
 fn require_dir(source: &str) -> Result<PathBuf, AppError> {
     skills_dir_for(source)
-        .ok_or_else(|| AppError::new("SKILL_BAD_SOURCE", format!("unknown source: {source}")))
+        .ok_or_else(|| AppError::new(crate::errors::codes::SKILL_BAD_SOURCE, format!("unknown source: {source}")))
 }
 
 /// 校验 skill id（目录名）：非空、无路径分隔符、无 `..`，防越权操作。
@@ -108,7 +108,7 @@ fn validate_id(id: &str) -> Result<(), AppError> {
         || id.contains("..")
     {
         return Err(AppError::new(
-            "SKILL_BAD_ID",
+            crate::errors::codes::SKILL_BAD_ID,
             format!("invalid skill id: {id}"),
         ));
     }
@@ -213,7 +213,7 @@ pub fn set_skill_enabled(source: &str, id: &str, enabled: bool) -> Result<Skill,
     let dir = require_dir(source)?.join(id);
     if !dir.is_dir() {
         return Err(AppError::new(
-            "SKILL_NOT_FOUND",
+            crate::errors::codes::SKILL_NOT_FOUND,
             format!("skill not found: {source}/{id}"),
         ));
     }
@@ -225,14 +225,14 @@ pub fn set_skill_enabled(source: &str, id: &str, enabled: bool) -> Result<Skill,
         (true, true, _) | (false, _, true) => {}
         _ => {
             return Err(AppError::new(
-                "SKILL_NO_MANIFEST",
+                crate::errors::codes::SKILL_NO_MANIFEST,
                 format!("skill {source}/{id} has no SKILL.md"),
             ))
         }
     }
     read_skill(source, &dir).ok_or_else(|| {
         AppError::new(
-            "SKILL_NOT_FOUND",
+            crate::errors::codes::SKILL_NOT_FOUND,
             format!("skill not found after toggle: {source}/{id}"),
         )
     })
@@ -241,7 +241,7 @@ pub fn set_skill_enabled(source: &str, id: &str, enabled: bool) -> Result<Skill,
 fn rename(from: &Path, to: &Path) -> Result<(), AppError> {
     fs::rename(from, to).map_err(|e| {
         AppError::new(
-            "SKILL_TOGGLE_FAILED",
+            crate::errors::codes::SKILL_TOGGLE_FAILED,
             format!("cannot rename {}: {e}", from.display()),
         )
     })
@@ -256,7 +256,7 @@ pub fn delete_skill(source: &str, id: &str) -> Result<bool, AppError> {
     }
     fs::remove_dir_all(&dir).map_err(|e| {
         AppError::new(
-            "SKILL_DELETE_FAILED",
+            crate::errors::codes::SKILL_DELETE_FAILED,
             format!("cannot delete {}: {e}", dir.display()),
         )
     })?;
@@ -270,27 +270,27 @@ pub fn delete_skill(source: &str, id: &str) -> Result<bool, AppError> {
 pub fn import_skill_from_zip(source: &str, bytes: &[u8]) -> Result<Skill, AppError> {
     let root = require_dir(source)?;
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes))
-        .map_err(|e| AppError::new("SKILL_ZIP_INVALID", format!("cannot read zip: {e}")))?;
+        .map_err(|e| AppError::new(crate::errors::codes::SKILL_ZIP_INVALID, format!("cannot read zip: {e}")))?;
 
     // 1) 先把所有文件读进内存（rel_path -> bytes），同时做 zip-slip 防护。
     let mut files: Vec<(String, Vec<u8>)> = Vec::new();
     for i in 0..archive.len() {
         let mut file = archive
             .by_index(i)
-            .map_err(|e| AppError::new("SKILL_ZIP_INVALID", format!("bad entry: {e}")))?;
+            .map_err(|e| AppError::new(crate::errors::codes::SKILL_ZIP_INVALID, format!("bad entry: {e}")))?;
         if file.is_dir() {
             continue;
         }
         let safe = file.enclosed_name().ok_or_else(|| {
             AppError::new(
-                "SKILL_ZIP_UNSAFE",
+                crate::errors::codes::SKILL_ZIP_UNSAFE,
                 format!("unsafe path in zip: {}", file.name()),
             )
         })?;
         let rel = safe.to_string_lossy().replace('\\', "/");
         let mut buf = Vec::new();
         file.read_to_end(&mut buf)
-            .map_err(|e| AppError::new("SKILL_ZIP_INVALID", format!("read entry failed: {e}")))?;
+            .map_err(|e| AppError::new(crate::errors::codes::SKILL_ZIP_INVALID, format!("read entry failed: {e}")))?;
         files.push((rel, buf));
     }
 
@@ -300,7 +300,7 @@ pub fn import_skill_from_zip(source: &str, bytes: &[u8]) -> Result<Skill, AppErr
         .map(|(p, _)| p.as_str())
         .find(|p| *p == MANIFEST || p.ends_with(&format!("/{MANIFEST}")))
         .ok_or_else(|| {
-            AppError::new("SKILL_ZIP_NO_MANIFEST", "zip 内没有 SKILL.md".to_string())
+            AppError::new(crate::errors::codes::SKILL_ZIP_NO_MANIFEST, "zip 内没有 SKILL.md".to_string())
         })?;
     let prefix = manifest_rel.strip_suffix(MANIFEST).unwrap_or("").to_string();
 
@@ -324,7 +324,7 @@ pub fn import_skill_from_zip(source: &str, bytes: &[u8]) -> Result<Skill, AppErr
         })
         .ok_or_else(|| {
             AppError::new(
-                "SKILL_ZIP_NO_NAME",
+                crate::errors::codes::SKILL_ZIP_NO_NAME,
                 "无法确定 skill 名（缺 frontmatter name 且 zip 无目录名）".to_string(),
             )
         })?;
@@ -334,7 +334,7 @@ pub fn import_skill_from_zip(source: &str, bytes: &[u8]) -> Result<Skill, AppErr
     let target = root.join(&dir_name);
     if target.exists() {
         return Err(AppError::new(
-            "SKILL_EXISTS",
+            crate::errors::codes::SKILL_EXISTS,
             format!("skill 已存在：{source}/{dir_name}，请先删除再导入"),
         ));
     }
@@ -350,14 +350,14 @@ pub fn import_skill_from_zip(source: &str, bytes: &[u8]) -> Result<Skill, AppErr
         let dest = target.join(stripped);
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)
-                .map_err(|e| AppError::new("SKILL_WRITE_FAILED", format!("mkdir failed: {e}")))?;
+                .map_err(|e| AppError::new(crate::errors::codes::SKILL_WRITE_FAILED, format!("mkdir failed: {e}")))?;
         }
         fs::write(&dest, data)
-            .map_err(|e| AppError::new("SKILL_WRITE_FAILED", format!("write failed: {e}")))?;
+            .map_err(|e| AppError::new(crate::errors::codes::SKILL_WRITE_FAILED, format!("write failed: {e}")))?;
     }
 
     read_skill(source, &target)
-        .ok_or_else(|| AppError::new("SKILL_WRITE_FAILED", "导入后读取 skill 失败".to_string()))
+        .ok_or_else(|| AppError::new(crate::errors::codes::SKILL_WRITE_FAILED, "导入后读取 skill 失败".to_string()))
 }
 
 /// frontmatter name 可能含空格/大写，转成安全目录名（kebab）。
@@ -429,7 +429,7 @@ fn collect_files(root: &Path, dir: &Path, out: &mut Vec<SkillFile>, skipped: &mu
 /// 跳过并上报，不覆盖用户现有 skill。返回成功导入的 skill 列表。
 pub fn import_skills(payload: &str) -> Result<Vec<Skill>, AppError> {
     let export: SkillsExport = serde_json::from_str(payload)
-        .map_err(|e| AppError::new("SKILL_IMPORT_BAD_JSON", format!("invalid json: {e}")))?;
+        .map_err(|e| AppError::new(crate::errors::codes::SKILL_IMPORT_BAD_JSON, format!("invalid json: {e}")))?;
     let mut imported = Vec::new();
     for item in export.skills {
         let Some(root) = skills_dir_for(&item.source) else {
@@ -455,10 +455,10 @@ pub fn import_skills(payload: &str) -> Result<Vec<Skill>, AppError> {
             let dest = target.join(&rel);
             if let Some(parent) = dest.parent() {
                 fs::create_dir_all(parent)
-                    .map_err(|e| AppError::new("SKILL_WRITE_FAILED", format!("mkdir failed: {e}")))?;
+                    .map_err(|e| AppError::new(crate::errors::codes::SKILL_WRITE_FAILED, format!("mkdir failed: {e}")))?;
             }
             fs::write(&dest, &file.content)
-                .map_err(|e| AppError::new("SKILL_WRITE_FAILED", format!("write failed: {e}")))?;
+                .map_err(|e| AppError::new(crate::errors::codes::SKILL_WRITE_FAILED, format!("write failed: {e}")))?;
         }
         if let Some(skill) = read_skill(&item.source, &target) {
             imported.push(skill);

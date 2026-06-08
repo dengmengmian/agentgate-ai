@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { useProviders } from "@/store/global";
 
 interface Action {
   id: string;
@@ -51,7 +52,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const { t } = useI18n();
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
-  const [providers, setProviders] = useState<Array<{ id: string; name: string }>>([]);
+  const providerItems = useProviders(s => s.items);
   const [focused, setFocused] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -62,10 +63,16 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       setFocused(0);
       // requestAnimationFrame 确保 input 已挂载
       requestAnimationFrame(() => inputRef.current?.focus());
-      // 顺手刷一下 provider 候选——首次打开 + 用户可能刚加新的
-      api.listProviders().then(ps => setProviders(ps.map(p => ({ id: p.id, name: p.name })))).catch(() => {});
+      // 顺手刷一下 provider 候选——用户可能刚加新的；store 内部防重入,
+      // 多次打开 palette 不会真的多发 invoke。
+      useProviders.getState().refetch().catch(() => {});
     }
   }, [open]);
+
+  const providers = useMemo(
+    () => providerItems.map(p => ({ id: p.id, name: p.name })),
+    [providerItems]
+  );
 
   const actions: Action[] = useMemo(() => {
     const navActions: Action[] = [

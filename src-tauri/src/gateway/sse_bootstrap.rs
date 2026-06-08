@@ -87,7 +87,7 @@ async fn bootstrap_detect_stream(
             }
             Ok(Some(Err(e))) => {
                 return Err(AppError::new(
-                    "PROVIDER_REQUEST_FAILED",
+                    crate::errors::codes::PROVIDER_REQUEST_FAILED,
                     format!("Upstream connection failed during bootstrap: {e}"),
                 ));
             }
@@ -218,7 +218,7 @@ fn classify_status(code: &str, typ: &str, msg: &str) -> u16 {
 
 fn make_stream_error(status: u16, msg: &str, detail: &str) -> AppError {
     AppError::new(
-        "UPSTREAM_STREAM_ERROR",
+        crate::errors::codes::UPSTREAM_STREAM_ERROR,
         format!("Provider returned HTTP {status}: {msg}"),
     )
     .with_detail(format!("Provider returned HTTP {status}; {detail}"))

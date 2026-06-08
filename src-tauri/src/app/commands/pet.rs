@@ -533,7 +533,7 @@ pub async fn pet_chat(
             .map_err(|_| AppError::internal("Runtime lock failed"))?;
         if !runtime.running {
             return Err(AppError::new(
-                "GATEWAY_NOT_RUNNING",
+                crate::errors::codes::GATEWAY_NOT_RUNNING,
                 "Gateway is not running",
             )
             .with_suggestion("Start the gateway from the pet menu or Gateway page"));

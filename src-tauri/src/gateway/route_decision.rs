@@ -55,7 +55,7 @@ fn decide_with_protocols(
         "/v1/responses" | "/responses" => ClientProtocol::OpenAIResponses,
         _ => {
             return Err(AppError::new(
-                "ROUTE_NOT_SUPPORTED",
+                crate::errors::codes::ROUTE_NOT_SUPPORTED,
                 format!("Route '{route}' is not supported"),
             )
             .with_suggestion("Use /v1/chat/completions, /v1/responses, or /v1/models"));
@@ -94,7 +94,7 @@ fn decide_with_protocols(
         _ => {
             let protocols_str = provider_protocols.join(", ");
             Err(AppError::new(
-                "PROTOCOL_TRANSFORM_NOT_SUPPORTED",
+                crate::errors::codes::PROTOCOL_TRANSFORM_NOT_SUPPORTED,
                 format!("Transform from {route} to provider protocols [{protocols_str}] is not supported"),
             ).with_suggestion("Change the active provider or use a compatible endpoint"))
         }

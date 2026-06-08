@@ -3,14 +3,16 @@ import { Radio, Play, Square, RotateCcw, Settings, Save, AlertTriangle } from "l
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
+import { useGatewaySettings } from "@/store/global";
 import { PROTOCOLS } from "@/types/provider";
 import type { GatewayStatus } from "@/types/gateway";
-import type { GatewaySettings } from "@/types/gateway";
 
 export function Gateway() {
   const { t } = useI18n();
   const [status, setStatus] = useState<GatewayStatus | null>(null);
-  const [settings, setSettings] = useState<GatewaySettings | null>(null);
+  // settings 走全局 store——Settings 页 / 其它 page 也读这份;mutation 后
+  // 这页 handleSave 内显式 refetch 同步给 store。
+  const settings = useGatewaySettings(s => s.value);
 
   // Editable fields
   const [host, setHost] = useState("");
@@ -23,19 +25,20 @@ export function Gateway() {
 
   const load = useCallback(async () => {
     try {
-      const [s, g] = await Promise.all([
-        api.getGatewayStatus(),
-        api.getGatewaySettings(),
+      await Promise.all([
+        api.getGatewayStatus().then(setStatus),
+        useGatewaySettings.getState().refetch(),
       ]);
-      setStatus(s);
-      setSettings(g);
-      setHost(g.host);
-      setPort(String(g.port));
-      setInputProtocol(g.input_protocol);
-      setOutputProtocol(g.output_protocol);
-      setAutoStart(g.auto_start);
-      setLogRetention(String(g.log_retention_days));
-      setDirty(false);
+      const g = useGatewaySettings.getState().value;
+      if (g) {
+        setHost(g.host);
+        setPort(String(g.port));
+        setInputProtocol(g.input_protocol);
+        setOutputProtocol(g.output_protocol);
+        setAutoStart(g.auto_start);
+        setLogRetention(String(g.log_retention_days));
+        setDirty(false);
+      }
     } catch (err) {
       toast("error", (err as api.AppError).message);
     }

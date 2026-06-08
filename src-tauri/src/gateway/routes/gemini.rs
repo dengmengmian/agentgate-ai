@@ -34,7 +34,7 @@ pub async fn handle_gemini_generate(
         let body = crate::gateway::body_decode::decode(&headers, body).map_err(GatewayError)?;
         let v: Value = serde_json::from_str(&body).map_err(|e| {
             GatewayError(AppError::new(
-                "COUNT_TOKENS_PARSE_ERROR",
+                crate::errors::codes::COUNT_TOKENS_PARSE_ERROR,
                 format!("Failed to parse: {e}"),
             ))
         })?;
@@ -85,7 +85,7 @@ pub async fn handle_gemini_generate(
 
     let gemini_body: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
         let err = AppError::new(
-            "GEMINI_PARSE_ERROR",
+            crate::errors::codes::GEMINI_PARSE_ERROR,
             format!("Failed to parse Gemini request: {e}"),
         );
         log_request_error(
@@ -241,7 +241,7 @@ pub async fn handle_gemini_generate(
                         .to_string();
                 if let Some(msg) = stream_err {
                     let err = AppError::new(
-                        "UPSTREAM_STREAM_ERROR",
+                        crate::errors::codes::UPSTREAM_STREAM_ERROR,
                         format!("Gemini 上游流中断: {msg}"),
                     );
                     log_request_error(

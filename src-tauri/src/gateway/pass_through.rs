@@ -176,7 +176,7 @@ async fn handle_non_stream(
     .await
     .map_err(|e| {
         AppError::new(
-            "PASS_THROUGH_REQUEST_FAILED",
+            crate::errors::codes::PASS_THROUGH_REQUEST_FAILED,
             format!("Failed to connect to provider: {e}"),
         )
     })?;
@@ -263,7 +263,7 @@ async fn handle_stream(
     .await
     .map_err(|e| {
         AppError::new(
-            "PASS_THROUGH_STREAM_FAILED",
+            crate::errors::codes::PASS_THROUGH_STREAM_FAILED,
             format!("Failed to connect to provider: {e}"),
         )
     })?;
@@ -649,7 +649,7 @@ pub async fn handle_anthropic(
         // Stream pass-through
         let resp = crate::providers::adapter::send_with_net_retry(&build_request, 1)
             .await
-            .map_err(|e| AppError::new("PASS_THROUGH_REQUEST_FAILED", format!("Failed: {e}")))?;
+            .map_err(|e| AppError::new(crate::errors::codes::PASS_THROUGH_REQUEST_FAILED, format!("Failed: {e}")))?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -769,7 +769,7 @@ pub async fn handle_anthropic(
         // Non-stream
         let resp = crate::providers::adapter::send_with_net_retry(&build_request, 1)
             .await
-            .map_err(|e| AppError::new("PASS_THROUGH_REQUEST_FAILED", format!("Failed: {e}")))?;
+            .map_err(|e| AppError::new(crate::errors::codes::PASS_THROUGH_REQUEST_FAILED, format!("Failed: {e}")))?;
         let status = resp.status();
         let body_text = resp.text().await.unwrap_or_default();
         let sanitized = sanitize(&body_text, config.api_key());

@@ -95,21 +95,21 @@ pub fn restore_files(snapshot: &ClientSnapshot) -> Result<(), AppError> {
             if let Some(parent) = path.parent() {
                 fs::create_dir_all(parent).map_err(|e| {
                     AppError::new(
-                        "CLIENT_RESTORE_FAILED",
+                        crate::errors::codes::CLIENT_RESTORE_FAILED,
                         format!("Cannot create parent of {}: {e}", file.name),
                     )
                 })?;
             }
             fs::write(&path, &file.content).map_err(|e| {
                 AppError::new(
-                    "CLIENT_RESTORE_FAILED",
+                    crate::errors::codes::CLIENT_RESTORE_FAILED,
                     format!("Cannot write {}: {e}", file.name),
                 )
             })?;
         } else if path.exists() {
             fs::remove_file(&path).map_err(|e| {
                 AppError::new(
-                    "CLIENT_RESTORE_FAILED",
+                    crate::errors::codes::CLIENT_RESTORE_FAILED,
                     format!("Cannot remove {}: {e}", file.name),
                 )
             })?;

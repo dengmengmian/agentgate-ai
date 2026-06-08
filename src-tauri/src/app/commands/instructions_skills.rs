@@ -26,7 +26,7 @@ pub fn read_global_instructions(
     scope: String,
 ) -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
     let s = crate::tools::instructions::InstructionsScope::from_str(&scope).ok_or_else(|| {
-        AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}"))
+        AppError::new(crate::errors::codes::INSTRUCTIONS_BAD_SCOPE, format!("unknown scope: {scope}"))
     })?;
     Ok(crate::tools::instructions::read(s))
 }
@@ -41,7 +41,7 @@ pub fn write_global_instructions(
     content: String,
 ) -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
     let s = crate::tools::instructions::InstructionsScope::from_str(&scope).ok_or_else(|| {
-        AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}"))
+        AppError::new(crate::errors::codes::INSTRUCTIONS_BAD_SCOPE, format!("unknown scope: {scope}"))
     })?;
     record_pre_apply(
         &state,
@@ -63,10 +63,10 @@ pub fn apply_instructions_template(
     mode: String,
 ) -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
     let s = crate::tools::instructions::InstructionsScope::from_str(&scope).ok_or_else(|| {
-        AppError::new("INSTRUCTIONS_BAD_SCOPE", format!("unknown scope: {scope}"))
+        AppError::new(crate::errors::codes::INSTRUCTIONS_BAD_SCOPE, format!("unknown scope: {scope}"))
     })?;
     let m = crate::tools::instructions::ApplyMode::from_str(&mode)
-        .ok_or_else(|| AppError::new("INSTRUCTIONS_BAD_MODE", format!("unknown mode: {mode}")))?;
+        .ok_or_else(|| AppError::new(crate::errors::codes::INSTRUCTIONS_BAD_MODE, format!("unknown mode: {mode}")))?;
     let summary = format!("template {template_id} ({mode})");
     record_pre_apply(
         &state,
@@ -94,7 +94,7 @@ pub fn import_instructions(
     payload: String,
 ) -> Result<Vec<crate::tools::instructions::InstructionsStatus>, AppError> {
     let backup: crate::tools::instructions::InstructionsBackup = serde_json::from_str(&payload)
-        .map_err(|e| AppError::new("INSTRUCTIONS_IMPORT_BAD_JSON", format!("invalid json: {e}")))?;
+        .map_err(|e| AppError::new(crate::errors::codes::INSTRUCTIONS_IMPORT_BAD_JSON, format!("invalid json: {e}")))?;
     use crate::tools::instructions::InstructionsScope;
     let mut out = Vec::new();
     for (scope, content) in [

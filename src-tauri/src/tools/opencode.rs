@@ -90,7 +90,7 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             AppError::new(
-                "OPENCODE_CONFIG_WRITE_FAILED",
+                crate::errors::codes::OPENCODE_CONFIG_WRITE_FAILED,
                 format!("Cannot create directory: {e}"),
             )
         })?;
@@ -105,7 +105,7 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
 
     let mut doc: serde_json::Value = serde_json::from_str(&existing).map_err(|e| {
         AppError::new(
-            "OPENCODE_CONFIG_PARSE_ERROR",
+            crate::errors::codes::OPENCODE_CONFIG_PARSE_ERROR,
             format!("Cannot parse opencode.json: {e}"),
         )
     })?;
@@ -126,7 +126,7 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     // Write
     let new_content = serde_json::to_string_pretty(&doc).map_err(|e| {
         AppError::new(
-            "OPENCODE_CONFIG_WRITE_FAILED",
+            crate::errors::codes::OPENCODE_CONFIG_WRITE_FAILED,
             format!("Cannot serialize: {e}"),
         )
     })?;
@@ -134,14 +134,14 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     let tmp = path.with_extension("json.tmp");
     fs::write(&tmp, format!("{new_content}\n")).map_err(|e| {
         AppError::new(
-            "OPENCODE_CONFIG_WRITE_FAILED",
+            crate::errors::codes::OPENCODE_CONFIG_WRITE_FAILED,
             format!("Failed to write: {e}"),
         )
     })?;
     fs::rename(&tmp, &path).map_err(|e| {
         let _ = fs::remove_file(&tmp);
         AppError::new(
-            "OPENCODE_CONFIG_WRITE_FAILED",
+            crate::errors::codes::OPENCODE_CONFIG_WRITE_FAILED,
             format!("Failed to replace: {e}"),
         )
     })?;
@@ -160,13 +160,13 @@ pub fn open_config() -> Result<(), AppError> {
     let path = config_path();
     if !path.exists() {
         return Err(AppError::new(
-            "OPENCODE_CONFIG_NOT_FOUND",
+            crate::errors::codes::OPENCODE_CONFIG_NOT_FOUND,
             "OpenCode config file does not exist",
         ));
     }
     open::that(&path).map_err(|e| {
         AppError::new(
-            "OPENCODE_CONFIG_OPEN_FAILED",
+            crate::errors::codes::OPENCODE_CONFIG_OPEN_FAILED,
             format!("Failed to open: {e}"),
         )
     })

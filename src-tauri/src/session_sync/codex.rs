@@ -204,7 +204,7 @@ pub fn delete_session_file(session_id: &str) -> Result<bool, AppError> {
         Some(path) => {
             fs::remove_file(&path).map_err(|e| {
                 AppError::new(
-                    "SESSION_DELETE_FAILED",
+                    crate::errors::codes::SESSION_DELETE_FAILED,
                     format!("删除 Codex 会话日志失败: {e}"),
                 )
             })?;
@@ -221,9 +221,9 @@ pub fn read_conversation(
 ) -> Result<Vec<crate::session_sync::claude::ConversationMessage>, AppError> {
     use crate::session_sync::claude::ConversationMessage;
     let path = find_session_file(session_id)
-        .ok_or_else(|| AppError::new("SESSION_NOT_FOUND", "找不到该 Codex 会话的本地日志"))?;
+        .ok_or_else(|| AppError::new(crate::errors::codes::SESSION_NOT_FOUND, "找不到该 Codex 会话的本地日志"))?;
     let content = fs::read_to_string(&path)
-        .map_err(|e| AppError::new("SESSION_READ_FAILED", format!("读取会话日志失败: {e}")))?;
+        .map_err(|e| AppError::new(crate::errors::codes::SESSION_READ_FAILED, format!("读取会话日志失败: {e}")))?;
 
     let mut msgs = Vec::new();
     for line in content.lines() {

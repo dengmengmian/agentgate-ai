@@ -39,7 +39,7 @@ pub fn import_config_json(
     let payload: storage::config_backups::ConfigExport =
         serde_json::from_str(&json).map_err(|e| {
             AppError::new(
-                "CONFIG_IMPORT_PARSE_ERROR",
+                crate::errors::codes::CONFIG_IMPORT_PARSE_ERROR,
                 format!("Invalid config JSON: {e}"),
             )
             .with_suggestion(

@@ -47,7 +47,7 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<RouteProfile, AppError> 
             selection_strategy: row.get(9)?,
         }),
     ).map_err(|e| match e {
-        rusqlite::Error::QueryReturnedNoRows => AppError::new("ROUTE_PROFILE_NOT_FOUND", format!("Route profile '{id}' not found")),
+        rusqlite::Error::QueryReturnedNoRows => AppError::new(crate::errors::codes::ROUTE_PROFILE_NOT_FOUND, format!("Route profile '{id}' not found")),
         other => AppError::database(other),
     })
 }
@@ -112,7 +112,7 @@ pub fn delete(conn: &Connection, id: &str) -> Result<bool, AppError> {
     let profile = get_by_id(conn, id)?;
     if profile.is_default {
         return Err(AppError::new(
-            "ROUTE_PROFILE_DELETE_DEFAULT_FORBIDDEN",
+            crate::errors::codes::ROUTE_PROFILE_DELETE_DEFAULT_FORBIDDEN,
             "Cannot delete the default route profile",
         ));
     }
@@ -227,7 +227,7 @@ pub fn add_provider(
     )?;
     if dup > 0 {
         return Err(AppError::new(
-            "ROUTE_PROVIDER_DUPLICATED",
+            crate::errors::codes::ROUTE_PROVIDER_DUPLICATED,
             "Provider is already in this route profile",
         ));
     }

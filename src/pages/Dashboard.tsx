@@ -17,6 +17,7 @@ import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { formatLatency } from "@/lib/utils";
 import * as api from "@/lib/api";
+import { useProviders, useRouteProfiles } from "@/store/global";
 import type { GatewayStatus } from "@/types/gateway";
 import type { ToolConfigView } from "@/types/tool";
 import type { RequestLogListItem, CostBreakdown } from "@/types/request-log";
@@ -136,17 +137,21 @@ export function Dashboard() {
     let cancelled = false;
     const load = async () => {
       try {
-        const [s, tl, l, st, ps, cm, cc, rs, rp] = await Promise.all([
+        // providers / route profiles 走全局 store——5s 轮询刷新到 store,其它
+        // 页面切回来不会再重发 invoke。
+        const [s, tl, l, st, cm, cc, rs] = await Promise.all([
           api.getGatewayStatus(),
           api.listTools(),
           api.listRequestLogs({ limit: 5 }),
           api.getRequestStatsRange(rangeDays),
-          api.listProviders(),
           api.aggregateCostByModel(rangeDays, 8),
           api.aggregateCostByClient(rangeDays, 8),
           api.aggregateRouteProfileStats(rangeDays).catch(() => []),
-          api.listRouteProfiles().catch(() => []),
+          useProviders.getState().refetch(),
+          useRouteProfiles.getState().refetch().catch(() => {}),
         ]);
+        const ps = useProviders.getState().items;
+        const rp = useRouteProfiles.getState().items;
         // 按策略成本：route_profile stats(含 cost/请求数) + profile 名字，转成
         // 和按模型/客户端一致的 CostBreakdown 形态复用 CostList。
         const nameMap = Object.fromEntries(rp.map((p) => [p.id, p.name]));

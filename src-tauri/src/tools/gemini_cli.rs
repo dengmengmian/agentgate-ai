@@ -45,12 +45,12 @@ fn saved_env_path() -> PathBuf {
 fn save_official_settings() -> Result<(), AppError> {
     let dir = saved_dir();
     fs::create_dir_all(&dir)
-        .map_err(|e| AppError::new("GEMINI_SAVE_FAILED", format!("Cannot create dir: {e}")))?;
+        .map_err(|e| AppError::new(crate::errors::codes::GEMINI_SAVE_FAILED, format!("Cannot create dir: {e}")))?;
     let src = settings_path();
     if src.exists() {
         fs::copy(&src, saved_settings_path()).map_err(|e| {
             AppError::new(
-                "GEMINI_SAVE_FAILED",
+                crate::errors::codes::GEMINI_SAVE_FAILED,
                 format!("Cannot save settings.json: {e}"),
             )
         })?;
@@ -58,7 +58,7 @@ fn save_official_settings() -> Result<(), AppError> {
     let env_src = env_file_path();
     if env_src.exists() {
         fs::copy(&env_src, saved_env_path())
-            .map_err(|e| AppError::new("GEMINI_SAVE_FAILED", format!("Cannot save .env: {e}")))?;
+            .map_err(|e| AppError::new(crate::errors::codes::GEMINI_SAVE_FAILED, format!("Cannot save .env: {e}")))?;
     }
     Ok(())
 }
@@ -71,13 +71,13 @@ fn restore_official_settings() -> Result<(), AppError> {
     let saved = saved_settings_path();
     if !saved.exists() {
         return Err(AppError::new(
-            "GEMINI_NO_SAVED_FILES",
+            crate::errors::codes::GEMINI_NO_SAVED_FILES,
             "No saved official settings found.",
         ));
     }
     fs::copy(&saved, settings_path()).map_err(|e| {
         AppError::new(
-            "GEMINI_RESTORE_FAILED",
+            crate::errors::codes::GEMINI_RESTORE_FAILED,
             format!("Cannot restore settings.json: {e}"),
         )
     })?;
@@ -85,7 +85,7 @@ fn restore_official_settings() -> Result<(), AppError> {
     let saved_env = saved_env_path();
     if saved_env.exists() {
         fs::copy(&saved_env, env_file_path()).map_err(|e| {
-            AppError::new("GEMINI_RESTORE_FAILED", format!("Cannot restore .env: {e}"))
+            AppError::new(crate::errors::codes::GEMINI_RESTORE_FAILED, format!("Cannot restore .env: {e}"))
         })?;
     } else {
         // No original .env — remove the AgentGate one
@@ -160,7 +160,7 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
     if let Some(parent) = sp.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             AppError::new(
-                "GEMINI_CONFIG_WRITE_FAILED",
+                crate::errors::codes::GEMINI_CONFIG_WRITE_FAILED,
                 format!("Cannot create directory: {e}"),
             )
         })?;
@@ -181,7 +181,7 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
 
     let mut doc: serde_json::Value = serde_json::from_str(&existing).map_err(|e| {
         AppError::new(
-            "GEMINI_CONFIG_PARSE_ERROR",
+            crate::errors::codes::GEMINI_CONFIG_PARSE_ERROR,
             format!("Cannot parse settings.json: {e}"),
         )
     })?;
@@ -204,7 +204,7 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
     // Write settings.json atomically
     let new_content = serde_json::to_string_pretty(&doc).map_err(|e| {
         AppError::new(
-            "GEMINI_CONFIG_WRITE_FAILED",
+            crate::errors::codes::GEMINI_CONFIG_WRITE_FAILED,
             format!("Cannot serialize: {e}"),
         )
     })?;
@@ -212,14 +212,14 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
     let tmp = sp.with_extension("json.tmp");
     fs::write(&tmp, format!("{new_content}\n")).map_err(|e| {
         AppError::new(
-            "GEMINI_CONFIG_WRITE_FAILED",
+            crate::errors::codes::GEMINI_CONFIG_WRITE_FAILED,
             format!("Failed to write temp: {e}"),
         )
     })?;
     fs::rename(&tmp, &sp).map_err(|e| {
         let _ = fs::remove_file(&tmp);
         AppError::new(
-            "GEMINI_CONFIG_WRITE_FAILED",
+            crate::errors::codes::GEMINI_CONFIG_WRITE_FAILED,
             format!("Failed to replace: {e}"),
         )
     })?;
@@ -231,7 +231,7 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
     );
     fs::write(&env_path, &env_content).map_err(|e| {
         AppError::new(
-            "GEMINI_CONFIG_WRITE_FAILED",
+            crate::errors::codes::GEMINI_CONFIG_WRITE_FAILED,
             format!("Failed to write .env: {e}"),
         )
     })?;
@@ -276,12 +276,12 @@ pub fn open_config() -> Result<(), AppError> {
     let sp = settings_path();
     if !sp.exists() {
         return Err(AppError::new(
-            "GEMINI_CONFIG_NOT_FOUND",
+            crate::errors::codes::GEMINI_CONFIG_NOT_FOUND,
             "Gemini CLI settings.json does not exist",
         ));
     }
     open::that(&sp)
-        .map_err(|e| AppError::new("GEMINI_CONFIG_OPEN_FAILED", format!("Failed to open: {e}")))
+        .map_err(|e| AppError::new(crate::errors::codes::GEMINI_CONFIG_OPEN_FAILED, format!("Failed to open: {e}")))
 }
 
 pub fn generate_snippet(host: &str, port: i64, model: &str) -> String {

@@ -368,7 +368,7 @@ fn convert_input_array(
                 let call_id = item.get("call_id").and_then(|c| c.as_str());
                 if call_id.is_none() || call_id == Some("") {
                     return Err(AppError::new(
-                        "FUNCTION_CALL_OUTPUT_ID_MISSING",
+                        crate::errors::codes::FUNCTION_CALL_OUTPUT_ID_MISSING,
                         "function_call_output is missing call_id",
                     ).with_suggestion("Each function_call_output must have a call_id matching a previous function_call"));
                 }

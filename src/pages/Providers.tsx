@@ -11,6 +11,7 @@ import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
 import { fetchDetectAndPersistProviderModels } from "@/lib/providerAutoSetup";
+import { useProviders } from "@/store/global";
 import * as api from "@/lib/api";
 import type {
   ProviderView,
@@ -22,7 +23,7 @@ import type { ProviderRuntimeStatus } from "@/types/route-profile";
 export function Providers() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const [providers, setProviders] = useState<ProviderView[]>([]);
+  const providers = useProviders(s => s.items);
   const [runtimeMap, setRuntimeMap] = useState<Record<string, ProviderRuntimeStatus>>({});
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
@@ -47,12 +48,12 @@ export function Providers() {
 
   const loadProviders = useCallback(async () => {
     try {
-      // runtime status 单独拉取，失败不影响 provider 列表渲染。
-      const [data, statuses] = await Promise.all([
-        api.listProviders(),
+      // providers 走全局 store——别页 mount 时已经填好,这里走 refetch 拿最新值;
+      // runtime status 单独拉取(profile-specific 数据,不进 store),失败不影响列表。
+      const [, statuses] = await Promise.all([
+        useProviders.getState().refetch(),
         api.listProviderRuntimeStatus().catch(() => [] as ProviderRuntimeStatus[]),
       ]);
-      setProviders(data);
       setRuntimeMap(Object.fromEntries(statuses.map((s) => [s.provider_id, s])));
     } catch (err) {
       toast("error", (err as api.AppError).message);

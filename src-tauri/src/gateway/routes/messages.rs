@@ -159,7 +159,7 @@ pub async fn handle_messages(
     // No anthropic endpoint — fall back to Messages → Chat Completions transform
     let msg_req: crate::protocol::anthropic_messages::MessagesRequest = serde_json::from_str(&body)
         .map_err(|e| {
-            let err = AppError::new("MESSAGES_PARSE_ERROR", format!("Failed to parse: {e}"));
+            let err = AppError::new(crate::errors::codes::MESSAGES_PARSE_ERROR, format!("Failed to parse: {e}"));
             log_request_error(
                 &state.db,
                 &client_type,

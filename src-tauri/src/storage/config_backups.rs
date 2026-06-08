@@ -125,7 +125,7 @@ fn load_route_members(
 pub fn import(conn: &mut Connection, payload: &ConfigExport) -> Result<ImportSummary, AppError> {
     if payload.version != CONFIG_EXPORT_VERSION {
         return Err(AppError::new(
-            "CONFIG_IMPORT_VERSION_MISMATCH",
+            crate::errors::codes::CONFIG_IMPORT_VERSION_MISMATCH,
             format!(
                 "Unsupported export version {} (this build expects {CONFIG_EXPORT_VERSION})",
                 payload.version

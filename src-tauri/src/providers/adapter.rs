@@ -37,7 +37,7 @@ impl ProviderConfig {
     pub fn from_provider(p: &Provider) -> Result<Self, AppError> {
         let raw = p.api_key.clone().filter(|k| !k.is_empty()).ok_or_else(|| {
             AppError::new(
-                "PROVIDER_API_KEY_MISSING",
+                crate::errors::codes::PROVIDER_API_KEY_MISSING,
                 "Active provider has no API key configured",
             )
             .with_suggestion("Set an API key in the Providers page")
@@ -47,7 +47,7 @@ impl ProviderConfig {
         let api_keys = parse_api_keys(&raw);
         if api_keys.is_empty() {
             return Err(
-                AppError::new("PROVIDER_API_KEY_MISSING", "No valid API keys configured")
+                AppError::new(crate::errors::codes::PROVIDER_API_KEY_MISSING, "No valid API keys configured")
                     .with_suggestion("Set at least one API key in the Providers page"),
             );
         }
@@ -312,7 +312,7 @@ pub async fn send_non_stream(
         maybe_strip_mimo_web_search_for_account(config, &api_key, &mut effective_request);
         let mut body = serde_json::to_value(&effective_request).map_err(|e| {
             AppError::new(
-                "TRANSFORM_ERROR",
+                crate::errors::codes::TRANSFORM_ERROR,
                 format!("Failed to serialize request: {e}"),
             )
         })?;
@@ -337,14 +337,14 @@ pub async fn send_non_stream(
                     ))
                     .await;
                     last_err = Some(AppError::new(
-                        "PROVIDER_REQUEST_FAILED",
+                        crate::errors::codes::PROVIDER_REQUEST_FAILED,
                         format!("Transient connect failure attempt {}: {e}", attempt + 1),
                     ));
                     continue 'retry;
                 }
                 Err(e) => {
                     return Err(AppError::new(
-                        "PROVIDER_REQUEST_FAILED",
+                        crate::errors::codes::PROVIDER_REQUEST_FAILED,
                         format!("Failed to connect to provider: {e}"),
                     ));
                 }
@@ -358,7 +358,7 @@ pub async fn send_non_stream(
                 *request = effective_request;
                 return serde_json::from_str(&sanitized).map_err(|e| {
                     AppError::new(
-                        "UPSTREAM_NON_STREAM_ERROR",
+                        crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
                         format!("Failed to parse provider response: {e}"),
                     )
                     .with_detail(truncate(&sanitized, 500))
@@ -385,7 +385,7 @@ pub async fn send_non_stream(
                 );
                 body = serde_json::to_value(&effective_request).map_err(|e| {
                     AppError::new(
-                        "TRANSFORM_ERROR",
+                        crate::errors::codes::TRANSFORM_ERROR,
                         format!("Failed to serialize degraded request: {e}"),
                     )
                 })?;
@@ -420,7 +420,7 @@ pub async fn send_non_stream(
     }
 
     Err(last_err
-        .unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
+        .unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_NON_STREAM_ERROR, "All retries exhausted")))
 }
 
 /// Send a streaming chat completions request with automatic retry.
@@ -439,7 +439,7 @@ pub async fn send_stream(
         maybe_strip_mimo_web_search_for_account(config, &api_key, &mut effective_request);
         let mut body = serde_json::to_value(&effective_request).map_err(|e| {
             AppError::new(
-                "TRANSFORM_ERROR",
+                crate::errors::codes::TRANSFORM_ERROR,
                 format!("Failed to serialize request: {e}"),
             )
         })?;
@@ -465,14 +465,14 @@ pub async fn send_stream(
                     ))
                     .await;
                     last_err = Some(AppError::new(
-                        "PROVIDER_REQUEST_FAILED",
+                        crate::errors::codes::PROVIDER_REQUEST_FAILED,
                         format!("Transient connect failure attempt {}: {e}", attempt + 1),
                     ));
                     continue 'retry;
                 }
                 Err(e) => {
                     return Err(AppError::new(
-                        "PROVIDER_REQUEST_FAILED",
+                        crate::errors::codes::PROVIDER_REQUEST_FAILED,
                         format!("Failed to connect to provider: {e}"),
                     ));
                 }
@@ -504,7 +504,7 @@ pub async fn send_stream(
                 );
                 body = serde_json::to_value(&effective_request).map_err(|e| {
                     AppError::new(
-                        "TRANSFORM_ERROR",
+                        crate::errors::codes::TRANSFORM_ERROR,
                         format!("Failed to serialize degraded request: {e}"),
                     )
                 })?;
@@ -538,7 +538,7 @@ pub async fn send_stream(
         }
     }
 
-    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))
+    Err(last_err.unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, "All retries exhausted")))
 }
 
 pub fn is_mimo_web_search_disabled_error(err: &AppError) -> bool {
@@ -684,14 +684,14 @@ pub async fn send_anthropic_non_stream(
                 tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1)))
                     .await;
                 last_err = Some(AppError::new(
-                    "PROVIDER_REQUEST_FAILED",
+                    crate::errors::codes::PROVIDER_REQUEST_FAILED,
                     format!("Transient connect failure attempt {}: {e}", attempt + 1),
                 ));
                 continue;
             }
             Err(e) => {
                 return Err(AppError::new(
-                    "PROVIDER_REQUEST_FAILED",
+                    crate::errors::codes::PROVIDER_REQUEST_FAILED,
                     format!("Failed to connect to Claude: {e}"),
                 ));
             }
@@ -703,7 +703,7 @@ pub async fn send_anthropic_non_stream(
             let sanitized = config.sanitize(&body_text);
             return serde_json::from_str(&sanitized).map_err(|e| {
                 AppError::new(
-                    "UPSTREAM_NON_STREAM_ERROR",
+                    crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
                     format!("Failed to parse Claude response: {e}"),
                 )
                 .with_detail(truncate(&sanitized, 500))
@@ -723,7 +723,7 @@ pub async fn send_anthropic_non_stream(
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             last_err = Some(
                 AppError::new(
-                    "UPSTREAM_NON_STREAM_ERROR",
+                    crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
                     format!("Claude returned HTTP {status}"),
                 )
                 .with_detail(truncate(&sanitized, 2000)),
@@ -732,14 +732,14 @@ pub async fn send_anthropic_non_stream(
         }
 
         return Err(AppError::new(
-            "UPSTREAM_NON_STREAM_ERROR",
+            crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
             format!("Claude returned HTTP {status}"),
         )
         .with_detail(truncate(&sanitized, 2000)));
     }
 
     Err(last_err
-        .unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
+        .unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_NON_STREAM_ERROR, "All retries exhausted")))
 }
 
 /// Send a streaming request to Claude Messages API with automatic retry.
@@ -774,14 +774,14 @@ pub async fn send_anthropic_stream(
                 tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1)))
                     .await;
                 last_err = Some(AppError::new(
-                    "PROVIDER_REQUEST_FAILED",
+                    crate::errors::codes::PROVIDER_REQUEST_FAILED,
                     format!("Transient connect failure attempt {}: {e}", attempt + 1),
                 ));
                 continue;
             }
             Err(e) => {
                 return Err(AppError::new(
-                    "PROVIDER_REQUEST_FAILED",
+                    crate::errors::codes::PROVIDER_REQUEST_FAILED,
                     format!("Failed to connect to Claude: {e}"),
                 ));
             }
@@ -805,7 +805,7 @@ pub async fn send_anthropic_stream(
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             last_err = Some(
                 AppError::new(
-                    "UPSTREAM_STREAM_ERROR",
+                    crate::errors::codes::UPSTREAM_STREAM_ERROR,
                     format!("Claude returned HTTP {status}"),
                 )
                 .with_detail(truncate(&sanitized, 2000)),
@@ -814,13 +814,13 @@ pub async fn send_anthropic_stream(
         }
 
         return Err(AppError::new(
-            "UPSTREAM_STREAM_ERROR",
+            crate::errors::codes::UPSTREAM_STREAM_ERROR,
             format!("Claude returned HTTP {status}"),
         )
         .with_detail(truncate(&sanitized, 2000)));
     }
 
-    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))
+    Err(last_err.unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, "All retries exhausted")))
 }
 
 /// Send a non-streaming request to Gemini API with retry.
@@ -851,14 +851,14 @@ pub async fn send_gemini_non_stream(
                 tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1)))
                     .await;
                 last_err = Some(AppError::new(
-                    "PROVIDER_REQUEST_FAILED",
+                    crate::errors::codes::PROVIDER_REQUEST_FAILED,
                     format!("Transient connect failure attempt {}: {e}", attempt + 1),
                 ));
                 continue;
             }
             Err(e) => {
                 return Err(AppError::new(
-                    "PROVIDER_REQUEST_FAILED",
+                    crate::errors::codes::PROVIDER_REQUEST_FAILED,
                     format!("Failed to connect to Gemini: {e}"),
                 ));
             }
@@ -870,7 +870,7 @@ pub async fn send_gemini_non_stream(
             let sanitized = config.sanitize(&body_text);
             return serde_json::from_str(&sanitized).map_err(|e| {
                 AppError::new(
-                    "UPSTREAM_NON_STREAM_ERROR",
+                    crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
                     format!("Failed to parse Gemini response: {e}"),
                 )
                 .with_detail(truncate(&sanitized, 500))
@@ -890,7 +890,7 @@ pub async fn send_gemini_non_stream(
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             last_err = Some(
                 AppError::new(
-                    "UPSTREAM_NON_STREAM_ERROR",
+                    crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
                     format!("Gemini returned HTTP {status}"),
                 )
                 .with_detail(truncate(&sanitized, 2000)),
@@ -899,14 +899,14 @@ pub async fn send_gemini_non_stream(
         }
 
         return Err(AppError::new(
-            "UPSTREAM_NON_STREAM_ERROR",
+            crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
             format!("Gemini returned HTTP {status}"),
         )
         .with_detail(truncate(&sanitized, 2000)));
     }
 
     Err(last_err
-        .unwrap_or_else(|| AppError::new("UPSTREAM_NON_STREAM_ERROR", "All retries exhausted")))
+        .unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_NON_STREAM_ERROR, "All retries exhausted")))
 }
 
 /// Send a streaming request to Gemini API with retry.
@@ -938,14 +938,14 @@ pub async fn send_gemini_stream(
                 tokio::time::sleep(std::time::Duration::from_millis(200 * (attempt as u64 + 1)))
                     .await;
                 last_err = Some(AppError::new(
-                    "PROVIDER_REQUEST_FAILED",
+                    crate::errors::codes::PROVIDER_REQUEST_FAILED,
                     format!("Transient connect failure attempt {}: {e}", attempt + 1),
                 ));
                 continue;
             }
             Err(e) => {
                 return Err(AppError::new(
-                    "PROVIDER_REQUEST_FAILED",
+                    crate::errors::codes::PROVIDER_REQUEST_FAILED,
                     format!("Failed to connect to Gemini: {e}"),
                 ));
             }
@@ -969,7 +969,7 @@ pub async fn send_gemini_stream(
             tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
             last_err = Some(
                 AppError::new(
-                    "UPSTREAM_STREAM_ERROR",
+                    crate::errors::codes::UPSTREAM_STREAM_ERROR,
                     format!("Gemini returned HTTP {status}"),
                 )
                 .with_detail(truncate(&sanitized, 2000)),
@@ -978,13 +978,13 @@ pub async fn send_gemini_stream(
         }
 
         return Err(AppError::new(
-            "UPSTREAM_STREAM_ERROR",
+            crate::errors::codes::UPSTREAM_STREAM_ERROR,
             format!("Gemini returned HTTP {status}"),
         )
         .with_detail(truncate(&sanitized, 2000)));
     }
 
-    Err(last_err.unwrap_or_else(|| AppError::new("UPSTREAM_STREAM_ERROR", "All retries exhausted")))
+    Err(last_err.unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, "All retries exhausted")))
 }
 
 /// Parse api_key field: JSON array → Vec<String>, plain string → vec![string].
@@ -1335,7 +1335,7 @@ mod tests {
     #[test]
     fn mimo_web_search_error_detection_uses_marker() {
         let err = AppError::new(
-            "UPSTREAM_STREAM_ERROR",
+            crate::errors::codes::UPSTREAM_STREAM_ERROR,
             "Provider returned HTTP 502: upstream emitted error event",
         )
         .with_detail("data: {\"error\":{\"message\":\"webSearchEnabled is false\"}}");

@@ -447,7 +447,7 @@ fn read_raw_codex_server(home: &Path, name: &str) -> Result<RawMcpServer, AppErr
         fs::read_to_string(&path).map_err(|_| AppError::not_found("Codex MCP server", name))?;
     let doc = content.parse::<toml_edit::DocumentMut>().map_err(|e| {
         AppError::new(
-            "MCP_CONFIG_PARSE_ERROR",
+            crate::errors::codes::MCP_CONFIG_PARSE_ERROR,
             format!("Cannot parse Codex MCP config: {e}"),
         )
     })?;
@@ -490,7 +490,7 @@ fn read_raw_claude_server(home: &Path, name: &str) -> Result<RawMcpServer, AppEr
         .map_err(|_| AppError::not_found("Claude Code MCP server", name))?;
     let json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
         AppError::new(
-            "MCP_CONFIG_PARSE_ERROR",
+            crate::errors::codes::MCP_CONFIG_PARSE_ERROR,
             format!("Cannot parse Claude Code MCP config: {e}"),
         )
     })?;
@@ -569,7 +569,7 @@ fn upsert_codex(home: &Path, input: &UpsertMcpServerInput) -> Result<(), AppErro
     };
     fs::write(&path, next).map_err(|e| {
         AppError::new(
-            "MCP_CONFIG_WRITE_FAILED",
+            crate::errors::codes::MCP_CONFIG_WRITE_FAILED,
             format!("Cannot write Codex MCP config: {e}"),
         )
     })
@@ -588,7 +588,7 @@ fn delete_codex(home: &Path, name: &str) -> Result<bool, AppError> {
     }
     fs::write(&path, next).map_err(|e| {
         AppError::new(
-            "MCP_CONFIG_WRITE_FAILED",
+            crate::errors::codes::MCP_CONFIG_WRITE_FAILED,
             format!("Cannot write Codex MCP config: {e}"),
         )
     })?;
@@ -601,7 +601,7 @@ fn upsert_claude(home: &Path, input: &UpsertMcpServerInput) -> Result<(), AppErr
     let content = fs::read_to_string(&path).unwrap_or_else(|_| "{}".to_string());
     let mut json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
         AppError::new(
-            "MCP_CONFIG_PARSE_ERROR",
+            crate::errors::codes::MCP_CONFIG_PARSE_ERROR,
             format!("Cannot parse Claude Code MCP config: {e}"),
         )
     })?;
@@ -629,7 +629,7 @@ fn delete_claude(home: &Path, name: &str) -> Result<bool, AppError> {
     };
     let mut json: serde_json::Value = serde_json::from_str(&content).map_err(|e| {
         AppError::new(
-            "MCP_CONFIG_PARSE_ERROR",
+            crate::errors::codes::MCP_CONFIG_PARSE_ERROR,
             format!("Cannot parse Claude Code MCP config: {e}"),
         )
     })?;
@@ -647,7 +647,7 @@ fn ensure_parent(path: &Path) -> Result<(), AppError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             AppError::new(
-                "MCP_CONFIG_WRITE_FAILED",
+                crate::errors::codes::MCP_CONFIG_WRITE_FAILED,
                 format!("Cannot create MCP config directory: {e}"),
             )
         })?;
@@ -780,7 +780,7 @@ fn write_pretty_json(path: &Path, value: &serde_json::Value) -> Result<(), AppEr
         .map_err(|e| AppError::internal(format!("serialize MCP JSON: {e}")))?;
     fs::write(path, format!("{content}\n")).map_err(|e| {
         AppError::new(
-            "MCP_CONFIG_WRITE_FAILED",
+            crate::errors::codes::MCP_CONFIG_WRITE_FAILED,
             format!("Cannot write Claude Code MCP config: {e}"),
         )
     })

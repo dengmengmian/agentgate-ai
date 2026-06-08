@@ -72,7 +72,7 @@ pub async fn handle_count_tokens(
     let body = crate::gateway::body_decode::decode(&headers, body).map_err(GatewayError)?;
     let v: Value = serde_json::from_str(&body).map_err(|e| {
         GatewayError(AppError::new(
-            "COUNT_TOKENS_PARSE_ERROR",
+            crate::errors::codes::COUNT_TOKENS_PARSE_ERROR,
             format!("Failed to parse: {e}"),
         ))
     })?;

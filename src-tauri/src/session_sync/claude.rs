@@ -247,10 +247,10 @@ fn find_session_file(session_id: &str) -> Option<PathBuf> {
 /// 读取某个 Claude Code 会话的完整对话（user / assistant 消息）。
 pub fn read_conversation(session_id: &str) -> Result<Vec<ConversationMessage>, AppError> {
     let path = find_session_file(session_id).ok_or_else(|| {
-        AppError::new("SESSION_NOT_FOUND", "找不到该会话的本地日志文件")
+        AppError::new(crate::errors::codes::SESSION_NOT_FOUND, "找不到该会话的本地日志文件")
     })?;
     let content = fs::read_to_string(&path)
-        .map_err(|e| AppError::new("SESSION_READ_FAILED", format!("读取会话日志失败: {e}")))?;
+        .map_err(|e| AppError::new(crate::errors::codes::SESSION_READ_FAILED, format!("读取会话日志失败: {e}")))?;
 
     let mut msgs = Vec::new();
     for line in content.lines() {
@@ -292,7 +292,7 @@ pub fn delete_session_file(session_id: &str) -> Result<bool, AppError> {
         Some(path) => {
             fs::remove_file(&path).map_err(|e| {
                 AppError::new(
-                    "SESSION_DELETE_FAILED",
+                    crate::errors::codes::SESSION_DELETE_FAILED,
                     format!("删除 Claude 会话日志失败: {e}"),
                 )
             })?;

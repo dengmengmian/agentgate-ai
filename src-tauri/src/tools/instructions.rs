@@ -122,14 +122,14 @@ pub fn write(scope: InstructionsScope, content: &str) -> Result<InstructionsStat
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| {
             AppError::new(
-                "INSTRUCTIONS_WRITE_FAILED",
+                crate::errors::codes::INSTRUCTIONS_WRITE_FAILED,
                 format!("Cannot create directory {}: {e}", parent.display()),
             )
         })?;
     }
     fs::write(&path, content).map_err(|e| {
         AppError::new(
-            "INSTRUCTIONS_WRITE_FAILED",
+            crate::errors::codes::INSTRUCTIONS_WRITE_FAILED,
             format!("Cannot write {}: {e}", path.display()),
         )
     })?;
@@ -146,7 +146,7 @@ pub fn apply_template(
 ) -> Result<InstructionsStatus, AppError> {
     let tpl = super::instructions_templates::find(template_id).ok_or_else(|| {
         AppError::new(
-            "INSTRUCTIONS_TEMPLATE_NOT_FOUND",
+            crate::errors::codes::INSTRUCTIONS_TEMPLATE_NOT_FOUND,
             format!("Unknown template: {template_id}"),
         )
     })?;
