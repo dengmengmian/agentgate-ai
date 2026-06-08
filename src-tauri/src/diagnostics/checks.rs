@@ -1,5 +1,3 @@
-use rusqlite::Connection;
-use std::sync::{Arc, Mutex};
 
 use crate::diagnostics::report::*;
 use crate::security::local_token;
@@ -7,7 +5,7 @@ use crate::storage;
 
 // ── Health Check ──────────────────────────────────────────────
 
-pub fn health_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
+pub fn health_check(db: &crate::storage::db::DbPool) -> CheckReport {
     let mut checks = Vec::new();
 
     // Token file
@@ -49,7 +47,7 @@ pub fn health_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
     }
 
     // DB accessible
-    match db.lock() {
+    match db.get() {
         Ok(conn) => {
             checks.push(CheckItem::ok("db_lock", "Database", "Database accessible"));
             // Tables
@@ -94,10 +92,10 @@ pub fn health_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
 
 // ── Database Check ────────────────────────────────────────────
 
-pub fn database_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
+pub fn database_check(db: &crate::storage::db::DbPool) -> CheckReport {
     let mut checks = Vec::new();
 
-    let Ok(conn) = db.lock() else {
+    let Ok(conn) = db.get() else {
         checks.push(CheckItem::failed("db_lock", "Database lock", "Cannot lock"));
         return CheckReport::new("Database Check", checks);
     };
@@ -166,7 +164,7 @@ pub fn database_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
 
 // ── Gateway Auth Check ────────────────────────────────────────
 
-pub fn gateway_auth_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
+pub fn gateway_auth_check(db: &crate::storage::db::DbPool) -> CheckReport {
     let mut checks = Vec::new();
 
     // Token exists
@@ -204,7 +202,7 @@ pub fn gateway_auth_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
     }
 
     // Check logs for token leakage
-    if let Ok(conn) = db.lock() {
+    if let Ok(conn) = db.get() {
         let leaked: i64 = conn.query_row(
             "SELECT COUNT(*) FROM request_logs WHERE raw_request LIKE ?1 OR converted_request LIKE ?1 OR error_message LIKE ?1",
             [&format!("%{token}%")], |r| r.get(0),
@@ -232,10 +230,10 @@ pub fn gateway_auth_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
 
 // ── Provider Check ────────────────────────────────────────────
 
-pub fn provider_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
+pub fn provider_check(db: &crate::storage::db::DbPool) -> CheckReport {
     let mut checks = Vec::new();
 
-    let Ok(conn) = db.lock() else {
+    let Ok(conn) = db.get() else {
         checks.push(CheckItem::failed("db", "Database", "Cannot lock"));
         return CheckReport::new("Provider Check", checks);
     };
@@ -304,7 +302,7 @@ pub fn provider_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
 
 // ── Codex Config Check ────────────────────────────────────────
 
-pub fn codex_config_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
+pub fn codex_config_check(db: &crate::storage::db::DbPool) -> CheckReport {
     let mut checks = Vec::new();
 
     let status = crate::tools::codex::detect();
@@ -385,7 +383,7 @@ pub fn codex_config_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
     }
 
     // Base URL check
-    if let Ok(conn) = db.lock() {
+    if let Ok(conn) = db.get() {
         if let Ok(settings) = storage::gateway_settings::get(&conn) {
             let expected_url = format!("http://{}:{}/v1", settings.host, settings.port);
             let content =
@@ -414,7 +412,7 @@ pub fn codex_config_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
 
 // ── Claude Code Config Check ──────────────────────────────────
 
-pub fn claude_code_config_check(_db: &Arc<Mutex<Connection>>) -> CheckReport {
+pub fn claude_code_config_check(_db: &crate::storage::db::DbPool) -> CheckReport {
     let mut checks = Vec::new();
 
     let status = crate::tools::claude_code::detect_env();
@@ -487,10 +485,10 @@ pub fn claude_code_config_check(_db: &Arc<Mutex<Connection>>) -> CheckReport {
 
 // ── Route Profile Check ───────────────────────────────────────
 
-pub fn route_profile_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
+pub fn route_profile_check(db: &crate::storage::db::DbPool) -> CheckReport {
     let mut checks = Vec::new();
 
-    let Ok(conn) = db.lock() else {
+    let Ok(conn) = db.get() else {
         checks.push(CheckItem::failed("db", "Database", "Cannot lock"));
         return CheckReport::new("Route Profile Check", checks);
     };
@@ -553,7 +551,7 @@ pub fn route_profile_check(db: &Arc<Mutex<Connection>>) -> CheckReport {
 
 // ── Full Self Test ────────────────────────────────────────────
 
-pub fn full_self_test(db: &Arc<Mutex<Connection>>) -> FullSelfTestReport {
+pub fn full_self_test(db: &crate::storage::db::DbPool) -> FullSelfTestReport {
     let reports = vec![
         health_check(db),
         database_check(db),
@@ -588,7 +586,7 @@ pub fn full_self_test(db: &Arc<Mutex<Connection>>) -> FullSelfTestReport {
 // ── Diagnostic Bundle Export ──────────────────────────────────
 
 pub fn export_bundle(
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     include_logs: bool,
     max_logs: usize,
 ) -> Result<ExportResult, crate::errors::AppError> {
@@ -622,7 +620,7 @@ pub fn export_bundle(
     files.push("self_test_report.json".to_string());
 
     // 2. Gateway status
-    if let Ok(conn) = db.lock() {
+    if let Ok(conn) = db.get() {
         if let Ok(settings) = storage::gateway_settings::get(&conn) {
             let sj = serde_json::to_string_pretty(&settings).unwrap_or_default();
             fs::write(bundle_dir.join("gateway_settings.json"), &sj).ok();

@@ -4,7 +4,6 @@ use axum::response::Response;
 use futures::StreamExt;
 use rusqlite::Connection;
 use serde_json::json;
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -50,7 +49,7 @@ fn forward_client_headers(
 /// Handle a native upstream pass-through request (stream or non-stream).
 pub async fn handle(
     http_client: &reqwest::Client,
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     config: &ProviderConfig,
     target_url: &str,
     route: &str,
@@ -146,7 +145,7 @@ fn native_trace_mode(model_override: Option<&str>) -> &'static str {
 
 async fn handle_non_stream(
     http_client: &reqwest::Client,
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     config: &ProviderConfig,
     target_url: &str,
     route: &str,
@@ -232,7 +231,7 @@ async fn handle_non_stream(
 
 async fn handle_stream(
     http_client: &reqwest::Client,
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     config: &ProviderConfig,
     target_url: &str,
     route: &str,
@@ -467,12 +466,11 @@ async fn handle_stream(
         .unwrap())
 }
 
-/// Lock the DB, recovering from a poisoned Mutex if necessary.
-fn lock_db(db: &Arc<Mutex<Connection>>) -> Option<std::sync::MutexGuard<'_, Connection>> {
-    match db.lock() {
-        Ok(guard) => Some(guard),
-        Err(poisoned) => Some(poisoned.into_inner()),
-    }
+/// 从连接池借一个连接,池满 / 超时返回 None(调用方决定怎么兜底)。
+fn lock_db(
+    db: &crate::storage::db::DbPool,
+) -> Option<r2d2::PooledConnection<r2d2_sqlite::SqliteConnectionManager>> {
+    db.get().ok()
 }
 
 /// 给直通日志的 trace 补 route_decision（按协议反推默认 profile），让「按策略」统计
@@ -540,7 +538,7 @@ fn truncate(s: &str, max: usize) -> String {
 }
 
 fn log_to_db(
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     client_type: &str,
     route: &str,
     request_id: &str,
@@ -592,7 +590,7 @@ fn log_to_db(
 /// Used when provider has `anthropic_base_url` set (e.g. DeepSeek, Kimi).
 pub async fn handle_anthropic(
     http_client: &reqwest::Client,
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     config: &ProviderConfig,
     target_url: &str,
     raw_body: &str,

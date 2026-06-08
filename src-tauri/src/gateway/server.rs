@@ -3,12 +3,11 @@ use axum::routing::{get, post};
 use axum::Router;
 use axum_server::tls_rustls::RustlsConfig;
 use http_body::{Body as HttpBody, Frame, SizeHint};
-use rusqlite::Connection;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -82,7 +81,7 @@ impl HttpBody for CountingBody {
 pub async fn start(
     host: &str,
     port: u16,
-    db: Arc<Mutex<Connection>>,
+    db: crate::storage::db::DbPool,
     tls: Option<TlsConfig>,
 ) -> Result<
     (

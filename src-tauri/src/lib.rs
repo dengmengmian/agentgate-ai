@@ -166,7 +166,7 @@ pub fn run() {
                     let app_handle = app.clone();
                     tauri::async_runtime::spawn(async move {
                         let state: tauri::State<'_, AppState> = app_handle.state();
-                        let lock = state.db.lock();
+                        let lock = state.db.get();
                         if let Ok(conn) = lock {
                             let _ = storage::pet_settings::update(
                                 &conn,
@@ -197,11 +197,11 @@ pub fn run() {
                 .app_data_dir()
                 .expect("Failed to get app data directory");
 
-            let conn = storage::db::init_database(&app_data_dir)
+            let pool = storage::db::init_database(&app_data_dir)
                 .expect("Failed to initialize database");
 
             let state = AppState {
-                db: Arc::new(Mutex::new(conn)),
+                db: pool,
                 gateway_runtime: Arc::new(Mutex::new(GatewayRuntimeState::default())),
                 pet_click_through: Arc::new(Mutex::new(false)),
             };
@@ -219,7 +219,7 @@ pub fn run() {
                 let db = cleanup_db;
                 tauri::async_runtime::spawn(async move {
                     loop {
-                        if let Ok(conn) = db.lock() {
+                        if let Ok(conn) = db.get() {
                             let days = storage::gateway_settings::get(&conn)
                                 .map(|s| s.log_retention_days)
                                 .unwrap_or(14);
@@ -256,7 +256,7 @@ pub fn run() {
                     // Small delay to let app fully initialize
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                     let state: tauri::State<'_, AppState> = app_handle.state();
-                    let should_start = state.db.lock()
+                    let should_start = state.db.get()
                         .ok()
                         .and_then(|conn| storage::gateway_settings::get(&conn).ok())
                         .map(|s| s.auto_start)
@@ -270,7 +270,7 @@ pub fn run() {
             // ── Desktop Pet Window ──
             {
                 let state: &AppState = app.state::<AppState>().inner();
-                let pet_settings = state.db.lock()
+                let pet_settings = state.db.get()
                     .ok()
                     .and_then(|conn| storage::pet_settings::get(&conn).ok());
 
@@ -642,7 +642,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         tauri::async_runtime::spawn(async move {
                             let state: tauri::State<'_, AppState> = app_handle.state();
                             let db = state.db.clone();
-                            let conn = db.lock().unwrap();
+                            let conn = db.get().unwrap();
                             let _ = storage::pet_settings::update(
                                 &conn,
                                 crate::models::pet::UpdatePetSettingsInput {

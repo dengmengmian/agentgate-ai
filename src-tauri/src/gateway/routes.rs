@@ -5,7 +5,7 @@ use axum::response::{IntoResponse, Json, Response};
 use rusqlite::Connection;
 use serde_json::{json, Value};
 use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -31,12 +31,12 @@ use crate::transform::{
 /// into the request log). Failing to lock the DB or read settings degrades
 /// to no-op — the gateway should still forward the request transparently.
 fn refine_value_body(
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     provider: &Provider,
     body: &mut Value,
 ) -> crate::gateway::refiner_log::RefinerLog {
     let settings = match db
-        .lock()
+        .get()
         .ok()
         .and_then(|c| crate::storage::gateway_settings::get(&c).ok())
     {
@@ -51,7 +51,7 @@ fn refine_value_body(
 /// modified struct back. If either serde leg fails the original struct is
 /// returned untouched — refiner errors must never block the request.
 fn refine_struct_body<T>(
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     provider: &Provider,
     req: &mut T,
 ) -> crate::gateway::refiner_log::RefinerLog
@@ -74,7 +74,7 @@ where
 /// Shared state for the gateway HTTP server.
 #[derive(Clone)]
 pub struct GatewayState {
-    pub db: Arc<Mutex<Connection>>,
+    pub db: crate::storage::db::DbPool,
     pub http_client: reqwest::Client,
     pub active_requests: Arc<AtomicU64>,
 }
@@ -312,7 +312,7 @@ pub async fn handle_responses(
         let provider = {
             let conn = state
                 .db
-                .lock()
+                .get()
                 .map_err(|_| GatewayError(AppError::internal("DB lock")))?;
             match crate::storage::providers::get_by_id(&conn, &candidate.provider_id) {
                 Ok(p) => p,
@@ -452,7 +452,7 @@ pub async fn handle_responses(
             let matrix = {
                 let conn = state
                     .db
-                    .lock()
+                    .get()
                     .map_err(|_| GatewayError(AppError::internal("DB lock")))?;
                 crate::storage::providers::get_by_id(&conn, &candidate.provider_id)
                     .ok()
@@ -2391,7 +2391,7 @@ pub async fn handle_chat_completions(
         let provider = {
             let conn = state
                 .db
-                .lock()
+                .get()
                 .map_err(|_| GatewayError(AppError::internal("DB lock")))?;
             match crate::storage::providers::get_by_id(&conn, &candidate.provider_id) {
                 Ok(p) => p,
@@ -3793,29 +3793,13 @@ mod tests {
 
     #[test]
     fn test_lock_db_normal() {
-        let conn = Connection::open_in_memory().unwrap();
-        let db = Arc::new(Mutex::new(conn));
-        assert!(lock_db(&db).is_some());
+        let manager = r2d2_sqlite::SqliteConnectionManager::memory();
+        let pool = r2d2::Pool::builder().max_size(1).build(manager).unwrap();
+        assert!(lock_db(&pool).is_some());
     }
 
-    #[test]
-    fn test_lock_db_recovers_from_poison() {
-        let conn = Connection::open_in_memory().unwrap();
-        let db = Arc::new(Mutex::new(conn));
-        // Poison the mutex by panicking while holding the lock
-        let db2 = db.clone();
-        let _ = std::thread::spawn(move || {
-            let _guard = db2.lock().unwrap();
-            panic!("intentional panic to poison mutex");
-        })
-        .join();
-        // Mutex is now poisoned — lock_db should recover
-        assert!(db.lock().is_err(), "Mutex should be poisoned");
-        assert!(
-            lock_db(&db).is_some(),
-            "lock_db should recover from poisoned mutex"
-        );
-    }
+    // 旧 "test_lock_db_recovers_from_poison" 已删——r2d2::Pool 不存在 Mutex poison 概念,
+    // 连接获取失败只可能是超时 / 池满,语义不再对应。
 
     #[test]
     fn route_candidate_skip_reasons_explain_unavailable_cooldown_and_vision() {
@@ -4197,9 +4181,9 @@ mod tests {
     }
 }
 
-fn get_active_provider(db: &Arc<Mutex<Connection>>) -> Result<Provider, GatewayError> {
+fn get_active_provider(db: &crate::storage::db::DbPool) -> Result<Provider, GatewayError> {
     let conn = db
-        .lock()
+        .get()
         .map_err(|_| GatewayError(AppError::internal("DB lock failed")))?;
     let settings = crate::storage::gateway_settings::get(&conn)?;
 
@@ -4505,7 +4489,7 @@ fn route_candidate_skip_reasons(
 }
 
 fn log_request_error(
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     client_type: &str,
     route: &str,
     request_id: &str,
@@ -4535,21 +4519,16 @@ fn log_request_error(
     );
 }
 
-/// Lock the DB, recovering from a poisoned Mutex if necessary.
-fn lock_db(db: &Arc<Mutex<Connection>>) -> Option<std::sync::MutexGuard<'_, Connection>> {
-    match db.lock() {
-        Ok(guard) => Some(guard),
-        Err(poisoned) => {
-            // Recover from a poisoned Mutex (a previous thread panicked while holding it).
-            // The data may be in an inconsistent state, but SQLite WAL mode is resilient.
-            Some(poisoned.into_inner())
-        }
-    }
+/// 从连接池借一个连接,池满 / 超时返回 None(调用方决定怎么兜底)。
+fn lock_db(
+    db: &crate::storage::db::DbPool,
+) -> Option<r2d2::PooledConnection<r2d2_sqlite::SqliteConnectionManager>> {
+    db.get().ok()
 }
 
 #[allow(clippy::too_many_arguments)]
 fn log_request_success(
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     client_type: &str,
     route: &str,
     request_id: &str,
@@ -4640,7 +4619,7 @@ fn log_request_success(
 }
 
 fn log_request_error_full(
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     client_type: &str,
     route: &str,
     request_id: &str,

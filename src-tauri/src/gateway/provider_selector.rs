@@ -1,7 +1,6 @@
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::Value;
-use std::sync::{Arc, Mutex};
 
 use crate::errors::AppError;
 use crate::models::provider::Provider;
@@ -321,13 +320,13 @@ fn select_global_fallback(
 /// Select provider for failover mode. Returns the ordered list of providers to try.
 /// If `request` is provided, routing conditions on providers will be evaluated.
 pub fn select_for_failover(
-    db: &Arc<Mutex<Connection>>,
+    db: &crate::storage::db::DbPool,
     input_protocol: &str,
     requested_model: Option<&str>,
     request: Option<&ResponsesRequest>,
 ) -> Result<ProviderSelection, AppError> {
     let conn = db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
 
     let profile = storage::route_profiles::get_default_for_protocol(&conn, input_protocol)?;

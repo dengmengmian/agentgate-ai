@@ -1,3 +1,5 @@
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
 use std::fs;
 use std::path::PathBuf;
@@ -5,20 +7,42 @@ use std::path::PathBuf;
 use crate::errors::AppError;
 use crate::storage::migrations;
 
-pub fn init_database(app_data_dir: &PathBuf) -> Result<Connection, AppError> {
+/// 全局数据库连接池类型别名。AppState 持有 Clone 的 handle,
+/// 各处用 `pool.get()` 拿 `PooledConnection`(deref 到 `Connection`)。
+pub type DbPool = Pool<SqliteConnectionManager>;
+
+/// 池大小。SQLite WAL 模式允许多 reader 并发,写仍内部串行。
+/// 桌面应用 QPS 不大,4 个 connection 足够吸收短期 burst。
+const POOL_MAX_SIZE: u32 = 4;
+
+/// 每个连接初始化时统一开 WAL + 外键约束,跟旧单连接实现保持行为一致。
+fn init_connection(conn: &mut Connection) -> rusqlite::Result<()> {
+    conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+    Ok(())
+}
+
+pub fn init_database(app_data_dir: &PathBuf) -> Result<DbPool, AppError> {
     fs::create_dir_all(app_data_dir)
         .map_err(|e| AppError::internal(format!("Failed to create app data directory: {e}")))?;
 
     let db_path = app_data_dir.join("agentgate.db");
-    let conn = Connection::open(&db_path)?;
 
-    // Enable WAL mode for better concurrent performance
-    conn.execute_batch("PRAGMA journal_mode=WAL;")?;
-    conn.execute_batch("PRAGMA foreign_keys=ON;")?;
+    let manager = SqliteConnectionManager::file(&db_path).with_init(init_connection);
+    let pool = Pool::builder()
+        .max_size(POOL_MAX_SIZE)
+        .build(manager)
+        .map_err(|e| AppError::internal(format!("Failed to build DB pool: {e}")))?;
 
-    migrations::run_migrations(&conn)?;
+    // migrations 在 pool ready 后跑一次:借一个连接、跑完归还。
+    {
+        let conn = pool
+            .get()
+            .map_err(|e| AppError::internal(format!("Failed to acquire connection: {e}")))?;
+        migrations::run_migrations(&conn)?;
+    }
 
-    Ok(conn)
+    Ok(pool)
 }
 
 #[cfg(test)]
@@ -28,7 +52,8 @@ mod tests {
     #[test]
     fn test_init_database_in_memory() {
         let temp = std::env::temp_dir().join("agentgate_test_db");
-        let conn = init_database(&temp).unwrap();
+        let pool = init_database(&temp).unwrap();
+        let conn = pool.get().unwrap();
         // Verify WAL mode is enabled
         let journal_mode: String = conn
             .query_row("PRAGMA journal_mode", [], |row| row.get(0))
@@ -54,6 +79,22 @@ mod tests {
         assert!(tables.contains(&"model_pricing".to_string()));
         assert!(tables.contains(&"pet_settings".to_string()));
         // Cleanup
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn test_pool_concurrent_reads() {
+        let temp = std::env::temp_dir().join("agentgate_test_db_concurrent");
+        let pool = init_database(&temp).unwrap();
+        // 同时拿 2 个 connection,确认 Pool 没把它们 serialize
+        let c1 = pool.get().unwrap();
+        let c2 = pool.get().unwrap();
+        let n1: i64 = c1.query_row("SELECT 1", [], |r| r.get(0)).unwrap();
+        let n2: i64 = c2.query_row("SELECT 2", [], |r| r.get(0)).unwrap();
+        assert_eq!(n1, 1);
+        assert_eq!(n2, 2);
+        drop(c1);
+        drop(c2);
         let _ = std::fs::remove_dir_all(&temp);
     }
 }

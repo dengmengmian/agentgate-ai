@@ -14,10 +14,8 @@
 //! Spawned from `lib.rs::setup` alongside the existing `log-cleanup` loop —
 //! see that for the architectural pattern.
 
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use rusqlite::Connection;
 
 use super::SyncResult;
 
@@ -25,7 +23,7 @@ const STARTUP_DELAY: Duration = Duration::from_secs(5);
 const INTERVAL: Duration = Duration::from_secs(3600);
 
 /// Run all three sync paths once and aggregate the result.
-fn sync_all_now(db: &Arc<Mutex<Connection>>) -> SyncResult {
+fn sync_all_now(db: &crate::storage::db::DbPool) -> SyncResult {
     let mut total = SyncResult::default();
     if let Ok(r) = super::claude::sync(db) {
         total.merge(r);
@@ -48,7 +46,7 @@ fn sync_all_now(db: &Arc<Mutex<Connection>>) -> SyncResult {
 /// The task runs for the lifetime of the process; there's no shutdown
 /// signal because the work is purely advisory (and DB writes are short
 /// and atomic — a SIGINT mid-sync won't corrupt state).
-pub fn spawn(db: Arc<Mutex<Connection>>) {
+pub fn spawn(db: crate::storage::db::DbPool) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(STARTUP_DELAY).await;
         loop {

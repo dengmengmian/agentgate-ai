@@ -372,7 +372,7 @@ async fn cmd_serve(
     let token = agentgate_lib::security::local_token::read_token().unwrap_or_default();
 
     let provider_count = {
-        let c = db.lock().unwrap();
+        let c = db.get().unwrap();
         agentgate_lib::storage::providers::list_all(&c)
             .map(|p| p.len())
             .unwrap_or(0)
@@ -458,7 +458,7 @@ fn install_sighup_handler(db: Arc<Mutex<rusqlite::Connection>>) {
             hup.recv().await;
             tracing::info!("SIGHUP received, clearing runtime caches");
             agentgate_lib::gateway::session_affinity::clear();
-            if let Ok(c) = db.lock() {
+            if let Ok(c) = db.get() {
                 if let Err(e) = agentgate_lib::storage::provider_runtime_status::reset_all(&c) {
                     tracing::warn!(error = %e.message, "SIGHUP: reset_all failed");
                 }

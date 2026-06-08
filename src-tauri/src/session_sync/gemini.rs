@@ -35,9 +35,7 @@
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
-use rusqlite::Connection;
 use serde::Deserialize;
 
 use crate::errors::AppError;
@@ -188,7 +186,7 @@ fn parse_file(path: &Path, result: &mut SyncResult) -> Vec<ParsedRow> {
     rows
 }
 
-pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
+pub fn sync(db: &crate::storage::db::DbPool) -> Result<SyncResult, AppError> {
     let mut result = SyncResult::default();
     let dir = gemini_chats_root();
     if !dir.exists() {
@@ -210,7 +208,7 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
 
     let candidate_ids: Vec<String> = all_rows.iter().map(|r| r.external_id.clone()).collect();
     let conn = db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let already = storage::request_logs::external_ids_for_source(&conn, SOURCE, &candidate_ids)?;
 

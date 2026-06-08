@@ -40,7 +40,7 @@ pub fn autofill_provider_capabilities(
 ) -> Result<usize, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::get_by_id(&conn, &id)?;
 
@@ -94,7 +94,7 @@ pub fn autofill_provider_capabilities(
 pub fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderView>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let providers = storage::providers::list_all(&conn)?;
     Ok(providers.into_iter().map(|p| p.to_view()).collect())
@@ -104,7 +104,7 @@ pub fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderView>, A
 pub fn get_provider(id: String, state: State<'_, AppState>) -> Result<ProviderView, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::get_by_id(&conn, &id)?;
     Ok(provider.to_view())
@@ -120,7 +120,7 @@ pub fn get_provider(id: String, state: State<'_, AppState>) -> Result<ProviderVi
 pub fn get_provider_keys(id: String, state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::get_by_id(&conn, &id)?;
     let raw = match provider.api_key {
@@ -159,7 +159,7 @@ pub fn create_provider(
 
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::create(&conn, input)?;
 
@@ -217,7 +217,7 @@ pub fn update_provider(
 
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let provider = storage::providers::update(&conn, &id, input)?;
     Ok(provider.to_view())
@@ -227,7 +227,7 @@ pub fn update_provider(
 pub fn delete_provider(id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::providers::delete(&conn, &id)
 }
@@ -241,7 +241,7 @@ pub fn set_active_provider(
     let provider = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::set_active(&conn, &id)?
     };
@@ -257,7 +257,7 @@ pub async fn fetch_provider_models(
     let (base_url, api_key, timeout_seconds) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let provider = storage::providers::get_by_id(&conn, &id)?;
         (
@@ -310,7 +310,7 @@ pub async fn fetch_provider_models(
                     if !models.is_empty() {
                         // Auto-save to provider
                         let models_json = serde_json::to_string(&models).unwrap_or_default();
-                        let conn = state.db.lock().map_err(|_| AppError::internal("DB lock"))?;
+                        let conn = state.db.get().map_err(|_| AppError::internal("DB lock"))?;
                         let _ = conn.execute(
                             "UPDATE providers SET supported_models=?1, updated_at=?2 WHERE id=?3",
                             rusqlite::params![&models_json, chrono::Utc::now().to_rfc3339(), &id],
@@ -344,7 +344,7 @@ pub async fn provider_speedtest(
     let provider = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::get_by_id(&conn, &id)?
     };
@@ -360,7 +360,7 @@ pub async fn provider_speedtest_all(
     let providers = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::list_all(&conn)?
             .into_iter()
@@ -378,7 +378,7 @@ pub async fn test_provider(
     let (base_url, api_key, timeout_seconds) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let provider = storage::providers::get_by_id(&conn, &id)?;
         (
@@ -391,7 +391,7 @@ pub async fn test_provider(
     let (provider_type, extra_headers) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let p = storage::providers::get_by_id(&conn, &id)?;
         (p.provider_type, p.extra_headers)
@@ -477,7 +477,7 @@ pub async fn test_provider(
                 {
                     let conn = state
                         .db
-                        .lock()
+                        .get()
                         .map_err(|_| AppError::internal("DB lock failed"))?;
                     storage::providers::update_status(&conn, &id, "connected")?;
                     let _ = storage::recommended_mappings::supplement_provider(
@@ -514,7 +514,7 @@ pub async fn test_provider(
     {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::update_status(&conn, &id, "failed")?;
     }
@@ -544,7 +544,7 @@ pub async fn detect_provider_vision(
     let provider = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::get_by_id(&conn, &id)?
     };
@@ -651,7 +651,7 @@ pub async fn detect_provider_vision(
     if let Some(v) = supports_vision {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::update_supports_vision(&conn, &id, v)?;
     }
@@ -683,7 +683,7 @@ pub async fn detect_provider_cache(
     let provider = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::get_by_id(&conn, &id)?
     };
@@ -856,7 +856,7 @@ pub async fn detect_provider_cache(
     {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::providers::update_supports_cache(&conn, &id, supports_cache)?;
     }
@@ -883,7 +883,7 @@ pub async fn detect_provider_cache(
 pub fn get_gateway_status(state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
     let runtime = state
@@ -922,7 +922,7 @@ pub fn get_gateway_status(state: State<'_, AppState>) -> Result<GatewayStatus, A
 pub fn get_gateway_settings(state: State<'_, AppState>) -> Result<GatewaySettings, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::gateway_settings::get(&conn)
 }
@@ -934,7 +934,7 @@ pub fn update_gateway_settings(
 ) -> Result<GatewaySettings, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::gateway_settings::update(&conn, input)
 }
@@ -962,7 +962,7 @@ pub async fn start_gateway(
     let (host, port) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port as u16)
@@ -1082,7 +1082,7 @@ pub fn list_request_logs(
 ) -> Result<Vec<RequestLogListItem>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::list(&conn, filter)
 }
@@ -1092,7 +1092,7 @@ pub fn list_request_logs(
 pub fn list_log_models(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::distinct_models(&conn)
 }
@@ -1118,7 +1118,7 @@ pub fn delete_session(session_id: String, state: State<'_, AppState>) -> Result<
     {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::request_logs::delete_by_session(&conn, &session_id)?;
     }
@@ -1134,7 +1134,7 @@ pub fn count_request_logs(
 ) -> Result<i64, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::count(&conn, &filter)
 }
@@ -1146,7 +1146,7 @@ pub fn get_request_log_detail(
 ) -> Result<RequestLogDetail, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::get_detail(&conn, &id)
 }
@@ -1155,7 +1155,7 @@ pub fn get_request_log_detail(
 pub fn clear_request_logs(state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::clear(&conn)
 }
@@ -1170,7 +1170,7 @@ pub fn aggregate_request_logs_by_session(
 ) -> Result<Vec<crate::models::request_log::SessionUsageSummary>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::aggregate_by_session(&conn, &filter, limit.unwrap_or(100))
 }
@@ -1189,7 +1189,7 @@ pub fn aggregate_cost_by_model(
 ) -> Result<Vec<crate::models::request_log::CostBreakdown>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let since = cost_since(days);
     storage::request_logs::aggregate_cost_by_model(&conn, since.as_deref(), limit.unwrap_or(50))
@@ -1204,7 +1204,7 @@ pub fn aggregate_cost_by_client(
 ) -> Result<Vec<crate::models::request_log::CostBreakdown>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let since = cost_since(days);
     storage::request_logs::aggregate_cost_by_client(&conn, since.as_deref(), limit.unwrap_or(50))
@@ -1220,7 +1220,7 @@ pub fn aggregate_provider_detail_stats(
 ) -> Result<crate::models::request_log::ProviderDetailStats, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let since = cost_since(days);
     storage::request_logs::aggregate_provider_detail_stats(
@@ -1238,7 +1238,7 @@ pub fn aggregate_route_profile_stats(
 ) -> Result<Vec<crate::models::route_profile::RouteProfileStats>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let since = cost_since(days);
     storage::request_logs::aggregate_route_profile_stats(&conn, since.as_deref())
@@ -1348,7 +1348,7 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
 pub fn generate_codex_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
     let token = crate::security::local_token::ensure_token()?;
@@ -1367,7 +1367,7 @@ pub fn list_route_profiles(
 ) -> Result<Vec<crate::models::route_profile::RouteProfileView>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::list_all(&conn)
 }
@@ -1379,7 +1379,7 @@ pub fn get_route_profile(
 ) -> Result<crate::models::route_profile::RouteProfileDetail, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let profile = storage::route_profiles::get_by_id(&conn, &id)?;
     let providers = storage::route_profiles::list_providers(&conn, &id)?;
@@ -1417,7 +1417,7 @@ pub fn create_route_profile(
 ) -> Result<crate::models::route_profile::RouteProfileView, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let profile = storage::route_profiles::create(&conn, input)?;
     Ok(crate::models::route_profile::RouteProfileView {
@@ -1444,7 +1444,7 @@ pub fn update_route_profile(
 ) -> Result<crate::models::route_profile::RouteProfileView, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let profile = storage::route_profiles::update(&conn, &id, input)?;
     let cnt: i64 = conn.query_row(
@@ -1472,7 +1472,7 @@ pub fn update_route_profile(
 pub fn delete_route_profile(id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::delete(&conn, &id)
 }
@@ -1481,7 +1481,7 @@ pub fn delete_route_profile(id: String, state: State<'_, AppState>) -> Result<bo
 pub fn set_default_route_profile(id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::set_default(&conn, &id)?;
     Ok(true)
@@ -1495,7 +1495,7 @@ pub fn set_route_profile_mode(
 ) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::update(
         &conn,
@@ -1518,7 +1518,7 @@ pub fn set_route_active_provider(
 ) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::set_active_provider(&conn, &route_profile_id, &provider_id)?;
     Ok(true)
@@ -1533,7 +1533,7 @@ pub fn add_provider_to_route(
 ) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::add_provider(&conn, &route_profile_id, &provider_id, input)?;
     Ok(true)
@@ -1547,7 +1547,7 @@ pub fn remove_provider_from_route(
 ) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::remove_provider(&conn, &route_profile_id, &provider_id)?;
     Ok(true)
@@ -1561,7 +1561,7 @@ pub fn reorder_route_providers(
 ) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::reorder_providers(&conn, &route_profile_id, &provider_ids)?;
     Ok(true)
@@ -1576,7 +1576,7 @@ pub fn update_route_provider_conditions(
 ) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::route_profiles::update_provider_conditions(
         &conn,
@@ -1593,7 +1593,7 @@ pub fn list_provider_runtime_status(
 ) -> Result<Vec<crate::models::route_profile::ProviderRuntimeStatus>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::provider_runtime_status::list_all(&conn)
 }
@@ -1605,7 +1605,7 @@ pub fn reset_provider_runtime_status(
 ) -> Result<crate::models::route_profile::ProviderRuntimeStatus, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::provider_runtime_status::reset(&conn, &provider_id)
 }
@@ -1614,7 +1614,7 @@ pub fn reset_provider_runtime_status(
 pub fn reset_all_provider_runtime_status(state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::provider_runtime_status::reset_all(&conn)?;
     Ok(true)
@@ -1669,7 +1669,7 @@ fn record_pre_apply(
 ) {
     // Read off disk before acquiring the DB lock — file I/O may be slow.
     let snap = storage::apply_history::snapshot_files_at(&paths);
-    let Ok(conn) = state.db.lock() else { return };
+    let Ok(conn) = state.db.get() else { return };
     let _ = storage::apply_history::record(&conn, client_id, action, &snap, summary);
 }
 
@@ -1687,7 +1687,7 @@ pub fn apply_codex_config(
     let (host, port) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let _ = storage::recommended_mappings::supplement_active_provider(
             &conn,
@@ -1714,7 +1714,7 @@ pub fn toggle_codex_provider(
     let (host, port) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let _ = storage::recommended_mappings::supplement_active_provider(
             &conn,
@@ -1770,7 +1770,7 @@ pub fn preview_claude_desktop_profile(state: State<'_, AppState>) -> Result<Stri
     let (host, port) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let s = storage::gateway_settings::get(&conn)?;
         (s.host, s.port)
@@ -1790,7 +1790,7 @@ pub fn apply_claude_desktop_config(
     let (host, port) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
@@ -1821,7 +1821,7 @@ pub fn apply_claude_code_config(
     let (host, port) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let _ = storage::recommended_mappings::supplement_active_provider(
             &conn,
@@ -1847,7 +1847,7 @@ pub fn toggle_claude_code_provider(
     let (host, port) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let _ = storage::recommended_mappings::supplement_active_provider(
             &conn,
@@ -1876,7 +1876,7 @@ pub fn open_claude_code_config() -> Result<bool, AppError> {
 pub fn generate_claude_code_env(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
     Ok(crate::tools::claude_code::generate_env_snippet(
@@ -1900,7 +1900,7 @@ pub fn apply_opencode_config(
     let (host, port) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         (settings.host, settings.port)
@@ -1919,7 +1919,7 @@ pub fn apply_opencode_config(
 pub fn generate_opencode_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
     Ok(crate::tools::opencode::generate_snippet(
@@ -1948,7 +1948,7 @@ pub fn apply_gemini_config(
     let (host, port, model) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         let provider_id = settings.active_provider_id.clone().unwrap_or_default();
@@ -1972,7 +1972,7 @@ pub fn apply_gemini_config(
 pub fn generate_gemini_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
     Ok(crate::tools::gemini_cli::generate_snippet(
@@ -1989,7 +1989,7 @@ pub fn toggle_gemini_provider(
     let (host, port, model) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         let provider_id = settings.active_provider_id.clone().unwrap_or_default();
@@ -2029,7 +2029,7 @@ pub fn apply_atomcode_config(
     let (host, port, model) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         let provider_id = settings.active_provider_id.clone().unwrap_or_default();
@@ -2053,7 +2053,7 @@ pub fn apply_atomcode_config(
 pub fn generate_atomcode_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
     let provider_id = settings.active_provider_id.clone().unwrap_or_default();
@@ -2152,7 +2152,7 @@ pub fn clients_with_apply_history(
 ) -> Result<Vec<String>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::apply_history::distinct_clients(&conn)
 }
@@ -2166,7 +2166,7 @@ pub fn list_client_apply_history(
 ) -> Result<Vec<storage::apply_history::HistoryEntry>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::apply_history::list(&conn, &client_id)
 }
@@ -2182,7 +2182,7 @@ pub fn rollback_client_apply(
     let entry = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         storage::apply_history::get(&conn, &history_id)?
     };
@@ -2200,7 +2200,7 @@ pub fn toggle_atomcode_provider(
     let (host, port, model) = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let settings = storage::gateway_settings::get(&conn)?;
         let provider_id = settings.active_provider_id.clone().unwrap_or_default();
@@ -2386,7 +2386,7 @@ pub fn get_provider_health(
 ) -> Result<crate::storage::request_logs::ProviderHealth, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     crate::storage::request_logs::get_provider_health(&conn, &provider)
 }
@@ -2399,7 +2399,7 @@ pub fn list_model_pricing(
 ) -> Result<Vec<crate::storage::pricing::ModelPricing>, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     crate::storage::pricing::list_all(&conn)
 }
@@ -2414,7 +2414,7 @@ pub fn upsert_model_pricing(
 ) -> Result<crate::storage::pricing::ModelPricing, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     crate::storage::pricing::upsert_custom(
         &conn,
@@ -2429,7 +2429,7 @@ pub fn upsert_model_pricing(
 pub fn delete_model_pricing(state: State<'_, AppState>, id: String) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     crate::storage::pricing::delete_custom(&conn, &id)
 }
@@ -2442,7 +2442,7 @@ pub fn get_request_stats(
 ) -> Result<crate::storage::request_logs::RequestStats, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::get_stats(&conn)
 }
@@ -2456,7 +2456,7 @@ pub fn get_request_stats_range(
 ) -> Result<crate::storage::request_logs::RequestStats, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::request_logs::get_stats_for_range(&conn, days)
 }
@@ -2505,7 +2505,7 @@ pub fn get_runtime_kpis(state: State<'_, AppState>) -> Result<RuntimeKpis, AppEr
 
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let stats = storage::request_logs::get_stats(&conn)?;
     Ok(RuntimeKpis {
@@ -2651,7 +2651,7 @@ pub async fn test_tool_connection(
     let test_model = {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         let route_model =
             storage::route_profiles::get_default_for_protocol(&conn, "openai_chat_completions")?
@@ -2729,7 +2729,7 @@ pub fn get_pet_settings(
 ) -> Result<crate::models::pet::PetSettings, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::pet_settings::get(&conn)
 }
@@ -2742,7 +2742,7 @@ pub fn update_pet_settings(
 ) -> Result<crate::models::pet::PetSettings, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let result = storage::pet_settings::update(&conn, input)?;
     let _ = app_handle.emit("pet-settings-changed", &result);
@@ -2766,7 +2766,7 @@ pub fn set_pet_visible(
     }
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::pet_settings::update(
         &conn,
@@ -2811,7 +2811,7 @@ pub fn get_pet_gateway_state_lite(
     let last_error = if running {
         let conn = state
             .db
-            .lock()
+            .get()
             .map_err(|_| AppError::internal("DB lock failed"))?;
         conn.query_row(
             "SELECT error_message, provider, timestamp FROM request_logs
@@ -2858,7 +2858,7 @@ pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::V
 
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let settings = storage::gateway_settings::get(&conn)?;
     let active_provider = settings
@@ -2949,7 +2949,7 @@ pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::V
 pub fn get_pet_memory(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     Ok(storage::app_settings::get(&conn, "pet_memory")?.unwrap_or_else(|| "{}".to_string()))
 }
@@ -2980,7 +2980,7 @@ pub fn show_pet_context_menu(
         .map_err(|_| AppError::internal("ct lock"))?;
 
     let (current_pet_type, active_provider_name, today_total) = {
-        let conn = state.db.lock().map_err(|_| AppError::internal("db lock"))?;
+        let conn = state.db.get().map_err(|_| AppError::internal("db lock"))?;
         let current_pet_type = storage::pet_settings::get(&conn)
             .map(|s| s.pet_type)
             .unwrap_or_else(|_| "robot".into());
@@ -3218,7 +3218,7 @@ pub fn pet_open_settings(app_handle: tauri::AppHandle) -> Result<bool, AppError>
 pub fn save_pet_memory(memory: String, state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::app_settings::set(&conn, "pet_memory", &memory)?;
     Ok(true)
@@ -3408,7 +3408,7 @@ pub fn export_config_json(
 ) -> Result<String, AppError> {
     let conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let dump = storage::config_backups::export(&conn, include_secrets)?;
     serde_json::to_string_pretty(&dump)
@@ -3436,7 +3436,7 @@ pub fn import_config_json(
         })?;
     let mut conn = state
         .db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::config_backups::import(&mut conn, &payload)
 }

@@ -3,10 +3,8 @@
 //! ——绝不碰 available / cooldown。受 gateway_settings.health_probe_enabled 控制，
 //! 默认关（开启才探测，会消耗少量额度）。
 
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use rusqlite::Connection;
 
 /// 启动延迟：让网关 / DB 先就绪。
 const STARTUP_DELAY: Duration = Duration::from_secs(30);
@@ -16,7 +14,7 @@ const INTERVAL: Duration = Duration::from_secs(600);
 /// 启动后台探测循环。db 句柄由 AppState 传入。
 /// 用 tauri::async_runtime::spawn（与项目其它后台任务一致）——Tauri setup 是同步
 /// 上下文，直接 tokio::spawn 会 panic "no reactor running"。
-pub fn spawn(db: Arc<Mutex<Connection>>) {
+pub fn spawn(db: crate::storage::db::DbPool) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(STARTUP_DELAY).await;
         loop {
@@ -26,12 +24,12 @@ pub fn spawn(db: Arc<Mutex<Connection>>) {
     });
 }
 
-async fn run_once(db: &Arc<Mutex<Connection>>) {
+async fn run_once(db: &crate::storage::db::DbPool) {
     // 短暂持锁读开关 + provider 列表；持锁期间绝不 await。
     let providers = {
-        let conn = match db.lock() {
+        let conn = match db.get() {
             Ok(c) => c,
-            Err(p) => p.into_inner(),
+            Err(_) => return,
         };
         match crate::storage::gateway_settings::get(&conn) {
             Ok(s) if s.health_probe_enabled => {}
@@ -63,9 +61,9 @@ async fn run_once(db: &Arc<Mutex<Connection>>) {
     };
 
     // 短暂持锁写结果。
-    let conn = match db.lock() {
+    let conn = match db.get() {
         Ok(c) => c,
-        Err(p) => p.into_inner(),
+        Err(_) => return,
     };
     for r in reports {
         if let Err(e) = crate::storage::provider_runtime_status::record_probe(

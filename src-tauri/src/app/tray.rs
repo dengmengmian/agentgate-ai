@@ -76,7 +76,7 @@ struct Snapshot {
 
 fn read_snapshot(app: &AppHandle) -> Result<Snapshot, Box<dyn std::error::Error>> {
     let state: tauri::State<'_, AppState> = app.state();
-    let conn = state.db.lock().map_err(|_| "DB lock failed")?;
+    let conn = state.db.get().map_err(|_| "DB lock failed")?;
 
     let zh = crate::is_chinese_locale_pub();
 
@@ -306,7 +306,7 @@ pub fn handle_switch_active(app: &AppHandle, menu_id: &str) {
     tauri::async_runtime::spawn(async move {
         let state: tauri::State<'_, AppState> = app_clone.state();
         let result = {
-            let conn = match state.db.lock() {
+            let conn = match state.db.get() {
                 Ok(c) => c,
                 Err(_) => return,
             };

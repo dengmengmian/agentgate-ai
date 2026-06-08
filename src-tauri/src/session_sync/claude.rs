@@ -28,9 +28,7 @@
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
-use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -306,7 +304,7 @@ pub fn delete_session_file(session_id: &str) -> Result<bool, AppError> {
 
 /// Sync all Claude session logs into request_logs. Idempotent: messages
 /// already present (by external_id) are skipped.
-pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
+pub fn sync(db: &crate::storage::db::DbPool) -> Result<SyncResult, AppError> {
     let mut result = SyncResult::default();
     let dir = claude_projects_dir();
     if !dir.exists() {
@@ -331,7 +329,7 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
     // Phase 2: filter out external_ids we've already imported.
     let candidate_ids: Vec<String> = all_rows.iter().map(|r| r.message_id.clone()).collect();
     let conn = db
-        .lock()
+        .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let already = storage::request_logs::external_ids_for_source(&conn, SOURCE, &candidate_ids)?;
 
@@ -384,6 +382,7 @@ pub fn sync(db: &Arc<Mutex<Connection>>) -> Result<SyncResult, AppError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::Connection;
     use std::io::Write;
 
     #[test]
