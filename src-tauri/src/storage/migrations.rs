@@ -2,7 +2,67 @@ use rusqlite::Connection;
 
 use crate::errors::AppError;
 
+/// 当前 schema 版本。每加一段新迁移就 +1,放到 `run_versioned_migrations`
+/// 里 match 上对应的 version。读 `PRAGMA user_version` 决定该跑哪些。
+const CURRENT_SCHEMA_VERSION: u32 = 1;
+
+fn get_user_version(conn: &Connection) -> Result<u32, AppError> {
+    let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
+    Ok(v)
+}
+
+fn set_user_version(conn: &Connection, v: u32) -> Result<(), AppError> {
+    // PRAGMA 不支持 ?  参数,只能拼字符串。v 是内部常量,无注入风险。
+    conn.execute_batch(&format!("PRAGMA user_version = {v};"))?;
+    Ok(())
+}
+
+/// 主入口:按 `PRAGMA user_version` 跳过已应用的迁移。
+///
+/// - v0(默认):说明要么是新装,要么是 1.3.6 及更早版本——schema 由
+///   `legacy_baseline_v1` 用 `IF NOT EXISTS` / `is_ok` 探嗅式迁移建出来。跑一次,
+///   再 `set_user_version(1)`。对老用户:跑一次幂等无副作用;对新用户:从零建好。
+/// - v1+:跳过 baseline,只跑 `run_versioned_migrations` 里 version > current 的步骤。
+///
+/// 以后再加迁移:CURRENT_SCHEMA_VERSION + 1,在 `run_versioned_migrations` 加
+/// 对应 match arm,**不要**改 legacy_baseline_v1(保持已发布版本里的语义)。
 pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
+    let current = get_user_version(conn)?;
+
+    if current < 1 {
+        legacy_baseline_v1(conn)?;
+        set_user_version(conn, 1)?;
+    }
+
+    run_versioned_migrations(conn, current.max(1))?;
+
+    // 防御性自检:跑完所有迁移后,user_version 必须等于 CURRENT_SCHEMA_VERSION。
+    // 不等说明加了新 version 但忘了在 `run_versioned_migrations` 里 set_user_version,
+    // 或 set 错值。debug build 直接 panic 提示;release 静默(避免锁死用户启动)。
+    let final_version = get_user_version(conn)?;
+    debug_assert_eq!(
+        final_version, CURRENT_SCHEMA_VERSION,
+        "schema version drift: expected {CURRENT_SCHEMA_VERSION}, got {final_version}"
+    );
+
+    Ok(())
+}
+
+/// 占位:未来新迁移在这里按 version 分支。当前 v1 已是最新,无新增。
+fn run_versioned_migrations(conn: &Connection, _from_version: u32) -> Result<(), AppError> {
+    // 例:future migration shape
+    // if _from_version < 2 {
+    //     conn.execute_batch("ALTER TABLE ... ADD COLUMN ... ;")?;
+    //     set_user_version(conn, 2)?;
+    // }
+    let _ = conn;
+    Ok(())
+}
+
+/// 1.3.6 及更早版本累计下来的所有 schema 操作。**所有语句必须 idempotent**
+/// (`CREATE IF NOT EXISTS` / `is_ok` 守卫 / 等价手段),因为已有用户首次升级
+/// 会跑这里一次,跑完才会 set user_version=1。
+fn legacy_baseline_v1(conn: &Connection) -> Result<(), AppError> {
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS providers (
@@ -514,6 +574,60 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         run_migrations(&conn).unwrap();
         run_migrations(&conn).unwrap(); // should not panic or error
+    }
+
+    #[test]
+    fn run_migrations_sets_user_version() {
+        let conn = Connection::open_in_memory().unwrap();
+        assert_eq!(get_user_version(&conn).unwrap(), 0, "new DB starts at 0");
+        run_migrations(&conn).unwrap();
+        assert_eq!(
+            get_user_version(&conn).unwrap(),
+            CURRENT_SCHEMA_VERSION,
+            "migrations should bump user_version to current"
+        );
+    }
+
+    #[test]
+    fn run_migrations_skips_baseline_when_already_v1() {
+        // 模拟"已升级到 v1"的 DB:手工建好关键表 + 设 user_version=1。
+        // 再跑 run_migrations 应该跳过 legacy_baseline_v1(它会创建 deepseek seed),
+        // seed 不会再插入(因为表里没有 providers,seed 还是会跑——但 baseline
+        // 整段都被跳,所以连表都不会建)。
+        let conn = Connection::open_in_memory().unwrap();
+        set_user_version(&conn, 1).unwrap();
+        run_migrations(&conn).unwrap();
+        // baseline 被跳过 → providers 表不存在
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='providers'",
+                [],
+                |_| Ok(true),
+            )
+            .unwrap_or(false);
+        assert!(
+            !table_exists,
+            "baseline 跑过了,user_version=1 时不该重建表"
+        );
+    }
+
+    #[test]
+    fn legacy_db_without_user_version_gets_migrated() {
+        // 已有 1.3.6 用户的真实路径:DB 已有完整 schema,但 user_version 还是 0。
+        // 第一次跑新 run_migrations 应该:跑一遍 baseline(全 idempotent,无副作用)+ 设 v1。
+        let conn = Connection::open_in_memory().unwrap();
+        // 先跑一遍模拟已升级到 1.3.6 schema
+        legacy_baseline_v1(&conn).unwrap();
+        // user_version 仍是 0(1.3.6 没设)
+        assert_eq!(get_user_version(&conn).unwrap(), 0);
+        // 模拟用户升级到 1.3.7 后首次启动
+        run_migrations(&conn).unwrap();
+        assert_eq!(get_user_version(&conn).unwrap(), 1);
+        // 数据仍在(没被破坏)
+        let provider_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM providers", [], |r| r.get(0))
+            .unwrap();
+        assert!(provider_count > 0, "seed providers 应仍存在");
     }
 
     #[test]
