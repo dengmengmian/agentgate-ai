@@ -1329,6 +1329,25 @@ async importSkills(payload: string) : Promise<Result<Skill[], AppError>> {
 /** user-defined events **/
 
 
+export const events = __makeEvents__<{
+petBubble: PetBubble,
+petClickThroughChanged: PetClickThroughChanged,
+petGatewayStateChanged: PetGatewayStateChanged,
+petMemoryReset: PetMemoryReset,
+petOpenGateway: PetOpenGateway,
+petOpenLogs: PetOpenLogs,
+petOpenSettings: PetOpenSettings,
+petSettingsChanged: PetSettingsChanged
+}>({
+petBubble: "pet-bubble",
+petClickThroughChanged: "pet-click-through-changed",
+petGatewayStateChanged: "pet-gateway-state-changed",
+petMemoryReset: "pet-memory-reset",
+petOpenGateway: "pet-open-gateway",
+petOpenLogs: "pet-open-logs",
+petOpenSettings: "pet-open-settings",
+petSettingsChanged: "pet-settings-changed"
+})
 
 /** user-defined constants **/
 
@@ -1519,7 +1538,40 @@ export type McpValidationState = { status: string; issues: McpValidationIssue[] 
 export type ModelPricing = { id: string; provider: string; model_pattern: string; input_price: number; output_price: number; is_custom: boolean; updated_at: string }
 export type OpenCodeApplyConfigResult = { success: boolean; config_path: string; changed_keys: string[]; warnings: string[] }
 export type OpenCodeConfigStatus = { config_path: string; exists: boolean; has_agentgate: boolean; current_model: string | null }
+/**
+ * 宠物窗口顶部气泡——Gateway 启停、错误、统计提示等都走这条。
+ * `r#type` 字面值:`"info" | "success" | "error" | "chat"`,前端窄类型在 src/types。
+ */
+export type PetBubble = { text: string; text_zh: string | null; type: string }
+/**
+ * 鼠标穿透开关变了——三个入口(右键菜单 / tray / Settings)共用这一个事件。
+ */
+export type PetClickThroughChanged = boolean
+/**
+ * 网关运行态切换(running / stopped / active)。让前端 polling 立即刷一次。
+ */
+export type PetGatewayStateChanged = string
+/**
+ * 「清空记忆」触发,Pet 前端清本地缓存 + 弹气泡。
+ */
+export type PetMemoryReset = null
+/**
+ * Pet 右键菜单的「打开网关页」,主窗口路由到 /gateway。
+ */
+export type PetOpenGateway = null
+/**
+ * Pet 右键菜单的「打开日志」,主窗口路由到 /logs?source=gateway。
+ */
+export type PetOpenLogs = null
+/**
+ * Pet 右键菜单的「打开设置」,主窗口路由到 /settings?tab=pet。
+ */
+export type PetOpenSettings = null
 export type PetSettings = { pet_type: string; visible: boolean; pos_x: number; pos_y: number }
+/**
+ * 宠物 settings 改了——pet 窗口跨实例同步用。
+ */
+export type PetSettingsChanged = PetSettings
 export type ProfileDetection = { path: string; exists: boolean; has_anthropic_vars: boolean; var_count: number }
 export type ProviderDetailStats = { provider: string; latency_points: ProviderLatencyPoint[]; model_stats: ProviderModelStats[] }
 export type ProviderHealth = { provider: string; h1_total: number; h1_success: number; h1_success_rate: number; h1_avg_latency_ms: number; h1_p95_latency_ms: number; h24_total: number; h24_success: number; h24_success_rate: number; h24_avg_latency_ms: number; recent_errors: RecentError[] }

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
-import { listen } from "@tauri-apps/api/event";
+import { events } from "@/lib/bindings";
 import { I18nProvider } from "@/lib/i18n";
 import { AppShell } from "@/components/layout/AppShell";
 import { ToastContainer } from "@/components/common/Toast";
@@ -23,9 +23,9 @@ import { Skills } from "@/pages/Skills";
 function PetEventBridge() {
   const navigate = useNavigate();
   useEffect(() => {
-    const unSettings = listen("pet-open-settings", () => navigate("/settings?tab=pet"));
-    const unGateway = listen("pet-open-gateway", () => navigate("/gateway"));
-    const unLogs = listen("pet-open-logs", () => navigate("/logs?source=gateway"));
+    const unSettings = events.petOpenSettings.listen(() => navigate("/settings?tab=pet"));
+    const unGateway = events.petOpenGateway.listen(() => navigate("/gateway"));
+    const unLogs = events.petOpenLogs.listen(() => navigate("/logs?source=gateway"));
     return () => {
       unSettings.then((fn) => fn());
       unGateway.then((fn) => fn());

@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
-import { listen } from "@tauri-apps/api/event";
+import { events } from "@/lib/bindings";
 import { getPetSettings, updatePetSettings, getPetGatewayState, getPetGatewayStateLite, getPetMemory, savePetMemory, petChat, getPetClickThrough, showPetContextMenu } from "@/lib/api";
-import type { PetType, PetState, PetSettings, PetBubbleEvent } from "@/types/pet";
+import type { PetType, PetState } from "@/types/pet";
 import { RobotPet } from "./pets/RobotPet";
 import { PixelCat } from "./pets/PixelCat";
 import { SlimePet } from "./pets/SlimePet";
@@ -114,14 +114,14 @@ export function PetApp() {
   // ── Event listeners ──
 
   useEffect(() => {
-    const unlisten = listen<PetSettings>("pet-settings-changed", (e) => setPetType(e.payload.pet_type as PetType));
+    const unlisten = events.petSettingsChanged.listen((e) => setPetType(e.payload.pet_type as PetType));
     return () => { unlisten.then((fn) => fn()); };
   }, []);
 
   useEffect(() => {
-    const unlisten = listen<PetBubbleEvent>("pet-bubble", (e) => {
+    const unlisten = events.petBubble.listen((e) => {
       const text = locale === "zh" && e.payload.text_zh ? e.payload.text_zh : e.payload.text;
-      showBubble(text, e.payload.type);
+      showBubble(text, e.payload.type as "info" | "success" | "error" | "chat");
     });
     return () => { unlisten.then((fn) => fn()); };
   }, [locale, showBubble]);
@@ -160,7 +160,7 @@ export function PetApp() {
     const id = setInterval(poll, POLL_INTERVAL);
     const onVisible = () => { if (!document.hidden) poll(); };
     document.addEventListener("visibilitychange", onVisible);
-    const unEvent = listen("pet-gateway-state-changed", () => poll());
+    const unEvent = events.petGatewayStateChanged.listen(() => poll());
     return () => {
       clearInterval(id);
       document.removeEventListener("visibilitychange", onVisible);
@@ -319,7 +319,7 @@ export function PetApp() {
 
   // 「清空记忆」由原生菜单触发,Rust 写 DB + emit。前端清本地缓存 + 提示气泡。
   useEffect(() => {
-    const un = listen("pet-memory-reset", () => {
+    const un = events.petMemoryReset.listen(() => {
       memoryRef.current = {};
       chatHistoryRef.current = [];
       showBubble(locale === "zh" ? "记忆已清空 ✨" : "Memory cleared ✨", "info");
@@ -338,7 +338,7 @@ export function PetApp() {
 
   useEffect(() => {
     getPetClickThrough().then(applyClickThrough).catch(() => {});
-    const un = listen<boolean>("pet-click-through-changed", (e) => applyClickThrough(e.payload));
+    const un = events.petClickThroughChanged.listen((e) => applyClickThrough(e.payload));
     return () => { un.then((fn) => fn()); };
   }, [applyClickThrough]);
 

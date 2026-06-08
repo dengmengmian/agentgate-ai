@@ -1,5 +1,7 @@
-use tauri::{Emitter, State};
+use tauri::State;
+use tauri_specta::Event;
 
+use crate::app::events::{PetBubble, PetGatewayStateChanged};
 use crate::app::state::AppState;
 use crate::errors::AppError;
 use crate::gateway;
@@ -120,8 +122,13 @@ pub async fn start_gateway(
         runtime.active_requests = Some(active_requests);
     }
 
-    let _ = app_handle.emit("pet-bubble", serde_json::json!({ "text": "Gateway started", "text_zh": "网关已启动", "type": "success" }));
-    let _ = app_handle.emit("pet-gateway-state-changed", "running");
+    let _ = PetBubble {
+        text: "Gateway started".into(),
+        text_zh: Some("网关已启动".into()),
+        r#type: "success".into(),
+    }
+    .emit(&app_handle);
+    let _ = PetGatewayStateChanged("running".into()).emit(&app_handle);
     crate::app::tray::refresh_tray(&app_handle);
     get_gateway_status(state)
 }
@@ -158,11 +165,13 @@ pub async fn stop_gateway(
         let _ = tokio::time::timeout(std::time::Duration::from_secs(5), handle).await;
     }
 
-    let _ = app_handle.emit(
-        "pet-bubble",
-        serde_json::json!({ "text": "Gateway stopped", "text_zh": "网关已停止", "type": "info" }),
-    );
-    let _ = app_handle.emit("pet-gateway-state-changed", "stopped");
+    let _ = PetBubble {
+        text: "Gateway stopped".into(),
+        text_zh: Some("网关已停止".into()),
+        r#type: "info".into(),
+    }
+    .emit(&app_handle);
+    let _ = PetGatewayStateChanged("stopped".into()).emit(&app_handle);
     crate::app::tray::refresh_tray(&app_handle);
     get_gateway_status(state)
 }

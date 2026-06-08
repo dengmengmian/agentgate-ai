@@ -15,9 +15,13 @@ use std::sync::{Arc, Mutex};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::TrayIconBuilder;
 use tauri::webview::WebviewWindowBuilder;
-use tauri::{Emitter, Manager};
+use tauri::Manager;
+use tauri_specta::Event;
 
 use app::commands;
+use app::events::{
+    PetClickThroughChanged, PetMemoryReset, PetOpenGateway, PetOpenLogs,
+};
 use app::state::AppState;
 use models::gateway::GatewayRuntimeState;
 
@@ -80,10 +84,22 @@ fn move_pet_to_visible_area(app: &tauri::AppHandle, pet_win: &tauri::WebviewWind
 /// generate_handler!,这里只是把同一份命令清单喂给 specta 用来生成 TS 类型。
 #[cfg(debug_assertions)]
 fn export_ts_bindings() {
+    use app::events::*;
     use specta_typescript::Typescript;
-    use tauri_specta::{collect_commands, Builder};
+    use tauri_specta::{collect_commands, collect_events, Builder};
 
-    let builder = Builder::<tauri::Wry>::new().commands(collect_commands![
+    let builder = Builder::<tauri::Wry>::new()
+        .events(collect_events![
+            PetBubble,
+            PetGatewayStateChanged,
+            PetSettingsChanged,
+            PetClickThroughChanged,
+            PetMemoryReset,
+            PetOpenSettings,
+            PetOpenGateway,
+            PetOpenLogs,
+        ])
+        .commands(collect_commands![
         // Providers
         commands::list_providers,
         commands::get_provider,
@@ -373,7 +389,7 @@ pub fn run() {
                         *lock = !*lock;
                         *lock
                     };
-                    let _ = app.emit("pet-click-through-changed", new_value);
+                    let _ = PetClickThroughChanged(new_value).emit(app);
                 }
                 "pet_open_settings" => {
                     let _ = commands::pet_open_settings(app.clone());
@@ -384,7 +400,7 @@ pub fn run() {
                         let _ = w.show();
                         let _ = w.set_focus();
                     }
-                    let _ = app.emit("pet-open-gateway", ());
+                    let _ = PetOpenGateway.emit(app);
                 }
                 "pet_open_logs" => {
                     if let Some(w) = app.get_webview_window("main") {
@@ -392,12 +408,12 @@ pub fn run() {
                         let _ = w.show();
                         let _ = w.set_focus();
                     }
-                    let _ = app.emit("pet-open-logs", ());
+                    let _ = PetOpenLogs.emit(app);
                 }
                 "pet_reset_memory" => {
                     let state: tauri::State<'_, AppState> = app.state();
                     let _ = commands::save_pet_memory("{}".into(), state);
-                    let _ = app.emit("pet-memory-reset", ());
+                    let _ = PetMemoryReset.emit(app);
                 }
                 "pet_hide" => {
                     if let Some(pet_win) = app.get_webview_window("pet") {
@@ -913,7 +929,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         *lock = !*lock;
                         *lock
                     };
-                    let _ = app.emit("pet-click-through-changed", new_value);
+                    let _ = PetClickThroughChanged(new_value).emit(app);
                 }
                 "quit" => {
                     // Stop gateway before quitting

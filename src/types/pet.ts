@@ -41,8 +41,6 @@ export interface PetGatewayInfo {
   };
 }
 
-export interface PetBubbleEvent {
-  text: string;
-  text_zh?: string;
-  type: "info" | "success" | "error" | "chat";
-}
+// PetBubbleEvent 已下放到 bindings.ts(由 Rust app::events::PetBubble 反射),
+// `type` 窄字段从 `bindings.PetBubble.type` 转 `BubbleType` 是 listener 边界
+// cast。手抄类型删除。

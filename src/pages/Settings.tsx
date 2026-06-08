@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
-import { listen } from "@tauri-apps/api/event";
+import { events } from "@/lib/bindings";
 import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2, Settings2, Database, Info, PawPrint, ChevronDown, ChevronRight, Share2, Upload } from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -69,7 +69,7 @@ export function Settings() {
   const [petClickThrough, setPetClickThroughState] = useState(false);
   useEffect(() => {
     api.getPetClickThrough().then(setPetClickThroughState).catch(() => {});
-    const un = listen<boolean>("pet-click-through-changed", (e) => setPetClickThroughState(e.payload));
+    const un = events.petClickThroughChanged.listen((e) => setPetClickThroughState(e.payload));
     return () => { un.then((fn) => fn()); };
   }, []);
   const handlePetClickThroughChange = useCallback((v: boolean) => {

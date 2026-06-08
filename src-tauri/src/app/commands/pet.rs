@@ -1,5 +1,7 @@
-use tauri::{Emitter, Manager, State};
+use tauri::{Manager, State};
+use tauri_specta::Event;
 
+use crate::app::events::{PetClickThroughChanged, PetOpenSettings, PetSettingsChanged};
 use crate::app::state::AppState;
 use crate::errors::AppError;
 use crate::storage;
@@ -30,7 +32,7 @@ pub fn update_pet_settings(
         .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
     let result = storage::pet_settings::update(&conn, input)?;
-    let _ = app_handle.emit("pet-settings-changed", &result);
+    let _ = PetSettingsChanged(result.clone()).emit(&app_handle);
     Ok(result)
 }
 
@@ -489,7 +491,7 @@ pub fn set_pet_click_through(
         .pet_click_through
         .lock()
         .map_err(|_| AppError::internal("lock failed"))? = value;
-    let _ = app_handle.emit("pet-click-through-changed", value);
+    let _ = PetClickThroughChanged(value).emit(&app_handle);
     Ok(value)
 }
 
@@ -503,7 +505,7 @@ pub fn pet_open_settings(app_handle: tauri::AppHandle) -> Result<bool, AppError>
         let _ = w.show();
         let _ = w.set_focus();
     }
-    let _ = app_handle.emit("pet-open-settings", ());
+    let _ = PetOpenSettings.emit(&app_handle);
     Ok(true)
 }
 
