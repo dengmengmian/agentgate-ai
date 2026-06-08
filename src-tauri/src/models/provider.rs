@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
+use specta::Type;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct Provider {
     pub id: String,
     pub name: String,
@@ -44,7 +45,7 @@ pub struct Provider {
 /// Known per-provider request quirks. Serialized into Provider.provider_quirks
 /// as JSON. Every field optional so partial overrides don't have to spell out
 /// the whole struct.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
 pub struct ProviderQuirks {
     /// Top-level request fields the provider will 400 on. Body filter strips
     /// these when its switch is enabled.
@@ -64,13 +65,13 @@ pub struct ProviderQuirks {
     pub error_code_overrides: std::collections::HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, Type)]
 pub struct RangeI64 {
     pub min: i64,
     pub max: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct ProviderView {
     pub id: String,
     pub name: String,
@@ -102,7 +103,7 @@ pub struct ProviderView {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Type)]
 pub struct CreateProviderInput {
     pub name: String,
     pub provider_type: String,
@@ -127,7 +128,7 @@ pub struct CreateProviderInput {
     pub enabled: Option<bool>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Type)]
 pub struct UpdateProviderInput {
     pub name: Option<String>,
     pub provider_type: Option<String>,
@@ -152,7 +153,7 @@ pub struct UpdateProviderInput {
     pub enabled: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 pub struct ProviderTestResult {
     pub success: bool,
     pub status: String,

@@ -70,6 +70,7 @@ pub fn set_pet_visible(
 /// last_error 走 idx_request_logs_timestamp 索引,O(log n) 几乎免费。
 /// stats 数据用单独的 `get_pet_gateway_state`(原命令)在 30 分钟 stats bubble 触发前调一次。
 #[tauri::command]
+#[specta::specta]
 pub fn get_pet_gateway_state_lite(
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, AppError> {
@@ -123,6 +124,7 @@ pub fn get_pet_gateway_state_lite(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::Value, AppError> {
     let (running, active, runtime_host, runtime_port) = {
         let runtime = state
@@ -232,6 +234,7 @@ pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::V
 // ── Pet Chat Commands ─────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_pet_memory(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
@@ -247,6 +250,7 @@ pub fn get_pet_memory(state: State<'_, AppState>) -> Result<String, AppError> {
 /// 9 个角色用子菜单 + checked 标记当前选中。鼠标穿透用 CheckMenuItem。
 /// 菜单事件统一在 lib.rs 的 on_menu_event 里处理(pet_ 前缀)。
 #[tauri::command]
+#[specta::specta]
 pub fn show_pet_context_menu(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -466,6 +470,7 @@ pub fn show_pet_context_menu(
 /// 宠物窗口的鼠标穿透状态。三个入口(右键菜单 / tray / Settings)都改这里,
 /// emit `pet-click-through-changed` 让所有 webview 同步。
 #[tauri::command]
+#[specta::specta]
 pub fn get_pet_click_through(state: State<'_, AppState>) -> Result<bool, AppError> {
     Ok(*state
         .pet_click_through
@@ -474,6 +479,7 @@ pub fn get_pet_click_through(state: State<'_, AppState>) -> Result<bool, AppErro
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_pet_click_through(
     value: bool,
     app_handle: tauri::AppHandle,
@@ -490,6 +496,7 @@ pub fn set_pet_click_through(
 /// 从宠物右键菜单触发:把主窗口拉起来 + 通知前端导航到「宠物」设置页。
 /// 主窗口可能被最小化/隐藏,所以先 unminimize 再 show + set_focus。
 #[tauri::command]
+#[specta::specta]
 pub fn pet_open_settings(app_handle: tauri::AppHandle) -> Result<bool, AppError> {
     if let Some(w) = app_handle.get_webview_window("main") {
         let _ = w.unminimize();
@@ -501,6 +508,7 @@ pub fn pet_open_settings(app_handle: tauri::AppHandle) -> Result<bool, AppError>
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn save_pet_memory(memory: String, state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
@@ -511,6 +519,7 @@ pub fn save_pet_memory(memory: String, state: State<'_, AppState>) -> Result<boo
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn pet_chat(
     messages: Vec<serde_json::Value>,
     state: State<'_, AppState>,

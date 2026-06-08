@@ -386,7 +386,7 @@ export function ProviderFormDialog({
                     setSeedingCaps(true);
                     try {
                       const seeded = await api.seedModelCapabilities(providerType, models);
-                      setModelCapabilities(seeded);
+                      setModelCapabilities(seeded as Record<string, string[]>);
                       toast("success", `${models.length} ${t("providers.toast_models_and_caps")}`);
                     } catch {
                       toast("success", `${models.length} models`);

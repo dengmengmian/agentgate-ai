@@ -20,6 +20,7 @@ fn dirs_next() -> Option<String> {
 // ── Tool Commands ──────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
     let home = dirs_next().unwrap_or_default();
 
@@ -91,6 +92,7 @@ pub fn list_tools() -> Result<Vec<ToolConfigView>, AppError> {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn generate_codex_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
@@ -108,11 +110,13 @@ pub fn generate_codex_config(state: State<'_, AppState>) -> Result<String, AppEr
 // ── Codex Config Commands ──────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn detect_codex_config() -> Result<crate::tools::codex::CodexConfigStatus, AppError> {
     Ok(crate::tools::codex::detect())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn apply_codex_config(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
@@ -140,6 +144,7 @@ pub fn apply_codex_config(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn toggle_codex_provider(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::codex::ToggleResult, AppError> {
@@ -169,6 +174,7 @@ pub fn toggle_codex_provider(
 /// copied back so the user gets the official `[plugins.*]` / `[mcp_servers.*]`
 /// blocks alive again. Used by the UI's "Switch to native mode" button.
 #[tauri::command]
+#[specta::specta]
 pub fn disable_codex_agentgate(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::codex::ApplyConfigResult, AppError> {
@@ -183,6 +189,7 @@ pub fn disable_codex_agentgate(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn open_codex_config() -> Result<bool, AppError> {
     crate::tools::codex::open_config()?;
     Ok(true)
@@ -191,6 +198,7 @@ pub fn open_codex_config() -> Result<bool, AppError> {
 // ── Claude Desktop Commands（第一阶段：只读 detect + profile 预览，不写盘）──
 
 #[tauri::command]
+#[specta::specta]
 pub fn detect_claude_desktop() -> crate::tools::claude_desktop::ClaudeDesktopStatus {
     crate::tools::claude_desktop::detect()
 }
@@ -198,6 +206,7 @@ pub fn detect_claude_desktop() -> crate::tools::claude_desktop::ClaudeDesktopSta
 /// 生成指向 AgentGate 网关的 3p profile JSON（pretty），仅供和用户机器上实际的
 /// Claude Desktop 3p 配置对比、确认 schema，不写任何文件。
 #[tauri::command]
+#[specta::specta]
 pub fn preview_claude_desktop_profile(state: State<'_, AppState>) -> Result<String, AppError> {
     let (host, port) = {
         let conn = state
@@ -216,6 +225,7 @@ pub fn preview_claude_desktop_profile(state: State<'_, AppState>) -> Result<Stri
 /// 接入 Claude Desktop：写 3p profile + 切 appliedId 到 AgentGate。apply 前先经
 /// apply_history 快照 profile/_meta，用户可在客户端历史里一键回滚。
 #[tauri::command]
+#[specta::specta]
 pub fn apply_claude_desktop_config(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::claude_desktop::ClaudeDesktopApplyResult, AppError> {
@@ -241,12 +251,14 @@ pub fn apply_claude_desktop_config(
 // ── Claude Code Commands ──────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn detect_claude_code_env() -> Result<crate::tools::claude_code::ClaudeCodeEnvStatus, AppError>
 {
     Ok(crate::tools::claude_code::detect_env())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn apply_claude_code_config(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::claude_code::ApplyConfigResult, AppError> {
@@ -273,6 +285,7 @@ pub fn apply_claude_code_config(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn toggle_claude_code_provider(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::claude_code::ToggleResult, AppError> {
@@ -299,12 +312,14 @@ pub fn toggle_claude_code_provider(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn open_claude_code_config() -> Result<bool, AppError> {
     crate::tools::claude_code::open_config()?;
     Ok(true)
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn generate_claude_code_env(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
@@ -321,11 +336,13 @@ pub fn generate_claude_code_env(state: State<'_, AppState>) -> Result<String, Ap
 // ── OpenCode Commands ─────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn detect_opencode_config() -> Result<crate::tools::opencode::OpenCodeConfigStatus, AppError> {
     Ok(crate::tools::opencode::detect())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn apply_opencode_config(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::opencode::ApplyConfigResult, AppError> {
@@ -348,6 +365,7 @@ pub fn apply_opencode_config(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn generate_opencode_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
@@ -361,6 +379,7 @@ pub fn generate_opencode_config(state: State<'_, AppState>) -> Result<String, Ap
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn open_opencode_config() -> Result<bool, AppError> {
     crate::tools::opencode::open_config()?;
     Ok(true)
@@ -369,11 +388,13 @@ pub fn open_opencode_config() -> Result<bool, AppError> {
 // ── Gemini CLI Config Commands ─────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn detect_gemini_config() -> Result<crate::tools::gemini_cli::GeminiCliConfigStatus, AppError> {
     Ok(crate::tools::gemini_cli::detect())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn apply_gemini_config(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::gemini_cli::ApplyConfigResult, AppError> {
@@ -401,6 +422,7 @@ pub fn apply_gemini_config(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn generate_gemini_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
@@ -415,6 +437,7 @@ pub fn generate_gemini_config(state: State<'_, AppState>) -> Result<String, AppE
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn toggle_gemini_provider(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::gemini_cli::ToggleResult, AppError> {
@@ -442,6 +465,7 @@ pub fn toggle_gemini_provider(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn open_gemini_config() -> Result<bool, AppError> {
     crate::tools::gemini_cli::open_config()?;
     Ok(true)
@@ -450,11 +474,13 @@ pub fn open_gemini_config() -> Result<bool, AppError> {
 // ── AtomCode Config Commands ──────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn detect_atomcode_config() -> Result<crate::tools::atomcode::AtomCodeConfigStatus, AppError> {
     Ok(crate::tools::atomcode::detect())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn apply_atomcode_config(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::atomcode::ApplyConfigResult, AppError> {
@@ -482,6 +508,7 @@ pub fn apply_atomcode_config(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn generate_atomcode_config(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
@@ -507,6 +534,7 @@ pub fn generate_atomcode_config(state: State<'_, AppState>) -> Result<String, Ap
 /// macOS desktop app). Returns an empty list on Windows (pgrep-only
 /// detection); the caller treats empty as "couldn't detect", not "OK".
 #[tauri::command]
+#[specta::specta]
 pub fn detect_client_running(
     client_id: String,
 ) -> Result<Vec<crate::tools::process_detect::RunningProcess>, AppError> {
@@ -527,6 +555,7 @@ pub fn detect_client_running(
 /// Never called automatically; only fires when the user clicks the button in
 /// PostApplyDialog.
 #[tauri::command]
+#[specta::specta]
 pub fn restart_codex_desktop() -> Result<crate::tools::codex_restart::CodexRestartResult, AppError>
 {
     crate::tools::codex_restart::restart()
@@ -535,12 +564,14 @@ pub fn restart_codex_desktop() -> Result<crate::tools::codex_restart::CodexResta
 /// 读取各客户端(Codex / Claude Code)现有的 MCP server 配置，汇总展示。
 /// 以客户端文件为真相源，只读不写；env 只返回 key 不返回 value。
 #[tauri::command]
+#[specta::specta]
 pub fn list_mcp_servers() -> Result<Vec<crate::tools::mcp::McpServer>, AppError> {
     Ok(crate::tools::mcp::list_all())
 }
 
 /// 添加或更新指定客户端的 MCP server。只写入一个客户端配置文件，不做跨客户端同步。
 #[tauri::command]
+#[specta::specta]
 pub fn upsert_mcp_server(
     input: crate::tools::mcp::UpsertMcpServerInput,
 ) -> Result<crate::tools::mcp::McpServer, AppError> {
@@ -549,12 +580,14 @@ pub fn upsert_mcp_server(
 
 /// 删除指定客户端的 MCP server。文件或 server 不存在时返回 false。
 #[tauri::command]
+#[specta::specta]
 pub fn delete_mcp_server(client: String, name: String) -> Result<bool, AppError> {
     crate::tools::mcp::delete(&client, &name)
 }
 
 /// 将一个客户端里的 MCP server 显式同步到一个或多个目标客户端。
 #[tauri::command]
+#[specta::specta]
 pub fn sync_mcp_server(
     input: crate::tools::mcp::SyncMcpServerInput,
 ) -> Result<Vec<crate::tools::mcp::McpServer>, AppError> {
@@ -563,12 +596,14 @@ pub fn sync_mcp_server(
 
 /// 导出 MCP server 配置。默认由前端传 include_secrets=false，不导出 env value。
 #[tauri::command]
+#[specta::specta]
 pub fn export_mcp_servers(include_secrets: bool) -> Result<String, AppError> {
     crate::tools::mcp::export_config(include_secrets)
 }
 
 /// 从 JSON 文本导入 MCP server 配置到指定客户端。
 #[tauri::command]
+#[specta::specta]
 pub fn import_mcp_servers(
     payload: String,
     target_clients: Vec<String>,
@@ -579,6 +614,7 @@ pub fn import_mcp_servers(
 /// 曾经 apply 过配置的客户端 id 列表。前端用来判断「配置漂移」：客户端 detected
 /// 但 id 在这个列表里，说明接入过又被改回去了，提示重新应用。
 #[tauri::command]
+#[specta::specta]
 pub fn clients_with_apply_history(
     state: State<'_, AppState>,
 ) -> Result<Vec<String>, AppError> {
@@ -592,6 +628,7 @@ pub fn clients_with_apply_history(
 /// 列出某客户端的 apply/disable/toggle 历史（按时间倒序）。前端用来
 /// 渲染历史抽屉。
 #[tauri::command]
+#[specta::specta]
 pub fn list_client_apply_history(
     state: State<'_, AppState>,
     client_id: String,
@@ -607,6 +644,7 @@ pub fn list_client_apply_history(
 /// absolute_path（不存在的文件被删除）。回滚本身**不**记录新历史，避免反复
 /// 回滚把保留窗撑满。
 #[tauri::command]
+#[specta::specta]
 pub fn rollback_client_apply(
     state: State<'_, AppState>,
     history_id: String,
@@ -626,6 +664,7 @@ pub fn rollback_client_apply(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn toggle_atomcode_provider(
     state: State<'_, AppState>,
 ) -> Result<crate::tools::atomcode::ToggleResult, AppError> {
@@ -653,6 +692,7 @@ pub fn toggle_atomcode_provider(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn open_atomcode_config() -> Result<bool, AppError> {
     crate::tools::atomcode::open_config()?;
     Ok(true)

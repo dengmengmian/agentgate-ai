@@ -94,7 +94,7 @@ fn restore_official_settings() -> Result<(), AppError> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct GeminiCliConfigStatus {
     pub config_path: String,
     pub exists: bool,
@@ -103,7 +103,8 @@ pub struct GeminiCliConfigStatus {
     pub has_saved_official: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[specta(rename = "GeminiCliApplyConfigResult")]
 pub struct ApplyConfigResult {
     pub success: bool,
     pub config_path: String,
@@ -111,7 +112,8 @@ pub struct ApplyConfigResult {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[specta(rename = "GeminiCliToggleResult")]
 pub struct ToggleResult {
     pub success: bool,
     pub new_provider: String,

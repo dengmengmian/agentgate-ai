@@ -6,6 +6,7 @@ use crate::errors::AppError;
 // ── Pricing Commands ──────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_model_pricing(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::storage::pricing::ModelPricing>, AppError> {
@@ -17,6 +18,7 @@ pub fn list_model_pricing(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn upsert_model_pricing(
     state: State<'_, AppState>,
     provider: String,
@@ -38,6 +40,7 @@ pub fn upsert_model_pricing(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_model_pricing(state: State<'_, AppState>, id: String) -> Result<bool, AppError> {
     let conn = state
         .db

@@ -996,7 +996,7 @@ pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<Reque
 
 use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct RequestStats {
     pub total: i64,
     pub success: i64,
@@ -1019,7 +1019,7 @@ pub struct RequestStats {
     pub providers: Vec<ProviderStat>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct DailyStat {
     pub date: String,
     pub total: i64,
@@ -1032,7 +1032,7 @@ pub struct DailyStat {
     pub cache_read_tokens: i64,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct ProviderStat {
     pub name: String,
     pub count: i64,
@@ -1115,7 +1115,7 @@ pub fn get_provider_health(
     })
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct ProviderHealth {
     pub provider: String,
     pub h1_total: i64,
@@ -1130,7 +1130,7 @@ pub struct ProviderHealth {
     pub recent_errors: Vec<RecentError>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct RecentError {
     pub timestamp: String,
     pub status_code: i64,

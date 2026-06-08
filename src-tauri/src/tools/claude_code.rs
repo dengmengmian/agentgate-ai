@@ -69,7 +69,7 @@ const ENV_VARS: &[&str] = &[
 
 const SHELL_PROFILES: &[&str] = &[".zshrc", ".bashrc", ".bash_profile", ".profile"];
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct ClaudeCodeEnvStatus {
     pub settings_path: String,
     pub settings_exists: bool,
@@ -86,7 +86,7 @@ pub struct ClaudeCodeEnvStatus {
     pub has_saved_official: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct ProfileDetection {
     pub path: String,
     pub exists: bool,
@@ -94,7 +94,8 @@ pub struct ProfileDetection {
     pub var_count: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[specta(rename = "ClaudeCodeApplyConfigResult")]
 pub struct ApplyConfigResult {
     pub success: bool,
     pub config_path: String,
@@ -340,7 +341,8 @@ pub fn toggle_provider(host: &str, port: i64, model: &str) -> Result<ToggleResul
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[specta(rename = "ClaudeCodeToggleResult")]
 pub struct ToggleResult {
     pub success: bool,
     pub new_provider: String,

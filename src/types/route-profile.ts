@@ -1,66 +1,36 @@
-export interface RouteProfileView {
-  id: string;
-  name: string;
-  input_protocol: string;
-  mode: string;
-  selection_strategy: string;   // "priority" | "cheapest" | "fastest"
-  active_provider_id: string | null;
-  active_provider_name: string | null;
-  enabled: boolean;
-  is_default: boolean;
-  providers_count: number;
-  created_at: string;
-  updated_at: string;
-}
+// 从 bindings re-export,Create/Update/Add input 留 Partial。
+import type {
+  RouteProfileView,
+  RouteProfileDetail,
+  RouteProfileProviderView,
+  CreateRouteProfileInput as WideCreate,
+  UpdateRouteProfileInput as WideUpdate,
+  AddProviderToRouteInput as WideAdd,
+  ProviderRuntimeStatus,
+  RouteProfileStats,
+} from "@/lib/bindings";
 
-export interface RouteProfileDetail {
-  profile: RouteProfileView;
-  providers: RouteProfileProviderView[];
-}
+export type {
+  RouteProfileView,
+  RouteProfileDetail,
+  RouteProfileProviderView,
+  ProviderRuntimeStatus,
+  RouteProfileStats,
+};
 
-export interface RouteProfileProviderView {
-  id: string;
-  provider_id: string;
-  provider_name: string;
-  provider_type: string;
-  provider_protocol: string;
-  has_anthropic_url: boolean;
-  supports_vision: boolean | null;
-  model_capabilities: string | null;
-  priority: number;
-  enabled: boolean;
-  model_override: string | null;
-  cooldown_seconds: number;
-  failover_on_status_codes: string | null;
-  failover_on_error_keywords: string | null;
-  routing_conditions: string | null;
-  runtime_available: boolean;
-  cooldown_until: string | null;
-  consecutive_failures: number;
-}
+export type CreateRouteProfileInput = {
+  [K in keyof WideCreate]?: WideCreate[K] | undefined;
+} & Pick<WideCreate, "name" | "input_protocol">;
 
-export interface CreateRouteProfileInput {
-  name: string;
-  input_protocol: string;
-  mode?: string;
-}
+export type UpdateRouteProfileInput = {
+  [K in keyof WideUpdate]?: WideUpdate[K] | undefined;
+};
 
-export interface UpdateRouteProfileInput {
-  name?: string;
-  mode?: string;
-  selection_strategy?: string;
-  enabled?: boolean;
-}
+export type AddProviderToRouteInput = {
+  [K in keyof WideAdd]?: WideAdd[K] | undefined;
+};
 
-export interface AddProviderToRouteInput {
-  priority?: number;
-  model_override?: string;
-  cooldown_seconds?: number;
-  failover_on_status_codes?: string;
-  failover_on_error_keywords?: string;
-  routing_conditions?: string;
-}
-
+// 历史保留的 RoutingConditions 类型(纯前端 JSON shape,Rust 端只存 String)。
 export interface RoutingConditions {
   min_input_chars?: number | null;
   max_input_chars?: number | null;
@@ -68,31 +38,4 @@ export interface RoutingConditions {
   has_tools?: boolean | null;
   system_keywords?: string[] | null;
   model_override?: string | null;
-}
-
-export interface ProviderRuntimeStatus {
-  provider_id: string;
-  available: boolean;
-  consecutive_failures: number;
-  last_error: string | null;
-  last_error_code: string | null;
-  last_error_at: string | null;
-  cooldown_until: string | null;
-  quota_exhausted: boolean;
-  // 主动健康探测结果（仅展示，不参与路由）
-  last_probe_ok: boolean | null;
-  last_probe_at: string | null;
-  last_probe_latency_ms: number | null;
-  last_probe_error: string | null;
-  updated_at: string;
-}
-
-export interface RouteProfileStats {
-  route_profile_id: string;
-  request_count: number;
-  success_count: number;
-  error_count: number;
-  success_rate: number;
-  avg_latency_ms: number;
-  cost: number;
 }

@@ -1,96 +1,28 @@
-export interface ProviderView {
-  id: string;
-  name: string;
-  provider_type: string;
-  base_url: string;
-  masked_api_key: string | null;
-  default_model: string;
-  reasoning_model: string | null;
-  supported_models: string | null;
-  model_mapping: string | null;
-  extra_headers: string | null;
-  anthropic_base_url: string | null;
-  responses_base_url: string | null;
-  protocol: string;
-  timeout_seconds: number;
-  status: string;
-  supports_vision: boolean | null;
-  auto_cache_control: boolean | null;
-  supports_cache: boolean | null;
-  model_capabilities: string | null;  // JSON: {"model_id": ["text","vision",...]}
-  // Refiner pipeline (default 全部关，需要全局总闸打开才生效，详见 Settings 页)
-  provider_quirks: string | null;            // JSON: ProviderQuirks
-  body_filter_enabled: number | null;        // null = 跟随全局, 0 = 强制关, 1 = 强制开
-  thinking_rectifier_enabled: number | null;
-  error_mapper_enabled: number | null;
-  model_degradation_chain: string | null;    // JSON: {"requested":["fallback1","fallback2"]}
-  enabled: boolean;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-}
+// 历史上手抄的 types,现在从 bindings (Rust 端 specta 反射) 再导出。
+// 边界 shim：bindings 把 Rust 端 `Option<T>` 映射成 `T | null`,但前端历史
+// 代码大量构造 `{ x: undefined }` 形式的 partial。这里 re-export 时用 Partial
+// 类型保持兼容(field 可以省略 = undefined)。input 类型走 Partial,output
+// 类型(View / Result)是后端给的固定 shape,保留 null。
+import type {
+  ProviderView as Wide,
+  CreateProviderInput as WideCreate,
+  UpdateProviderInput as WideUpdate,
+  ProviderTestResult,
+  ProviderSpeedReport,
+} from "@/lib/bindings";
 
-export interface CreateProviderInput {
-  name: string;
-  provider_type: string;
-  base_url: string;
-  api_key?: string;
-  default_model: string;
-  reasoning_model?: string;
-  supported_models?: string;
-  model_mapping?: string;
-  extra_headers?: string;
-  anthropic_base_url?: string;
-  responses_base_url?: string;
-  auto_cache_control?: boolean;
-  model_capabilities?: string;
-  provider_quirks?: string;
-  body_filter_enabled?: number | null;
-  thinking_rectifier_enabled?: number | null;
-  error_mapper_enabled?: number | null;
-  model_degradation_chain?: string;
-  protocol: string;
-  timeout_seconds?: number;
-  enabled?: boolean;
-}
+export type ProviderView = Wide;
+// 创建/更新输入：所有 `T | null` 改成 `T | null | undefined`,前端可省略字段。
+export type CreateProviderInput = {
+  [K in keyof WideCreate]?: WideCreate[K] | undefined;
+} & Pick<WideCreate, "name" | "provider_type" | "base_url" | "default_model" | "protocol">;
+export type UpdateProviderInput = {
+  [K in keyof WideUpdate]?: WideUpdate[K] | undefined;
+};
 
-export interface UpdateProviderInput {
-  name?: string;
-  provider_type?: string;
-  base_url?: string;
-  api_key?: string;
-  default_model?: string;
-  reasoning_model?: string;
-  supported_models?: string;
-  model_mapping?: string;
-  extra_headers?: string;
-  anthropic_base_url?: string;
-  responses_base_url?: string;
-  auto_cache_control?: boolean;
-  model_capabilities?: string;
-  provider_quirks?: string;
-  body_filter_enabled?: number | null;
-  thinking_rectifier_enabled?: number | null;
-  error_mapper_enabled?: number | null;
-  model_degradation_chain?: string;
-  protocol?: string;
-  timeout_seconds?: number;
-  enabled?: boolean;
-}
+export type { ProviderTestResult, ProviderSpeedReport };
 
-/// Speedtest 报告项。手动触发，每个 provider 一份。
-export interface ProviderSpeedReport {
-  provider_id: string;
-  provider_name: string;
-  endpoint: string;
-  status_code: number | null;
-  connect_ms: number | null;
-  ttfb_ms: number | null;
-  total_ms: number;
-  success: boolean;
-  error: string | null;
-}
-
+// 显示用 lookup table——纯前端常量。
 export const CAPABILITY_LABELS: Record<string, string> = {
   text: "文本",
   vision: "视觉",
@@ -105,30 +37,8 @@ export const CAPABILITY_LABELS: Record<string, string> = {
 export const ALL_CAPABILITIES = ["text", "vision", "audio_in", "tts", "video_in", "reasoning", "tools", "web_search"] as const;
 export type Capability = (typeof ALL_CAPABILITIES)[number];
 
-export interface TestDiagnostic {
-  /// Stable machine-readable code (invalid_api_key / insufficient_balance / ...).
-  code: string;
-  /// One-line plain-language reason.
-  title: string;
-  /// One-line actionable suggestion.
-  hint: string;
-  /// Optional URL the user can open to fix the issue.
-  action_url?: string;
-  /// Localized label for the action button.
-  action_label?: string;
-  /// Original HTTP/network error string (kept for power users).
-  raw: string;
-}
-
-export interface ProviderTestResult {
-  success: boolean;
-  status: string;
-  message: string;
-  latency_ms: number | null;
-  supports_vision: boolean | null;
-  /// Present only on failure paths; older backends omit it (treated as undefined).
-  diagnostic?: TestDiagnostic;
-}
+// `TestDiagnostic` 在 bindings 里已经有,但历史 import 路径在这里,re-export 一下。
+export type { TestDiagnostic } from "@/lib/bindings";
 
 export const PROVIDER_TYPES = [
   // Tier 1: Major providers

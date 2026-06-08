@@ -66,7 +66,7 @@ fn restore_official_config() -> Result<(), AppError> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct AtomCodeConfigStatus {
     pub config_path: String,
     pub exists: bool,
@@ -75,7 +75,8 @@ pub struct AtomCodeConfigStatus {
     pub has_saved_official: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[specta(rename = "AtomCodeApplyConfigResult")]
 pub struct ApplyConfigResult {
     pub success: bool,
     pub config_path: String,
@@ -83,7 +84,8 @@ pub struct ApplyConfigResult {
     pub warnings: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[specta(rename = "AtomCodeToggleResult")]
 pub struct ToggleResult {
     pub success: bool,
     pub new_provider: String,

@@ -61,7 +61,7 @@ describe("MiMo provider endpoints", () => {
   });
 
   it("exposes all catalog providers as quick setup presets", () => {
-    expect(Object.keys(PROVIDER_PRESETS)).toHaveLength(24);
+    expect(Object.keys(PROVIDER_PRESETS)).toHaveLength(26);
     expect(PROVIDER_PRESETS.openai.responsesBaseUrl).toBe("https://api.openai.com");
     expect(PROVIDER_PRESETS.kimi.extraHeaders).toContain("KimiCLI");
   });

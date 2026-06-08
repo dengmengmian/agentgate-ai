@@ -1,20 +1,18 @@
-export type PetType = "robot" | "pixel-cat" | "slime" | "fox" | "octopus" | "ghost" | "ox" | "soldier" | "coder";
+// narrow union types 保留手抄(Rust 端字段是 String,bindings 给 string)。
+// PetSettings 在 bindings 里 pet_type 是 string,这里 narrow 成 PetType。
+import type {
+  PetSettings as Wide,
+  UpdatePetSettingsInput as WideUpdate,
+} from "@/lib/bindings";
 
+export type PetType = "robot" | "pixel-cat" | "slime" | "fox" | "octopus" | "ghost" | "ox" | "soldier" | "coder";
 export type PetState = "idle" | "active" | "error" | "sleep" | "poke";
 
-export interface PetSettings {
-  pet_type: PetType;
-  visible: boolean;
-  pos_x: number;
-  pos_y: number;
-}
+export type PetSettings = Omit<Wide, "pet_type"> & { pet_type: PetType };
 
-export interface UpdatePetSettingsInput {
-  pet_type?: string;
-  visible?: boolean;
-  pos_x?: number;
-  pos_y?: number;
-}
+export type UpdatePetSettingsInput = {
+  [K in keyof WideUpdate]?: WideUpdate[K] | undefined;
+};
 
 export interface PetGatewayInfo {
   state: "running" | "stopped" | "active";

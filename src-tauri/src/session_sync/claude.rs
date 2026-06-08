@@ -190,7 +190,7 @@ fn collect_session_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 /// 会话里的一条对话消息——会话详情视图渲染气泡用。
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 pub struct ConversationMessage {
     pub role: String, // user / assistant
     pub text: String,

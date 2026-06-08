@@ -7,6 +7,7 @@ use crate::storage;
 // ── Route Profile Commands ─────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_route_profiles(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::models::route_profile::RouteProfileView>, AppError> {
@@ -18,6 +19,7 @@ pub fn list_route_profiles(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_route_profile(
     id: String,
     state: State<'_, AppState>,
@@ -56,6 +58,7 @@ pub fn get_route_profile(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_route_profile(
     input: crate::models::route_profile::CreateRouteProfileInput,
     state: State<'_, AppState>,
@@ -82,6 +85,7 @@ pub fn create_route_profile(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_route_profile(
     id: String,
     input: crate::models::route_profile::UpdateRouteProfileInput,
@@ -114,6 +118,7 @@ pub fn update_route_profile(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_route_profile(id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
@@ -123,6 +128,7 @@ pub fn delete_route_profile(id: String, state: State<'_, AppState>) -> Result<bo
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_default_route_profile(id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
@@ -133,6 +139,7 @@ pub fn set_default_route_profile(id: String, state: State<'_, AppState>) -> Resu
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_route_profile_mode(
     id: String,
     mode: String,
@@ -156,6 +163,7 @@ pub fn set_route_profile_mode(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_route_active_provider(
     route_profile_id: String,
     provider_id: String,
@@ -170,6 +178,7 @@ pub fn set_route_active_provider(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn add_provider_to_route(
     route_profile_id: String,
     provider_id: String,
@@ -185,6 +194,7 @@ pub fn add_provider_to_route(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn remove_provider_from_route(
     route_profile_id: String,
     provider_id: String,
@@ -199,6 +209,7 @@ pub fn remove_provider_from_route(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn reorder_route_providers(
     route_profile_id: String,
     provider_ids: Vec<String>,
@@ -213,6 +224,7 @@ pub fn reorder_route_providers(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_route_provider_conditions(
     route_profile_id: String,
     provider_id: String,
@@ -233,6 +245,7 @@ pub fn update_route_provider_conditions(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_provider_runtime_status(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::models::route_profile::ProviderRuntimeStatus>, AppError> {
@@ -244,6 +257,7 @@ pub fn list_provider_runtime_status(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn reset_provider_runtime_status(
     provider_id: String,
     state: State<'_, AppState>,
@@ -256,6 +270,7 @@ pub fn reset_provider_runtime_status(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn reset_all_provider_runtime_status(state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db

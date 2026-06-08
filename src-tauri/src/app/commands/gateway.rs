@@ -9,6 +9,7 @@ use crate::storage;
 // ── Gateway Commands ───────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_gateway_status(state: State<'_, AppState>) -> Result<GatewayStatus, AppError> {
     let conn = state
         .db
@@ -48,6 +49,7 @@ pub fn get_gateway_status(state: State<'_, AppState>) -> Result<GatewayStatus, A
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_gateway_settings(state: State<'_, AppState>) -> Result<GatewaySettings, AppError> {
     let conn = state
         .db
@@ -57,6 +59,7 @@ pub fn get_gateway_settings(state: State<'_, AppState>) -> Result<GatewaySetting
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_gateway_settings(
     input: UpdateGatewaySettingsInput,
     state: State<'_, AppState>,
@@ -69,6 +72,7 @@ pub fn update_gateway_settings(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn start_gateway(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -123,6 +127,7 @@ pub async fn start_gateway(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn stop_gateway(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -163,6 +168,7 @@ pub async fn stop_gateway(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn restart_gateway(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -205,12 +211,14 @@ pub async fn restart_gateway(
 // ── Gateway Auth Commands ──────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_gateway_auth_settings(
 ) -> Result<crate::security::local_token::GatewayAuthSettings, AppError> {
     Ok(crate::security::local_token::get_auth_settings())
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn regenerate_local_access_token(
 ) -> Result<crate::security::local_token::GatewayAuthSettings, AppError> {
     crate::security::local_token::regenerate_token()?;
@@ -218,6 +226,7 @@ pub fn regenerate_local_access_token(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn ensure_local_access_token(
 ) -> Result<crate::security::local_token::GatewayAuthSettings, AppError> {
     crate::security::local_token::ensure_token()?;
@@ -225,11 +234,13 @@ pub fn ensure_local_access_token(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_local_access_token() -> Result<String, AppError> {
     crate::security::local_token::read_token()
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn open_token_folder() -> Result<bool, AppError> {
     let dir = crate::security::local_token::token_dir();
     open::that(&dir).map_err(|e| AppError::internal(format!("Failed to open folder: {e}")))?;

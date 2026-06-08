@@ -6,6 +6,7 @@ use crate::errors::AppError;
 // ── Diagnostics Commands ───────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn run_health_check(
     state: State<'_, AppState>,
 ) -> Result<crate::diagnostics::report::CheckReport, AppError> {
@@ -13,6 +14,7 @@ pub fn run_health_check(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn run_database_check(
     state: State<'_, AppState>,
 ) -> Result<crate::diagnostics::report::CheckReport, AppError> {
@@ -20,6 +22,7 @@ pub fn run_database_check(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn run_gateway_auth_check(
     state: State<'_, AppState>,
 ) -> Result<crate::diagnostics::report::CheckReport, AppError> {
@@ -27,6 +30,7 @@ pub fn run_gateway_auth_check(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn run_provider_check(
     state: State<'_, AppState>,
 ) -> Result<crate::diagnostics::report::CheckReport, AppError> {
@@ -34,6 +38,7 @@ pub fn run_provider_check(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn run_codex_config_check(
     state: State<'_, AppState>,
 ) -> Result<crate::diagnostics::report::CheckReport, AppError> {
@@ -41,6 +46,7 @@ pub fn run_codex_config_check(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn run_claude_code_config_check(
     state: State<'_, AppState>,
 ) -> Result<crate::diagnostics::report::CheckReport, AppError> {
@@ -50,6 +56,7 @@ pub fn run_claude_code_config_check(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn run_route_profile_check(
     state: State<'_, AppState>,
 ) -> Result<crate::diagnostics::report::CheckReport, AppError> {
@@ -57,6 +64,7 @@ pub fn run_route_profile_check(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn run_full_self_test(
     state: State<'_, AppState>,
 ) -> Result<crate::diagnostics::report::FullSelfTestReport, AppError> {
@@ -64,6 +72,7 @@ pub fn run_full_self_test(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn export_diagnostic_bundle(
     include_logs: Option<bool>,
     max_logs: Option<u32>,
@@ -77,6 +86,7 @@ pub fn export_diagnostic_bundle(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn open_app_data_dir() -> Result<bool, AppError> {
     let dir = crate::security::local_token::token_dir();
     open::that(&dir).map_err(|e| AppError::internal(format!("Cannot open: {e}")))?;

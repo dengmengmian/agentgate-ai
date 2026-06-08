@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct CheckItem {
     pub id: String,
     pub name: String,
@@ -49,7 +49,7 @@ impl CheckItem {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct CheckReport {
     pub name: String,
     pub status: String,
@@ -81,7 +81,7 @@ impl CheckReport {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct FullSelfTestReport {
     pub overall_status: String,
     pub reports: Vec<CheckReport>,
@@ -89,7 +89,7 @@ pub struct FullSelfTestReport {
     pub created_at: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct ExportResult {
     pub success: bool,
     pub path: String,

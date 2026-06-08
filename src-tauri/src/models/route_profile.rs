@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct RouteProfile {
     pub id: String,
     pub name: String,
@@ -112,7 +112,7 @@ mod tests {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct RouteProfileView {
     pub id: String,
     pub name: String,
@@ -128,13 +128,13 @@ pub struct RouteProfileView {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct RouteProfileDetail {
     pub profile: RouteProfileView,
     pub providers: Vec<RouteProfileProviderView>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct RouteProfileProviderView {
     pub id: String,
     pub provider_id: String,
@@ -156,14 +156,14 @@ pub struct RouteProfileProviderView {
     pub consecutive_failures: i64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct CreateRouteProfileInput {
     pub name: String,
     pub input_protocol: String,
     pub mode: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct UpdateRouteProfileInput {
     pub name: Option<String>,
     pub mode: Option<String>,
@@ -171,7 +171,7 @@ pub struct UpdateRouteProfileInput {
     pub enabled: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct AddProviderToRouteInput {
     pub priority: Option<i64>,
     pub model_override: Option<String>,
@@ -181,7 +181,7 @@ pub struct AddProviderToRouteInput {
     pub routing_conditions: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ProviderRuntimeStatus {
     pub provider_id: String,
     pub available: bool,
@@ -199,7 +199,7 @@ pub struct ProviderRuntimeStatus {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct RouteProfileStats {
     pub route_profile_id: String,
     pub request_count: i64,

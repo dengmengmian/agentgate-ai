@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use crate::errors::AppError;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct CodexRestartResult {
     /// 本平台是否实现了重启路径。false 表示前端不该显示按钮。
     pub supported: bool,

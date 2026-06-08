@@ -76,22 +76,186 @@ fn move_pet_to_visible_area(app: &tauri::AppHandle, pet_win: &tauri::WebviewWind
 }
 
 /// debug 模式启动时把 TS bindings 写到 src/lib/bindings.ts。
-/// 当前为 PoC,只收了 3 个 pet command 验证生成链路。验证通后扩展全量,
-/// 届时把所有 #[tauri::command] 都加上 #[specta::specta] 并塞进 collect_commands!。
+/// 全部 140 个 #[tauri::command] 都已加 #[specta::specta],invoke_handler 仍走
+/// generate_handler!,这里只是把同一份命令清单喂给 specta 用来生成 TS 类型。
 #[cfg(debug_assertions)]
 fn export_ts_bindings() {
     use specta_typescript::Typescript;
     use tauri_specta::{collect_commands, Builder};
 
     let builder = Builder::<tauri::Wry>::new().commands(collect_commands![
+        // Providers
+        commands::list_providers,
+        commands::get_provider,
+        commands::get_provider_keys,
+        commands::create_provider,
+        commands::update_provider,
+        commands::delete_provider,
+        commands::set_active_provider,
+        commands::fetch_provider_models,
+        commands::test_provider,
+        commands::provider_speedtest,
+        commands::provider_speedtest_all,
+        commands::detect_provider_vision,
+        commands::seed_model_capabilities,
+        commands::autofill_provider_capabilities,
+        // Gateway
+        commands::get_gateway_status,
+        commands::get_gateway_settings,
+        commands::update_gateway_settings,
+        commands::start_gateway,
+        commands::stop_gateway,
+        commands::restart_gateway,
+        // Logs
+        commands::list_request_logs,
+        commands::list_log_models,
+        commands::get_session_conversation,
+        commands::delete_session,
+        commands::count_request_logs,
+        commands::get_request_log_detail,
+        commands::clear_request_logs,
+        commands::aggregate_request_logs_by_session,
+        commands::aggregate_cost_by_model,
+        commands::aggregate_cost_by_client,
+        commands::aggregate_provider_detail_stats,
+        commands::aggregate_route_profile_stats,
+        commands::sync_claude_sessions,
+        commands::sync_codex_sessions,
+        commands::sync_gemini_sessions,
+        // Tools
+        commands::list_tools,
+        commands::generate_codex_config,
+        // Gateway Auth
+        commands::get_gateway_auth_settings,
+        commands::regenerate_local_access_token,
+        commands::ensure_local_access_token,
+        commands::get_local_access_token,
+        commands::open_token_folder,
+        // Codex Config
+        commands::detect_codex_config,
+        commands::apply_codex_config,
+        commands::disable_codex_agentgate,
+        commands::toggle_codex_provider,
+        commands::open_codex_config,
+        // Claude Code
+        commands::detect_claude_desktop,
+        commands::preview_claude_desktop_profile,
+        commands::apply_claude_desktop_config,
+        commands::detect_claude_code_env,
+        commands::apply_claude_code_config,
+        commands::toggle_claude_code_provider,
+        commands::open_claude_code_config,
+        commands::generate_claude_code_env,
+        // OpenCode
+        commands::detect_opencode_config,
+        commands::apply_opencode_config,
+        commands::generate_opencode_config,
+        commands::open_opencode_config,
+        // Gemini CLI
+        commands::detect_gemini_config,
+        commands::apply_gemini_config,
+        commands::generate_gemini_config,
+        commands::toggle_gemini_provider,
+        commands::open_gemini_config,
+        commands::detect_provider_cache,
+        commands::get_provider_health,
+        commands::update_route_provider_conditions,
+        // Pricing
+        commands::list_model_pricing,
+        commands::upsert_model_pricing,
+        commands::delete_model_pricing,
+        // AtomCode
+        commands::detect_atomcode_config,
+        commands::apply_atomcode_config,
+        commands::generate_atomcode_config,
+        commands::toggle_atomcode_provider,
+        commands::open_atomcode_config,
+        // Post-apply process detection
+        commands::detect_client_running,
+        commands::restart_codex_desktop,
+        // Client apply history
+        commands::list_client_apply_history,
+        commands::clients_with_apply_history,
+        commands::list_mcp_servers,
+        commands::upsert_mcp_server,
+        commands::delete_mcp_server,
+        commands::sync_mcp_server,
+        commands::export_mcp_servers,
+        commands::import_mcp_servers,
+        commands::rollback_client_apply,
+        // Route Profiles
+        commands::list_route_profiles,
+        commands::get_route_profile,
+        commands::create_route_profile,
+        commands::update_route_profile,
+        commands::delete_route_profile,
+        commands::set_default_route_profile,
+        commands::set_route_profile_mode,
+        commands::set_route_active_provider,
+        commands::add_provider_to_route,
+        commands::remove_provider_from_route,
+        commands::reorder_route_providers,
+        // Runtime Status
+        commands::list_provider_runtime_status,
+        commands::reset_provider_runtime_status,
+        commands::reset_all_provider_runtime_status,
+        // Stats
+        commands::get_request_stats,
+        commands::get_request_stats_range,
+        commands::get_runtime_kpis,
+        // Diagnostics
+        commands::run_health_check,
+        commands::run_database_check,
+        commands::run_gateway_auth_check,
+        commands::run_provider_check,
+        commands::run_codex_config_check,
+        commands::run_claude_code_config_check,
+        commands::run_route_profile_check,
+        commands::run_full_self_test,
+        commands::export_diagnostic_bundle,
+        commands::open_app_data_dir,
+        // Tool Connection Test
+        commands::test_tool_connection,
+        // Pet
         commands::get_pet_settings,
         commands::update_pet_settings,
         commands::set_pet_visible,
+        commands::get_pet_gateway_state,
+        commands::get_pet_gateway_state_lite,
+        commands::get_pet_memory,
+        commands::save_pet_memory,
+        commands::pet_chat,
+        commands::pet_open_settings,
+        commands::get_pet_click_through,
+        commands::set_pet_click_through,
+        commands::show_pet_context_menu,
+        // Config Import / Export
+        commands::export_config_json,
+        commands::import_config_json,
+        // Global instructions (CLAUDE.md / AGENTS.md)
+        commands::list_instructions_templates,
+        commands::read_global_instructions,
+        commands::write_global_instructions,
+        commands::apply_instructions_template,
+        commands::export_instructions,
+        commands::import_instructions,
+        // Local skills (~/.claude/skills)
+        commands::list_skills,
+        commands::set_skill_enabled,
+        commands::delete_skill,
+        commands::import_skill_from_zip,
+        commands::export_skills,
+        commands::import_skills,
     ]);
 
     // 生成文件含 tauri-specta boilerplate(unused imports 等)——加 @ts-nocheck
     // 让 tsc 不去 lint generated artifact。前端 import 这个文件仍能拿类型。
-    let exporter = Typescript::default().header("// @ts-nocheck\n");
+    // BigInt: i64/u64 字段映射成 `number`(JS 没有原生 i64,前端用 number 处理,
+    // 超过 2^53 的极端情况靠 backend 保证不出现——AgentGate 的 latency/token
+    // count/timestamp 都远小于 2^53)。
+    let exporter = Typescript::default()
+        .header("// @ts-nocheck\n")
+        .bigint(specta_typescript::BigIntExportBehavior::Number);
     if let Err(e) = builder.export(exporter, "../src/lib/bindings.ts") {
         eprintln!("[specta] failed to export TS bindings: {e}");
     }
@@ -99,20 +263,52 @@ fn export_ts_bindings() {
 
 #[cfg(test)]
 mod specta_export_tests {
+    /// Smoke test: 全量 export 后 bindings.ts 里应该有覆盖每个域的代表性 type
+    /// 和 fn。在 CI/本地 cargo test 时自动重新生成 bindings.ts,前端 tsc 就能
+    /// 接到最新结果。
     #[test]
-    fn poc_export_generates_pet_bindings() {
+    fn full_export_covers_all_domains() {
         super::export_ts_bindings();
         let content = std::fs::read_to_string("../src/lib/bindings.ts")
             .expect("bindings.ts should be generated by export_ts_bindings()");
-        assert!(content.contains("PetSettings"), "should emit PetSettings type");
-        assert!(
-            content.contains("getPetSettings") || content.contains("get_pet_settings"),
-            "should emit get_pet_settings command"
-        );
-        assert!(
-            content.contains("UpdatePetSettingsInput"),
-            "should emit input type"
-        );
+
+        // 代表性 types(每个域至少 1 个)
+        for ty in [
+            "PetSettings",
+            "ProviderView",
+            "GatewaySettings",
+            "RouteProfileView",
+            "RequestLogListItem",
+            "CheckReport",
+            "ModelPricing",
+            "GatewayAuthSettings",
+            "CodexConfigStatus",
+            "CodexApplyConfigResult",       // 旧名 ApplyConfigResult 会冲突的兜底
+            "ClaudeCodeApplyConfigResult",
+            "GeminiCliApplyConfigResult",
+            "AtomCodeApplyConfigResult",
+            "OpenCodeApplyConfigResult",
+            "InstructionsStatus",
+            "Skill",
+            "McpServer",
+            "AppError",
+        ] {
+            assert!(content.contains(ty), "missing type {ty}");
+        }
+
+        // 代表性 commands
+        for cmd in [
+            "getPetSettings",
+            "listProviders",
+            "startGateway",
+            "listRouteProfiles",
+            "listRequestLogs",
+            "runHealthCheck",
+            "listModelPricing",
+            "detectCodexConfig",
+        ] {
+            assert!(content.contains(cmd), "missing command {cmd}");
+        }
     }
 }
 

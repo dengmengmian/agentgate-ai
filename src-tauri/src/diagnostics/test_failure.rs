@@ -18,7 +18,7 @@ use serde::Serialize;
 
 use crate::transform::providers as p;
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, specta::Type)]
 pub struct TestDiagnostic {
     pub code: String,
     pub title: String,

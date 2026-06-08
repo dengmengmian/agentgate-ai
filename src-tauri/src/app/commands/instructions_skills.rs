@@ -8,6 +8,7 @@ use crate::errors::AppError;
 
 /// 列出内置模板。模板是只读静态资源，不需要参数也不消耗 DB。
 #[tauri::command]
+#[specta::specta]
 pub fn list_instructions_templates(
 ) -> Result<Vec<crate::tools::instructions_templates::InstructionsTemplate>, AppError> {
     // 静态 slice → Vec 让 Tauri 能序列化。
@@ -20,6 +21,7 @@ pub fn list_instructions_templates(
 /// 读取某 scope（claude_global / codex_global）的全局指令文件原文。
 /// 文件不存在时返回 `exists=false, content=""`，让前端 textarea 仍可编辑。
 #[tauri::command]
+#[specta::specta]
 pub fn read_global_instructions(
     scope: String,
 ) -> Result<crate::tools::instructions::InstructionsStatus, AppError> {
@@ -32,6 +34,7 @@ pub fn read_global_instructions(
 /// 手动编辑后保存。和 5 个客户端的 apply 流程一致：写盘前 snapshot 一次磁盘
 /// 原文，便于事后回滚。
 #[tauri::command]
+#[specta::specta]
 pub fn write_global_instructions(
     state: State<'_, AppState>,
     scope: String,
@@ -52,6 +55,7 @@ pub fn write_global_instructions(
 
 /// 把模板按 overwrite / append 写入目标 scope。同样在写盘前打 snapshot。
 #[tauri::command]
+#[specta::specta]
 pub fn apply_instructions_template(
     state: State<'_, AppState>,
     scope: String,
@@ -76,6 +80,7 @@ pub fn apply_instructions_template(
 
 /// 导出两个 scope 的全局指令为一份 JSON 备份（6.5）。
 #[tauri::command]
+#[specta::specta]
 pub fn export_instructions() -> Result<crate::tools::instructions::InstructionsBackup, AppError> {
     Ok(crate::tools::instructions::export_backup())
 }
@@ -83,6 +88,7 @@ pub fn export_instructions() -> Result<crate::tools::instructions::InstructionsB
 /// 从备份 JSON 恢复全局指令。每个非空 scope overwrite 写入，写盘前各打一次
 /// snapshot，复用现有回滚机制。返回恢复后的两个 scope 状态。
 #[tauri::command]
+#[specta::specta]
 pub fn import_instructions(
     state: State<'_, AppState>,
     payload: String,
@@ -114,12 +120,14 @@ pub fn import_instructions(
 
 /// 列出本地 skill（读 frontmatter + 启用状态）。
 #[tauri::command]
+#[specta::specta]
 pub fn list_skills() -> Result<Vec<crate::tools::skills::Skill>, AppError> {
     Ok(crate::tools::skills::list_skills())
 }
 
 /// 启用/禁用一个 skill（重命名 manifest）。source 为 claude / codex。
 #[tauri::command]
+#[specta::specta]
 pub fn set_skill_enabled(
     source: String,
     id: String,
@@ -130,12 +138,14 @@ pub fn set_skill_enabled(
 
 /// 删除一个 skill 目录（强确认在前端）。
 #[tauri::command]
+#[specta::specta]
 pub fn delete_skill(source: String, id: String) -> Result<bool, AppError> {
     crate::tools::skills::delete_skill(&source, &id)
 }
 
 /// 从本地 ZIP 字节安装一个 skill 到指定来源客户端（前端读文件成字节传入）。
 #[tauri::command]
+#[specta::specta]
 pub fn import_skill_from_zip(
     source: String,
     bytes: Vec<u8>,
@@ -145,12 +155,14 @@ pub fn import_skill_from_zip(
 
 /// 导出所有 skill 为可备份 JSON（6.5）。
 #[tauri::command]
+#[specta::specta]
 pub fn export_skills() -> Result<crate::tools::skills::SkillsExport, AppError> {
     Ok(crate::tools::skills::export_skills())
 }
 
 /// 从备份 JSON 恢复 skill（已存在的目录跳过，不覆盖）。
 #[tauri::command]
+#[specta::specta]
 pub fn import_skills(payload: String) -> Result<Vec<crate::tools::skills::Skill>, AppError> {
     crate::tools::skills::import_skills(&payload)
 }

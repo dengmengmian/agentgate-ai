@@ -1,30 +1,22 @@
-export interface CheckItem {
-  id: string;
-  name: string;
+// 从 bindings re-export。CheckItem.status 在 Rust 端是 String,bindings 给 string;
+// 前端历史 union 在边界 cast,这里给一个 narrow 版本。
+import type {
+  CheckItem as WideItem,
+  CheckReport as WideReport,
+  FullSelfTestReport as WideFull,
+  ExportResult,
+} from "@/lib/bindings";
+
+export type { ExportResult };
+
+export type CheckItem = Omit<WideItem, "status"> & {
   status: "ok" | "warning" | "failed" | "skipped";
-  message: string;
-  detail?: string;
-  suggestion?: string;
-}
+};
 
-export interface CheckReport {
-  name: string;
-  status: string;
+export type CheckReport = Omit<WideReport, "checks"> & {
   checks: CheckItem[];
-  summary: string;
-  created_at: string;
-}
+};
 
-export interface FullSelfTestReport {
-  overall_status: string;
+export type FullSelfTestReport = Omit<WideFull, "reports"> & {
   reports: CheckReport[];
-  summary: string;
-  created_at: string;
-}
-
-export interface ExportResult {
-  success: boolean;
-  path: string;
-  files: string[];
-  warnings: string[];
-}
+};

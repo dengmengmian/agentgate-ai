@@ -14,6 +14,7 @@ use crate::storage;
 /// Used by the "Auto-detect" button in the capability matrix editor to fill
 /// in sensible defaults without forcing the user to tick every box.
 #[tauri::command]
+#[specta::specta]
 pub fn seed_model_capabilities(
     provider_type: String,
     model_ids: Vec<String>,
@@ -30,6 +31,7 @@ pub fn seed_model_capabilities(
 /// succeeds, so newly added models pick up sensible defaults without the
 /// user needing to open the form dialog.
 #[tauri::command]
+#[specta::specta]
 pub fn autofill_provider_capabilities(
     id: String,
     state: State<'_, AppState>,
@@ -87,6 +89,7 @@ pub fn autofill_provider_capabilities(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderView>, AppError> {
     let conn = state
         .db
@@ -97,6 +100,7 @@ pub fn list_providers(state: State<'_, AppState>) -> Result<Vec<ProviderView>, A
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_provider(id: String, state: State<'_, AppState>) -> Result<ProviderView, AppError> {
     let conn = state
         .db
@@ -113,6 +117,7 @@ pub fn get_provider(id: String, state: State<'_, AppState>) -> Result<ProviderVi
 /// must keep the keys in memory only as long as the dialog is open;
 /// they're not redacted in any subsequent log path.
 #[tauri::command]
+#[specta::specta]
 pub fn get_provider_keys(id: String, state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
     let conn = state
         .db
@@ -133,6 +138,7 @@ pub fn get_provider_keys(id: String, state: State<'_, AppState>) -> Result<Vec<S
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn create_provider(
     mut input: CreateProviderInput,
     state: State<'_, AppState>,
@@ -185,6 +191,7 @@ pub fn create_provider(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn update_provider(
     id: String,
     input: UpdateProviderInput,
@@ -220,6 +227,7 @@ pub fn update_provider(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn delete_provider(id: String, state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
@@ -229,6 +237,7 @@ pub fn delete_provider(id: String, state: State<'_, AppState>) -> Result<bool, A
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn set_active_provider(
     app_handle: tauri::AppHandle,
     id: String,
@@ -246,6 +255,7 @@ pub fn set_active_provider(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn fetch_provider_models(
     id: String,
     state: State<'_, AppState>,
@@ -333,6 +343,7 @@ pub async fn fetch_provider_models(
 /// connect / TTFB / total latency. User-triggered only (never automatic) to
 /// avoid burning tokens.
 #[tauri::command]
+#[specta::specta]
 pub async fn provider_speedtest(
     id: String,
     state: State<'_, AppState>,
@@ -350,6 +361,7 @@ pub async fn provider_speedtest(
 /// Speedtest every enabled provider in parallel. Heavier than single-provider
 /// probe — confirm the user wants this in UI before calling.
 #[tauri::command]
+#[specta::specta]
 pub async fn provider_speedtest_all(
     state: State<'_, AppState>,
 ) -> Result<Vec<crate::diagnostics::speedtest::ProviderSpeedReport>, AppError> {
@@ -367,6 +379,7 @@ pub async fn provider_speedtest_all(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn test_provider(
     id: String,
     state: State<'_, AppState>,
@@ -533,6 +546,7 @@ pub async fn test_provider(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn detect_provider_vision(
     id: String,
     state: State<'_, AppState>,
@@ -672,6 +686,7 @@ pub async fn detect_provider_vision(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub async fn detect_provider_cache(
     id: String,
     state: State<'_, AppState>,
@@ -875,6 +890,7 @@ pub async fn detect_provider_cache(
 // ── Provider Health Commands ──────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_provider_health(
     state: State<'_, AppState>,
     provider: String,
@@ -889,6 +905,7 @@ pub fn get_provider_health(
 // ── Tool Connection Test ──────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub async fn test_tool_connection(
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, AppError> {

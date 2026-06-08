@@ -23,7 +23,7 @@ const MAX_NON_INITIAL_PER_CLIENT: usize = 10;
 
 /// 一条历史条目的可序列化形态。`snapshot_json` 是 `ClientSnapshot` 序列化
 /// 后的字符串，反序列化交给 caller —— 5 个客户端各自知道怎么 restore。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct HistoryEntry {
     pub id: String,
     pub client_id: String,

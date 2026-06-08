@@ -6,6 +6,1042 @@
 
 
 export const commands = {
+async listProviders() : Promise<Result<ProviderView[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_providers") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getProvider(id: string) : Promise<Result<ProviderView, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_provider", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Return the plain-text api keys for a provider, in storage order.
+ * 
+ * Used by the edit form to repopulate every key slot so users can see
+ * which key is which (the masked view alone hides that). Calling code
+ * must keep the keys in memory only as long as the dialog is open;
+ * they're not redacted in any subsequent log path.
+ */
+async getProviderKeys(id: string) : Promise<Result<string[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_provider_keys", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async createProvider(input: CreateProviderInput) : Promise<Result<ProviderView, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_provider", { input }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateProvider(id: string, input: UpdateProviderInput) : Promise<Result<ProviderView, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_provider", { id, input }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteProvider(id: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_provider", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async setActiveProvider(id: string) : Promise<Result<ProviderView, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_active_provider", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async fetchProviderModels(id: string) : Promise<Result<string[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("fetch_provider_models", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async testProvider(id: string) : Promise<Result<ProviderTestResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("test_provider", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Speedtest a single provider — sends a 1-token probe request and reports
+ * connect / TTFB / total latency. User-triggered only (never automatic) to
+ * avoid burning tokens.
+ */
+async providerSpeedtest(id: string) : Promise<Result<ProviderSpeedReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("provider_speedtest", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Speedtest every enabled provider in parallel. Heavier than single-provider
+ * probe — confirm the user wants this in UI before calling.
+ */
+async providerSpeedtestAll() : Promise<Result<ProviderSpeedReport[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("provider_speedtest_all") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async detectProviderVision(id: string) : Promise<Result<ProviderTestResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("detect_provider_vision", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Auto-derive capabilities for a list of model IDs given a provider type.
+ * Used by the "Auto-detect" button in the capability matrix editor to fill
+ * in sensible defaults without forcing the user to tick every box.
+ */
+async seedModelCapabilities(providerType: string, modelIds: string[]) : Promise<Result<Partial<{ [key in string]: string[] }>, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("seed_model_capabilities", { providerType, modelIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Seed-fill the model_capabilities matrix for a provider and persist it.
+ * Only fills models that are missing from the existing matrix — never
+ * overwrites manual edits. Used by the "测试" button after connectivity
+ * succeeds, so newly added models pick up sensible defaults without the
+ * user needing to open the form dialog.
+ */
+async autofillProviderCapabilities(id: string) : Promise<Result<number, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("autofill_provider_capabilities", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getGatewayStatus() : Promise<Result<GatewayStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_gateway_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getGatewaySettings() : Promise<Result<GatewaySettings, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_gateway_settings") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateGatewaySettings(input: UpdateGatewaySettingsInput) : Promise<Result<GatewaySettings, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_gateway_settings", { input }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async startGateway() : Promise<Result<GatewayStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("start_gateway") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async stopGateway() : Promise<Result<GatewayStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("stop_gateway") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async restartGateway() : Promise<Result<GatewayStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("restart_gateway") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listRequestLogs(filter: RequestLogFilter) : Promise<Result<RequestLogListItem[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_request_logs", { filter }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 日志里出现过的去重模型名——Logs 页「模型」筛选下拉用。
+ */
+async listLogModels() : Promise<Result<string[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_log_models") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 读取某个会话的完整对话（会话详情视图用）。直接读本地 jsonl，不走 DB。
+ * 先试 Claude Code 日志，找不到再试 Codex 日志。
+ */
+async getSessionConversation(sessionId: string) : Promise<Result<ConversationMessage[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_session_conversation", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 删除某个会话：删 request_logs 行 + 删 Claude/Codex 本地 jsonl 文件。
+ * 一个会话只在一处客户端，另一处 delete_session_file 返回 Ok(false)；删除失败传播 Err。
+ */
+async deleteSession(sessionId: string) : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_session", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async countRequestLogs(filter: RequestLogFilter) : Promise<Result<number, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("count_request_logs", { filter }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getRequestLogDetail(id: string) : Promise<Result<RequestLogDetail, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_request_log_detail", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clearRequestLogs() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clear_request_logs") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 按 session_id 聚合用量：Logs 页「按会话分组」视图用。
+ * 返回最近 `limit` 个会话，按最后活跃时间倒序排列。
+ */
+async aggregateRequestLogsBySession(filter: RequestLogFilter, limit: number | null) : Promise<Result<SessionUsageSummary[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("aggregate_request_logs_by_session", { filter, limit }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 按模型聚合成本——成本仪表盘「钱花在哪个模型」用。
+ */
+async aggregateCostByModel(days: number | null, limit: number | null) : Promise<Result<CostBreakdown[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("aggregate_cost_by_model", { days, limit }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 按客户端聚合成本——成本仪表盘「哪个客户端花得多」用。
+ */
+async aggregateCostByClient(days: number | null, limit: number | null) : Promise<Result<CostBreakdown[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("aggregate_cost_by_client", { days, limit }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Provider 详情页：按模型聚合成功率/成本，并返回最近延迟点。
+ */
+async aggregateProviderDetailStats(provider: string, days: number | null, limit: number | null) : Promise<Result<ProviderDetailStats, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("aggregate_provider_detail_stats", { provider, days, limit }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async aggregateRouteProfileStats(days: number | null) : Promise<Result<RouteProfileStats[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("aggregate_route_profile_stats", { days }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 扫描 ~/.claude/projects 下的 Claude Code 会话日志并写入 request_logs。
+ * 幂等：已同步过的 message_id 会被跳过。
+ */
+async syncClaudeSessions() : Promise<Result<SyncResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sync_claude_sessions") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 扫描 ~/.codex/sessions 下的 Codex 会话日志并写入 request_logs。
+ * 幂等：external_id = "{session_id}:{event_index}" 保证再次同步只写新增。
+ */
+async syncCodexSessions() : Promise<Result<SyncResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sync_codex_sessions") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 扫描 ~/.gemini/tmp/(session)/chats 下的 Gemini CLI 会话日志并写入 request_logs。
+ * 幂等：event 自带 UUID id 作 external_id。
+ */
+async syncGeminiSessions() : Promise<Result<SyncResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sync_gemini_sessions") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listTools() : Promise<Result<ToolConfigView[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_tools") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async generateCodexConfig() : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("generate_codex_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getGatewayAuthSettings() : Promise<Result<GatewayAuthSettings, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_gateway_auth_settings") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async regenerateLocalAccessToken() : Promise<Result<GatewayAuthSettings, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("regenerate_local_access_token") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async ensureLocalAccessToken() : Promise<Result<GatewayAuthSettings, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("ensure_local_access_token") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getLocalAccessToken() : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_local_access_token") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async openTokenFolder() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_token_folder") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async detectCodexConfig() : Promise<Result<CodexConfigStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("detect_codex_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async applyCodexConfig() : Promise<Result<CodexApplyConfigResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("apply_codex_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Restore Codex to its pre-AgentGate state — the saved config.toml is
+ * copied back so the user gets the official `[plugins.*]` / `[mcp_servers.*]`
+ * blocks alive again. Used by the UI's "Switch to native mode" button.
+ */
+async disableCodexAgentgate() : Promise<Result<CodexApplyConfigResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("disable_codex_agentgate") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async toggleCodexProvider() : Promise<Result<CodexToggleResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_codex_provider") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async openCodexConfig() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_codex_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async detectClaudeDesktop() : Promise<ClaudeDesktopStatus> {
+    return await TAURI_INVOKE("detect_claude_desktop");
+},
+/**
+ * 生成指向 AgentGate 网关的 3p profile JSON（pretty），仅供和用户机器上实际的
+ * Claude Desktop 3p 配置对比、确认 schema，不写任何文件。
+ */
+async previewClaudeDesktopProfile() : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("preview_claude_desktop_profile") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 接入 Claude Desktop：写 3p profile + 切 appliedId 到 AgentGate。apply 前先经
+ * apply_history 快照 profile/_meta，用户可在客户端历史里一键回滚。
+ */
+async applyClaudeDesktopConfig() : Promise<Result<ClaudeDesktopApplyResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("apply_claude_desktop_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async detectClaudeCodeEnv() : Promise<Result<ClaudeCodeEnvStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("detect_claude_code_env") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async applyClaudeCodeConfig() : Promise<Result<ClaudeCodeApplyConfigResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("apply_claude_code_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async toggleClaudeCodeProvider() : Promise<Result<ClaudeCodeToggleResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_claude_code_provider") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async openClaudeCodeConfig() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_claude_code_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async generateClaudeCodeEnv() : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("generate_claude_code_env") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async detectOpencodeConfig() : Promise<Result<OpenCodeConfigStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("detect_opencode_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async applyOpencodeConfig() : Promise<Result<OpenCodeApplyConfigResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("apply_opencode_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async generateOpencodeConfig() : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("generate_opencode_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async openOpencodeConfig() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_opencode_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async detectGeminiConfig() : Promise<Result<GeminiCliConfigStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("detect_gemini_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async applyGeminiConfig() : Promise<Result<GeminiCliApplyConfigResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("apply_gemini_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async generateGeminiConfig() : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("generate_gemini_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async toggleGeminiProvider() : Promise<Result<GeminiCliToggleResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_gemini_provider") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async openGeminiConfig() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_gemini_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async detectProviderCache(id: string) : Promise<Result<ProviderTestResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("detect_provider_cache", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getProviderHealth(provider: string) : Promise<Result<ProviderHealth, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_provider_health", { provider }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateRouteProviderConditions(routeProfileId: string, providerId: string, routingConditions: string | null) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_route_provider_conditions", { routeProfileId, providerId, routingConditions }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listModelPricing() : Promise<Result<ModelPricing[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_model_pricing") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async upsertModelPricing(provider: string, modelPattern: string, inputPrice: number, outputPrice: number) : Promise<Result<ModelPricing, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("upsert_model_pricing", { provider, modelPattern, inputPrice, outputPrice }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteModelPricing(id: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_model_pricing", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async detectAtomcodeConfig() : Promise<Result<AtomCodeConfigStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("detect_atomcode_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async applyAtomcodeConfig() : Promise<Result<AtomCodeApplyConfigResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("apply_atomcode_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async generateAtomcodeConfig() : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("generate_atomcode_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async toggleAtomcodeProvider() : Promise<Result<AtomCodeToggleResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("toggle_atomcode_provider") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async openAtomcodeConfig() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_atomcode_config") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * After a client's config is rewritten, look up matching live processes
+ * so the UI can warn the user that the existing session needs to be
+ * restarted to pick up the new config. Each `client_id` maps to one or
+ * more process basenames (e.g. `codex` matches both the CLI and the
+ * macOS desktop app). Returns an empty list on Windows (pgrep-only
+ * detection); the caller treats empty as "couldn't detect", not "OK".
+ */
+async detectClientRunning(clientId: string) : Promise<Result<RunningProcess[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("detect_client_running", { clientId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Restart Codex Desktop so freshly-written config.toml / auth.json take
+ * effect. macOS only at the moment — `restart_codex_desktop` returns
+ * `supported: false` on other platforms and the UI hides the button.
+ * Never called automatically; only fires when the user clicks the button in
+ * PostApplyDialog.
+ */
+async restartCodexDesktop() : Promise<Result<CodexRestartResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("restart_codex_desktop") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 列出某客户端的 apply/disable/toggle 历史（按时间倒序）。前端用来
+ * 渲染历史抽屉。
+ */
+async listClientApplyHistory(clientId: string) : Promise<Result<HistoryEntry[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_client_apply_history", { clientId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 曾经 apply 过配置的客户端 id 列表。前端用来判断「配置漂移」：客户端 detected
+ * 但 id 在这个列表里，说明接入过又被改回去了，提示重新应用。
+ */
+async clientsWithApplyHistory() : Promise<Result<string[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clients_with_apply_history") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 读取各客户端(Codex / Claude Code)现有的 MCP server 配置，汇总展示。
+ * 以客户端文件为真相源，只读不写；env 只返回 key 不返回 value。
+ */
+async listMcpServers() : Promise<Result<McpServer[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_mcp_servers") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 添加或更新指定客户端的 MCP server。只写入一个客户端配置文件，不做跨客户端同步。
+ */
+async upsertMcpServer(input: UpsertMcpServerInput) : Promise<Result<McpServer, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("upsert_mcp_server", { input }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 删除指定客户端的 MCP server。文件或 server 不存在时返回 false。
+ */
+async deleteMcpServer(client: string, name: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_mcp_server", { client, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 将一个客户端里的 MCP server 显式同步到一个或多个目标客户端。
+ */
+async syncMcpServer(input: SyncMcpServerInput) : Promise<Result<McpServer[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("sync_mcp_server", { input }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 导出 MCP server 配置。默认由前端传 include_secrets=false，不导出 env value。
+ */
+async exportMcpServers(includeSecrets: boolean) : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_mcp_servers", { includeSecrets }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 从 JSON 文本导入 MCP server 配置到指定客户端。
+ */
+async importMcpServers(payload: string, targetClients: string[]) : Promise<Result<McpServer[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_mcp_servers", { payload, targetClients }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 回滚到某条历史记录所代表的盘上状态。snapshot 反序列化后按 file 写回原
+ * absolute_path（不存在的文件被删除）。回滚本身**不**记录新历史，避免反复
+ * 回滚把保留窗撑满。
+ */
+async rollbackClientApply(historyId: string) : Promise<Result<HistoryEntry, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("rollback_client_apply", { historyId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listRouteProfiles() : Promise<Result<RouteProfileView[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_route_profiles") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getRouteProfile(id: string) : Promise<Result<RouteProfileDetail, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_route_profile", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async createRouteProfile(input: CreateRouteProfileInput) : Promise<Result<RouteProfileView, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_route_profile", { input }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateRouteProfile(id: string, input: UpdateRouteProfileInput) : Promise<Result<RouteProfileView, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_route_profile", { id, input }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteRouteProfile(id: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_route_profile", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async setDefaultRouteProfile(id: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_default_route_profile", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async setRouteProfileMode(id: string, mode: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_route_profile_mode", { id, mode }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async setRouteActiveProvider(routeProfileId: string, providerId: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_route_active_provider", { routeProfileId, providerId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async addProviderToRoute(routeProfileId: string, providerId: string, input: AddProviderToRouteInput) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("add_provider_to_route", { routeProfileId, providerId, input }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async removeProviderFromRoute(routeProfileId: string, providerId: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("remove_provider_from_route", { routeProfileId, providerId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async reorderRouteProviders(routeProfileId: string, providerIds: string[]) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reorder_route_providers", { routeProfileId, providerIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async listProviderRuntimeStatus() : Promise<Result<ProviderRuntimeStatus[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_provider_runtime_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async resetProviderRuntimeStatus(providerId: string) : Promise<Result<ProviderRuntimeStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reset_provider_runtime_status", { providerId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async resetAllProviderRuntimeStatus() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("reset_all_provider_runtime_status") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getRequestStats() : Promise<Result<RequestStats, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_request_stats") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * Stats over a configurable window (in days). Dashboard date-range tabs
+ * (今天/7天/14天/30天) call this with 1/7/14/30 respectively.
+ */
+async getRequestStatsRange(days: number) : Promise<Result<RequestStats, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_request_stats_range", { days }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getRuntimeKpis() : Promise<Result<RuntimeKpis, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_runtime_kpis") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async runHealthCheck() : Promise<Result<CheckReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("run_health_check") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async runDatabaseCheck() : Promise<Result<CheckReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("run_database_check") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async runGatewayAuthCheck() : Promise<Result<CheckReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("run_gateway_auth_check") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async runProviderCheck() : Promise<Result<CheckReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("run_provider_check") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async runCodexConfigCheck() : Promise<Result<CheckReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("run_codex_config_check") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async runClaudeCodeConfigCheck() : Promise<Result<CheckReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("run_claude_code_config_check") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async runRouteProfileCheck() : Promise<Result<CheckReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("run_route_profile_check") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async runFullSelfTest() : Promise<Result<FullSelfTestReport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("run_full_self_test") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async exportDiagnosticBundle(includeLogs: boolean | null, maxLogs: number | null) : Promise<Result<ExportResult, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_diagnostic_bundle", { includeLogs, maxLogs }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async openAppDataDir() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("open_app_data_dir") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async testToolConnection() : Promise<Result<JsonValue, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("test_tool_connection") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getPetSettings() : Promise<Result<PetSettings, AppError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_pet_settings") };
@@ -29,6 +1065,264 @@ async setPetVisible(visible: boolean) : Promise<Result<PetSettings, AppError>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async getPetGatewayState() : Promise<Result<JsonValue, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_pet_gateway_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 轻量版:只返回 state + last_error,**不**做全表 stats 聚合。
+ * 给 10s 轮询用,频次高所以必须便宜。
+ * last_error 走 idx_request_logs_timestamp 索引,O(log n) 几乎免费。
+ * stats 数据用单独的 `get_pet_gateway_state`(原命令)在 30 分钟 stats bubble 触发前调一次。
+ */
+async getPetGatewayStateLite() : Promise<Result<JsonValue, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_pet_gateway_state_lite") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getPetMemory() : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_pet_memory") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async savePetMemory(memory: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_pet_memory", { memory }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async petChat(messages: JsonValue[]) : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("pet_chat", { messages }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 从宠物右键菜单触发:把主窗口拉起来 + 通知前端导航到「宠物」设置页。
+ * 主窗口可能被最小化/隐藏,所以先 unminimize 再 show + set_focus。
+ */
+async petOpenSettings() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("pet_open_settings") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 宠物窗口的鼠标穿透状态。三个入口(右键菜单 / tray / Settings)都改这里,
+ * emit `pet-click-through-changed` 让所有 webview 同步。
+ */
+async getPetClickThrough() : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_pet_click_through") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async setPetClickThrough(value: boolean) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_pet_click_through", { value }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 原生右键菜单(替代 HTML 实现)——HTML 菜单画在宠物窗口里,菜单展开
+ * 期间窗口区域全部接事件,挡底层应用。换成 OS 弹出菜单完全脱离 webview,
+ * 不挡也不需要 resize 窗口。
+ * 
+ * 9 个角色用子菜单 + checked 标记当前选中。鼠标穿透用 CheckMenuItem。
+ * 菜单事件统一在 lib.rs 的 on_menu_event 里处理(pet_ 前缀)。
+ */
+async showPetContextMenu() : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("show_pet_context_menu") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 导出当前配置为 JSON 字符串。前端拿到后用 Tauri dialog 保存到磁盘。
+ * 
+ * `include_secrets = false`（默认）会把 api_key 字段全部置空——导出文件可以
+ * 安全分享/截图；用户在新机器导入后重新填密钥即可。`include_secrets = true`
+ * 会把明文密钥写入文件，仅用于自己换机迁移这种场景，前端需要明确警告。
+ */
+async exportConfigJson(includeSecrets: boolean) : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_config_json", { includeSecrets }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 从前端拿到的 JSON 字符串还原配置。**replace 语义**：providers / route_profiles
+ * / route_profile_providers 三张表会被先清空再重建。运行时状态（provider_runtime_status）
+ * 一并清空（指向已不存在的 provider_id 没意义）；request_logs / pricing 等
+ * 历史数据不受影响。
+ */
+async importConfigJson(json: string) : Promise<Result<ImportSummary, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_config_json", { json }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 列出内置模板。模板是只读静态资源，不需要参数也不消耗 DB。
+ */
+async listInstructionsTemplates() : Promise<Result<InstructionsTemplate[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_instructions_templates") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 读取某 scope（claude_global / codex_global）的全局指令文件原文。
+ * 文件不存在时返回 `exists=false, content=""`，让前端 textarea 仍可编辑。
+ */
+async readGlobalInstructions(scope: string) : Promise<Result<InstructionsStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("read_global_instructions", { scope }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 手动编辑后保存。和 5 个客户端的 apply 流程一致：写盘前 snapshot 一次磁盘
+ * 原文，便于事后回滚。
+ */
+async writeGlobalInstructions(scope: string, content: string) : Promise<Result<InstructionsStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("write_global_instructions", { scope, content }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 把模板按 overwrite / append 写入目标 scope。同样在写盘前打 snapshot。
+ */
+async applyInstructionsTemplate(scope: string, templateId: string, mode: string) : Promise<Result<InstructionsStatus, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("apply_instructions_template", { scope, templateId, mode }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 导出两个 scope 的全局指令为一份 JSON 备份（6.5）。
+ */
+async exportInstructions() : Promise<Result<InstructionsBackup, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_instructions") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 从备份 JSON 恢复全局指令。每个非空 scope overwrite 写入，写盘前各打一次
+ * snapshot，复用现有回滚机制。返回恢复后的两个 scope 状态。
+ */
+async importInstructions(payload: string) : Promise<Result<InstructionsStatus[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_instructions", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 列出本地 skill（读 frontmatter + 启用状态）。
+ */
+async listSkills() : Promise<Result<Skill[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("list_skills") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 启用/禁用一个 skill（重命名 manifest）。source 为 claude / codex。
+ */
+async setSkillEnabled(source: string, id: string, enabled: boolean) : Promise<Result<Skill, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("set_skill_enabled", { source, id, enabled }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 删除一个 skill 目录（强确认在前端）。
+ */
+async deleteSkill(source: string, id: string) : Promise<Result<boolean, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_skill", { source, id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 从本地 ZIP 字节安装一个 skill 到指定来源客户端（前端读文件成字节传入）。
+ */
+async importSkillFromZip(source: string, bytes: number[]) : Promise<Result<Skill, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_skill_from_zip", { source, bytes }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 导出所有 skill 为可备份 JSON（6.5）。
+ */
+async exportSkills() : Promise<Result<SkillsExport, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_skills") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 从备份 JSON 恢复 skill（已存在的目录跳过，不覆盖）。
+ */
+async importSkills(payload: string) : Promise<Result<Skill[], AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_skills", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -42,9 +1336,313 @@ async setPetVisible(visible: boolean) : Promise<Result<PetSettings, AppError>> {
 
 /** user-defined types **/
 
+export type AddProviderToRouteInput = { priority: number | null; model_override: string | null; cooldown_seconds: number | null; failover_on_status_codes: string | null; failover_on_error_keywords: string | null; routing_conditions: string | null }
 export type AppError = { code: string; message: string; detail: string | null; suggestion: string | null }
+export type AtomCodeApplyConfigResult = { success: boolean; config_path: string; changed_keys: string[]; warnings: string[] }
+export type AtomCodeConfigStatus = { config_path: string; exists: boolean; has_agentgate: boolean; current_model: string | null; has_saved_official: boolean }
+export type AtomCodeToggleResult = { success: boolean; new_provider: string; config_path: string }
+export type CheckItem = { id: string; name: string; status: string; message: string; detail?: string | null; suggestion?: string | null }
+export type CheckReport = { name: string; status: string; checks: CheckItem[]; summary: string; created_at: string }
+export type ClaudeCodeApplyConfigResult = { success: boolean; config_path: string; backup_path: string | null; changed_keys: string[]; warnings: string[] }
+export type ClaudeCodeEnvStatus = { settings_path: string; settings_exists: boolean; current_env: Partial<{ [key in string]: string }>; detected_profiles: ProfileDetection[]; conflicts: string[]; active_base_url: string | null; active_model: string | null; has_api_key: boolean; has_auth_token: boolean; has_agentgate: boolean; auth_mode: string; recommendations: string[]; has_saved_official: boolean }
+export type ClaudeCodeToggleResult = { success: boolean; new_provider: string; config_path: string }
+export type ClaudeDesktopApplyResult = { success: boolean; profile_path: string; base_url: string; warnings: string[] }
+export type ClaudeDesktopStatus = { 
+/**
+ * 当前平台是否支持
+ */
+supported: boolean; normal_config_path: string; threep_config_path: string; profile_path: string; 
+/**
+ * Claude Desktop 是否安装（normal config 目录存在）
+ */
+installed: boolean; 
+/**
+ * 是否已存在 AgentGate profile
+ */
+has_agentgate_profile: boolean; 
+/**
+ * _meta.json 里当前生效的 profile（用于判断是否「已接入」）
+ */
+applied_profile_id: string | null; 
+/**
+ * 当前 deploymentMode（"1p" / "3p" / None）
+ */
+deployment_mode: string | null }
+export type CodexApplyConfigResult = { success: boolean; config_path: string; auth_json_path: string; backup_path: string | null; auth_backup_path: string | null; token_path: string; changed_keys: string[]; warnings: string[] }
+export type CodexConfigStatus = { config_path: string; auth_json_path: string; exists: boolean; auth_json_exists: boolean; has_agentgate: boolean; has_agentgate_auth: boolean; current_provider: string | null; current_model: string | null; auth_mode: string; token_path: string; 
+/**
+ * Whether the provider is currently set to "agentgate" (active) or something else.
+ */
+is_agentgate_active: boolean; 
+/**
+ * True if OPENAI_API_KEY in auth.json was overwritten with ag_local_ by old AgentGate.
+ */
+openai_key_polluted: boolean; 
+/**
+ * True if saved official config exists for toggle restore.
+ */
+has_saved_official: boolean }
+export type CodexRestartResult = { 
+/**
+ * 本平台是否实现了重启路径。false 表示前端不该显示按钮。
+ */
+supported: boolean; platform: string; 
+/**
+ * kill 前桌面 App 是不是在跑。
+ */
+was_running: boolean; 
+/**
+ * 实际杀掉的进程数（macOS 上 pkill 一发一组，记 1 即可）。
+ */
+killed: number; 
+/**
+ * 是否成功重新拉起。
+ */
+relaunched: boolean }
+export type CodexToggleResult = { success: boolean; new_provider: string; config_path: string }
+/**
+ * 会话里的一条对话消息——会话详情视图渲染气泡用。
+ */
+export type ConversationMessage = { role: string; text: string; timestamp: string | null }
+/**
+ * 成本仪表盘用：按某维度（模型 / 客户端）聚合的成本与用量。
+ */
+export type CostBreakdown = { 
+/**
+ * 维度值：模型名 或 客户端名。
+ */
+key: string; 
+/**
+ * 该维度下出现过的一个 provider（按客户端聚合时仅供参考）。
+ */
+provider: string | null; request_count: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost: number; 
+/**
+ * 该模型在价格表里有没有价（仅按模型聚合时有意义）。用于 UI 区分
+ * "$0 是真免费" vs "$0 是缺价算不出"，避免假成功。按客户端聚合时恒为 true。
+ */
+has_price: boolean }
+export type CreateProviderInput = { name: string; provider_type: string; base_url: string; api_key: string | null; default_model: string; reasoning_model: string | null; supported_models: string | null; model_mapping: string | null; extra_headers: string | null; anthropic_base_url: string | null; responses_base_url: string | null; protocol: string; timeout_seconds: number | null; auto_cache_control: boolean | null; model_capabilities: string | null; provider_quirks: string | null; body_filter_enabled: number | null; thinking_rectifier_enabled: number | null; error_mapper_enabled: number | null; model_degradation_chain: string | null; enabled: boolean | null }
+export type CreateRouteProfileInput = { name: string; input_protocol: string; mode: string | null }
+export type DailyStat = { date: string; total: number; errors: number; success: number; input_tokens: number; output_tokens: number; cost: number; cache_write_tokens: number; cache_read_tokens: number }
+export type ExportResult = { success: boolean; path: string; files: string[]; warnings: string[] }
+export type FullSelfTestReport = { overall_status: string; reports: CheckReport[]; summary: string; created_at: string }
+export type GatewayAuthSettings = { gateway_auth_enabled: boolean; auth_mode: string; token_path: string; masked_token: string; codex_auth_type: string; claude_code_auth_type: string }
+export type GatewaySettings = { id: number; host: string; port: number; active_provider_id: string | null; input_protocol: string; output_protocol: string; auto_start: boolean; log_retention_days: number; 
+/**
+ * Global master switches for the refiner pipeline. When off, every
+ * per-provider opt-in is ignored — the gateway stays byte-level
+ * transparent. Default off for both, so the upgrade is silent.
+ */
+body_filter_global: boolean; thinking_rectifier_global: boolean; error_mapper_global: boolean; 
+/**
+ * 后台主动健康探测开关（默认关——开启后按间隔发 1-token 探测，消耗少量额度；
+ * 结果仅用于展示，不影响路由）。
+ */
+health_probe_enabled: boolean; updated_at: string }
+export type GatewayStatus = { running: boolean; host: string; port: number; active_provider: string | null; input_protocol: string; output_protocol: string; started_at: string | null }
+export type GeminiCliApplyConfigResult = { success: boolean; config_path: string; changed_keys: string[]; warnings: string[] }
+export type GeminiCliConfigStatus = { config_path: string; exists: boolean; has_agentgate: boolean; current_model: string | null; has_saved_official: boolean }
+export type GeminiCliToggleResult = { success: boolean; new_provider: string; config_path: string }
+/**
+ * 一条历史条目的可序列化形态。`snapshot_json` 是 `ClientSnapshot` 序列化
+ * 后的字符串，反序列化交给 caller —— 5 个客户端各自知道怎么 restore。
+ */
+export type HistoryEntry = { id: string; client_id: string; 
+/**
+ * `apply` / `disable` / `toggle_to_agentgate` / `toggle_to_official`
+ */
+action: string; 
+/**
+ * 序列化后的 `ClientSnapshot`。
+ */
+snapshot_json: string; 
+/**
+ * 一句话摘要：changed_keys 拼起来 / "switch to official" / 等。
+ */
+summary: string; 
+/**
+ * 同客户端第一条永远是 initial=true，从不被清理。
+ */
+is_initial: boolean; agentgate_version: string; 
+/**
+ * RFC3339。
+ */
+created_at: string }
+export type ImportSummary = { providers_imported: number; route_profiles_imported: number; members_imported: number; 
+/**
+ * API keys 是否随导入回填了：true = 导入文件携带了密钥并写入；
+ * false = 没带或用户选了不导入密钥。
+ */
+secrets_applied: boolean }
+/**
+ * 指令备份（6.5）：把两个 scope 的全局指令内容打包成一份 JSON，便于迁移。
+ * 沿用「不新增重复导出格式」原则——结构跟 SkillsExport 一样朴素。
+ */
+export type InstructionsBackup = { version: number; 
+/**
+ * `~/.claude/CLAUDE.md` 原文，文件不存在为空串。
+ */
+claude: string; 
+/**
+ * `~/.codex/AGENTS.md` 原文，文件不存在为空串。
+ */
+codex: string }
+export type InstructionsStatus = { scope: string; path: string; exists: boolean; 
+/**
+ * 文件 UTF-8 原文。`exists=false` 时为空字符串。
+ */
+content: string; size_bytes: number }
+export type InstructionsTemplate = { id: string; title: string; description: string; 
+/**
+ * 分组：general / coding / review / debug / security / docs。
+ * 前端按 category 折叠分组展示。
+ */
+category: string; 
+/**
+ * "claude" / "codex" / "all"
+ */
+scopes: string[]; content: string }
+export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+export type McpEnvInput = { key: string; value: string }
+export type McpEnvVar = { key: string; value?: string | null; is_sensitive: boolean; has_value: boolean }
+/**
+ * 一条 MCP server 配置(跨客户端归一后的形态)。
+ */
+export type McpServer = { id: string; name: string; transport: string; command: string; args: string[]; 
+/**
+ * 只暴露 env 元数据,value 不返回(常含敏感 token)。
+ */
+env: McpEnvVar[]; enabled_clients: string[]; sources: McpServerSource[]; validation: McpValidationState }
+export type McpServerSource = { client: string; source: string; config_path: string; raw_name: string }
+export type McpValidationIssue = { code: string; message: string; field?: string | null }
+export type McpValidationState = { status: string; issues: McpValidationIssue[] }
+export type ModelPricing = { id: string; provider: string; model_pattern: string; input_price: number; output_price: number; is_custom: boolean; updated_at: string }
+export type OpenCodeApplyConfigResult = { success: boolean; config_path: string; changed_keys: string[]; warnings: string[] }
+export type OpenCodeConfigStatus = { config_path: string; exists: boolean; has_agentgate: boolean; current_model: string | null }
 export type PetSettings = { pet_type: string; visible: boolean; pos_x: number; pos_y: number }
+export type ProfileDetection = { path: string; exists: boolean; has_anthropic_vars: boolean; var_count: number }
+export type ProviderDetailStats = { provider: string; latency_points: ProviderLatencyPoint[]; model_stats: ProviderModelStats[] }
+export type ProviderHealth = { provider: string; h1_total: number; h1_success: number; h1_success_rate: number; h1_avg_latency_ms: number; h1_p95_latency_ms: number; h24_total: number; h24_success: number; h24_success_rate: number; h24_avg_latency_ms: number; recent_errors: RecentError[] }
+export type ProviderLatencyPoint = { timestamp: string; model: string | null; latency_ms: number; status_code: number | null }
+export type ProviderModelStats = { model: string; request_count: number; success_count: number; error_count: number; success_rate: number; avg_latency_ms: number; cost: number }
+export type ProviderRuntimeStatus = { provider_id: string; available: boolean; consecutive_failures: number; last_error: string | null; last_error_code: string | null; last_error_at: string | null; cooldown_until: string | null; quota_exhausted: boolean; 
+/**
+ * 主动健康探测结果（后台定期探测，仅展示，不参与路由决策）
+ */
+last_probe_ok: boolean | null; last_probe_at: string | null; last_probe_latency_ms: number | null; last_probe_error: string | null; updated_at: string }
+export type ProviderSpeedReport = { provider_id: string; provider_name: string; endpoint: string; status_code: number | null; connect_ms: number | null; ttfb_ms: number | null; total_ms: number; success: boolean; error: string | null }
+export type ProviderStat = { name: string; count: number }
+export type ProviderTestResult = { success: boolean; status: string; message: string; latency_ms: number | null; supports_vision: boolean | null; 
+/**
+ * Structured failure diagnosis (only present on failure paths).
+ * Older clients that ignore this field still see the legacy `message`
+ * string verbatim — backward compatible.
+ */
+diagnostic?: TestDiagnostic | null }
+export type ProviderView = { id: string; name: string; provider_type: string; base_url: string; masked_api_key: string | null; default_model: string; reasoning_model: string | null; supported_models: string | null; model_mapping: string | null; extra_headers: string | null; anthropic_base_url: string | null; responses_base_url: string | null; protocol: string; timeout_seconds: number; status: string; supports_vision: boolean | null; auto_cache_control: boolean | null; supports_cache: boolean | null; model_capabilities: string | null; provider_quirks: string | null; body_filter_enabled: number | null; thinking_rectifier_enabled: number | null; error_mapper_enabled: number | null; model_degradation_chain: string | null; enabled: boolean; is_active: boolean; created_at: string; updated_at: string }
+export type RecentError = { timestamp: string; status_code: number; message: string }
+export type RequestLogDetail = { id: string; request_id: string; timestamp: string; client: string | null; provider: string | null; model: string | null; route: string | null; status_code: number | null; latency_ms: number | null; input_tokens: number | null; output_tokens: number | null; cost: number | null; cache_write_tokens: number | null; cache_read_tokens: number | null; raw_request: string | null; converted_request: string | null; raw_response: string | null; converted_response: string | null; sse_events: string | null; tool_calls: string | null; error_message: string | null; trace_json: string | null; source: string | null; session_id: string | null; external_id: string | null }
+export type RequestLogFilter = { client: string | null; provider: string | null; model: string | null; route_profile_id: string | null; status: string | null; error_type: string | null; keyword: string | null; 
+/**
+ * 'gateway' / 'claude_session' / 'codex_session' / 'gemini_session' /
+ * 'session_log'（聚合：所有非 gateway 来源）。
+ */
+source: string | null; 
+/**
+ * 按指定 session_id 过滤——「按会话分组」视图点开某条 session 时用。
+ */
+session_id: string | null; limit: number | null; offset: number | null }
+export type RequestLogListItem = { id: string; request_id: string; timestamp: string; client: string | null; provider: string | null; model: string | null; route: string | null; status_code: number | null; latency_ms: number | null; error_message: string | null; 
+/**
+ * 'gateway' / 'claude_session' / 'codex_session' / 'gemini_session'
+ */
+source: string | null; 
+/**
+ * 会话指纹：gateway 来源走 session_affinity；客户端日志来源是文件里的 session id
+ */
+session_id: string | null }
+export type RequestStats = { total: number; success: number; errors: number; success_rate: number; avg_latency_ms: number; today_total: number; today_errors: number; total_input_tokens: number; total_output_tokens: number; today_input_tokens: number; today_output_tokens: number; total_cost: number; today_cost: number; total_cache_write_tokens: number; total_cache_read_tokens: number; today_cache_write_tokens: number; today_cache_read_tokens: number; daily: DailyStat[]; providers: ProviderStat[] }
+export type RouteProfileDetail = { profile: RouteProfileView; providers: RouteProfileProviderView[] }
+export type RouteProfileProviderView = { id: string; provider_id: string; provider_name: string; provider_type: string; provider_protocol: string; has_anthropic_url: boolean; supports_vision: boolean | null; model_capabilities: string | null; priority: number; enabled: boolean; model_override: string | null; cooldown_seconds: number; failover_on_status_codes: string | null; failover_on_error_keywords: string | null; routing_conditions: string | null; runtime_available: boolean; cooldown_until: string | null; consecutive_failures: number }
+export type RouteProfileStats = { route_profile_id: string; request_count: number; success_count: number; error_count: number; success_rate: number; avg_latency_ms: number; cost: number }
+export type RouteProfileView = { id: string; name: string; input_protocol: string; mode: string; selection_strategy: string; active_provider_id: string | null; active_provider_name: string | null; enabled: boolean; is_default: boolean; providers_count: number; created_at: string; updated_at: string }
+export type RunningProcess = { pid: number; command: string }
+/**
+ * Live runtime KPIs surfaced in the bottom footer of Dashboard / Routes.
+ * Combines runtime-only state (active_requests, uptime) with lifetime
+ * aggregate metrics that used to live in a separate "累计" strip. Today
+ * stats are intentionally NOT included here — the Dashboard's "今日"
+ * strip already covers them, the footer focuses on the long-running view.
+ */
+export type RuntimeKpis = { 
+/**
+ * Currently in-flight requests at the proxy layer.
+ */
+active_requests: number; 
+/**
+ * Seconds since the gateway was started; 0 when stopped.
+ */
+uptime_seconds: number; gateway_running: boolean; gateway_port: number; 
+/**
+ * Lifetime totals — folded in from the old "累计" strip so the footer
+ * is the single source of truth for "long-running scoreboard" info.
+ */
+total_requests: number; total_tokens: number; total_cost: number; success_rate_lifetime: number }
+/**
+ * 按 session 维度聚合的用量摘要。Logs 页「按会话分组」视图用。
+ */
+export type SessionUsageSummary = { session_id: string; 
+/**
+ * 该 session 多数请求的 source。混合时填 'mixed'。
+ */
+source: string; provider: string | null; model: string | null; first_seen: string; last_seen: string; request_count: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number; cost: number }
+/**
+ * 一个本地 skill（归一后的展示形态）。
+ */
+export type Skill = { 
+/**
+ * 来源客户端：`"claude"` / `"codex"`。和 `id` 一起唯一定位一个 skill。
+ */
+source: string; 
+/**
+ * 目录名，作为来源内的稳定标识（启用/禁用/删除都用它）。
+ */
+id: string; 
+/**
+ * frontmatter 的 name，缺失时回退到目录名。
+ */
+name: string; 
+/**
+ * frontmatter 的 description，缺失为空串。
+ */
+description: string; enabled: boolean; path: string }
+export type SkillExportItem = { 
+/**
+ * 来源客户端。导入时按它写回对应目录；缺省回退 claude。
+ */
+source?: string; name: string; description?: string; enabled: boolean; files: SkillFile[] }
+export type SkillFile = { rel_path: string; content: string }
+/**
+ * 导出/备份用结构（6.5）。文本文件内容内联，二进制文件跳过并上报。
+ */
+export type SkillsExport = { version: number; skills: SkillExportItem[]; 
+/**
+ * 导出时因非 UTF-8 被跳过的文件相对路径，不静默丢弃。
+ */
+skipped_files?: string[] }
+export type SyncMcpServerInput = { from_client: string; name: string; to_clients?: string[] }
+/**
+ * One sync run's outcome — same shape across all clients. Aggregated for
+ * the GUI's "synced X conversations, Y new messages" status.
+ */
+export type SyncResult = { files_scanned: number; imported: number; skipped: number; errors: string[] }
+export type TestDiagnostic = { code: string; title: string; hint: string; action_url?: string | null; action_label?: string | null; raw: string }
+export type ToolConfigView = { id: string; name: string; slug: string; icon: string; config_path: string; description: string; config_exists: boolean }
+export type UpdateGatewaySettingsInput = { host: string | null; port: number | null; active_provider_id: string | null; input_protocol: string | null; output_protocol: string | null; auto_start: boolean | null; log_retention_days: number | null; body_filter_global: boolean | null; thinking_rectifier_global: boolean | null; error_mapper_global: boolean | null; health_probe_enabled: boolean | null }
 export type UpdatePetSettingsInput = { pet_type: string | null; visible: boolean | null; pos_x: number | null; pos_y: number | null }
+export type UpdateProviderInput = { name: string | null; provider_type: string | null; base_url: string | null; api_key: string | null; default_model: string | null; reasoning_model: string | null; supported_models: string | null; model_mapping: string | null; extra_headers: string | null; anthropic_base_url: string | null; responses_base_url: string | null; auto_cache_control: boolean | null; model_capabilities: string | null; provider_quirks: string | null; body_filter_enabled: number | null; thinking_rectifier_enabled: number | null; error_mapper_enabled: number | null; model_degradation_chain: string | null; protocol: string | null; timeout_seconds: number | null; enabled: boolean | null }
+export type UpdateRouteProfileInput = { name: string | null; mode: string | null; selection_strategy: string | null; enabled: boolean | null }
+export type UpsertMcpServerInput = { client: string; name: string; command: string; args?: string[]; env?: McpEnvInput[] }
 
 /** tauri-specta globals **/
 

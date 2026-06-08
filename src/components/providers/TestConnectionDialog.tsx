@@ -65,7 +65,7 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
           setConnectivity({
             status: "error",
             detail: r.diagnostic?.title ?? r.message,
-            diagnostic: r.diagnostic,
+            diagnostic: r.diagnostic ?? undefined,
           });
           return; // 失败链路终止，保留对话框让用户读错误
         }

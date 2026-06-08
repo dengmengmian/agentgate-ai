@@ -22,7 +22,7 @@ pub fn token_path() -> PathBuf {
     token_dir().join("token")
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct GatewayAuthSettings {
     pub gateway_auth_enabled: bool,
     pub auth_mode: String,

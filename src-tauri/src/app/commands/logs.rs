@@ -8,6 +8,7 @@ use crate::storage;
 // ── Logs Commands ──────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn list_request_logs(
     filter: RequestLogFilter,
     state: State<'_, AppState>,
@@ -21,6 +22,7 @@ pub fn list_request_logs(
 
 /// 日志里出现过的去重模型名——Logs 页「模型」筛选下拉用。
 #[tauri::command]
+#[specta::specta]
 pub fn list_log_models(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
     let conn = state
         .db
@@ -32,6 +34,7 @@ pub fn list_log_models(state: State<'_, AppState>) -> Result<Vec<String>, AppErr
 /// 读取某个会话的完整对话（会话详情视图用）。直接读本地 jsonl，不走 DB。
 /// 先试 Claude Code 日志，找不到再试 Codex 日志。
 #[tauri::command]
+#[specta::specta]
 pub fn get_session_conversation(
     session_id: String,
 ) -> Result<Vec<crate::session_sync::claude::ConversationMessage>, AppError> {
@@ -46,6 +49,7 @@ pub fn get_session_conversation(
 /// 删除某个会话：删 request_logs 行 + 删 Claude/Codex 本地 jsonl 文件。
 /// 一个会话只在一处客户端，另一处 delete_session_file 返回 Ok(false)；删除失败传播 Err。
 #[tauri::command]
+#[specta::specta]
 pub fn delete_session(session_id: String, state: State<'_, AppState>) -> Result<(), AppError> {
     {
         let conn = state
@@ -60,6 +64,7 @@ pub fn delete_session(session_id: String, state: State<'_, AppState>) -> Result<
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn count_request_logs(
     filter: RequestLogFilter,
     state: State<'_, AppState>,
@@ -72,6 +77,7 @@ pub fn count_request_logs(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_request_log_detail(
     id: String,
     state: State<'_, AppState>,
@@ -84,6 +90,7 @@ pub fn get_request_log_detail(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn clear_request_logs(state: State<'_, AppState>) -> Result<bool, AppError> {
     let conn = state
         .db
@@ -95,6 +102,7 @@ pub fn clear_request_logs(state: State<'_, AppState>) -> Result<bool, AppError> 
 /// 按 session_id 聚合用量：Logs 页「按会话分组」视图用。
 /// 返回最近 `limit` 个会话，按最后活跃时间倒序排列。
 #[tauri::command]
+#[specta::specta]
 pub fn aggregate_request_logs_by_session(
     filter: RequestLogFilter,
     limit: Option<i64>,
@@ -114,6 +122,7 @@ fn cost_since(days: Option<i64>) -> Option<String> {
 
 /// 按模型聚合成本——成本仪表盘「钱花在哪个模型」用。
 #[tauri::command]
+#[specta::specta]
 pub fn aggregate_cost_by_model(
     days: Option<i64>,
     limit: Option<i64>,
@@ -129,6 +138,7 @@ pub fn aggregate_cost_by_model(
 
 /// 按客户端聚合成本——成本仪表盘「哪个客户端花得多」用。
 #[tauri::command]
+#[specta::specta]
 pub fn aggregate_cost_by_client(
     days: Option<i64>,
     limit: Option<i64>,
@@ -144,6 +154,7 @@ pub fn aggregate_cost_by_client(
 
 /// Provider 详情页：按模型聚合成功率/成本，并返回最近延迟点。
 #[tauri::command]
+#[specta::specta]
 pub fn aggregate_provider_detail_stats(
     provider: String,
     days: Option<i64>,
@@ -164,6 +175,7 @@ pub fn aggregate_provider_detail_stats(
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn aggregate_route_profile_stats(
     days: Option<i64>,
     state: State<'_, AppState>,
@@ -179,6 +191,7 @@ pub fn aggregate_route_profile_stats(
 /// 扫描 ~/.claude/projects 下的 Claude Code 会话日志并写入 request_logs。
 /// 幂等：已同步过的 message_id 会被跳过。
 #[tauri::command]
+#[specta::specta]
 pub async fn sync_claude_sessions(
     state: State<'_, AppState>,
 ) -> Result<crate::session_sync::SyncResult, AppError> {
@@ -188,15 +201,17 @@ pub async fn sync_claude_sessions(
 /// 扫描 ~/.codex/sessions 下的 Codex 会话日志并写入 request_logs。
 /// 幂等：external_id = "{session_id}:{event_index}" 保证再次同步只写新增。
 #[tauri::command]
+#[specta::specta]
 pub async fn sync_codex_sessions(
     state: State<'_, AppState>,
 ) -> Result<crate::session_sync::SyncResult, AppError> {
     crate::session_sync::codex::sync(&state.db)
 }
 
-/// 扫描 ~/.gemini/tmp/*/chats 下的 Gemini CLI 会话日志并写入 request_logs。
+/// 扫描 ~/.gemini/tmp/(session)/chats 下的 Gemini CLI 会话日志并写入 request_logs。
 /// 幂等：event 自带 UUID id 作 external_id。
 #[tauri::command]
+#[specta::specta]
 pub async fn sync_gemini_sessions(
     state: State<'_, AppState>,
 ) -> Result<crate::session_sync::SyncResult, AppError> {
@@ -206,6 +221,7 @@ pub async fn sync_gemini_sessions(
 // ── Stats Commands ─────────────────────────────────────────────
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_request_stats(
     state: State<'_, AppState>,
 ) -> Result<crate::storage::request_logs::RequestStats, AppError> {
@@ -219,6 +235,7 @@ pub fn get_request_stats(
 /// Stats over a configurable window (in days). Dashboard date-range tabs
 /// (今天/7天/14天/30天) call this with 1/7/14/30 respectively.
 #[tauri::command]
+#[specta::specta]
 pub fn get_request_stats_range(
     days: i64,
     state: State<'_, AppState>,
@@ -235,7 +252,7 @@ pub fn get_request_stats_range(
 /// aggregate metrics that used to live in a separate "累计" strip. Today
 /// stats are intentionally NOT included here — the Dashboard's "今日"
 /// strip already covers them, the footer focuses on the long-running view.
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, specta::Type)]
 pub struct RuntimeKpis {
     /// Currently in-flight requests at the proxy layer.
     pub active_requests: u64,
@@ -252,6 +269,7 @@ pub struct RuntimeKpis {
 }
 
 #[tauri::command]
+#[specta::specta]
 pub fn get_runtime_kpis(state: State<'_, AppState>) -> Result<RuntimeKpis, AppError> {
     let runtime = state
         .gateway_runtime

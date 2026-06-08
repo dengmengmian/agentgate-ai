@@ -56,7 +56,7 @@ pub struct RouteProfileMemberExport {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct ImportSummary {
     pub providers_imported: usize,
     pub route_profiles_imported: usize,

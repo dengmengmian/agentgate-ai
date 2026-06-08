@@ -8,7 +8,7 @@
 
 use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, specta::Type)]
 pub struct RunningProcess {
     pub pid: u32,
     pub command: String,

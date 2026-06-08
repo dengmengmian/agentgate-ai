@@ -20,7 +20,7 @@ use crate::errors::AppError;
 
 /// 用户全局指令的两个目标文件。前端只暴露这两个值，新增 scope 必须先在这里
 /// 加一条枚举 + `path()` 分支，避免「字符串路径满天飞」式的硬编码。
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum InstructionsScope {
     ClaudeGlobal,
@@ -68,7 +68,7 @@ impl InstructionsScope {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct InstructionsStatus {
     pub scope: String,
     pub path: String,
@@ -78,7 +78,7 @@ pub struct InstructionsStatus {
     pub size_bytes: u64,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ApplyMode {
     /// 覆盖整文件。
@@ -177,7 +177,7 @@ pub fn snapshot_paths(scope: InstructionsScope) -> Vec<(&'static str, PathBuf)> 
 
 /// 指令备份（6.5）：把两个 scope 的全局指令内容打包成一份 JSON，便于迁移。
 /// 沿用「不新增重复导出格式」原则——结构跟 SkillsExport 一样朴素。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct InstructionsBackup {
     pub version: u32,
     /// `~/.claude/CLAUDE.md` 原文，文件不存在为空串。

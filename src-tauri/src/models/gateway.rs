@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct GatewaySettings {
     pub id: i64,
     pub host: String,
@@ -26,7 +27,7 @@ pub struct GatewaySettings {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, Type)]
 pub struct UpdateGatewaySettingsInput {
     pub host: Option<String>,
     pub port: Option<i64>,
@@ -41,7 +42,7 @@ pub struct UpdateGatewaySettingsInput {
     pub health_probe_enabled: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Type)]
 pub struct GatewayStatus {
     pub running: bool,
     pub host: String,

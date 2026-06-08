@@ -117,8 +117,8 @@ export function Skills() {
       const data = await api.exportSkills();
       setExportText(JSON.stringify(data, null, 2));
       setTransferMode("export");
-      if (data.skipped_files.length > 0) {
-        toast("warning", t("skills.skipped_note").replace("{count}", String(data.skipped_files.length)));
+      if ((data.skipped_files?.length ?? 0) > 0) {
+        toast("warning", t("skills.skipped_note").replace("{count}", String(data.skipped_files?.length ?? 0)));
       } else {
         toast("success", t("skills.exported"));
       }

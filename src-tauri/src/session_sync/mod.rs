@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 
 /// One sync run's outcome — same shape across all clients. Aggregated for
 /// the GUI's "synced X conversations, Y new messages" status.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, specta::Type)]
 pub struct SyncResult {
     pub files_scanned: u32,
     pub imported: u32,

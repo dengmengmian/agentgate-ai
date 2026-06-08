@@ -59,7 +59,7 @@ pub fn paths() -> Result<DesktopPaths, AppError> {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct ClaudeDesktopStatus {
     /// 当前平台是否支持
     pub supported: bool,
@@ -145,7 +145,7 @@ pub fn generate_profile(host: &str, port: i64, token: &str) -> Value {
     })
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct ClaudeDesktopApplyResult {
     pub success: bool,
     pub profile_path: String,

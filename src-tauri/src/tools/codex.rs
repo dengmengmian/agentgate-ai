@@ -171,7 +171,7 @@ fn repair_polluted_auth_json() -> bool {
     fs::copy(&saved, &auth_path).is_ok()
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct CodexConfigStatus {
     pub config_path: String,
     pub auth_json_path: String,
@@ -191,7 +191,8 @@ pub struct CodexConfigStatus {
     pub has_saved_official: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[specta(rename = "CodexApplyConfigResult")]
 pub struct ApplyConfigResult {
     pub success: bool,
     pub config_path: String,
@@ -444,7 +445,8 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     })
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[specta(rename = "CodexToggleResult")]
 pub struct ToggleResult {
     pub success: bool,
     pub new_provider: String,

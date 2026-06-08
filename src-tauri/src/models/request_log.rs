@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct RequestLogListItem {
     pub id: String,
     pub request_id: String,
@@ -18,7 +18,7 @@ pub struct RequestLogListItem {
     pub session_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct RequestLogDetail {
     pub id: String,
     pub request_id: String,
@@ -47,7 +47,7 @@ pub struct RequestLogDetail {
     pub external_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct RequestLogFilter {
     pub client: Option<String>,
     pub provider: Option<String>,
@@ -66,7 +66,7 @@ pub struct RequestLogFilter {
 }
 
 /// 按 session 维度聚合的用量摘要。Logs 页「按会话分组」视图用。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct SessionUsageSummary {
     pub session_id: String,
     /// 该 session 多数请求的 source。混合时填 'mixed'。
@@ -84,7 +84,7 @@ pub struct SessionUsageSummary {
 }
 
 /// 成本仪表盘用：按某维度（模型 / 客户端）聚合的成本与用量。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct CostBreakdown {
     /// 维度值：模型名 或 客户端名。
     pub key: String,
@@ -101,7 +101,7 @@ pub struct CostBreakdown {
     pub has_price: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ProviderLatencyPoint {
     pub timestamp: String,
     pub model: Option<String>,
@@ -109,7 +109,7 @@ pub struct ProviderLatencyPoint {
     pub status_code: Option<i64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ProviderModelStats {
     pub model: String,
     pub request_count: i64,
@@ -120,7 +120,7 @@ pub struct ProviderModelStats {
     pub cost: f64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ProviderDetailStats {
     pub provider: String,
     pub latency_points: Vec<ProviderLatencyPoint>,

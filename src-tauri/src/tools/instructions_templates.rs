@@ -8,7 +8,7 @@
 
 use serde::Serialize;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct InstructionsTemplate {
     pub id: &'static str,
     pub title: &'static str,

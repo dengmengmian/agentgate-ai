@@ -22,7 +22,7 @@ pub fn snapshot_paths() -> Vec<(&'static str, PathBuf)> {
     vec![("opencode.json", config_path())]
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct OpenCodeConfigStatus {
     pub config_path: String,
     pub exists: bool,
@@ -30,7 +30,8 @@ pub struct OpenCodeConfigStatus {
     pub current_model: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[specta(rename = "OpenCodeApplyConfigResult")]
 pub struct ApplyConfigResult {
     pub success: bool,
     pub config_path: String,

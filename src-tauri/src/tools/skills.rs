@@ -30,7 +30,7 @@ const MANIFEST_DISABLED: &str = "SKILL.md.disabled";
 const SOURCES: &[&str] = &["claude", "codex"];
 
 /// 一个本地 skill（归一后的展示形态）。
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, specta::Type)]
 pub struct Skill {
     /// 来源客户端：`"claude"` / `"codex"`。和 `id` 一起唯一定位一个 skill。
     pub source: String,
@@ -45,7 +45,7 @@ pub struct Skill {
 }
 
 /// 导出/备份用结构（6.5）。文本文件内容内联，二进制文件跳过并上报。
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct SkillsExport {
     pub version: u32,
     pub skills: Vec<SkillExportItem>,
@@ -54,7 +54,7 @@ pub struct SkillsExport {
     pub skipped_files: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct SkillExportItem {
     /// 来源客户端。导入时按它写回对应目录；缺省回退 claude。
     #[serde(default = "default_source")]
@@ -70,7 +70,7 @@ fn default_source() -> String {
     "claude".to_string()
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct SkillFile {
     pub rel_path: String,
     pub content: String,

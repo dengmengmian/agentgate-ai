@@ -4,7 +4,7 @@ use serde::Serialize;
 use crate::errors::AppError;
 use crate::storage::generated_provider_catalog as catalog;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct ModelPricing {
     pub id: String,
     pub provider: String,

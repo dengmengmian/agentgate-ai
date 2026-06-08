@@ -18,7 +18,7 @@ const SENSITIVE_ENV_MARKERS: &[&str] =
     &["KEY", "TOKEN", "SECRET", "PASSWORD", "AUTH", "CREDENTIAL"];
 
 /// 一条 MCP server 配置(跨客户端归一后的形态)。
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct McpServer {
     pub id: String,
     pub name: String,
@@ -32,7 +32,7 @@ pub struct McpServer {
     pub validation: McpValidationState,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct McpEnvVar {
     pub key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -41,7 +41,7 @@ pub struct McpEnvVar {
     pub has_value: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct McpServerSource {
     pub client: String,
     pub source: String,
@@ -49,13 +49,13 @@ pub struct McpServerSource {
     pub raw_name: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct McpValidationState {
     pub status: String,
     pub issues: Vec<McpValidationIssue>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 pub struct McpValidationIssue {
     pub code: String,
     pub message: String,
@@ -63,7 +63,7 @@ pub struct McpValidationIssue {
     pub field: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, specta::Type)]
 pub struct UpsertMcpServerInput {
     pub client: String,
     pub name: String,
@@ -74,13 +74,13 @@ pub struct UpsertMcpServerInput {
     pub env: Vec<McpEnvInput>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, specta::Type)]
 pub struct McpEnvInput {
     pub key: String,
     pub value: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, specta::Type)]
 pub struct SyncMcpServerInput {
     pub from_client: String,
     pub name: String,

@@ -41,7 +41,7 @@ describe("API client", () => {
   it("listProviders invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue([{ id: "p1" }]);
     const result = await listProviders();
-    expect(invoke).toHaveBeenCalledWith("list_providers", undefined);
+    expect(invoke).toHaveBeenCalledWith("list_providers");
     expect(result).toEqual([{ id: "p1" }]);
   });
 
@@ -108,14 +108,14 @@ describe("API client", () => {
   it("getGatewayStatus invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue({ running: true });
     const result = await getGatewayStatus();
-    expect(invoke).toHaveBeenCalledWith("get_gateway_status", undefined);
+    expect(invoke).toHaveBeenCalledWith("get_gateway_status");
     expect(result).toEqual({ running: true });
   });
 
   it("getGatewaySettings invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue({ port: 9090 });
     const result = await getGatewaySettings();
-    expect(invoke).toHaveBeenCalledWith("get_gateway_settings", undefined);
+    expect(invoke).toHaveBeenCalledWith("get_gateway_settings");
     expect(result).toEqual({ port: 9090 });
   });
 
@@ -130,14 +130,14 @@ describe("API client", () => {
   it("startGateway invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue({ running: true });
     const result = await startGateway();
-    expect(invoke).toHaveBeenCalledWith("start_gateway", undefined);
+    expect(invoke).toHaveBeenCalledWith("start_gateway");
     expect(result).toEqual({ running: true });
   });
 
   it("stopGateway invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue({ running: false });
     const result = await stopGateway();
-    expect(invoke).toHaveBeenCalledWith("stop_gateway", undefined);
+    expect(invoke).toHaveBeenCalledWith("stop_gateway");
     expect(result).toEqual({ running: false });
   });
 
@@ -176,63 +176,63 @@ describe("API client", () => {
   it("clearRequestLogs invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue(true);
     const result = await clearRequestLogs();
-    expect(invoke).toHaveBeenCalledWith("clear_request_logs", undefined);
+    expect(invoke).toHaveBeenCalledWith("clear_request_logs");
     expect(result).toBe(true);
   });
 
   it("listTools invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue([]);
     const result = await listTools();
-    expect(invoke).toHaveBeenCalledWith("list_tools", undefined);
+    expect(invoke).toHaveBeenCalledWith("list_tools");
     expect(result).toEqual([]);
   });
 
   it("getGatewayAuthSettings invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue({ token_path: "/path" });
     const result = await getGatewayAuthSettings();
-    expect(invoke).toHaveBeenCalledWith("get_gateway_auth_settings", undefined);
+    expect(invoke).toHaveBeenCalledWith("get_gateway_auth_settings");
     expect(result).toEqual({ token_path: "/path" });
   });
 
   it("regenerateLocalAccessToken invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue({ token_path: "/path" });
     const result = await regenerateLocalAccessToken();
-    expect(invoke).toHaveBeenCalledWith("regenerate_local_access_token", undefined);
+    expect(invoke).toHaveBeenCalledWith("regenerate_local_access_token");
     expect(result).toEqual({ token_path: "/path" });
   });
 
   it("getLocalAccessToken invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue("token123");
     const result = await getLocalAccessToken();
-    expect(invoke).toHaveBeenCalledWith("get_local_access_token", undefined);
+    expect(invoke).toHaveBeenCalledWith("get_local_access_token");
     expect(result).toBe("token123");
   });
 
   it("detectCodexConfig invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue({ exists: true });
     const result = await detectCodexConfig();
-    expect(invoke).toHaveBeenCalledWith("detect_codex_config", undefined);
+    expect(invoke).toHaveBeenCalledWith("detect_codex_config");
     expect(result).toEqual({ exists: true });
   });
 
   it("applyCodexConfig invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue({ success: true });
     const result = await applyCodexConfig();
-    expect(invoke).toHaveBeenCalledWith("apply_codex_config", undefined);
+    expect(invoke).toHaveBeenCalledWith("apply_codex_config");
     expect(result).toEqual({ success: true });
   });
 
   it("detectClaudeCodeEnv invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue({ settings_exists: true });
     const result = await detectClaudeCodeEnv();
-    expect(invoke).toHaveBeenCalledWith("detect_claude_code_env", undefined);
+    expect(invoke).toHaveBeenCalledWith("detect_claude_code_env");
     expect(result).toEqual({ settings_exists: true });
   });
 
   it("generateClaudeCodeEnv invokes correct command", async () => {
     vi.mocked(invoke).mockResolvedValue("export FOO=bar");
     const result = await generateClaudeCodeEnv();
-    expect(invoke).toHaveBeenCalledWith("generate_claude_code_env", undefined);
+    expect(invoke).toHaveBeenCalledWith("generate_claude_code_env");
     expect(result).toBe("export FOO=bar");
   });
 });

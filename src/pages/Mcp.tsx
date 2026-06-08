@@ -477,7 +477,7 @@ function ServerTable({
               selectedId === server.id ? "bg-accent/5" : ""
             }`}
           >
-            <StatusPill status={server.validation.status} />
+            <StatusPill status={server.validation.status as McpValidationStatus} />
             <div className="min-w-0">
               <div className="truncate font-mono font-semibold text-text-primary">{server.name}</div>
               {server.validation.issues.length > 0 && (
@@ -524,7 +524,7 @@ function ServerDetail({
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <StatusPill status={server.validation.status} />
+        <StatusPill status={server.validation.status as McpValidationStatus} />
         <div className="flex items-center gap-1.5">
           <IconButton title="编辑" onClick={onEdit}>
             <Edit2 className="h-3.5 w-3.5" />

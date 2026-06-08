@@ -12,6 +12,7 @@ use crate::storage;
 /// 安全分享/截图；用户在新机器导入后重新填密钥即可。`include_secrets = true`
 /// 会把明文密钥写入文件，仅用于自己换机迁移这种场景，前端需要明确警告。
 #[tauri::command]
+#[specta::specta]
 pub fn export_config_json(
     include_secrets: bool,
     state: State<'_, AppState>,
@@ -30,6 +31,7 @@ pub fn export_config_json(
 /// 一并清空（指向已不存在的 provider_id 没意义）；request_logs / pricing 等
 /// 历史数据不受影响。
 #[tauri::command]
+#[specta::specta]
 pub fn import_config_json(
     json: String,
     state: State<'_, AppState>,

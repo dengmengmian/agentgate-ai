@@ -26,7 +26,7 @@ const PROBE_PROMPT: &str = "hi";
 const PROBE_MAX_TOKENS: u32 = 1;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(20);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 pub struct ProviderSpeedReport {
     pub provider_id: String,
     pub provider_name: String,
