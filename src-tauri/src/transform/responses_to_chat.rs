@@ -146,6 +146,15 @@ pub fn convert_with_provider_matrix(
             }
         });
 
+    // Codex 自动压缩信号:input 里带一个 {"type":"compaction_trigger"} item。Codex 的
+    // "remote compaction v2" 要求模型只回**一个**文本摘要 output item;若 MiMo 照常思考,
+    // AgentGate 会多发一个 reasoning output item → 2 个 item → Codex 报
+    // "expected exactly one compaction output item, got 0 from 2 output items"。
+    let is_compaction = req.input.as_array().map_or(false, |arr| {
+        arr.iter()
+            .any(|it| it.get("type").and_then(|t| t.as_str()) == Some("compaction_trigger"))
+    });
+
     let mut chat_req = ChatCompletionsRequest {
         model: model.to_string(),
         messages,
@@ -169,6 +178,15 @@ pub fn convert_with_provider_matrix(
         parallel_tool_calls: req.parallel_tool_calls,
         diagnostic_events,
     };
+
+    // 压缩请求:关思考 + 去工具,确保上游只回一条文本 message(= 1 个 output item)。
+    // 关思考去掉 reasoning item;去工具避免模型在压缩时还调工具(也会多出 item)。
+    if is_compaction {
+        chat_req.thinking = Some(serde_json::json!({"type": "disabled"}));
+        chat_req.reasoning_effort = None;
+        chat_req.tools = None;
+        chat_req.tool_choice = None;
+    }
 
     // 8. Provider-specific finalization (thinking, reasoning_effort, response_format overrides)
     let tools_clone = chat_req.tools.clone();
@@ -1188,6 +1206,28 @@ mod tests {
         assert!(result.messages[0].tool_calls.is_none(), "user 不应被挂 tool_calls");
         assert_eq!(result.messages[1].role, "assistant");
         assert!(result.messages[1].tool_calls.is_some());
+    }
+
+    #[test]
+    fn test_compaction_trigger_disables_thinking_and_tools() {
+        // input 末尾的 {"type":"compaction_trigger"} 是 Codex 压缩信号;命中后应关思考、
+        // 去工具,保证上游只回一条文本(= 1 个 output item),避免 reasoning item 撑爆压缩。
+        let req = ResponsesRequest {
+            model: Some("gpt-4".to_string()),
+            input: json!([
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "总结一下"}]},
+                {"type": "compaction_trigger"}
+            ]),
+            tools: Some(vec![
+                json!({"type": "function", "name": "f", "parameters": {"type": "object"}}),
+            ]),
+            reasoning: Some(json!({"effort": "medium"})),
+            ..Default::default()
+        };
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
+        assert_eq!(result.thinking, Some(json!({"type": "disabled"})), "压缩应关思考");
+        assert!(result.tools.is_none(), "压缩应去工具");
+        assert!(result.reasoning_effort.is_none(), "压缩应清 reasoning_effort");
     }
 
     #[test]
