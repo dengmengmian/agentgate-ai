@@ -9,8 +9,23 @@ use crate::errors::AppError;
 const TOKEN_PREFIX: &str = "ag_local_";
 const TOKEN_RANDOM_LEN: usize = 40;
 
+/// 显式注入的 token(headless / 容器部署用固定 token,免去现查文件)。
+/// 设了 `AGENTGATE_TOKEN` 就以它为准,不再读写 token 文件。
+fn env_token() -> Option<String> {
+    std::env::var("AGENTGATE_TOKEN")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// Get the token directory path.
 pub fn token_dir() -> PathBuf {
+    // headless 部署:token 落在数据目录(随 volume 持久化),不丢在容器临时 HOME。
+    if let Ok(dir) = std::env::var("AGENTGATE_DB_PATH") {
+        if !dir.trim().is_empty() {
+            return PathBuf::from(dir);
+        }
+    }
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_default();
@@ -57,6 +72,9 @@ pub fn mask_token(token: &str) -> String {
 
 /// Ensure token file exists. Create if not present.
 pub fn ensure_token() -> Result<String, AppError> {
+    if let Some(t) = env_token() {
+        return Ok(t);
+    }
     let path = token_path();
 
     if path.exists() {
@@ -101,6 +119,9 @@ pub fn ensure_token() -> Result<String, AppError> {
 
 /// Read the current token. Returns error if not found.
 pub fn read_token() -> Result<String, AppError> {
+    if let Some(t) = env_token() {
+        return Ok(t);
+    }
     let path = token_path();
     if !path.exists() {
         return Err(

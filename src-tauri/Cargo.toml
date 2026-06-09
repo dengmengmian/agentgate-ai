@@ -8,8 +8,20 @@ default-run = "agentgate"
 autobins = false
 
 [features]
-default = []
+# desktop = 完整 Tauri 桌面 app(默认)。cli = headless agentgate-serve,
+# 用 `--no-default-features --features cli` 构建,不链接 tauri / webkit。
+default = ["desktop"]
 cli = []
+desktop = [
+    "dep:tauri",
+    "dep:tauri-plugin-opener",
+    "dep:tauri-plugin-autostart",
+    "dep:tauri-specta",
+    "dep:specta-typescript",
+    "dep:tauri-plugin-updater",
+    "dep:tauri-plugin-process",
+    "dep:tauri-plugin-clipboard-manager",
+]
 
 [lib]
 name = "agentgate_lib"
@@ -18,6 +30,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [[bin]]
 name = "agentgate"
 path = "src/main.rs"
+required-features = ["desktop"]
 
 [[bin]]
 name = "agentgate-serve"
@@ -28,18 +41,18 @@ required-features = ["cli"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
-tauri-plugin-opener = "2"
-tauri-plugin-autostart = "2"
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"], optional = true }
+tauri-plugin-opener = { version = "2", optional = true }
+tauri-plugin-autostart = { version = "2", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.31", features = ["bundled"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.24"
 # 自动从 Rust 推导 TS 类型 + 生成 invoke 客户端,前端不再手抄 type/api。
-specta = { version = "=2.0.0-rc.22", features = ["serde_json"] }
-specta-typescript = "0.0.9"
-tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"] }
+specta = { version = "=2.0.0-rc.22", features = ["serde_json", "derive"] }
+specta-typescript = { version = "0.0.9", optional = true }
+tauri-specta = { version = "=2.0.0-rc.21", features = ["derive", "typescript"], optional = true }
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
 # gzip/brotli/zstd 让 reqwest 自动解压上游响应——若上游返回压缩 SSE 流
@@ -66,12 +79,12 @@ toml_edit = "0.22"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 open = "5"
 rand = "0.9"
-tauri-plugin-updater = "2.10.1"
-tauri-plugin-process = "2"
+tauri-plugin-updater = { version = "2.10.1", optional = true }
+tauri-plugin-process = { version = "2", optional = true }
 # Used only by Quick Setup to peek at the clipboard for a known-shaped API
 # key. Read is wrapped in try/catch on the frontend so missing capability /
 # permission / plugin failure is silent — never blocks the form.
-tauri-plugin-clipboard-manager = "2"
+tauri-plugin-clipboard-manager = { version = "2", optional = true }
 clap = { version = "4", features = ["derive", "env"] }
 # 结构化日志：CLI/headless 用 JSON 输出到 stdout（给 journalctl / docker logs 抓）。
 # GUI 模式不强制初始化。env: AGENTGATE_LOG（env-filter syntax）。

@@ -1,3 +1,4 @@
+#[cfg(feature = "desktop")]
 mod app;
 mod diagnostics;
 pub mod errors;
@@ -5,31 +6,45 @@ pub mod gateway;
 pub mod models;
 pub mod protocol;
 pub mod providers;
+pub mod runtime;
 pub mod security;
 pub mod session_sync;
 pub mod storage;
 mod tools;
 pub mod transform;
 
+#[cfg(feature = "desktop")]
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "desktop")]
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
+#[cfg(feature = "desktop")]
 use tauri::tray::TrayIconBuilder;
+#[cfg(feature = "desktop")]
 use tauri::webview::WebviewWindowBuilder;
+#[cfg(feature = "desktop")]
 use tauri::Manager;
+#[cfg(feature = "desktop")]
 use tauri_specta::Event;
 
+#[cfg(feature = "desktop")]
 use app::commands;
-use app::events::{
-    PetClickThroughChanged, PetMemoryReset, PetOpenGateway, PetOpenLogs,
-};
+#[cfg(feature = "desktop")]
+use app::events::{PetClickThroughChanged, PetMemoryReset, PetOpenGateway, PetOpenLogs};
+#[cfg(feature = "desktop")]
 use app::state::AppState;
+#[cfg(feature = "desktop")]
 use models::gateway::GatewayRuntimeState;
 
+#[cfg(feature = "desktop")]
 const PET_DEFAULT_X: f64 = 100.0;
+#[cfg(feature = "desktop")]
 const PET_DEFAULT_Y: f64 = 100.0;
+#[cfg(feature = "desktop")]
 const PET_WIDTH: f64 = 140.0;
+#[cfg(feature = "desktop")]
 const PET_HEIGHT: f64 = 200.0;
 
+#[cfg(feature = "desktop")]
 fn pet_position_on_screen(monitors: &[tauri::Monitor], x: f64, y: f64) -> bool {
     if !x.is_finite() || !y.is_finite() {
         return false;
@@ -48,6 +63,7 @@ fn pet_position_on_screen(monitors: &[tauri::Monitor], x: f64, y: f64) -> bool {
     })
 }
 
+#[cfg(feature = "desktop")]
 fn normalized_pet_position(monitors: &[tauri::Monitor], x: f64, y: f64) -> (f64, f64) {
     if monitors.is_empty() || pet_position_on_screen(monitors, x, y) {
         return (x, y);
@@ -65,6 +81,7 @@ fn normalized_pet_position(monitors: &[tauri::Monitor], x: f64, y: f64) -> (f64,
     }
 }
 
+#[cfg(feature = "desktop")]
 fn move_pet_to_visible_area(app: &tauri::AppHandle, pet_win: &tauri::WebviewWindow) {
     let Ok(position) = pet_win.outer_position() else {
         return;
@@ -86,6 +103,7 @@ fn move_pet_to_visible_area(app: &tauri::AppHandle, pet_win: &tauri::WebviewWind
 /// 全部 140 个 #[tauri::command] 都已加 #[specta::specta],invoke_handler 仍走
 /// generate_handler!,这里只是把同一份命令清单喂给 specta 用来生成 TS 类型 +
 /// 注册事件。
+#[cfg(feature = "desktop")]
 fn build_specta() -> tauri_specta::Builder<tauri::Wry> {
     use app::events::*;
     use tauri_specta::{collect_commands, collect_events, Builder};
@@ -275,6 +293,7 @@ fn build_specta() -> tauri_specta::Builder<tauri::Wry> {
 /// 超过 2^53 的极端情况靠 backend 保证不出现——AgentGate 的 latency/token
 /// count/timestamp 都远小于 2^53)。
 #[cfg(debug_assertions)]
+#[cfg(feature = "desktop")]
 fn export_ts_bindings(builder: &tauri_specta::Builder<tauri::Wry>) {
     use specta_typescript::Typescript;
     let exporter = Typescript::default()
@@ -285,7 +304,7 @@ fn export_ts_bindings(builder: &tauri_specta::Builder<tauri::Wry>) {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "desktop"))]
 mod specta_export_tests {
     /// Smoke test: 全量 export 后 bindings.ts 里应该有覆盖每个域的代表性 type
     /// 和 fn。在 CI/本地 cargo test 时自动重新生成 bindings.ts,前端 tsc 就能
@@ -337,6 +356,7 @@ mod specta_export_tests {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg(feature = "desktop")]
 pub fn run() {
     // 同一份 specta builder 用两次:dev export TS + setup 阶段 mount_events
     // (后者注册 EventRegistry,让 PetXxx{..}.emit(&app) 不 panic)。
@@ -797,10 +817,12 @@ pub fn run() {
         });
 }
 
+#[cfg(feature = "desktop")]
 pub fn is_chinese_locale_pub() -> bool {
     is_chinese_locale()
 }
 
+#[cfg(feature = "desktop")]
 fn is_chinese_locale() -> bool {
     ["LC_ALL", "LC_MESSAGES", "LANG"]
         .iter()
@@ -809,12 +831,13 @@ fn is_chinese_locale() -> bool {
         || macos_system_locale_is_chinese()
 }
 
+#[cfg(feature = "desktop")]
 fn locale_value_is_chinese(value: &str) -> bool {
     let value = value.to_ascii_lowercase();
     value.starts_with("zh") || value.contains("zh-hans") || value.contains("zh-hant")
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "desktop", target_os = "macos"))]
 fn macos_system_locale_is_chinese() -> bool {
     fn defaults_value(key: &str) -> Option<String> {
         let output = std::process::Command::new("defaults")
@@ -833,11 +856,12 @@ fn macos_system_locale_is_chinese() -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(feature = "desktop", not(target_os = "macos")))]
 fn macos_system_locale_is_chinese() -> bool {
     false
 }
 
+#[cfg(feature = "desktop")]
 fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let zh = is_chinese_locale();
     // Build a minimal placeholder menu; `app::tray::refresh_tray` rebuilds
@@ -995,7 +1019,7 @@ pub(crate) mod test_utils {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "desktop"))]
 mod tests {
     use super::*;
 

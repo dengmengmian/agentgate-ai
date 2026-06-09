@@ -34,9 +34,9 @@ jobs:
 
       # cli feature 的 agentgate-serve bin 不在 `cargo test` 的编译范围内,
       # 单独 build 一次,防止 CLI 编译失败只在 release 才暴露(1.3.6 就是这么漏的)。
-      - name: Build (incl. agentgate-serve CLI)
+      - name: Build headless agentgate-serve (no Tauri)
         working-directory: src-tauri
-        run: cargo build --features cli
+        run: cargo build --no-default-features --features cli --bin agentgate-serve
 
       - name: Run capability + protocol fixture tests
         working-directory: src-tauri

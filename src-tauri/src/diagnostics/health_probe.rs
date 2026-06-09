@@ -15,7 +15,7 @@ const INTERVAL: Duration = Duration::from_secs(600);
 /// 用 tauri::async_runtime::spawn（与项目其它后台任务一致）——Tauri setup 是同步
 /// 上下文，直接 tokio::spawn 会 panic "no reactor running"。
 pub fn spawn(db: crate::storage::db::DbPool) {
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         tokio::time::sleep(STARTUP_DELAY).await;
         loop {
             run_once(&db).await;

@@ -47,7 +47,7 @@ fn sync_all_now(db: &crate::storage::db::DbPool) -> SyncResult {
 /// signal because the work is purely advisory (and DB writes are short
 /// and atomic — a SIGINT mid-sync won't corrupt state).
 pub fn spawn(db: crate::storage::db::DbPool) {
-    tauri::async_runtime::spawn(async move {
+    crate::runtime::spawn(async move {
         tokio::time::sleep(STARTUP_DELAY).await;
         loop {
             let result = sync_all_now(&db);
