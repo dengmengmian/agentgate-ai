@@ -87,10 +87,8 @@ export function RequestDetailDrawer({
           <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-3">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
             <div className="text-[11px] leading-relaxed text-text-secondary">
-              <span className="font-medium text-text-primary">{sourceLabel(request.source)} 客户端日志条目</span>
-              ：从本地会话文件解析而来，只含模型、token、费用等用量字段。
-              请求体 / 响应体 / SSE / 工具调用等完整内容**不会**保存到本地日志，因此下方相关区块为空。
-              如需完整链路，请让对应客户端走 AgentGate 网关。
+              <span className="font-medium text-text-primary">{sourceLabel(request.source, t)} {t("logs.client_log_entry")}</span>
+              {t("logs.client_log_banner")}
             </div>
           </div>
         )}
@@ -99,14 +97,14 @@ export function RequestDetailDrawer({
         {request.session_id && (
           <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-card-secondary px-3 py-2">
             <div className="min-w-0">
-              <span className="text-[11px] text-text-muted">所属会话</span>
+              <span className="text-[11px] text-text-muted">{t("logs.belongs_to_session")}</span>
               <p className="truncate font-mono text-[11px] text-text-primary" title={request.session_id}>{request.session_id}</p>
             </div>
             <button
               onClick={() => setConvoOpen(true)}
               className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-text-secondary transition-colors hover:text-accent"
             >
-              <MessageSquare className="h-3.5 w-3.5" /> 查看会话对话
+              <MessageSquare className="h-3.5 w-3.5" /> {t("logs.view_session_convo")}
             </button>
           </div>
         )}
@@ -209,7 +207,7 @@ function RouteCostSummary({
     <div className="rounded-lg border border-border bg-card-secondary p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <h4 className="text-xs font-semibold text-text-primary">链路与成本</h4>
+          <h4 className="text-xs font-semibold text-text-primary">{t("logs.route_and_cost")}</h4>
           <p className="mt-1 text-[11px] text-text-muted">
             {formatTimestamp(request.timestamp)} · {request.client ?? "—"}
           </p>

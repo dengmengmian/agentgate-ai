@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { X, Loader2, Zap, AlertCircle, Check } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/common/Toast";
 import * as api from "@/lib/api";
 import type { ProviderSpeedReport } from "@/types/provider";
@@ -14,6 +15,7 @@ interface SpeedtestDialogProps {
 /// enabled provider. Results show connect/TTFB/total latency. User-triggered
 /// only — never automatic, because probes cost real tokens.
 export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
+  const { t } = useI18n();
   const [reports, setReports] = useState<ProviderSpeedReport[] | null>(null);
   const [running, setRunning] = useState(false);
 
@@ -44,7 +46,7 @@ export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-accent" />
-            <h2 className="text-sm font-semibold text-text-primary">节点测速</h2>
+            <h2 className="text-sm font-semibold text-text-primary">{t("providers.speedtest_title")}</h2>
           </div>
           <button onClick={onClose} className="rounded-md p-1.5 text-text-muted hover:bg-card-secondary hover:text-text-primary">
             <X className="h-4 w-4" />
@@ -53,7 +55,7 @@ export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
 
         <div className="p-6 space-y-4">
           <p className="text-xs text-text-muted leading-relaxed">
-            对每个启用的 provider 并行发送一个 <code className="rounded bg-card-secondary px-1 py-0.5">max_tokens=1</code> 的探测请求，记录连接、TTFB、总耗时。<span className="text-warning">每次运行都会消耗少量 token</span>，不会自动触发。
+            {t("providers.speedtest_desc_1")} <code className="rounded bg-card-secondary px-1 py-0.5">max_tokens=1</code> {t("providers.speedtest_desc_2")}<span className="text-warning">{t("providers.speedtest_desc_cost")}</span>{t("providers.speedtest_desc_3")}
           </p>
 
           <button
@@ -62,11 +64,11 @@ export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
             className="flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
           >
             {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-            {running ? "测速中…" : reports ? "重新测速" : "运行测速"}
+            {running ? t("providers.speedtest_running") : reports ? t("providers.speedtest_rerun") : t("providers.speedtest_run")}
           </button>
 
           {reports && reports.length === 0 && (
-            <p className="text-xs text-text-muted">没有启用的 provider 可测速</p>
+            <p className="text-xs text-text-muted">{t("providers.speedtest_no_enabled")}</p>
           )}
 
           {reports && reports.length > 0 && (
@@ -78,7 +80,7 @@ export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
                     <th className="px-3 py-2 text-right font-medium text-text-muted">Connect</th>
                     <th className="px-3 py-2 text-right font-medium text-text-muted">TTFB</th>
                     <th className="px-3 py-2 text-right font-medium text-text-muted">Total</th>
-                    <th className="px-3 py-2 text-center font-medium text-text-muted">状态</th>
+                    <th className="px-3 py-2 text-center font-medium text-text-muted">{t("providers.speedtest_col_status")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -115,7 +117,7 @@ export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
               </table>
               {reports.some((r) => !r.success) && (
                 <div className="border-t border-border bg-card-secondary/60 p-3 text-[11px] text-text-muted">
-                  鼠标悬停红色感叹号查看错误详情。
+                  {t("providers.speedtest_error_hint")}
                 </div>
               )}
             </div>

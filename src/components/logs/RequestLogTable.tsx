@@ -74,8 +74,9 @@ export function RequestLogTable({ requests, onSelect }: RequestLogTableProps) {
 /// 来源徽章——区分 gateway 流量 vs 从客户端本地日志扫出来的条目。后者拿不到
 /// raw_request / SSE / tool_calls 等字段，详情页会显示降级 banner。
 function SourceBadge({ source }: { source: string | null }) {
+  const { t } = useI18n();
   if (!source || source === "gateway") return null;
-  const label = sourceLabel(source);
+  const label = sourceLabel(source, t);
   return (
     <span
       title={label}
@@ -86,13 +87,13 @@ function SourceBadge({ source }: { source: string | null }) {
   );
 }
 
-export function sourceLabel(source: string | null): string {
+export function sourceLabel(source: string | null, t: (key: string) => string): string {
   switch (source) {
-    case "gateway": return "网关";
+    case "gateway": return t("logs.source_gateway");
     case "claude_session": return "Claude";
     case "codex_session": return "Codex";
     case "gemini_session": return "Gemini";
-    case "mixed": return "混合";
+    case "mixed": return t("logs.source_mixed");
     default: return source ?? "—";
   }
 }

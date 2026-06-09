@@ -97,7 +97,7 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 
 **Cost Tracking & Multi-Key Pooling**
 - 22+ built-in model prices, auto-calculate cost per request
-- Dashboard: total/today/average cost cards, plus cost breakdown **by model and by client**, scoped to a time range (7/30 days)
+- Dashboard: total/today/average cost cards, plus cost breakdown **by model, by client, and by route**, scoped to a time range (7/30 days)
 - Settings: inline price editing, custom price overrides
 - Multi-API-key per provider: round-robin rotation, auto-switch on 429
 
@@ -107,6 +107,14 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 - Preset scenes: Image Requests / Reasoning / Background / Long Text / Tool-Heavy
 - Prompt cache injection for Anthropic (auto `cache_control`, ~90% input cost savings)
 - Cache support auto-detection on provider test
+
+**Gateway Refiner Layer (opt-in, off by default)**
+- By default the gateway forwards requests/responses byte-for-byte; nothing is rewritten until you opt in
+- Three independent refiners, each behind a global master switch in Settings, with a per-provider override that can force-off (never force-on):
+  - **Request field filter** — strips request fields a provider rejects, based on its quirks, to avoid 400s
+  - **Reasoning param correction** — normalizes `thinking.budget_tokens` / `reasoning.effort` to the provider's accepted shape and range
+  - **Error response normalization** — rewrites upstream error bodies into the shape the client (Codex / Claude Code / Gemini CLI) expects
+- Provider quirks come from built-in defaults, overridable per provider; every refiner action is recorded in the request log's `trace_json`
 
 **Multimodal Support & Per-Model Capability Matrix**
 - Image content is fully preserved during protocol conversion (`input_image`/`image_url` → Chat Completions `image_url`, Anthropic `image source` format)
@@ -149,7 +157,7 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 
 **Desktop Experience**
 - System tray background operation when the window is closed
-- Auto-start on system boot, in-app updates, bilingual UI
+- Auto-start on system boot, in-app updates, bilingual UI, 8 built-in themes
 - Optional desktop pet for gateway status, request stats, and error bubbles; it can be disabled in Settings
 
 **Quick Setup & Diagnostics**
@@ -183,13 +191,17 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 |:---:|:---:|
 | ![Diagnostics](docs/screenshots/diagnostics.png) | ![Settings](docs/screenshots/settings.png) |
 
-| Quick Setup | Pet Settings |
+| Global Instructions | MCP Servers |
 |:---:|:---:|
-| ![Quick Setup](docs/screenshots/quick-setup.png) | ![Pet Settings](docs/screenshots/pet-settings.png) |
+| ![Global Instructions](docs/screenshots/instructions.png) | ![MCP Servers](docs/screenshots/mcp.png) |
 
-| Desktop Pet |
-|:---:|
-| ![Pet](docs/screenshots/pet.png) |
+| Skills | Quick Setup |
+|:---:|:---:|
+| ![Skills](docs/screenshots/skills.png) | ![Quick Setup](docs/screenshots/quick-setup.png) |
+
+| Pet Settings | Desktop Pet |
+|:---:|:---:|
+| ![Pet Settings](docs/screenshots/pet-settings.png) | ![Pet](docs/screenshots/pet.png) |
 
 ## Tech Stack
 

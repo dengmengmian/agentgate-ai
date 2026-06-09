@@ -346,7 +346,7 @@ export function Tools() {
       { id: "opencode", name: t("tools.opencode"), desc: t("tools.opencode_desc"), icon: Braces, presence: opencodePresence, drifted: drifted("opencode", opencodePresence) },
       { id: "gemini_cli", name: t("tools.gemini_cli"), desc: t("tools.gemini_cli_desc"), icon: Sparkles, presence: geminiPresence, drifted: drifted("gemini_cli", geminiPresence) },
       { id: "atomcode", name: t("tools.atomcode"), desc: t("tools.atomcode_desc"), icon: Atom, presence: atomPresence, drifted: drifted("atomcode", atomPresence) },
-      { id: "claude_desktop", name: "Claude Desktop", desc: "接入 Claude Desktop（实验·macOS）", icon: Monitor, presence: claudeDesktopPresence, drifted: drifted("claude_desktop", claudeDesktopPresence) },
+      { id: "claude_desktop", name: "Claude Desktop", desc: t("tools.claude_desktop_desc"), icon: Monitor, presence: claudeDesktopPresence, drifted: drifted("claude_desktop", claudeDesktopPresence) },
     ];
   }, [codexStatus, claudeEnv, openCodeStatus, geminiStatus, atomCodeStatus, claudeDesktopStatus, historyClients, t]);
 
@@ -395,12 +395,12 @@ export function Tools() {
         <aside className="rounded-xl border border-border bg-card p-2">
           {/* 4.1 状态总汇 + 4.2 漂移提示 */}
           <div className="flex items-center justify-between px-2.5 py-1.5 text-[10px] text-text-muted">
-            <span>客户端</span>
-            <span>已接入 {clientRows.filter((r) => r.presence === "active").length}/{clientRows.length}</span>
+            <span>{t("tools.clients")}</span>
+            <span>{t("tools.connected_count")} {clientRows.filter((r) => r.presence === "active").length}/{clientRows.length}</span>
           </div>
           {clientRows.some((r) => r.drifted) && (
             <div className="mb-1 px-2.5 text-[10px] text-warning">
-              {clientRows.filter((r) => r.drifted).length} 个配置已变，建议重新应用
+              {clientRows.filter((r) => r.drifted).length} {t("tools.drift_count_hint")}
             </div>
           )}
           <ul className="space-y-1">
@@ -427,7 +427,7 @@ export function Tools() {
                         "truncate text-[10px] " +
                         (row.drifted ? "text-warning" : selected ? "text-accent/80" : "text-text-muted")
                       }>
-                        {row.drifted ? "配置已变·重新应用" : presenceLabel(row.presence, t)}
+                        {row.drifted ? t("tools.drifted_label") : presenceLabel(row.presence, t)}
                       </div>
                     </div>
                   </button>
@@ -491,35 +491,35 @@ export function Tools() {
               <DetailHeader
                 Icon={Monitor}
                 name="Claude Desktop"
-                desc="把第三方推理网关指向 AgentGate（仅 macOS，需先启用过一次第三方网关）"
+                desc={t("tools.claude_desktop_detail_desc")}
                 badge={
                   <StatusBadge variant={claudeDesktopStatus?.has_agentgate_profile ? "success" : claudeDesktopStatus?.installed ? "warning" : "muted"}>
-                    {claudeDesktopStatus?.has_agentgate_profile ? "已接入 AgentGate" : claudeDesktopStatus?.installed ? "未接入" : "未检测到"}
+                    {claudeDesktopStatus?.has_agentgate_profile ? t("tools.agentgate_configured") : claudeDesktopStatus?.installed ? t("tools.not_configured") : t("tools.no_config")}
                   </StatusBadge>
                 }
               />
 
               {!claudeDesktopStatus?.supported ? (
-                <p className="text-xs text-error">当前平台不支持（仅 macOS）。</p>
+                <p className="text-xs text-error">{t("tools.claude_desktop_unsupported")}</p>
               ) : !claudeDesktopStatus?.installed ? (
-                <p className="text-xs text-text-muted">未检测到 Claude Desktop。</p>
+                <p className="text-xs text-text-muted">{t("tools.claude_desktop_not_detected")}</p>
               ) : (
                 <>
                   <div className="mb-4 text-xs">
-                    <span className="text-text-muted">配置文件（3p profile）</span>
+                    <span className="text-text-muted">{t("tools.claude_desktop_profile_label")}</span>
                     <p className="break-all font-mono text-[11px] text-text-secondary">{claudeDesktopStatus.profile_path}</p>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
                     <button onClick={handleApplyClaudeDesktop} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
-                    <button onClick={handlePreviewClaudeDesktop} className="btn-secondary"><Eye className="h-3 w-3" />预览 profile</button>
+                    <button onClick={handlePreviewClaudeDesktop} className="btn-secondary"><Eye className="h-3 w-3" />{t("tools.preview_profile")}</button>
                     <ClientHistoryButton clientId="claude_desktop" clientName="Claude Desktop" onRollbackDone={load} />
                   </div>
 
                   {cdPreview && (
                     <pre className="mt-3 max-h-60 overflow-auto rounded-md bg-card-secondary p-3 text-[11px] text-text-primary">{cdPreview}</pre>
                   )}
-                  <p className="mt-3 text-[11px] text-text-muted">应用后请重启 Claude Desktop 生效。要还原，用上面的历史回滚。</p>
+                  <p className="mt-3 text-[11px] text-text-muted">{t("tools.claude_desktop_restart_hint")}</p>
                 </>
               )}
             </div>

@@ -154,7 +154,7 @@ export function Skills() {
     return (
       <div className="flex items-center gap-2 text-xs text-text-muted">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        加载中…
+        {t("common.loading")}
       </div>
     );
   }
@@ -239,12 +239,12 @@ export function Skills() {
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(exportText);
-                    toast("success", "已复制");
+                    toast("success", t("common.copied"));
                   }}
                   className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-card-secondary"
                 >
                   <Copy className="h-3.5 w-3.5" />
-                  复制
+                  {t("common.copy")}
                 </button>
               ) : (
                 <button

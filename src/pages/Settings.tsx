@@ -303,7 +303,7 @@ function decodeShareCode(code: string): string {
 /// 随手发到群里/截图/丢仓库是常见泄密路径，所以默认安全；用户明确勾选
 /// "含密钥"才会写入，仅用于本机迁移。
 export function ConfigBackupSection() {
-  const { t: _t } = useI18n();
+  const { t } = useI18n();
   const [includeSecrets, setIncludeSecrets] = useState(false);
   const [pendingImportJson, setPendingImportJson] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
@@ -320,7 +320,7 @@ export function ConfigBackupSection() {
       a.download = `agentgate-config-${ts}${includeSecrets ? "-with-secrets" : ""}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      toast("success", includeSecrets ? "已导出（含密钥）" : "已导出（不含密钥）");
+      toast("success", includeSecrets ? t("settings.exported_with_secrets") : t("settings.exported_no_secrets"));
     } catch (err) {
       toast("error", (err as api.AppError).message);
     }
@@ -331,7 +331,7 @@ export function ConfigBackupSection() {
     try {
       const json = await api.exportConfigJson(false);
       await navigator.clipboard.writeText(encodeShareCode(json));
-      toast("success", "已复制分享码（不含密钥），发给对方粘贴导入即可");
+      toast("success", t("settings.share_code_copied"));
     } catch (err) {
       toast("error", (err as api.AppError).message);
     }
@@ -345,7 +345,7 @@ export function ConfigBackupSection() {
       JSON.parse(json); // 校验是合法 JSON，再走和文件导入一样的确认弹窗
       setPendingImportJson(json);
     } catch {
-      toast("error", "分享码无效或已损坏");
+      toast("error", t("settings.share_code_invalid"));
     }
   };
 
@@ -356,7 +356,7 @@ export function ConfigBackupSection() {
       JSON.parse(text);
       setPendingImportJson(text);
     } catch {
-      toast("error", "文件不是合法 JSON");
+      toast("error", t("settings.import_invalid_json"));
     }
   };
 
@@ -367,8 +367,8 @@ export function ConfigBackupSection() {
       const summary = await api.importConfigJson(pendingImportJson);
       toast(
         "success",
-        `已导入 ${summary.providers_imported} 个 provider、${summary.route_profiles_imported} 个 route profile${
-          summary.secrets_applied ? "（含密钥）" : "（密钥需重新填写）"
+        `${t("settings.imported_prefix")} ${summary.providers_imported} ${t("settings.imported_providers")}、${summary.route_profiles_imported} ${t("settings.imported_route_profiles")}${
+          summary.secrets_applied ? t("settings.imported_with_secrets") : t("settings.imported_no_secrets")
         }`
       );
       setPendingImportJson(null);
@@ -384,11 +384,11 @@ export function ConfigBackupSection() {
 
   return (
     <section className="rounded-xl border border-border bg-card p-5">
-      <h3 className="mb-1 text-sm font-semibold text-text-primary">配置导入导出</h3>
+      <h3 className="mb-1 text-sm font-semibold text-text-primary">{t("settings.config_backup")}</h3>
       <p className="mb-4 text-xs text-text-muted">
-        导出 providers + route profiles 为 JSON 文件，方便迁移机器或备份后再恢复。导入会
-        <span className="text-warning">替换</span>
-        当前所有配置（请求日志、定价等历史数据不受影响）。
+        {t("settings.config_backup_desc_1")}
+        <span className="text-warning">{t("settings.config_backup_replace")}</span>
+        {t("settings.config_backup_desc_2")}
       </p>
 
       <div className="space-y-3">
@@ -399,21 +399,21 @@ export function ConfigBackupSection() {
             onChange={(e) => setIncludeSecrets(e.target.checked)}
             className="h-3.5 w-3.5 rounded border-border bg-card-secondary accent-accent"
           />
-          导出时包含 API key（仅用于本机迁移；导出文件请勿分享）
+          {t("settings.include_secrets")}
         </label>
 
         <div className="flex flex-wrap items-center gap-2">
           <button onClick={handleExport} className="btn-primary inline-flex items-center gap-1.5 text-xs">
             <Download className="h-3.5 w-3.5" />
-            导出配置
+            {t("settings.export_config")}
           </button>
           <button onClick={handleCopyShareCode} className="btn-secondary inline-flex items-center gap-1.5 text-xs">
             <Share2 className="h-3.5 w-3.5" />
-            复制分享码
+            {t("settings.copy_share_code")}
           </button>
           <label className="btn-secondary inline-flex cursor-pointer items-center gap-1.5 text-xs">
             <FolderOpen className="h-3.5 w-3.5" />
-            选择文件导入
+            {t("settings.import_from_file")}
             <input
               type="file"
               accept="application/json,.json"
@@ -429,12 +429,12 @@ export function ConfigBackupSection() {
 
         {/* 分享码导入：对方「复制分享码」后,把那串文本粘到这里导入 */}
         <div className="space-y-2 border-t border-border pt-3">
-          <p className="text-xs text-text-muted">或者粘贴别人发来的分享码导入（不含密钥，导入后需自己填 API key）：</p>
+          <p className="text-xs text-text-muted">{t("settings.import_share_code_hint")}</p>
           <div className="flex items-start gap-2">
             <textarea
               value={shareCodeInput}
               onChange={(e) => setShareCodeInput(e.target.value)}
-              placeholder="粘贴分享码…"
+              placeholder={t("settings.share_code_placeholder")}
               rows={2}
               className="form-input flex-1 resize-none font-mono text-[11px]"
             />
@@ -444,7 +444,7 @@ export function ConfigBackupSection() {
               className="btn-secondary inline-flex shrink-0 items-center gap-1.5 text-xs disabled:opacity-40"
             >
               <Upload className="h-3.5 w-3.5" />
-              导入
+              {t("settings.import")}
             </button>
           </div>
         </div>
@@ -453,9 +453,9 @@ export function ConfigBackupSection() {
       <ConfirmDialog
         open={!!pendingImportJson}
         variant="danger"
-        title="确认导入配置？"
-        message="导入会清空当前所有 providers 和 route profiles，并从文件还原。操作不可撤销——建议先导出当前配置作为备份。"
-        confirmLabel={importing ? "导入中..." : "确认导入"}
+        title={t("settings.import_confirm_title")}
+        message={t("settings.import_confirm_msg")}
+        confirmLabel={importing ? t("settings.importing") : t("settings.import_confirm")}
         onConfirm={handleConfirmImport}
         onCancel={() => setPendingImportJson(null)}
       />

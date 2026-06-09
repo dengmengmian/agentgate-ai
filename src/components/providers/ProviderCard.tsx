@@ -274,7 +274,7 @@ export function ProviderCard({
           className="flex items-center gap-1 text-[11px] text-text-muted transition-colors hover:text-text-primary"
         >
           {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          {t("providers.details") || "详情"}
+          {t("providers.details")}
         </button>
       </div>
     </div>

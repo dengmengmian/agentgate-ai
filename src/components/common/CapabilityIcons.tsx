@@ -1,4 +1,5 @@
 import { Eye, EyeOff, Mic, Speaker, Video, Brain, Globe } from "lucide-react";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * Render a row of capability icons inferred from a provider's
@@ -25,17 +26,17 @@ const ICON_SIZE = { xs: "h-3 w-3", sm: "h-3.5 w-3.5" };
 interface IconSpec {
   cap: string;
   Icon: typeof Eye;
-  label: string;
-  noLabel: string;
+  labelKey: string;
+  noLabelKey: string;
 }
 
 const ICONS: IconSpec[] = [
-  { cap: "vision", Icon: Eye, label: "视觉输入", noLabel: "不支持视觉" },
-  { cap: "audio_in", Icon: Mic, label: "音频输入", noLabel: "不支持音频" },
-  { cap: "tts", Icon: Speaker, label: "语音合成", noLabel: "不支持 TTS" },
-  { cap: "video_in", Icon: Video, label: "视频输入", noLabel: "不支持视频" },
-  { cap: "reasoning", Icon: Brain, label: "深度思考", noLabel: "无推理" },
-  { cap: "web_search", Icon: Globe, label: "联网搜索", noLabel: "无联网搜索" },
+  { cap: "vision", Icon: Eye, labelKey: "providers.cap.vision", noLabelKey: "providers.cap.vision_no" },
+  { cap: "audio_in", Icon: Mic, labelKey: "providers.cap.audio_in", noLabelKey: "providers.cap.audio_in_no" },
+  { cap: "tts", Icon: Speaker, labelKey: "providers.cap.tts", noLabelKey: "providers.cap.tts_no" },
+  { cap: "video_in", Icon: Video, labelKey: "providers.cap.video_in", noLabelKey: "providers.cap.video_in_no" },
+  { cap: "reasoning", Icon: Brain, labelKey: "providers.cap.reasoning", noLabelKey: "providers.cap.reasoning_no" },
+  { cap: "web_search", Icon: Globe, labelKey: "providers.cap.web_search", noLabelKey: "providers.cap.web_search_no" },
 ];
 
 function parseMatrix(json: string | null): Record<string, string[]> | null {
@@ -53,6 +54,7 @@ function anyModelHas(matrix: Record<string, string[]>, capability: string): bool
 }
 
 export function CapabilityIcons({ modelCapabilities, legacyVision, compact = true, size = "sm" }: CapabilityIconsProps) {
+  const { t } = useI18n();
   const matrix = parseMatrix(modelCapabilities);
   const cls = ICON_SIZE[size];
 
@@ -73,15 +75,18 @@ export function CapabilityIcons({ modelCapabilities, legacyVision, compact = tru
 
   return (
     <span className="inline-flex items-center gap-1.5">
-      {visible.map(({ spec, state }) => (
-        <spec.Icon
-          key={spec.cap}
-          className={`${cls} ${state === "yes" ? "text-accent" : "text-text-muted/60"}`}
-          aria-label={state === "yes" ? spec.label : spec.noLabel}
-        >
-          <title>{state === "yes" ? spec.label : spec.noLabel}</title>
-        </spec.Icon>
-      ))}
+      {visible.map(({ spec, state }) => {
+        const label = state === "yes" ? t(spec.labelKey) : t(spec.noLabelKey);
+        return (
+          <spec.Icon
+            key={spec.cap}
+            className={`${cls} ${state === "yes" ? "text-accent" : "text-text-muted/60"}`}
+            aria-label={label}
+          >
+            <title>{label}</title>
+          </spec.Icon>
+        );
+      })}
     </span>
   );
 }

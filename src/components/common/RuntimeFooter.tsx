@@ -11,6 +11,7 @@
 import { useEffect, useState } from "react";
 import { Activity, Clock, TrendingUp, Database, DollarSign, CheckCircle2 } from "lucide-react";
 import * as api from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 import type { RuntimeKpis } from "@/types/stats";
 
 function formatUptime(secs: number): string {
@@ -65,6 +66,7 @@ function Metric({ icon, label, value, tone = "default" }: MetricProps) {
 }
 
 export function RuntimeFooter() {
+  const { t } = useI18n();
   const [kpis, setKpis] = useState<RuntimeKpis | null>(null);
 
   useEffect(() => {
@@ -91,19 +93,19 @@ export function RuntimeFooter() {
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      <Metric icon={<Activity className="h-3.5 w-3.5" />} label="活跃连接" value={String(kpis.active_requests)} />
+      <Metric icon={<Activity className="h-3.5 w-3.5" />} label={t("stats.active_connections")} value={String(kpis.active_requests)} />
       <Metric
         icon={<Clock className="h-3.5 w-3.5" />}
-        label="运行时间"
-        value={kpis.gateway_running ? formatUptime(kpis.uptime_seconds) : "已停止"}
+        label={t("stats.uptime")}
+        value={kpis.gateway_running ? formatUptime(kpis.uptime_seconds) : t("stats.stopped")}
         tone={kpis.gateway_running ? "default" : "muted"}
       />
-      <Metric icon={<TrendingUp className="h-3.5 w-3.5" />} label="累计请求" value={kpis.total_requests.toLocaleString()} />
-      <Metric icon={<Database className="h-3.5 w-3.5" />} label="累计 Tokens" value={formatTokens(kpis.total_tokens)} />
-      <Metric icon={<DollarSign className="h-3.5 w-3.5" />} label="累计费用" value={formatCost(kpis.total_cost)} />
+      <Metric icon={<TrendingUp className="h-3.5 w-3.5" />} label={t("stats.total_requests")} value={kpis.total_requests.toLocaleString()} />
+      <Metric icon={<Database className="h-3.5 w-3.5" />} label={t("stats.total_tokens")} value={formatTokens(kpis.total_tokens)} />
+      <Metric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("stats.total_cost")} value={formatCost(kpis.total_cost)} />
       <Metric
         icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-        label="累计成功率"
+        label={t("stats.success_rate_lifetime")}
         value={rateStr}
         tone={kpis.total_requests > 0 && kpis.success_rate_lifetime < 90 ? "default" : "accent"}
       />

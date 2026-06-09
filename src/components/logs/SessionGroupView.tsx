@@ -5,6 +5,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { ConversationModal } from "@/components/logs/ConversationModal";
 import { formatTimestamp } from "@/lib/utils";
 import { toast } from "@/components/common/Toast";
+import { useI18n } from "@/lib/i18n";
 import { sourceLabel } from "@/components/logs/RequestLogTable";
 import * as api from "@/lib/api";
 import type { SessionUsageSummary, RequestLogFilter } from "@/types/request-log";
@@ -22,6 +23,7 @@ interface SessionGroupViewProps {
 /// 按 `session_id` GROUP BY，跨 gateway / 各客户端本地日志聚合。同一 session_id
 /// 同时跨多源时 source 字段返回 'mixed'。
 export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProps) {
+  const { t } = useI18n();
   const [rows, setRows] = useState<SessionUsageSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [convo, setConvo] = useState<{ sessionId: string; source: string } | null>(null);
@@ -32,7 +34,7 @@ export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProp
     try {
       await api.deleteSession(deleteTarget);
       setRows((prev) => prev.filter((r) => r.session_id !== deleteTarget));
-      toast("success", "会话已删除");
+      toast("success", t("logs.session_deleted"));
     } catch (err) {
       toast("error", (err as api.AppError).message);
     }
@@ -61,7 +63,7 @@ export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProp
     return (
       <div className="flex items-center gap-2 text-xs text-text-muted">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        加载中…
+        {t("common.loading")}
       </div>
     );
   }
@@ -70,8 +72,8 @@ export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProp
     return (
       <EmptyState
         icon={Layers}
-        title="还没有会话级数据"
-        description="网关请求会按 session_id 自动聚合；客户端本地日志在「同步」之后也会出现在这里。"
+        title={t("logs.session_empty_title")}
+        description={t("logs.session_empty_desc")}
       />
     );
   }
@@ -82,13 +84,13 @@ export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProp
       <table className="w-full text-left text-xs">
         <thead>
           <tr className="border-b border-border text-text-muted">
-            <th className="px-5 py-3 font-medium">会话</th>
-            <th className="px-5 py-3 font-medium">来源</th>
-            <th className="px-5 py-3 font-medium">最后活跃</th>
-            <th className="px-5 py-3 font-medium text-right">请求数</th>
-            <th className="px-5 py-3 font-medium text-right">输入 / 输出</th>
-            <th className="px-5 py-3 font-medium text-right">缓存读</th>
-            <th className="px-5 py-3 font-medium text-right">费用</th>
+            <th className="px-5 py-3 font-medium">{t("logs.session_col_session")}</th>
+            <th className="px-5 py-3 font-medium">{t("logs.session_col_source")}</th>
+            <th className="px-5 py-3 font-medium">{t("logs.session_col_last_seen")}</th>
+            <th className="px-5 py-3 font-medium text-right">{t("logs.session_col_requests")}</th>
+            <th className="px-5 py-3 font-medium text-right">{t("logs.session_col_in_out")}</th>
+            <th className="px-5 py-3 font-medium text-right">{t("logs.session_col_cache_read")}</th>
+            <th className="px-5 py-3 font-medium text-right">{t("logs.session_col_cost")}</th>
           </tr>
         </thead>
         <tbody>
@@ -103,14 +105,14 @@ export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProp
                   <button
                     onClick={(e) => { e.stopPropagation(); setConvo({ sessionId: row.session_id, source: row.source }); }}
                     className="shrink-0 text-text-muted transition-colors hover:text-accent"
-                    title="查看对话"
+                    title={t("logs.session_view_convo")}
                   >
                     <MessageSquare className="h-3.5 w-3.5" />
                   </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); setDeleteTarget(row.session_id); }}
                     className="shrink-0 text-text-muted transition-colors hover:text-error"
-                    title="删除会话"
+                    title={t("logs.session_delete")}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -148,9 +150,9 @@ export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProp
     )}
     <ConfirmDialog
       open={!!deleteTarget}
-      title="删除会话"
-      message="将删除该会话的统计记录，并删除 Claude / Codex 的本地日志文件。删除后客户端无法再恢复该会话，且不可撤销。"
-      confirmLabel="删除"
+      title={t("logs.session_delete_title")}
+      message={t("logs.session_delete_msg")}
+      confirmLabel={t("common.delete")}
       variant="danger"
       onConfirm={handleDelete}
       onCancel={() => setDeleteTarget(null)}
@@ -160,6 +162,7 @@ export function SessionGroupView({ filter, onPickSession }: SessionGroupViewProp
 }
 
 function SourceChip({ source }: { source: string }) {
+  const { t } = useI18n();
   const isMixed = source === "mixed";
   const color = source === "gateway"
     ? "bg-accent/15 text-accent"
@@ -168,7 +171,7 @@ function SourceChip({ source }: { source: string }) {
       : "bg-card-secondary text-text-secondary";
   return (
     <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium ${color}`}>
-      {sourceLabel(source)}
+      {sourceLabel(source, t)}
     </span>
   );
 }

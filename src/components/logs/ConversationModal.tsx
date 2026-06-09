@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Loader2, X, Copy, Terminal, FileText } from "lucide-react";
 import { formatTimestamp } from "@/lib/utils";
 import { toast } from "@/components/common/Toast";
+import { useI18n } from "@/lib/i18n";
 import { MarkdownContent } from "@/components/common/MarkdownContent";
 import * as api from "@/lib/api";
 import type { ConversationMessage } from "@/types/request-log";
@@ -33,6 +34,7 @@ export function ConversationModal({
   source: string;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [msgs, setMsgs] = useState<ConversationMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -55,7 +57,7 @@ export function ConversationModal({
       <div className="flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-text-primary">会话对话</h3>
+            <h3 className="text-sm font-semibold text-text-primary">{t("logs.conversation_title")}</h3>
             <p className="truncate font-mono text-[11px] text-text-muted" title={sessionId}>{sessionId}</p>
           </div>
           <button onClick={onClose} className="shrink-0 text-text-muted hover:text-text-primary"><X className="h-4 w-4" /></button>
@@ -67,9 +69,9 @@ export function ConversationModal({
               <code className="truncate font-mono text-[11px] text-text-secondary">{cmd}</code>
             </div>
             <button
-              onClick={() => { navigator.clipboard.writeText(cmd); toast("success", "已复制恢复命令"); }}
+              onClick={() => { navigator.clipboard.writeText(cmd); toast("success", t("logs.resume_cmd_copied")); }}
               className="shrink-0 rounded-md p-1.5 text-text-muted transition-colors hover:bg-card hover:text-accent"
-              title="复制"
+              title={t("common.copy")}
             >
               <Copy className="h-3.5 w-3.5" />
             </button>
@@ -77,11 +79,11 @@ export function ConversationModal({
         )}
         <div className="flex-1 space-y-4 overflow-y-auto bg-background/30 p-5">
           {loading ? (
-            <div className="flex items-center gap-2 text-xs text-text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" />加载中…</div>
+            <div className="flex items-center gap-2 text-xs text-text-muted"><Loader2 className="h-3.5 w-3.5 animate-spin" />{t("common.loading")}</div>
           ) : err ? (
             <p className="text-xs text-error">{err}</p>
           ) : msgs.length === 0 ? (
-            <p className="text-xs text-text-muted">没有可显示的对话内容（该来源的本地日志可能不含完整对话）。</p>
+            <p className="text-xs text-text-muted">{t("logs.conversation_empty")}</p>
           ) : (
             msgs.map((m, i) => <MessageBubble key={i} msg={m} />)
           )}
@@ -92,11 +94,12 @@ export function ConversationModal({
 }
 
 function MessageBubble({ msg }: { msg: ConversationMessage }) {
+  const { t } = useI18n();
   const isUser = msg.role === "user";
   const kind = getConversationMessageKind(msg.text);
   const meta = (
     <div className="mb-1 text-[10px] text-text-muted">
-      {isUser ? "用户" : "AI"}{msg.timestamp ? ` · ${formatTimestamp(msg.timestamp)}` : ""}
+      {isUser ? t("logs.msg_user") : t("logs.msg_ai")}{msg.timestamp ? ` · ${formatTimestamp(msg.timestamp)}` : ""}
     </div>
   );
 
@@ -107,7 +110,7 @@ function MessageBubble({ msg }: { msg: ConversationMessage }) {
         {meta}
         <div className="flex max-w-[72%] items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs text-text-secondary">
           <Terminal className="h-3.5 w-3.5 shrink-0 text-text-muted" />
-          <span>工具调用</span>
+          <span>{t("logs.tool_call")}</span>
           <span className="rounded bg-card-secondary px-1.5 py-0.5 font-mono text-[10px] text-text-primary">{toolName}</span>
         </div>
       </div>
@@ -121,7 +124,7 @@ function MessageBubble({ msg }: { msg: ConversationMessage }) {
         <div className="w-full max-w-[92%] rounded-lg border border-border bg-card">
           <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[11px] font-medium text-text-muted">
             <FileText className="h-3.5 w-3.5" />
-            工具结果
+            {t("logs.tool_result")}
           </div>
           <pre className="max-h-[22rem] overflow-auto whitespace-pre-wrap break-words px-3 py-2.5 font-mono text-[11px] leading-relaxed text-text-secondary">{msg.text.replace(/^\[Tool result\]\s*/, "")}</pre>
         </div>

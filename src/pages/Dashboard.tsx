@@ -51,6 +51,7 @@ function formatCost(n: number): string {
 
 // 成本分解小列表：每行 名称 + 占比条 + 请求数 + 成本，按成本倒序（后端已排）。
 function CostList({ title, rows }: { title: string; rows: CostBreakdown[] }) {
+  const { t } = useI18n();
   const max = rows.reduce((m, r) => Math.max(m, r.cost), 0) || 1;
   return (
     <div>
@@ -69,7 +70,7 @@ function CostList({ title, rows }: { title: string; rows: CostBreakdown[] }) {
               {r.has_price ? (
                 <span className="w-16 shrink-0 text-right font-mono tabular-nums text-text-primary">{formatCost(r.cost)}</span>
               ) : (
-                <span className="w-16 shrink-0 text-right text-[10px] text-text-muted/60" title="价格表里没有这个模型的价，成本算不出（不是免费）">无价格</span>
+                <span className="w-16 shrink-0 text-right text-[10px] text-text-muted/60" title={t("stats.no_price_tip")}>{t("stats.no_price")}</span>
               )}
             </div>
           ))}
@@ -122,7 +123,7 @@ const RANGE_OPTIONS: { days: RangeDays; labelZh: string; labelEn: string }[] = [
 ];
 
 export function Dashboard() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [status, setStatus] = useState<GatewayStatus | null>(null);
   const [tools, setTools] = useState<ToolConfigView[]>([]);
   const [recentLogs, setRecentLogs] = useState<RequestLogListItem[]>([]);
@@ -303,20 +304,20 @@ export function Dashboard() {
           </div>
           {(stats.today_cache_read_tokens > 0 || stats.today_cache_write_tokens > 0) && (
             <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border pt-3 text-[11px] text-text-muted">
-              <span className="font-medium text-text-secondary">缓存</span>
+              <span className="font-medium text-text-secondary">{t("stats.cache")}</span>
               <span>
-                写入 <span className="font-mono text-text-primary">{formatTokens(stats.today_cache_write_tokens)}</span>
+                {t("stats.cache_write")} <span className="font-mono text-text-primary">{formatTokens(stats.today_cache_write_tokens)}</span>
               </span>
               <span className="text-text-muted/40">·</span>
               <span>
-                命中 <span className="font-mono text-text-primary">{formatTokens(stats.today_cache_read_tokens)}</span>
+                {t("stats.cache_hit")} <span className="font-mono text-text-primary">{formatTokens(stats.today_cache_read_tokens)}</span>
               </span>
               <span className="text-text-muted/40">·</span>
               <span>
-                输入合计 <span className="font-mono text-text-primary">{formatTokens(stats.today_input_tokens)}</span>
+                {t("stats.input_total")} <span className="font-mono text-text-primary">{formatTokens(stats.today_input_tokens)}</span>
               </span>
               <span className="ml-auto flex items-center gap-1.5">
-                命中率
+                {t("stats.hit_rate")}
                 <CacheHitBadge
                   cacheRead={stats.today_cache_read_tokens}
                   cacheWrite={stats.today_cache_write_tokens}
@@ -337,7 +338,7 @@ export function Dashboard() {
               <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <BarChart3 className="h-4 w-4 text-text-muted" />
                 {t("stats.daily_chart")}
-                <span className="text-text-muted">· {rangeDays === 1 ? "今天" : `${rangeDays} 天`}</span>
+                <span className="text-text-muted">· {rangeDays === 1 ? t("stats.range_today") : `${rangeDays} ${t("stats.days_suffix")}`}</span>
               </h3>
               <div className="flex items-center gap-3">
                 <div className="hidden items-center gap-3 text-[10px] text-text-muted sm:flex">
@@ -355,7 +356,7 @@ export function Dashboard() {
                           : "text-text-secondary hover:text-accent"
                       }`}
                     >
-                      {opt.labelZh}
+                      {locale === "zh" ? opt.labelZh : opt.labelEn}
                     </button>
                   ))}
                 </div>
@@ -394,7 +395,7 @@ export function Dashboard() {
                       const successCount = Math.max(d.total - d.errors, 0);
                       const totalH = d.total > 0 ? Math.max((d.total / niceMax) * BAR_H, 2) : 0;
                       const errH = d.errors > 0 && totalH > 0 ? Math.max((d.errors / d.total) * totalH, 2) : 0;
-                      const tooltip = `${d.date}\n请求: ${d.total} (成功 ${successCount} / 错误 ${d.errors})\nTokens: in ${formatTokens(d.input_tokens)} · out ${formatTokens(d.output_tokens)}`;
+                      const tooltip = `${d.date}\n${t("stats.tooltip_requests")}: ${d.total} (${t("stats.success_rate_label")} ${successCount} / ${t("stats.tooltip_errors")} ${d.errors})\nTokens: in ${formatTokens(d.input_tokens)} · out ${formatTokens(d.output_tokens)}`;
                       return (
                         <div
                           key={d.date}

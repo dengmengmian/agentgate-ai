@@ -49,26 +49,16 @@ export function CodexDetail({
         <div className="mb-3 rounded-md border border-success/30 bg-success-soft p-3">
           <div className="flex items-center gap-2 text-xs font-medium text-success">
             <Shield className="h-3.5 w-3.5" />
-            代理模式已启用：对话走 AgentGate · IDE 插件继续可用
+            {t("tools.codex_proxy_mode_title")}
           </div>
-          <p className="mt-1 text-[11px] text-text-secondary">
-            当前配置使用「劫持 OpenAI provider + <code className="font-mono">requires_openai_auth</code>」方案：
-            对话请求路由到 AgentGate（→ 第三方模型），同时保留 ChatGPT 官方登录态 —
-            Browser / Computer-Use / Mobile / 配额查询 全部可用。<br />
-            要切回 Codex 直连 ChatGPT 官方，点击 "切换到官方"。
-          </p>
+          <p className="mt-1 text-[11px] text-text-secondary">{t("tools.codex_proxy_mode_desc")}</p>
         </div>
       )}
 
       {!status?.is_agentgate_active && status?.exists && (
         <div className="mb-3 rounded-md border border-border bg-card-secondary p-3">
-          <div className="text-xs font-medium text-text-primary">
-            原生模式：Codex 直连 ChatGPT 官方
-          </div>
-          <p className="mt-1 text-[11px] text-text-secondary">
-            当前不经过 AgentGate。如需路由到 MiMo / DeepSeek / Kimi 等第三方模型，
-            点击 "应用配置" 切换到代理模式 —— 切换后 IDE 插件 / Codex Mobile 仍可正常使用。
-          </p>
+          <div className="text-xs font-medium text-text-primary">{t("tools.codex_native_mode_title")}</div>
+          <p className="mt-1 text-[11px] text-text-secondary">{t("tools.codex_native_mode_desc")}</p>
         </div>
       )}
 

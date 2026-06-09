@@ -22,6 +22,7 @@ import {
 import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
 import { DetailDrawer } from "@/components/layout/DetailDrawer";
+import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import type { McpServer, McpValidationStatus } from "@/lib/api";
 
@@ -44,6 +45,7 @@ const clients = [
 
 /// MCP 面板。以客户端文件为真相源，读写 Codex / Claude Code 现有 MCP server。
 export function Mcp() {
+  const { t } = useI18n();
   const [servers, setServers] = useState<McpServer[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -148,7 +150,7 @@ export function Mcp() {
   const handleSave = async () => {
     if (!draft) return;
     if (!draft.name.trim() || !draft.command.trim()) {
-      toast("error", "name 和 command 必填");
+      toast("error", t("mcp.name_command_required"));
       return;
     }
     setSaving(true);
@@ -163,7 +165,7 @@ export function Mcp() {
         args: draft.argsText.split("\n").map((item) => item.trim()).filter(Boolean),
         env: parseEnv(draft.envText),
       });
-      toast("success", "MCP server 已保存");
+      toast("success", t("mcp.saved"));
       setDraft(null);
       await refreshServers();
     } catch (err) {
@@ -175,10 +177,10 @@ export function Mcp() {
 
   const handleDelete = async (server: McpServer) => {
     const client = server.enabled_clients[0] ?? "codex";
-    if (!window.confirm(`删除 ${server.name}？`)) return;
+    if (!window.confirm(t("mcp.delete_confirm").replace("{name}", server.name))) return;
     try {
       await api.deleteMcpServer(client, server.name);
-      toast("success", "MCP server 已删除");
+      toast("success", t("mcp.deleted"));
       setServers((items) => items.filter((item) => item.id !== server.id));
       if (selectedId === server.id) setSelectedId(null);
     } catch (err) {
@@ -190,14 +192,14 @@ export function Mcp() {
     const fromClient = server.enabled_clients[0] ?? "codex";
     const toClient = fromClient === "codex" ? "claude_code" : "codex";
     const toLabel = clientLabel(toClient);
-    if (!window.confirm(`同步 ${server.name} 到 ${toLabel}？同名配置会被覆盖。`)) return;
+    if (!window.confirm(t("mcp.sync_confirm").replace("{name}", server.name).replace("{target}", toLabel))) return;
     try {
       await api.syncMcpServer({
         from_client: fromClient,
         name: server.name,
         to_clients: [toClient],
       });
-      toast("success", `已同步到 ${toLabel}`);
+      toast("success", t("mcp.synced_to").replace("{target}", toLabel));
       await refreshServers();
     } catch (err) {
       toast("error", (err as api.AppError).message);
@@ -205,14 +207,14 @@ export function Mcp() {
   };
 
   const handleExport = async () => {
-    if (includeSecrets && !window.confirm("导出会包含 env value，确认继续？")) return;
+    if (includeSecrets && !window.confirm(t("mcp.export_secrets_confirm"))) return;
     setMoreOpen(false);
     setTransferring(true);
     try {
       const text = await api.exportMcpServers(includeSecrets);
       setExportText(text);
       setTransferMode("export");
-      toast("success", includeSecrets ? "已导出 MCP 配置（含密钥）" : "已导出 MCP 配置");
+      toast("success", includeSecrets ? t("mcp.exported_with_secrets") : t("mcp.exported"));
     } catch (err) {
       toast("error", (err as api.AppError).message);
     } finally {
@@ -227,15 +229,15 @@ export function Mcp() {
 
   const handleImport = async () => {
     if (!importText.trim()) {
-      toast("error", "请粘贴 MCP 导出 JSON");
+      toast("error", t("mcp.paste_json_required"));
       return;
     }
     const targetLabel = clientLabel(importClient);
-    if (!window.confirm(`导入到 ${targetLabel}？同名配置会被覆盖。`)) return;
+    if (!window.confirm(t("mcp.import_confirm").replace("{target}", targetLabel))) return;
     setTransferring(true);
     try {
       await api.importMcpServers(importText, [importClient]);
-      toast("success", `已导入到 ${targetLabel}`);
+      toast("success", t("mcp.imported_to").replace("{target}", targetLabel));
       await refreshServers();
     } catch (err) {
       toast("error", (err as api.AppError).message);
@@ -248,7 +250,7 @@ export function Mcp() {
     return (
       <div className="flex items-center gap-2 text-xs text-text-muted">
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        加载中…
+        {t("common.loading")}
       </div>
     );
   }
@@ -257,10 +259,9 @@ export function Mcp() {
     <div className="space-y-4">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-text-primary">MCP 服务器</h2>
+          <h2 className="text-sm font-semibold text-text-primary">{t("mcp.title")}</h2>
           <p className="mt-0.5 text-xs text-text-muted">
-            读自 Codex <code className="font-mono">config.toml</code> / Claude Code <code className="font-mono">.claude.json</code>。
-            env 仅显示 key，不显示值。
+            {t("mcp.subtitle_before")}<code className="font-mono">config.toml</code>{t("mcp.subtitle_mid")}<code className="font-mono">.claude.json</code>{t("mcp.subtitle_after")}
           </p>
         </div>
         <div className="relative flex shrink-0 items-center gap-2">
@@ -269,12 +270,12 @@ export function Mcp() {
             className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
           >
             <Plus className="h-3.5 w-3.5" />
-            添加 server
+            {t("mcp.add_server")}
           </button>
           <button
             onClick={() => setMoreOpen((open) => !open)}
             className="rounded-md border border-border p-1.5 text-text-secondary hover:bg-card-secondary"
-            title="更多"
+            title={t("mcp.more")}
           >
             <MoreHorizontal className="h-4 w-4" />
           </button>
@@ -287,7 +288,7 @@ export function Mcp() {
                   onChange={(event) => setIncludeSecrets(event.target.checked)}
                   className="h-3.5 w-3.5 rounded border-border"
                 />
-                导出包含密钥
+                {t("mcp.export_include_secrets")}
               </label>
               <button
                 onClick={handleExport}
@@ -295,14 +296,14 @@ export function Mcp() {
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-card-secondary disabled:opacity-60"
               >
                 {transferring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                导出 JSON
+                {t("mcp.export_json")}
               </button>
               <button
                 onClick={openImport}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-card-secondary"
               >
                 <Upload className="h-3.5 w-3.5" />
-                导入 JSON
+                {t("mcp.import_json")}
               </button>
             </div>
           )}
@@ -311,8 +312,8 @@ export function Mcp() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <FilterButton active={filter === "all"} label="全部" count={counts.all} onClick={() => setFilter("all")} />
-          <FilterButton active={filter === "issues"} label="有问题" count={counts.issues} onClick={() => setFilter("issues")} />
+          <FilterButton active={filter === "all"} label={t("mcp.filter_all")} count={counts.all} onClick={() => setFilter("all")} />
+          <FilterButton active={filter === "issues"} label={t("mcp.filter_issues")} count={counts.issues} onClick={() => setFilter("issues")} />
           <FilterButton active={filter === "codex"} label="Codex" count={counts.codex} onClick={() => setFilter("codex")} />
           <FilterButton active={filter === "claude_code"} label="Claude Code" count={counts.claude_code} onClick={() => setFilter("claude_code")} />
         </div>
@@ -322,7 +323,7 @@ export function Mcp() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className="w-full bg-transparent text-text-primary outline-none placeholder:text-text-muted"
-            placeholder="搜索 name / command / env"
+            placeholder={t("mcp.search_placeholder")}
           />
         </label>
       </div>
@@ -332,12 +333,12 @@ export function Mcp() {
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-xs font-medium text-text-primary">
-                {transferMode === "export" ? "导出 MCP 配置" : "导入 MCP 配置"}
+                {transferMode === "export" ? t("mcp.export_config") : t("mcp.import_config")}
               </div>
               <div className="mt-0.5 text-[11px] text-text-muted">
                 {transferMode === "export"
-                  ? includeSecrets ? "当前导出包含 env value。" : "当前导出已隐藏 env value。"
-                  : "粘贴 JSON 后选择目标客户端。"}
+                  ? includeSecrets ? t("mcp.export_hint_with_value") : t("mcp.export_hint_hidden")
+                  : t("mcp.import_hint")}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -357,7 +358,7 @@ export function Mcp() {
                     className="flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-60"
                   >
                     {transferring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                    导入
+                    {t("mcp.import")}
                   </button>
                 </>
               )}
@@ -374,7 +375,7 @@ export function Mcp() {
             onChange={(event) => transferMode === "export" ? setExportText(event.target.value) : setImportText(event.target.value)}
             rows={6}
             className="w-full resize-none rounded-md border border-border bg-card-secondary px-2.5 py-2 font-mono text-xs text-text-primary outline-none focus:border-accent"
-            placeholder={transferMode === "export" ? "导出结果会显示在这里" : "粘贴 MCP 导出 JSON"}
+            placeholder={transferMode === "export" ? t("mcp.export_result_placeholder") : t("mcp.import_paste_placeholder")}
           />
         </section>
       )}
@@ -382,8 +383,8 @@ export function Mcp() {
       {servers.length === 0 ? (
         <EmptyState
           icon={Plug}
-          title="没有检测到 MCP 服务器"
-          description="在 Codex 或 Claude Code 里配置过 MCP server 后，这里会自动列出。"
+          title={t("mcp.empty_title")}
+          description={t("mcp.empty_desc")}
         />
       ) : (
         <ServerTable
@@ -398,7 +399,7 @@ export function Mcp() {
 
       <DetailDrawer
         open={Boolean(selected)}
-        title={selected?.name ?? "MCP server"}
+        title={selected?.name ?? t("mcp.server")}
         onClose={() => setSelectedId(null)}
       >
         {selected && (
@@ -413,7 +414,7 @@ export function Mcp() {
 
       <DetailDrawer
         open={Boolean(draft)}
-        title={draft?.originalName ? "编辑 MCP server" : "添加 MCP server"}
+        title={draft?.originalName ? t("mcp.edit_server") : t("mcp.add_server")}
         onClose={() => setDraft(null)}
       >
         {draft && (
@@ -444,10 +445,11 @@ function ServerTable({
   onSync: (server: McpServer) => void;
   onDelete: (server: McpServer) => void;
 }) {
+  const { t } = useI18n();
   if (servers.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card p-8 text-center text-xs text-text-muted">
-        没有匹配的 MCP server。
+        {t("mcp.no_match")}
       </div>
     );
   }
@@ -456,12 +458,12 @@ function ServerTable({
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
       <div className="min-w-[840px]">
       <div className="grid grid-cols-[120px_minmax(160px,1.2fr)_120px_minmax(240px,2fr)_90px_104px] border-b border-border bg-card-secondary px-4 py-2 text-[11px] font-medium text-text-muted">
-        <div>状态</div>
-        <div>名称</div>
-        <div>客户端</div>
+        <div>{t("mcp.col_status")}</div>
+        <div>{t("mcp.col_name")}</div>
+        <div>{t("mcp.col_client")}</div>
         <div>command</div>
         <div>env</div>
-        <div className="text-right">操作</div>
+        <div className="text-right">{t("mcp.col_actions")}</div>
       </div>
       <div className="divide-y divide-border">
         {servers.map((server) => (
@@ -488,17 +490,17 @@ function ServerTable({
             </div>
             <ClientBadges server={server} />
             <div className="min-w-0 truncate font-mono text-[11px] text-text-muted" title={`${server.command} ${server.args.join(" ")}`}>
-              {server.command || "未配置 command"} {server.args.join(" ")}
+              {server.command || t("mcp.no_command")} {server.args.join(" ")}
             </div>
             <EnvSummary server={server} />
             <div className="flex justify-end gap-1">
-              <IconButton title="编辑" onClick={(event) => { event.stopPropagation(); onEdit(server); }}>
+              <IconButton title={t("common.edit")} onClick={(event) => { event.stopPropagation(); onEdit(server); }}>
                 <Edit2 className="h-3.5 w-3.5" />
               </IconButton>
-              <IconButton title="同步到另一个客户端" onClick={(event) => { event.stopPropagation(); onSync(server); }}>
+              <IconButton title={t("mcp.sync_to_other")} onClick={(event) => { event.stopPropagation(); onSync(server); }}>
                 <Copy className="h-3.5 w-3.5" />
               </IconButton>
-              <IconButton danger title="删除" onClick={(event) => { event.stopPropagation(); onDelete(server); }}>
+              <IconButton danger title={t("common.delete")} onClick={(event) => { event.stopPropagation(); onDelete(server); }}>
                 <Trash2 className="h-3.5 w-3.5" />
               </IconButton>
             </div>
@@ -521,33 +523,34 @@ function ServerDetail({
   onSync: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <StatusPill status={server.validation.status as McpValidationStatus} />
         <div className="flex items-center gap-1.5">
-          <IconButton title="编辑" onClick={onEdit}>
+          <IconButton title={t("common.edit")} onClick={onEdit}>
             <Edit2 className="h-3.5 w-3.5" />
           </IconButton>
-          <IconButton title="同步到另一个客户端" onClick={onSync}>
+          <IconButton title={t("mcp.sync_to_other")} onClick={onSync}>
             <Copy className="h-3.5 w-3.5" />
           </IconButton>
-          <IconButton danger title="删除" onClick={onDelete}>
+          <IconButton danger title={t("common.delete")} onClick={onDelete}>
             <Trash2 className="h-3.5 w-3.5" />
           </IconButton>
         </div>
       </div>
 
-      <DetailSection title="客户端">
+      <DetailSection title={t("mcp.col_client")}>
         <ClientBadges server={server} />
       </DetailSection>
 
       <DetailSection title="command">
-        <CodeBlock value={server.command || "未配置 command"} />
+        <CodeBlock value={server.command || t("mcp.no_command")} />
       </DetailSection>
 
       <DetailSection title="args">
-        {server.args.length > 0 ? <CodeBlock value={server.args.join("\n")} /> : <MutedText>未配置 args</MutedText>}
+        {server.args.length > 0 ? <CodeBlock value={server.args.join("\n")} /> : <MutedText>{t("mcp.no_args")}</MutedText>}
       </DetailSection>
 
       <DetailSection title="env">
@@ -557,18 +560,18 @@ function ServerDetail({
               <div key={env.key} className="flex items-center justify-between gap-2 rounded-md bg-card-secondary px-2.5 py-1.5">
                 <div className="min-w-0 truncate font-mono text-[11px] text-text-secondary">{env.key}</div>
                 <div className="flex shrink-0 items-center gap-1.5 text-[10px] text-text-muted">
-                  {env.is_sensitive && <span>敏感</span>}
+                  {env.is_sensitive && <span>{t("mcp.sensitive")}</span>}
                   {!env.has_value && <span className="text-warning">missing</span>}
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <MutedText>未配置 env</MutedText>
+          <MutedText>{t("mcp.no_env")}</MutedText>
         )}
       </DetailSection>
 
-      <DetailSection title="来源">
+      <DetailSection title={t("mcp.sources")}>
         <div className="space-y-2">
           {server.sources.map((source) => (
             <div key={`${source.client}:${source.config_path}`} className="rounded-md bg-card-secondary px-2.5 py-2">
@@ -580,7 +583,7 @@ function ServerDetail({
       </DetailSection>
 
       {server.validation.issues.length > 0 && (
-        <DetailSection title="校验问题">
+        <DetailSection title={t("mcp.validation_issues")}>
           <div className="space-y-2">
             {server.validation.issues.map((issue) => (
               <div key={`${issue.code}:${issue.field ?? ""}`} className="rounded-md border border-warning/30 bg-warning/5 px-2.5 py-2 text-[11px] text-text-secondary">
@@ -605,6 +608,7 @@ function DraftForm({
   onChange: (draft: Draft) => void;
   onSave: () => void;
 }) {
+  const { t } = useI18n();
   return (
     <div className="space-y-4">
       <label className="space-y-1 text-[11px] text-text-muted">
@@ -636,7 +640,7 @@ function DraftForm({
         />
       </label>
       <label className="space-y-1 text-[11px] text-text-muted">
-        args（一行一个）
+        {t("mcp.field_args")}
         <textarea
           value={draft.argsText}
           onChange={(event) => onChange({ ...draft, argsText: event.target.value })}
@@ -645,7 +649,7 @@ function DraftForm({
         />
       </label>
       <label className="space-y-1 text-[11px] text-text-muted">
-        env（KEY=value，编辑时 value 留空会保留原值）
+        {t("mcp.field_env")}
         <textarea
           value={draft.envText}
           onChange={(event) => onChange({ ...draft, envText: event.target.value })}
@@ -659,7 +663,7 @@ function DraftForm({
         className="flex w-full items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-60"
       >
         {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-        保存
+        {t("common.save")}
       </button>
     </div>
   );
@@ -721,12 +725,13 @@ function ClientBadges({ server }: { server: McpServer }) {
 }
 
 function EnvSummary({ server }: { server: McpServer }) {
+  const { t } = useI18n();
   const missing = server.env.filter((env) => !env.has_value).length;
   return (
     <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
       <KeyRound className="h-3 w-3" />
       <span>{server.env.length}</span>
-      {missing > 0 && <span className="text-warning">/{missing} 缺失</span>}
+      {missing > 0 && <span className="text-warning">/{missing} {t("mcp.missing")}</span>}
     </div>
   );
 }

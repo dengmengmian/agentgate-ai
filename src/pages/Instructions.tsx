@@ -261,7 +261,7 @@ export function Instructions() {
                 className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "edit" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
               >
                 <Pencil className="h-3 w-3" />
-                编辑
+                {t("common.edit")}
               </button>
               <button
                 type="button"
@@ -269,7 +269,7 @@ export function Instructions() {
                 className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "preview" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
               >
                 <Eye className="h-3 w-3" />
-                预览
+                {t("common.preview")}
               </button>
             </div>
 
@@ -436,12 +436,12 @@ export function Instructions() {
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(backupExport);
-                    toast("success", "已复制");
+                    toast("success", t("common.copied"));
                   }}
                   className="btn-secondary"
                 >
                   <Copy className="h-3 w-3" />
-                  复制
+                  {t("common.copy")}
                 </button>
               ) : (
                 <button

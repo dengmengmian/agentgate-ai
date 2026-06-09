@@ -200,10 +200,10 @@ export function Providers() {
             onClick={() => setSpeedtestOpen(true)}
             disabled={providers.length === 0}
             className="flex items-center gap-1.5 rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-card hover:text-text-primary disabled:opacity-40"
-            title="对所有启用的 provider 并行发探测请求，记录延迟"
+            title={t("providers.speedtest_button_tooltip")}
           >
             <Zap className="h-3.5 w-3.5" />
-            测速
+            {t("providers.speedtest_button")}
           </button>
           <button
             onClick={() => {

@@ -157,8 +157,8 @@ export function Logs() {
       if (r.files_scanned === 0) {
         toast("success", missingHint);
       } else {
-        toast("success", `${label} 已扫描 ${r.files_scanned} 个文件：新增 ${r.imported}，跳过 ${r.skipped}` +
-          (r.errors.length > 0 ? `，${r.errors.length} 个错误` : ""));
+        toast("success", `${label} ${t("logs.sync_scanned")} ${r.files_scanned} ${t("logs.sync_files")}: ${t("logs.sync_imported")} ${r.imported}, ${t("logs.sync_skipped")} ${r.skipped}` +
+          (r.errors.length > 0 ? `, ${r.errors.length} ${t("logs.sync_errors")}` : ""));
       }
       loadLogs();
     } catch (err) {
@@ -168,20 +168,20 @@ export function Logs() {
     }
   };
   const handleSyncClaude = () =>
-    runSync("claude", "Claude", api.syncClaudeSessions, "未找到 Claude Code 会话目录（~/.claude/projects/）");
+    runSync("claude", "Claude", api.syncClaudeSessions, t("logs.sync_claude_missing"));
   const handleSyncCodex = () =>
-    runSync("codex", "Codex", api.syncCodexSessions, "未找到 Codex 会话目录（~/.codex/sessions/）");
+    runSync("codex", "Codex", api.syncCodexSessions, t("logs.sync_codex_missing"));
   const handleSyncGemini = () =>
-    runSync("gemini", "Gemini", api.syncGeminiSessions, "未找到 Gemini CLI 会话目录（~/.gemini/tmp/）");
+    runSync("gemini", "Gemini", api.syncGeminiSessions, t("logs.sync_gemini_missing"));
 
   return (
     <div className="space-y-4">
       <div className="space-y-3">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <LogSummaryItem label="筛选命中" value={total.toLocaleString()} hint={t("logs.requests")} />
-          <LogSummaryItem label="本页错误" value={pageErrorCount.toLocaleString()} hint={`${knownStatusLogs.length.toLocaleString()} 条有状态`} />
-          <LogSummaryItem label="本页成功率" value={pageSuccessRate} hint={`${pageSuccessCount.toLocaleString()} 条成功`} />
-          <LogSummaryItem label="本页平均延迟" value={formatOptionalLatency(pageAvgLatency)} hint={`${pageRecordedLatencies.length.toLocaleString()} 条有记录`} />
+          <LogSummaryItem label={t("logs.summary_matched")} value={total.toLocaleString()} hint={t("logs.requests")} />
+          <LogSummaryItem label={t("logs.summary_page_errors")} value={pageErrorCount.toLocaleString()} hint={`${knownStatusLogs.length.toLocaleString()} ${t("logs.summary_with_status")}`} />
+          <LogSummaryItem label={t("logs.summary_page_success_rate")} value={pageSuccessRate} hint={`${pageSuccessCount.toLocaleString()} ${t("logs.summary_succeeded")}`} />
+          <LogSummaryItem label={t("logs.summary_page_avg_latency")} value={formatOptionalLatency(pageAvgLatency)} hint={`${pageRecordedLatencies.length.toLocaleString()} ${t("logs.summary_recorded")}`} />
         </div>
 
         <div className="rounded-xl border border-border bg-card p-3">
@@ -242,7 +242,7 @@ export function Logs() {
               onClick={() => setShowAdvancedFilters((v) => !v)}
               className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${showAdvancedFilters ? "bg-card-secondary text-text-primary" : "text-text-muted hover:bg-card-secondary hover:text-text-primary"}`}
             >
-              {showAdvancedFilters ? "收起筛选" : `高级筛选${advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}`}
+              {showAdvancedFilters ? t("logs.filters_collapse") : `${t("logs.filters_advanced")}${advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}`}
             </button>
           </div>
 
@@ -276,14 +276,14 @@ export function Logs() {
                 value={sourceFilter}
                 onChange={(e) => setSourceFilter(e.target.value)}
                 className="form-input !w-36 shrink-0"
-                title="按来源过滤：网关 / 各客户端本地日志"
+                title={t("logs.filter_source")}
               >
-                <option value="">全部来源</option>
-                <option value="gateway">{sourceLabel("gateway")}</option>
-                <option value="session_log">客户端日志（全部）</option>
-                <option value="claude_session">{sourceLabel("claude_session")}</option>
-                <option value="codex_session">{sourceLabel("codex_session")}</option>
-                <option value="gemini_session">{sourceLabel("gemini_session")}</option>
+                <option value="">{t("logs.all_sources")}</option>
+                <option value="gateway">{sourceLabel("gateway", t)}</option>
+                <option value="session_log">{t("logs.source_session_log")}</option>
+                <option value="claude_session">{sourceLabel("claude_session", t)}</option>
+                <option value="codex_session">{sourceLabel("codex_session", t)}</option>
+                <option value="gemini_session">{sourceLabel("gemini_session", t)}</option>
               </select>
               {sessionIdFilter && (
                 <button
@@ -305,18 +305,18 @@ export function Logs() {
             <button
               onClick={() => setViewMode("list")}
               className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
-              title="按时间逐条"
+              title={t("logs.view_list_hint")}
             >
               <LayoutList className="h-3 w-3" />
-              请求
+              {t("logs.view_list")}
             </button>
             <button
               onClick={() => setViewMode("session")}
               className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "session" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
-              title="按会话聚合用量"
+              title={t("logs.view_session_hint")}
             >
               <Layers className="h-3 w-3" />
-              会话
+              {t("logs.view_session")}
             </button>
           </div>
           <button
@@ -333,7 +333,7 @@ export function Logs() {
             className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${showSyncActions ? "bg-card-secondary text-text-primary" : "text-text-muted hover:bg-card-secondary hover:text-text-primary"}`}
           >
             <Download className="h-3 w-3" />
-            同步日志
+            {t("logs.sync_logs")}
           </button>
           <button
             onClick={() => setConfirmClear(true)}
@@ -349,28 +349,28 @@ export function Logs() {
               onClick={handleSyncClaude}
               disabled={syncing !== null}
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
-              title="扫描 ~/.claude/projects/ 下的会话日志，补齐绕过网关使用 Claude Code 时的用量记录"
+              title={t("logs.sync_claude_hint")}
             >
               <Download className={`h-3 w-3 ${syncing === "claude" ? "animate-pulse" : ""}`} />
-              同步 Claude
+              {t("logs.sync_claude")}
             </button>
             <button
               onClick={handleSyncCodex}
               disabled={syncing !== null}
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
-              title="扫描 ~/.codex/sessions/ 下的会话日志，补齐绕过网关使用 Codex 时的用量记录"
+              title={t("logs.sync_codex_hint")}
             >
               <Download className={`h-3 w-3 ${syncing === "codex" ? "animate-pulse" : ""}`} />
-              同步 Codex
+              {t("logs.sync_codex")}
             </button>
             <button
               onClick={handleSyncGemini}
               disabled={syncing !== null}
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
-              title="扫描 ~/.gemini/tmp/ 下的会话日志，补齐绕过网关使用 Gemini CLI 时的用量记录"
+              title={t("logs.sync_gemini_hint")}
             >
               <Download className={`h-3 w-3 ${syncing === "gemini" ? "animate-pulse" : ""}`} />
-              同步 Gemini
+              {t("logs.sync_gemini")}
             </button>
           </div>
         )}
@@ -408,9 +408,9 @@ export function Logs() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between rounded-xl border border-border bg-card px-5 py-2.5">
               <span className="text-xs text-text-muted">
-                第 <span className="font-mono text-text-primary">{page}</span> / {totalPages} 页
+                {t("logs.page_prefix")} <span className="font-mono text-text-primary">{page}</span> / {totalPages} {t("logs.page_suffix")}
                 <span className="ml-3 text-text-muted/60">
-                  显示 {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} 条
+                  {t("logs.page_showing")} {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)}
                 </span>
               </span>
               <div className="flex items-center gap-1">
@@ -420,14 +420,14 @@ export function Logs() {
                   className="flex items-center gap-1 rounded-md bg-card-secondary px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-40 disabled:hover:bg-card-secondary disabled:hover:text-text-secondary"
                 >
                   <ChevronLeft className="h-3 w-3" />
-                  上一页
+                  {t("logs.page_prev")}
                 </button>
                 <button
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages || loading}
                   className="flex items-center gap-1 rounded-md bg-card-secondary px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-40 disabled:hover:bg-card-secondary disabled:hover:text-text-secondary"
                 >
-                  下一页
+                  {t("logs.page_next")}
                   <ChevronRight className="h-3 w-3" />
                 </button>
               </div>

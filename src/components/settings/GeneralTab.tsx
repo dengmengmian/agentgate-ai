@@ -1,5 +1,8 @@
+import { useState, useEffect } from "react";
+import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Locale } from "@/lib/i18n";
 import type { GatewaySettings as GatewaySettingsType } from "@/types/gateway";
+import { toast } from "@/components/common/Toast";
 
 interface Props {
   settings: GatewaySettingsType;
@@ -26,6 +29,22 @@ export function GeneralTab({
   handleUpdateAutoStart, handleUpdateRefinerGlobal, t,
   ToggleSwitch, ThemePicker,
 }: Props) {
+  const [launchAtLogin, setLaunchAtLogin] = useState(false);
+
+  useEffect(() => {
+    isEnabled().then(setLaunchAtLogin).catch(() => {});
+  }, []);
+
+  const handleToggleLaunchAtLogin = async (val: boolean) => {
+    try {
+      if (val) await enable();
+      else await disable();
+      setLaunchAtLogin(val);
+    } catch (e) {
+      toast("error", String(e));
+    }
+  };
+
   return (
     <section className="rounded-xl border border-border bg-card p-5">
       <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.general")}</h3>
@@ -36,6 +55,13 @@ export function GeneralTab({
             <p className="text-xs text-text-muted">{t("settings.auto_start_desc")}</p>
           </div>
           <ToggleSwitch checked={settings.auto_start} onChange={handleUpdateAutoStart} />
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-text-primary">{t("settings.launch_at_login")}</p>
+            <p className="text-xs text-text-muted">{t("settings.launch_at_login_desc")}</p>
+          </div>
+          <ToggleSwitch checked={launchAtLogin} onChange={handleToggleLaunchAtLogin} />
         </div>
         <div className="flex items-center justify-between">
           <div>
@@ -78,15 +104,15 @@ export function GeneralTab({
 
         {/* 网关精炼层全局总闸——默认全关 = 字节级透明 pass-through */}
         <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium text-text-primary">网关精炼层 (Refiner)</p>
+          <p className="text-sm font-medium text-text-primary">{t("settings.refiner")}</p>
           <p className="mb-3 text-xs text-text-muted">
-            默认全部关闭，网关原样转发请求。打开后会按每个 provider 的 quirks 配置改写请求 / 响应。每个 provider 还能单独覆写为强制关。
+            {t("settings.refiner_desc")}
           </p>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex-1 pr-4">
-                <p className="text-sm text-text-primary">请求字段过滤</p>
-                <p className="text-xs text-text-muted">按 Quirks 剥不支持的请求字段，避免 400 错误</p>
+                <p className="text-sm text-text-primary">{t("settings.body_filter")}</p>
+                <p className="text-xs text-text-muted">{t("settings.body_filter_desc")}</p>
               </div>
               <ToggleSwitch
                 checked={settings.body_filter_global}
@@ -95,8 +121,8 @@ export function GeneralTab({
             </div>
             <div className="flex items-center justify-between">
               <div className="flex-1 pr-4">
-                <p className="text-sm text-text-primary">推理参数校正</p>
-                <p className="text-xs text-text-muted">thinking.budget_tokens / reasoning.effort 自动归一</p>
+                <p className="text-sm text-text-primary">{t("settings.thinking_rectifier")}</p>
+                <p className="text-xs text-text-muted">{t("settings.thinking_rectifier_desc")}</p>
               </div>
               <ToggleSwitch
                 checked={settings.thinking_rectifier_global}
@@ -105,8 +131,8 @@ export function GeneralTab({
             </div>
             <div className="flex items-center justify-between">
               <div className="flex-1 pr-4">
-                <p className="text-sm text-text-primary">错误响应归一</p>
-                <p className="text-xs text-text-muted">provider 错误结构改写成客户端协议期望的形态</p>
+                <p className="text-sm text-text-primary">{t("settings.error_mapper")}</p>
+                <p className="text-xs text-text-muted">{t("settings.error_mapper_desc")}</p>
               </div>
               <ToggleSwitch
                 checked={settings.error_mapper_global}
@@ -115,8 +141,8 @@ export function GeneralTab({
             </div>
             <div className="flex items-center justify-between">
               <div className="flex-1 pr-4">
-                <p className="text-sm text-text-primary">主动健康探测</p>
-                <p className="text-xs text-text-muted">每 10 分钟对启用的供应商发 1-token 探测，结果显示在供应商卡片（仅展示，不影响路由）。会消耗少量额度。</p>
+                <p className="text-sm text-text-primary">{t("settings.health_probe")}</p>
+                <p className="text-xs text-text-muted">{t("settings.health_probe_desc")}</p>
               </div>
               <ToggleSwitch
                 checked={settings.health_probe_enabled}
