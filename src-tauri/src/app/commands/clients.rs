@@ -663,6 +663,21 @@ pub fn rollback_client_apply(
     Ok(entry)
 }
 
+/// 删除一条配置历史记录(初始快照受保护,不可删)。客户端配置历史和全局指令
+/// 历史共用 `client_apply_history` 表,故两处删除都走这里。
+#[tauri::command]
+#[specta::specta]
+pub fn delete_client_apply_history(
+    state: State<'_, AppState>,
+    history_id: String,
+) -> Result<(), AppError> {
+    let conn = state
+        .db
+        .get()
+        .map_err(|_| AppError::internal("DB lock failed"))?;
+    storage::apply_history::delete(&conn, &history_id)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn toggle_atomcode_provider(

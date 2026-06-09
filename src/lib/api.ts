@@ -350,6 +350,9 @@ export const importMcpServers = (payload: string, targetClients: string[]) =>
 export const rollbackClientApply = (historyId: string) =>
   unwrap(bindings.rollbackClientApply(historyId));
 
+export const deleteClientApplyHistory = (historyId: string) =>
+  unwrap(bindings.deleteClientApplyHistory(historyId));
+
 // narrow union types: Rust 端是 String,bindings 给 string,这里给前端用的窄类型。
 // 调用 api 时直接传 union literal,内部 cast 到 string 喂给 bindings。
 export type InstructionsScope = "claude_global" | "codex_global";

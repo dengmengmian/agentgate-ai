@@ -201,6 +201,7 @@ fn build_specta() -> tauri_specta::Builder<tauri::Wry> {
         commands::export_mcp_servers,
         commands::import_mcp_servers,
         commands::rollback_client_apply,
+        commands::delete_client_apply_history,
         // Route Profiles
         commands::list_route_profiles,
         commands::get_route_profile,
@@ -717,6 +718,7 @@ pub fn run() {
             commands::export_mcp_servers,
             commands::import_mcp_servers,
             commands::rollback_client_apply,
+            commands::delete_client_apply_history,
             // Route Profiles
             commands::list_route_profiles,
             commands::get_route_profile,

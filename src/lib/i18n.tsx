@@ -426,6 +426,16 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "tools.history.confirm_btn": { en: "Roll back", zh: "回滚" },
   "tools.history.rollback_done": { en: "Rolled back", zh: "已回滚" },
+  "tools.history.delete": { en: "Delete", zh: "删除" },
+  "tools.history.delete_confirm_title": {
+    en: "Delete this snapshot?",
+    zh: "删除该快照？",
+  },
+  "tools.history.delete_confirm_msg": {
+    en: "This history entry will be permanently removed and can no longer be rolled back to.",
+    zh: "该历史记录将被永久删除,之后无法再回滚到这个时点。",
+  },
+  "tools.history.delete_done": { en: "Deleted", zh: "已删除" },
 
   // ── Global Instructions ──
   "instructions.title": { en: "Global instructions", zh: "全局指令" },

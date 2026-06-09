@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { History, X, RotateCcw, Loader2 } from "lucide-react";
+import { History, X, RotateCcw, Loader2, Trash2 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/common/Toast";
@@ -48,6 +48,8 @@ function ClientHistoryDrawer({
   const [loading, setLoading] = useState(true);
   const [rollbackTarget, setRollbackTarget] = useState<api.ClientApplyHistoryEntry | null>(null);
   const [rollingBack, setRollingBack] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<api.ClientApplyHistoryEntry | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +82,20 @@ function ClientHistoryDrawer({
       toast("error", (err as api.AppError).message);
     } finally {
       setRollingBack(false);
+    }
+  };
+
+  const performDelete = async (entry: api.ClientApplyHistoryEntry) => {
+    setDeleting(true);
+    try {
+      await api.deleteClientApplyHistory(entry.id);
+      setEntries((prev) => prev.filter((e) => e.id !== entry.id));
+      toast("success", t("tools.history.delete_done"));
+      setDeleteTarget(null);
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -164,14 +180,27 @@ function ClientHistoryDrawer({
                           {entry.summary ? ` · ${entry.summary}` : ""}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setRollbackTarget(entry)}
-                        className="shrink-0 rounded border border-border bg-card px-2 py-1 text-[10px] font-medium text-text-primary hover:bg-hover"
-                      >
-                        <RotateCcw className="mr-1 inline h-3 w-3" />
-                        {t("tools.history.rollback")}
-                      </button>
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setRollbackTarget(entry)}
+                          className="rounded border border-border bg-card px-2 py-1 text-[10px] font-medium text-text-primary hover:bg-hover"
+                        >
+                          <RotateCcw className="mr-1 inline h-3 w-3" />
+                          {t("tools.history.rollback")}
+                        </button>
+                        {!entry.is_initial && (
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(entry)}
+                            title={t("tools.history.delete")}
+                            aria-label={t("tools.history.delete")}
+                            className="rounded border border-border bg-card p-1 text-text-muted hover:bg-hover hover:text-text-primary"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </li>
                 ))}
@@ -195,6 +224,16 @@ function ClientHistoryDrawer({
         confirmLabel={t("tools.history.confirm_btn")}
         onConfirm={() => rollbackTarget && performRollback(rollbackTarget)}
         onCancel={() => setRollbackTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={!!deleteTarget && !deleting}
+        variant="danger"
+        title={t("tools.history.delete_confirm_title")}
+        message={t("tools.history.delete_confirm_msg")}
+        confirmLabel={t("tools.history.delete")}
+        onConfirm={() => deleteTarget && performDelete(deleteTarget)}
+        onCancel={() => setDeleteTarget(null)}
       />
     </>
   );

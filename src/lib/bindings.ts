@@ -814,6 +814,18 @@ async rollbackClientApply(historyId: string) : Promise<Result<HistoryEntry, AppE
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * 删除一条配置历史记录(初始快照受保护,不可删)。客户端配置历史和全局指令
+ * 历史共用 `client_apply_history` 表,故两处删除都走这里。
+ */
+async deleteClientApplyHistory(historyId: string) : Promise<Result<null, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_client_apply_history", { historyId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async listRouteProfiles() : Promise<Result<RouteProfileView[], AppError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("list_route_profiles") };

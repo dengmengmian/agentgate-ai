@@ -218,6 +218,20 @@ pub fn get(conn: &Connection, id: &str) -> Result<HistoryEntry, AppError> {
     })
 }
 
+/// 删除一条历史记录。拒绝删除「初始」快照——它是回滚到接入 AgentGate 前原始
+/// 配置的唯一退路。删不存在的 id 报 not_found,删初始项报明确错误。
+pub fn delete(conn: &Connection, id: &str) -> Result<(), AppError> {
+    let entry = get(conn, id)?;
+    if entry.is_initial {
+        return Err(AppError::new(
+            "APPLY_HISTORY_INITIAL_PROTECTED",
+            "初始快照不可删除——它是回滚到原始配置的唯一退路",
+        ));
+    }
+    conn.execute("DELETE FROM client_apply_history WHERE id = ?1", params![id])?;
+    Ok(())
+}
+
 fn row_to_entry(row: &rusqlite::Row<'_>) -> rusqlite::Result<HistoryEntry> {
     Ok(HistoryEntry {
         id: row.get(0)?,
@@ -267,6 +281,24 @@ mod tests {
         let id2 = record(&conn, "codex", "apply", &dummy_snapshot("b"), "2").unwrap();
         let entry = get(&conn, &id2).unwrap();
         assert!(!entry.is_initial);
+    }
+
+    #[test]
+    fn delete_removes_non_initial_entry() {
+        let conn = setup();
+        record(&conn, "codex", "apply", &dummy_snapshot("a"), "1").unwrap();
+        let id2 = record(&conn, "codex", "apply", &dummy_snapshot("b"), "2").unwrap();
+        delete(&conn, &id2).unwrap();
+        assert!(get(&conn, &id2).is_err(), "deleted entry should be gone");
+        assert_eq!(list(&conn, "codex").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn delete_refuses_initial_entry() {
+        let conn = setup();
+        let id = record(&conn, "codex", "apply", &dummy_snapshot("a"), "first").unwrap();
+        assert!(delete(&conn, &id).is_err(), "initial must be protected");
+        assert!(get(&conn, &id).is_ok(), "initial still present after refused delete");
     }
 
     #[test]
