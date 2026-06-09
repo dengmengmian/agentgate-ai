@@ -11,6 +11,9 @@ use crate::storage::migrations;
 /// 各处用 `pool.get()` 拿 `PooledConnection`(deref 到 `Connection`)。
 pub type DbPool = Pool<SqliteConnectionManager>;
 
+/// 从池借出的连接(deref 到 `Connection`)。一次性 CLI 子命令借一条用完即还。
+pub type DbConn = r2d2::PooledConnection<SqliteConnectionManager>;
+
 /// 池大小。SQLite WAL 模式允许多 reader 并发,写仍内部串行。
 /// 桌面应用 QPS 不大,4 个 connection 足够吸收短期 burst。
 const POOL_MAX_SIZE: u32 = 4;
@@ -18,6 +21,8 @@ const POOL_MAX_SIZE: u32 = 4;
 /// 每个连接初始化时统一开 WAL + 外键约束,跟旧单连接实现保持行为一致。
 fn init_connection(conn: &mut Connection) -> rusqlite::Result<()> {
     conn.execute_batch("PRAGMA journal_mode=WAL;")?;
+    // WAL 下多连接并发写仍会 SQLITE_BUSY。给 5s 重试窗口,避免高并发瞬间直接失败。
+    conn.execute_batch("PRAGMA busy_timeout=5000;")?;
     conn.execute_batch("PRAGMA foreign_keys=ON;")?;
     Ok(())
 }

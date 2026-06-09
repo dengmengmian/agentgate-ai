@@ -912,16 +912,17 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         tauri::async_runtime::spawn(async move {
                             let state: tauri::State<'_, AppState> = app_handle.state();
                             let db = state.db.clone();
-                            let conn = db.get().unwrap();
-                            let _ = storage::pet_settings::update(
-                                &conn,
-                                crate::models::pet::UpdatePetSettingsInput {
-                                    pet_type: None,
-                                    visible: Some(new_visible),
-                                    pos_x: None,
-                                    pos_y: None,
-                                },
-                            );
+                            if let Ok(conn) = db.get() {
+                                let _ = storage::pet_settings::update(
+                                    &conn,
+                                    crate::models::pet::UpdatePetSettingsInput {
+                                        pet_type: None,
+                                        visible: Some(new_visible),
+                                        pos_x: None,
+                                        pos_y: None,
+                                    },
+                                );
+                            }
                         });
                     }
                 }

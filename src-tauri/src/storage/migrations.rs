@@ -29,6 +29,14 @@ fn set_user_version(conn: &Connection, v: u32) -> Result<(), AppError> {
 pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     let current = get_user_version(conn)?;
 
+    // 降级保护:用户装了新版(写了更高 user_version)又回退到旧版 app 时,
+    // 旧 app 看到高于自己认知的 schema 会读到不存在的列、静默出错。明确报错而不是硬跑。
+    if current > CURRENT_SCHEMA_VERSION {
+        return Err(AppError::internal(format!(
+            "数据库 schema 版本 {current} 高于当前应用支持的 {CURRENT_SCHEMA_VERSION},请升级 AgentGate 后再启动"
+        )));
+    }
+
     if current < 1 {
         legacy_baseline_v1(conn)?;
         set_user_version(conn, 1)?;
@@ -574,6 +582,14 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         run_migrations(&conn).unwrap();
         run_migrations(&conn).unwrap(); // should not panic or error
+    }
+
+    #[test]
+    fn db_newer_than_app_is_rejected() {
+        // 模拟用户装过更新版(user_version 高于当前 app),回退旧版启动应明确报错。
+        let conn = Connection::open_in_memory().unwrap();
+        set_user_version(&conn, CURRENT_SCHEMA_VERSION + 1).unwrap();
+        assert!(run_migrations(&conn).is_err(), "schema 高于 app 支持应报错");
     }
 
     #[test]

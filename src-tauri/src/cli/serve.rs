@@ -13,7 +13,8 @@
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+
+use agentgate_lib::storage::db::{DbConn, DbPool};
 
 #[derive(Parser)]
 #[command(
@@ -190,12 +191,24 @@ fn get_db_dir(cli: &Cli) -> PathBuf {
     }
 }
 
-fn open_db(cli: &Cli) -> rusqlite::Connection {
+fn open_db(cli: &Cli) -> DbPool {
     let db_dir = get_db_dir(cli);
     match agentgate_lib::storage::db::init_database(&db_dir) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Failed to initialize database: {}", e.message);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// 一次性子命令用:从池借一条连接。`PooledConnection` 自带池的 Arc 句柄,
+/// 局部 pool 变量析构后连接依然有效。
+fn open_conn(cli: &Cli) -> DbConn {
+    match open_db(cli).get() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to acquire database connection: {e}");
             std::process::exit(1);
         }
     }
@@ -365,17 +378,16 @@ async fn cmd_serve(
     tls_key: Option<PathBuf>,
 ) {
     let db_dir = get_db_dir(cli);
-    let conn = open_db(cli);
-    let db = Arc::new(Mutex::new(conn));
+    let db = open_db(cli);
 
     let _ = agentgate_lib::security::local_token::ensure_token();
     let token = agentgate_lib::security::local_token::read_token().unwrap_or_default();
 
-    let provider_count = {
-        let c = db.get().unwrap();
-        agentgate_lib::storage::providers::list_all(&c)
+    let provider_count = match db.get() {
+        Ok(c) => agentgate_lib::storage::providers::list_all(&c)
             .map(|p| p.len())
-            .unwrap_or(0)
+            .unwrap_or(0),
+        Err(_) => 0,
     };
 
     // 只提供 cert 不提供 key（或反之）直接报错——避免用户以为 TLS 开了实际还是 HTTP。
@@ -444,7 +456,7 @@ async fn cmd_serve(
 /// provider 配置（base_url/api_key/model_mapping 等）本来每次请求查 DB 已经
 /// 即时生效，所以 SIGHUP 不需要触发 DB-side reload。
 #[cfg(unix)]
-fn install_sighup_handler(db: Arc<Mutex<rusqlite::Connection>>) {
+fn install_sighup_handler(db: DbPool) {
     tokio::spawn(async move {
         use tokio::signal::unix::{signal, SignalKind};
         let mut hup = match signal(SignalKind::hangup()) {
@@ -511,7 +523,7 @@ fn cmd_provider_add(
     model: Option<&str>,
     active: bool,
 ) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let presets = provider_presets();
     let (default_url, default_model) = presets.get(provider_type).copied().unwrap_or(("", ""));
 
@@ -578,7 +590,7 @@ fn cmd_provider_add(
 }
 
 fn cmd_provider_list(cli: &Cli) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let providers = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
 
     if providers.is_empty() {
@@ -613,7 +625,7 @@ fn cmd_provider_list(cli: &Cli) {
 }
 
 fn cmd_provider_remove(cli: &Cli, name: &str) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let providers = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
     let target = providers.iter().find(|p| p.name.eq_ignore_ascii_case(name));
 
@@ -658,7 +670,7 @@ fn cmd_token_regen() {
 
 fn cmd_status(cli: &Cli) {
     let db_dir = get_db_dir(cli);
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let providers = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
     let active = providers.iter().find(|p| p.is_active);
     let token = agentgate_lib::security::local_token::read_token().unwrap_or_default();
@@ -689,7 +701,7 @@ fn cmd_provider_update(
     responses_url: Option<&str>,
     enabled: Option<bool>,
 ) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let target = match find_provider_by_name(&conn, name) {
         Some(p) => p,
         None => {
@@ -730,7 +742,7 @@ fn cmd_provider_update(
 }
 
 fn cmd_provider_set_active(cli: &Cli, name: &str) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let target = match find_provider_by_name(&conn, name) {
         Some(p) => p,
         None => {
@@ -748,7 +760,7 @@ fn cmd_provider_set_active(cli: &Cli, name: &str) {
 }
 
 fn cmd_mapping_add(cli: &Cli, provider_name: &str, from: &str, to: &str) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let target = match find_provider_by_name(&conn, provider_name) {
         Some(p) => p,
         None => {
@@ -770,7 +782,7 @@ fn cmd_mapping_add(cli: &Cli, provider_name: &str, from: &str, to: &str) {
 }
 
 fn cmd_mapping_list(cli: &Cli, provider_filter: Option<&str>) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let providers = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
     let mut printed = 0usize;
     for p in &providers {
@@ -798,7 +810,7 @@ fn cmd_mapping_list(cli: &Cli, provider_filter: Option<&str>) {
 }
 
 fn cmd_mapping_remove(cli: &Cli, provider_name: &str, from: &str) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let target = match find_provider_by_name(&conn, provider_name) {
         Some(p) => p,
         None => {
@@ -871,7 +883,7 @@ fn cmd_logs(
     keyword: Option<&str>,
     errors_only: bool,
 ) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let filter = agentgate_lib::models::request_log::RequestLogFilter {
         client: client.map(String::from),
         provider: provider.map(String::from),
@@ -939,7 +951,7 @@ fn cmd_logs(
 }
 
 fn cmd_stats(cli: &Cli, days: i64) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let stats = match agentgate_lib::storage::request_logs::get_stats_for_range(&conn, days) {
         Ok(s) => s,
         Err(e) => {
@@ -1000,7 +1012,7 @@ fn cmd_stats(cli: &Cli, days: i64) {
 }
 
 async fn cmd_health_check(cli: &Cli, timeout_secs: u64, mark: bool) {
-    let conn = open_db(cli);
+    let conn = open_conn(cli);
     let providers = agentgate_lib::storage::providers::list_all(&conn).unwrap_or_default();
     let enabled: Vec<_> = providers.into_iter().filter(|p| p.enabled).collect();
 
