@@ -4,7 +4,7 @@ use crate::errors::AppError;
 
 /// 当前 schema 版本。每加一段新迁移就 +1,放到 `run_versioned_migrations`
 /// 里 match 上对应的 version。读 `PRAGMA user_version` 决定该跑哪些。
-const CURRENT_SCHEMA_VERSION: u32 = 1;
+const CURRENT_SCHEMA_VERSION: u32 = 2;
 
 fn get_user_version(conn: &Connection) -> Result<u32, AppError> {
     let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -56,14 +56,18 @@ pub fn run_migrations(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
-/// 占位:未来新迁移在这里按 version 分支。当前 v1 已是最新,无新增。
-fn run_versioned_migrations(conn: &Connection, _from_version: u32) -> Result<(), AppError> {
-    // 例:future migration shape
-    // if _from_version < 2 {
-    //     conn.execute_batch("ALTER TABLE ... ADD COLUMN ... ;")?;
-    //     set_user_version(conn, 2)?;
-    // }
-    let _ = conn;
+/// 新迁移按 version 分支。
+fn run_versioned_migrations(conn: &Connection, from_version: u32) -> Result<(), AppError> {
+    if from_version < 2 {
+        // v2:Codex remote compaction v2 本地实现的两个开关字段。
+        // 默认 enabled=1(开)+ summary_max_tokens=1500。
+        // legacy_baseline_v1 已经创了 gateway_settings 表,这里只加列。
+        conn.execute_batch(
+            "ALTER TABLE gateway_settings ADD COLUMN codex_compact_enabled INTEGER NOT NULL DEFAULT 1;
+             ALTER TABLE gateway_settings ADD COLUMN codex_compact_summary_max_tokens INTEGER NOT NULL DEFAULT 1500;",
+        )?;
+        set_user_version(conn, 2)?;
+    }
     Ok(())
 }
 
@@ -606,36 +610,33 @@ mod tests {
 
     #[test]
     fn run_migrations_skips_baseline_when_already_v1() {
-        // 模拟"已升级到 v1"的 DB:手工建好关键表 + 设 user_version=1。
-        // 再跑 run_migrations 应该跳过 legacy_baseline_v1(它会创建 deepseek seed),
-        // seed 不会再插入(因为表里没有 providers,seed 还是会跑——但 baseline
-        // 整段都被跳,所以连表都不会建)。
+        // 模拟"已升级到 v1"的 DB:跑完 baseline + 手工 set user_version=1。
+        // 再跑 run_migrations 应该跳过 baseline(不重建表),但跑 v2 ALTER 推到 v2。
         let conn = Connection::open_in_memory().unwrap();
+        legacy_baseline_v1(&conn).unwrap();
         set_user_version(&conn, 1).unwrap();
         run_migrations(&conn).unwrap();
-        // baseline 被跳过 → providers 表不存在
-        let table_exists: bool = conn
-            .query_row(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='providers'",
-                [],
-                |_| Ok(true),
-            )
-            .unwrap_or(false);
-        assert!(!table_exists, "baseline 跑过了,user_version=1 时不该重建表");
+        // 推到当前版本
+        assert_eq!(get_user_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
+        // v2 加的新列存在
+        let has_col: bool = conn
+            .prepare("SELECT codex_compact_enabled FROM gateway_settings LIMIT 0")
+            .is_ok();
+        assert!(has_col, "v2 ALTER 应加上 codex_compact_enabled 列");
     }
 
     #[test]
     fn legacy_db_without_user_version_gets_migrated() {
         // 已有 1.3.6 用户的真实路径:DB 已有完整 schema,但 user_version 还是 0。
-        // 第一次跑新 run_migrations 应该:跑一遍 baseline(全 idempotent,无副作用)+ 设 v1。
+        // 第一次跑新 run_migrations 应该:跑一遍 baseline(全 idempotent,无副作用)+ 推到当前 version。
         let conn = Connection::open_in_memory().unwrap();
         // 先跑一遍模拟已升级到 1.3.6 schema
         legacy_baseline_v1(&conn).unwrap();
         // user_version 仍是 0(1.3.6 没设)
         assert_eq!(get_user_version(&conn).unwrap(), 0);
-        // 模拟用户升级到 1.3.7 后首次启动
+        // 模拟用户升级到下一版后首次启动
         run_migrations(&conn).unwrap();
-        assert_eq!(get_user_version(&conn).unwrap(), 1);
+        assert_eq!(get_user_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
         // 数据仍在(没被破坏)
         let provider_count: i64 = conn
             .query_row("SELECT COUNT(*) FROM providers", [], |r| r.get(0))

@@ -1469,7 +1469,17 @@ body_filter_global: boolean; thinking_rectifier_global: boolean; error_mapper_gl
  * 后台主动健康探测开关（默认关——开启后按间隔发 1-token 探测，消耗少量额度；
  * 结果仅用于展示，不影响路由）。
  */
-health_probe_enabled: boolean; updated_at: string }
+health_probe_enabled: boolean; 
+/**
+ * Codex remote compaction v2 本地实现开关。默认开,但只在请求带 v2 探嗅
+ * 信号(`x-codex-beta-features` 含 `remote_compaction_v2` / metadata 标 compaction
+ * / URL `/compact`)时才介入,对其他 client 透明无影响。
+ */
+codex_compact_enabled: boolean; 
+/**
+ * codex_compact 触发后给上游 summary 调用的 max_completion_tokens 上限。
+ */
+codex_compact_summary_max_tokens: number; updated_at: string }
 export type GatewayStatus = { running: boolean; host: string; port: number; active_provider: string | null; input_protocol: string; output_protocol: string; started_at: string | null }
 export type GeminiCliApplyConfigResult = { success: boolean; config_path: string; changed_keys: string[]; warnings: string[] }
 export type GeminiCliConfigStatus = { config_path: string; exists: boolean; has_agentgate: boolean; current_model: string | null; has_saved_official: boolean }
@@ -1702,7 +1712,7 @@ export type SyncMcpServerInput = { from_client: string; name: string; to_clients
 export type SyncResult = { files_scanned: number; imported: number; skipped: number; errors: string[] }
 export type TestDiagnostic = { code: string; title: string; hint: string; action_url?: string | null; action_label?: string | null; raw: string }
 export type ToolConfigView = { id: string; name: string; slug: string; icon: string; config_path: string; description: string; config_exists: boolean }
-export type UpdateGatewaySettingsInput = { host: string | null; port: number | null; active_provider_id: string | null; input_protocol: string | null; output_protocol: string | null; auto_start: boolean | null; log_retention_days: number | null; body_filter_global: boolean | null; thinking_rectifier_global: boolean | null; error_mapper_global: boolean | null; health_probe_enabled: boolean | null }
+export type UpdateGatewaySettingsInput = { host: string | null; port: number | null; active_provider_id: string | null; input_protocol: string | null; output_protocol: string | null; auto_start: boolean | null; log_retention_days: number | null; body_filter_global: boolean | null; thinking_rectifier_global: boolean | null; error_mapper_global: boolean | null; health_probe_enabled: boolean | null; codex_compact_enabled: boolean | null; codex_compact_summary_max_tokens: number | null }
 export type UpdatePetSettingsInput = { pet_type: string | null; visible: boolean | null; pos_x: number | null; pos_y: number | null }
 export type UpdateProviderInput = { name: string | null; provider_type: string | null; base_url: string | null; api_key: string | null; default_model: string | null; reasoning_model: string | null; supported_models: string | null; model_mapping: string | null; extra_headers: string | null; anthropic_base_url: string | null; responses_base_url: string | null; auto_cache_control: boolean | null; model_capabilities: string | null; provider_quirks: string | null; body_filter_enabled: number | null; thinking_rectifier_enabled: number | null; error_mapper_enabled: number | null; model_degradation_chain: string | null; protocol: string | null; timeout_seconds: number | null; enabled: boolean | null }
 export type UpdateRouteProfileInput = { name: string | null; mode: string | null; selection_strategy: string | null; enabled: boolean | null }

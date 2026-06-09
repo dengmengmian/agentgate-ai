@@ -1,0 +1,430 @@
+//! Codex remote compaction v2 网关实现。
+//!
+//! ## 背景
+//!
+//! Codex 在长对话超过模型 context window 时会触发"remote compaction":
+//! 把当前 history 发到上游(`POST /v1/responses` + 特殊 header / 旧版还会带
+//! `/compact` sub-path),让 OpenAI 自家的 `gpt-5.5-openai-compact` 模型产出一条
+//! 紧凑的"history summary" output item,Codex 拿到后**把那个 item 直接塞回**下次
+//! request 的 input,作为 history 的占位项。Item 的 `encrypted_content` 是
+//! OpenAI 加密 token,Codex 不解析,只是上下文回环用。
+//!
+//! 这套机制依赖 OpenAI 专属模型 + 加密 token,**MiMo / DeepSeek 等上游接不上**——
+//! 转过去要么 503(无此模型),要么不知道 v2 协议直接 fail。
+//!
+//! ## 我们的方案
+//!
+//! 网关在请求阶段就拦截:
+//! 1. **探嗅**(`is_codex_v2_compaction`):header `x-codex-beta-features` 含
+//!    `remote_compaction_v2`,或 `x-codex-turn-metadata.request_kind == "compaction"`,
+//!    或 URL 含 `/compact`(旧 Codex 兼容)
+//! 2. **本地 summary**:借 `auto_compact::summarize_chunk` 用同 provider 跑一次
+//!    非流式 chat completion(已经验证过的 chain),拿到 summary 文本
+//! 3. **编码**:`AGENTGATE_COMPACT_V1:<base64(summary)>` 塞 `encrypted_content`,
+//!    magic prefix 让我们下次能识别还原(避免跟真 OpenAI 加密 token 混淆)
+//! 4. **SSE 输出**:`response.output_item.done` (item type=compaction) + `response.completed`
+//!
+//! 下一轮 Codex 把 `{"type":"compaction","encrypted_content":"AGENTGATE_COMPACT_V1:..."}`
+//! 塞回 input 数组,`transform::responses_to_chat::convert_input_array` 识别 prefix,
+//! 解码出 summary,转成一条 user message 注入 history。
+//!
+//! ## 跟 `auto_compact` 的关系
+//!
+//! `auto_compact` 是**网关侧自驱动**——任何 client 发的请求超阈值就摘要 middle 段。
+//! `codex_compact` 是**响应 Codex 自身的 compact 指令**——只在 Codex 触发 v2 协议
+//! 时才介入,流程跟 Codex 期望的 SSE shape 严格对齐。两者共享 summarizer 调用链。
+
+use std::time::Instant;
+
+use axum::body::Body;
+use axum::http::{header, HeaderMap, StatusCode};
+use axum::response::Response;
+use base64::engine::general_purpose::STANDARD as B64;
+use base64::Engine;
+use serde_json::{json, Value};
+
+use crate::errors::AppError;
+use crate::gateway::auto_compact;
+use crate::gateway::routes::shared::GatewayError;
+use crate::protocol::chat_completions::ChatMessage;
+use crate::protocol::openai_responses::ResponsesRequest;
+use crate::providers::adapter::ProviderConfig;
+
+/// `encrypted_content` 的 magic prefix。AgentGate 自己塞进去的内容必须以这个开头,
+/// 否则当不可识别的 token 透传(给原生 OpenAI 直连场景留余地)。
+const ENCRYPTED_PREFIX: &str = "AGENTGATE_COMPACT_V1:";
+
+/// 探嗅一个 POST /v1/responses 是不是 Codex remote compaction v2 请求。
+///
+/// 规则(OR):
+/// - header `x-codex-beta-features` 包含 token `remote_compaction_v2`
+/// - 或 header `x-codex-turn-metadata` 是 JSON 含 `"request_kind":"compaction"`
+/// - 或 URL path 含 `/compact`(旧 Codex 用 sub-path,兼容)
+pub fn is_codex_v2_compaction(headers: &HeaderMap, uri_path: &str) -> bool {
+    if uri_path.contains("/compact") {
+        return true;
+    }
+    if let Some(v) = headers
+        .get("x-codex-beta-features")
+        .and_then(|h| h.to_str().ok())
+    {
+        if v.split(',')
+            .any(|s| s.trim().eq_ignore_ascii_case("remote_compaction_v2"))
+        {
+            return true;
+        }
+    }
+    if let Some(v) = headers
+        .get("x-codex-turn-metadata")
+        .and_then(|h| h.to_str().ok())
+    {
+        if let Ok(j) = serde_json::from_str::<Value>(v) {
+            if j.get("request_kind").and_then(|x| x.as_str()) == Some("compaction") {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// 把 summary 文本编码成 `encrypted_content`。
+pub fn encode_summary(summary: &str) -> String {
+    format!("{ENCRYPTED_PREFIX}{}", B64.encode(summary.as_bytes()))
+}
+
+/// 反向:从 `encrypted_content` 拿回 summary。`None` 表示不是 AgentGate 生成的
+/// 内容(可能是真 OpenAI 加密 token,这种就让上层透传)。
+pub fn decode_summary(encrypted_content: &str) -> Option<String> {
+    let payload = encrypted_content.strip_prefix(ENCRYPTED_PREFIX)?;
+    let bytes = B64.decode(payload.trim()).ok()?;
+    String::from_utf8(bytes).ok()
+}
+
+/// 从 ResponsesRequest 的 `input`(Value)抽出"可读 history"渲染成 ChatMessage 列表,
+/// 供 summarizer 用。规则跟 Codex `is_retained_for_remote_compaction_v2` 一致:
+/// 只保留 role 是 user / developer / system 的 message。
+fn extract_chat_messages(req: &ResponsesRequest) -> Vec<ChatMessage> {
+    let mut msgs: Vec<ChatMessage> = Vec::new();
+
+    // instructions 字段当作 system message
+    if let Some(s) = &req.instructions {
+        if !s.is_empty() {
+            msgs.push(ChatMessage {
+                role: "system".into(),
+                content: Some(Value::String(s.clone())),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            });
+        }
+    }
+
+    match &req.input {
+        Value::String(s) => {
+            msgs.push(ChatMessage {
+                role: "user".into(),
+                content: Some(Value::String(s.clone())),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            });
+        }
+        Value::Array(items) => {
+            for it in items {
+                let item_type = it.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if item_type == "message" {
+                    let role = it
+                        .get("role")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("user")
+                        .to_string();
+                    if !matches!(role.as_str(), "user" | "developer" | "system" | "assistant") {
+                        continue;
+                    }
+                    let text = extract_message_text(it.get("content"));
+                    if text.is_empty() {
+                        continue;
+                    }
+                    msgs.push(ChatMessage {
+                        role,
+                        content: Some(Value::String(text)),
+                        reasoning_content: None,
+                        tool_calls: None,
+                        tool_call_id: None,
+                        name: None,
+                    });
+                } else if item_type == "compaction" || item_type == "compaction_summary" {
+                    // 之前一轮 AgentGate 生成的 compaction item 又被塞回来了——
+                    // 解出原 summary 当 user message,让上下文链不断。
+                    if let Some(enc) = it.get("encrypted_content").and_then(|v| v.as_str()) {
+                        if let Some(summary) = decode_summary(enc) {
+                            msgs.push(ChatMessage {
+                                role: "user".into(),
+                                content: Some(Value::String(format!(
+                                    "[Prior compacted history]\n\n{summary}"
+                                ))),
+                                reasoning_content: None,
+                                tool_calls: None,
+                                tool_call_id: None,
+                                name: None,
+                            });
+                        }
+                    }
+                }
+                // function_call / function_call_output / reasoning 等不参与 summary
+            }
+        }
+        _ => {}
+    }
+
+    msgs
+}
+
+/// content 既支持 string(简单形式)也支持 ContentItem 数组(Responses API)。
+/// 把能取出来的文本拼起来。
+fn extract_message_text(content: Option<&Value>) -> String {
+    match content {
+        Some(Value::String(s)) => s.clone(),
+        Some(Value::Array(parts)) => {
+            let mut out = String::new();
+            for p in parts {
+                let pt = p.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if matches!(pt, "text" | "input_text" | "output_text") {
+                    if let Some(t) = p.get("text").and_then(|v| v.as_str()) {
+                        if !out.is_empty() {
+                            out.push('\n');
+                        }
+                        out.push_str(t);
+                    }
+                } else if pt == "input_image" || pt == "image_url" {
+                    if !out.is_empty() {
+                        out.push('\n');
+                    }
+                    out.push_str("[image]");
+                }
+            }
+            out
+        }
+        _ => String::new(),
+    }
+}
+
+/// Codex v2 compaction 的 SSE 响应:一个 output_item.done(item type=compaction)+ 一个 completed。
+fn build_compaction_sse(response_id: &str, summary: &str) -> String {
+    let encrypted = encode_summary(summary);
+    let item_event = json!({
+        "type": "response.output_item.done",
+        "item": {
+            "type": "compaction",
+            "encrypted_content": encrypted,
+        }
+    });
+    let completed_event = json!({
+        "type": "response.completed",
+        "response": { "id": response_id }
+    });
+    format!(
+        "event: response.output_item.done\n\
+         data: {}\n\n\
+         event: response.completed\n\
+         data: {}\n\n",
+        item_event, completed_event,
+    )
+}
+
+/// 主入口:把 ResponsesRequest 当作 Codex v2 compact 处理,本地做 summary
+/// 后返回 SSE。
+///
+/// 失败时返回 `GatewayError`,上层日志记录 + 让 Codex 看到具体原因。
+pub async fn handle_codex_compaction(
+    http_client: &reqwest::Client,
+    config: &ProviderConfig,
+    req: &ResponsesRequest,
+    request_id: &str,
+    start: Instant,
+) -> Result<Response, GatewayError> {
+    let history = extract_chat_messages(req);
+    if history.is_empty() {
+        return Err(GatewayError(AppError::new(
+            crate::errors::codes::RESPONSES_PARSE_ERROR,
+            "Codex compaction 请求 input 里没有可用的 history messages",
+        )));
+    }
+
+    // model:Codex 会发 gpt-5.5-openai-compact 之类专属名,我们走当前 provider
+    // 的 default_model 才有意义。
+    let model = if config.default_model.is_empty() {
+        req.model.clone().unwrap_or_else(|| "default".to_string())
+    } else {
+        config.default_model.clone()
+    };
+
+    let transcript = auto_compact::render_transcript(&history);
+    if transcript.trim().is_empty() {
+        return Err(GatewayError(AppError::new(
+            crate::errors::codes::RESPONSES_PARSE_ERROR,
+            "Codex compaction transcript 为空",
+        )));
+    }
+
+    let summary = match auto_compact::summarize_chunk(http_client, config, &model, &transcript).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!(
+                provider = %config.name,
+                error = %e.message,
+                "codex_compact: summary 调用失败"
+            );
+            return Err(GatewayError(e));
+        }
+    };
+
+    let sse_body = build_compaction_sse(request_id, &summary);
+    tracing::info!(
+        provider = %config.name,
+        request_id = %request_id,
+        summary_len = summary.len(),
+        history_messages = history.len(),
+        latency_ms = start.elapsed().as_millis() as i64,
+        "codex_compact: 返回伪 v2 compaction 响应"
+    );
+
+    Ok(Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/event-stream")
+        .header(header::CACHE_CONTROL, "no-cache")
+        .header("X-Accel-Buffering", "no")
+        .body(Body::from(sse_body))
+        .map_err(|e| {
+            GatewayError(AppError::internal(format!(
+                "构造 SSE 响应失败: {e}"
+            )))
+        })?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    fn h(name: &str, value: &str) -> HeaderMap {
+        let mut hm = HeaderMap::new();
+        hm.insert(name.parse::<axum::http::HeaderName>().unwrap(),
+                  HeaderValue::from_str(value).unwrap());
+        hm
+    }
+
+    #[test]
+    fn detect_via_beta_features_header() {
+        let hm = h("x-codex-beta-features", "alpha,remote_compaction_v2,beta");
+        assert!(is_codex_v2_compaction(&hm, "/v1/responses"));
+    }
+
+    #[test]
+    fn detect_via_turn_metadata_header() {
+        let hm = h(
+            "x-codex-turn-metadata",
+            r#"{"request_kind":"compaction","other":"x"}"#,
+        );
+        assert!(is_codex_v2_compaction(&hm, "/v1/responses"));
+    }
+
+    #[test]
+    fn detect_via_legacy_url_path() {
+        let hm = HeaderMap::new();
+        assert!(is_codex_v2_compaction(&hm, "/v1/responses/compact"));
+    }
+
+    #[test]
+    fn not_detected_for_normal_request() {
+        let hm = h("x-codex-beta-features", "other_feature");
+        assert!(!is_codex_v2_compaction(&hm, "/v1/responses"));
+    }
+
+    #[test]
+    fn encode_decode_round_trip() {
+        let summary = "用户讨论了 Final Cut Pro 调色工作流,选择走 ProRes 4K 交付。";
+        let encrypted = encode_summary(summary);
+        assert!(encrypted.starts_with(ENCRYPTED_PREFIX));
+        let decoded = decode_summary(&encrypted).expect("应能解码");
+        assert_eq!(decoded, summary);
+    }
+
+    #[test]
+    fn decode_returns_none_for_unknown_format() {
+        assert!(decode_summary("real_openai_encrypted_token_xyz").is_none());
+        assert!(decode_summary("").is_none());
+        assert!(decode_summary("AGENTGATE_COMPACT_V1:not-base64!!").is_none());
+    }
+
+    #[test]
+    fn extract_history_from_message_array() {
+        let req = ResponsesRequest {
+            instructions: Some("rules".into()),
+            input: serde_json::json!([
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "hi"}]
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "hello"}]
+                },
+                // reasoning / function_call 不参与
+                {"type": "reasoning", "id": "r1", "summary": []},
+                {"type": "function_call", "name": "f", "arguments": "{}", "call_id": "c1"}
+            ]),
+            ..Default::default()
+        };
+        let msgs = extract_chat_messages(&req);
+        assert_eq!(msgs.len(), 3); // system(instructions) + user + assistant
+        assert_eq!(msgs[0].role, "system");
+        assert_eq!(msgs[1].role, "user");
+        assert_eq!(msgs[2].role, "assistant");
+    }
+
+    #[test]
+    fn extract_history_restores_prior_compaction() {
+        let prior_summary = "上轮 summary 的内容";
+        let req = ResponsesRequest {
+            input: serde_json::json!([
+                {
+                    "type": "compaction",
+                    "encrypted_content": encode_summary(prior_summary)
+                },
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "继续问"}]
+                }
+            ]),
+            ..Default::default()
+        };
+        let msgs = extract_chat_messages(&req);
+        assert_eq!(msgs.len(), 2);
+        assert_eq!(msgs[0].role, "user");
+        let restored = msgs[0]
+            .content
+            .as_ref()
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert!(restored.contains(prior_summary));
+        assert!(restored.contains("Prior compacted history"));
+    }
+
+    #[test]
+    fn sse_includes_required_events() {
+        let sse = build_compaction_sse("resp-123", "test summary");
+        assert!(sse.contains("event: response.output_item.done"));
+        assert!(sse.contains("event: response.completed"));
+        assert!(sse.contains("\"type\":\"compaction\""));
+        assert!(sse.contains("\"encrypted_content\":\""));
+        assert!(sse.contains("\"id\":\"resp-123\""));
+        // SSE 事件必须用 \n\n 分隔
+        assert!(sse.contains("\n\n"));
+    }
+}

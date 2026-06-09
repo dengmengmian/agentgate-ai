@@ -24,6 +24,12 @@ pub struct GatewaySettings {
     /// 后台主动健康探测开关（默认关——开启后按间隔发 1-token 探测，消耗少量额度；
     /// 结果仅用于展示，不影响路由）。
     pub health_probe_enabled: bool,
+    /// Codex remote compaction v2 本地实现开关。默认开,但只在请求带 v2 探嗅
+    /// 信号(`x-codex-beta-features` 含 `remote_compaction_v2` / metadata 标 compaction
+    /// / URL `/compact`)时才介入,对其他 client 透明无影响。
+    pub codex_compact_enabled: bool,
+    /// codex_compact 触发后给上游 summary 调用的 max_completion_tokens 上限。
+    pub codex_compact_summary_max_tokens: i64,
     pub updated_at: String,
 }
 
@@ -40,6 +46,8 @@ pub struct UpdateGatewaySettingsInput {
     pub thinking_rectifier_global: Option<bool>,
     pub error_mapper_global: Option<bool>,
     pub health_probe_enabled: Option<bool>,
+    pub codex_compact_enabled: Option<bool>,
+    pub codex_compact_summary_max_tokens: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -99,6 +107,8 @@ mod tests {
             thinking_rectifier_global: false,
             error_mapper_global: false,
             health_probe_enabled: false,
+            codex_compact_enabled: true,
+            codex_compact_summary_max_tokens: 1500,
             updated_at: "2024-01-01T00:00:00Z".into(),
         };
         let json = serde_json::to_string(&s).unwrap();

@@ -153,6 +153,10 @@ pub async fn start(
         .route("/v1/models", get(routes::list_models))
         .route("/v1/responses", post(routes::handle_responses))
         .route("/responses", post(routes::handle_responses))
+        // Codex remote compaction v2:旧 Codex 把 compact 请求发到 sub-path,
+        // 新版用 header,但路径还是兜底注册一下,handle_responses 入口探嗅 header / path 决定走 compact 分支。
+        .route("/v1/responses/compact", post(routes::handle_responses))
+        .route("/responses/compact", post(routes::handle_responses))
         .route(
             "/v1/chat/completions",
             post(routes::handle_chat_completions),

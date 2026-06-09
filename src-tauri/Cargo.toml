@@ -74,6 +74,9 @@ bytes = "1"
 flate2 = "1"
 zstd = "0.13"
 brotli = "8"
+# Codex remote compaction:把 summary 编码到 encrypted_content 字段(Codex 不解析,
+# 只下次塞回当历史项),AgentGate 用 magic prefix + base64 让自己能可逆还原。
+base64 = "0.22"
 toml_edit = "0.22"
 # 本地 ZIP 导入 skill 用：从内存字节解压，做 zip-slip 防护。
 zip = { version = "2", default-features = false, features = ["deflate"] }

@@ -167,6 +167,8 @@ mod tests {
             thinking_rectifier_global: tr,
             error_mapper_global: em,
             health_probe_enabled: false,
+            codex_compact_enabled: true,
+            codex_compact_summary_max_tokens: 1500,
             updated_at: "now".into(),
         }
     }
