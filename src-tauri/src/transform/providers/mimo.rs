@@ -24,11 +24,6 @@ const MIMO_NO_WEB_SEARCH: &[&str] = &["mimo-v2-omni"];
 // images for non-vision targets so the request body remains valid.
 const MIMO_VISION_MODELS: &[&str] = &["mimo-v2.5", "mimo-v2-omni"];
 
-// MiMo 模型默认 thinking 关闭的(只有 flash 这类轻量模型)。其余模型若请求里没带
-// thinking,主动开 thinking —— 让模型深思后再行动,缓解 Codex agent loop 里
-// 「说一句就停」的早停。对齐 mimo2codex 的 normalizeMimoBody。
-const MIMO_THINKING_DEFAULT_DISABLED: &[&str] = &["mimo-v2-flash"];
-
 fn strip_qualifier(model: &str) -> &str {
     if let Some(stripped) = model.strip_suffix(']') {
         if let Some(open) = stripped.rfind('[') {
@@ -93,13 +88,6 @@ impl super::ProviderTransform for MimoProvider {
                 model,
                 "To analyze images, switch to a vision model (mimo-v2.5 or mimo-v2-omni) and re-send the request.",
             ));
-        }
-
-        // 非 flash 的 MiMo 模型:请求没带 thinking 时主动开启,让模型深思后再行动,
-        // 缓解 Codex agent loop 里的短回复早停。对齐 mimo2codex。必须放在下面
-        // temperature-strip 之前,这样开了 thinking 的 v2.5-pro/v2.5 才会被剥 temperature。
-        if req.thinking.is_none() && !MIMO_THINKING_DEFAULT_DISABLED.contains(&model) {
-            req.thinking = Some(serde_json::json!({"type": "enabled"}));
         }
 
         // Strip temperature in thinking mode for v2.5-pro / v2.5 — upstream
@@ -251,37 +239,6 @@ mod tests {
         r.temperature = Some(0.7);
         MimoProvider.finalize_request(&mut r, &None);
         assert!(r.temperature.is_none());
-    }
-
-    #[test]
-    fn thinking_enabled_by_default_for_non_flash() {
-        let mut r = req("mimo-v2.5-pro");
-        assert!(r.thinking.is_none());
-        MimoProvider.finalize_request(&mut r, &None);
-        assert_eq!(
-            r.thinking.as_ref().and_then(|t| t.get("type")).and_then(|v| v.as_str()),
-            Some("enabled"),
-            "non-flash MiMo should get thinking enabled when unset"
-        );
-    }
-
-    #[test]
-    fn thinking_not_injected_for_flash() {
-        let mut r = req("mimo-v2-flash");
-        MimoProvider.finalize_request(&mut r, &None);
-        assert!(r.thinking.is_none(), "flash keeps thinking off by default");
-    }
-
-    #[test]
-    fn existing_thinking_not_overridden() {
-        let mut r = req("mimo-v2.5-pro");
-        r.thinking = Some(json!({"type": "disabled"}));
-        MimoProvider.finalize_request(&mut r, &None);
-        assert_eq!(
-            r.thinking.as_ref().and_then(|t| t.get("type")).and_then(|v| v.as_str()),
-            Some("disabled"),
-            "explicit thinking must be preserved"
-        );
     }
 
     #[test]
