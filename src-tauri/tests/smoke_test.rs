@@ -12,9 +12,9 @@
 //!   AG_SMOKE_PORT       — gateway bind port (default: 19090)
 //!   AG_SMOKE_TIMEOUT    — per-request timeout seconds (default: 60)
 
-use std::path::PathBuf;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
+use std::path::PathBuf;
 
 type DbPool = Pool<SqliteConnectionManager>;
 use std::time::Duration;
@@ -152,10 +152,7 @@ fn snip(text: &str) -> String {
 /// 查给定 route 最近一条 request_logs 的 trace_json。smoke 测试串行跑、
 /// 隔离在 19090 端口，不与用户 app 同台并发——LIMIT 1 ORDER BY id DESC
 /// 拿到的就是当前测试自己的那条。
-fn fetch_recent_trace(
-    db: &DbPool,
-    route: &str,
-) -> Option<serde_json::Value> {
+fn fetch_recent_trace(db: &DbPool, route: &str) -> Option<serde_json::Value> {
     let c = db.get().ok()?;
     let tj: Option<String> = c
         .query_row(

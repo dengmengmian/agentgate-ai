@@ -207,9 +207,7 @@ pub fn sync(db: &crate::storage::db::DbPool) -> Result<SyncResult, AppError> {
     }
 
     let candidate_ids: Vec<String> = all_rows.iter().map(|r| r.external_id.clone()).collect();
-    let conn = db
-        .get()
-        .map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = db.get().map_err(|_| AppError::internal("DB lock failed"))?;
     let already = storage::request_logs::external_ids_for_source(&conn, SOURCE, &candidate_ids)?;
 
     for row in all_rows {

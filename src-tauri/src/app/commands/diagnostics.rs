@@ -92,4 +92,3 @@ pub fn open_app_data_dir() -> Result<bool, AppError> {
     open::that(&dir).map_err(|e| AppError::internal(format!("Cannot open: {e}")))?;
     Ok(true)
 }
-

@@ -543,7 +543,11 @@ pub async fn pet_chat(
 
     let token = crate::security::local_token::ensure_token()?;
     let host = gateway_client_host(&host);
-    let url = format!("http://{}:{}/v1/chat/completions", format_host_for_url(&host), port);
+    let url = format!(
+        "http://{}:{}/v1/chat/completions",
+        format_host_for_url(&host),
+        port
+    );
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(120))
@@ -679,4 +683,3 @@ mod pet_chat_tests {
         assert_eq!(err.detail, Some("plain failure".to_string()));
     }
 }
-

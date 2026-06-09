@@ -124,10 +124,11 @@ pub fn read_token() -> Result<String, AppError> {
     }
     let path = token_path();
     if !path.exists() {
-        return Err(
-            AppError::new(crate::errors::codes::LOCAL_ACCESS_TOKEN_NOT_FOUND, "Token file does not exist")
-                .with_suggestion("Restart AgentGate to auto-generate a token"),
-        );
+        return Err(AppError::new(
+            crate::errors::codes::LOCAL_ACCESS_TOKEN_NOT_FOUND,
+            "Token file does not exist",
+        )
+        .with_suggestion("Restart AgentGate to auto-generate a token"));
     }
     let token = fs::read_to_string(&path).map_err(|e| {
         AppError::new(

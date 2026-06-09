@@ -279,4 +279,3 @@ pub fn reset_all_provider_runtime_status(state: State<'_, AppState>) -> Result<b
     storage::provider_runtime_status::reset_all(&conn)?;
     Ok(true)
 }
-

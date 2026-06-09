@@ -48,4 +48,3 @@ pub fn delete_model_pricing(state: State<'_, AppState>, id: String) -> Result<bo
         .map_err(|_| AppError::internal("DB lock failed"))?;
     crate::storage::pricing::delete_custom(&conn, &id)
 }
-

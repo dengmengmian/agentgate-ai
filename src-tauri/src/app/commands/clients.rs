@@ -615,9 +615,7 @@ pub fn import_mcp_servers(
 /// 但 id 在这个列表里，说明接入过又被改回去了，提示重新应用。
 #[tauri::command]
 #[specta::specta]
-pub fn clients_with_apply_history(
-    state: State<'_, AppState>,
-) -> Result<Vec<String>, AppError> {
+pub fn clients_with_apply_history(state: State<'_, AppState>) -> Result<Vec<String>, AppError> {
     let conn = state
         .db
         .get()
@@ -712,4 +710,3 @@ pub fn open_atomcode_config() -> Result<bool, AppError> {
     crate::tools::atomcode::open_config()?;
     Ok(true)
 }
-

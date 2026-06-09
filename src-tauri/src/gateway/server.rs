@@ -222,26 +222,38 @@ pub async fn start(
         app
     };
 
-    let addr: SocketAddr = format!("{host}:{port}")
-        .parse()
-        .map_err(|e| AppError::new(crate::errors::codes::GATEWAY_BIND_ERROR, format!("Invalid address: {e}")))?;
+    let addr: SocketAddr = format!("{host}:{port}").parse().map_err(|e| {
+        AppError::new(
+            crate::errors::codes::GATEWAY_BIND_ERROR,
+            format!("Invalid address: {e}"),
+        )
+    })?;
 
     // axum_server 接受 std::net::TcpListener。先用 std bind 拿到 bound_port（port=0
     // 时 OS 才分配），set_nonblocking 让 tokio runtime 能 poll。
     let std_listener = std::net::TcpListener::bind(addr).map_err(|e| {
         if e.kind() == std::io::ErrorKind::AddrInUse {
-            AppError::new(crate::errors::codes::GATEWAY_PORT_IN_USE, "Gateway port is already in use")
-                .with_detail(format!("{host}:{port}"))
-                .with_suggestion(
-                    "Change the gateway port in Settings or stop the process using this port",
-                )
+            AppError::new(
+                crate::errors::codes::GATEWAY_PORT_IN_USE,
+                "Gateway port is already in use",
+            )
+            .with_detail(format!("{host}:{port}"))
+            .with_suggestion(
+                "Change the gateway port in Settings or stop the process using this port",
+            )
         } else {
-            AppError::new(crate::errors::codes::GATEWAY_BIND_ERROR, format!("Failed to bind: {e}"))
+            AppError::new(
+                crate::errors::codes::GATEWAY_BIND_ERROR,
+                format!("Failed to bind: {e}"),
+            )
         }
     })?;
-    std_listener
-        .set_nonblocking(true)
-        .map_err(|e| AppError::new(crate::errors::codes::GATEWAY_BIND_ERROR, format!("set_nonblocking failed: {e}")))?;
+    std_listener.set_nonblocking(true).map_err(|e| {
+        AppError::new(
+            crate::errors::codes::GATEWAY_BIND_ERROR,
+            format!("set_nonblocking failed: {e}"),
+        )
+    })?;
 
     let bound_port = std_listener.local_addr().map(|a| a.port()).unwrap_or(port);
 

@@ -249,6 +249,14 @@ fn convert_input_array(
     items: &[Value],
     system_blocks: &mut Vec<Value>,
 ) -> Result<Vec<Value>, AppError> {
+    if !items.is_empty() && items.iter().all(is_content_part) {
+        let blocks = extract_content_blocks(Some(&Value::Array(items.to_vec())));
+        if blocks.is_empty() {
+            return Ok(vec![]);
+        }
+        return Ok(vec![json!({"role": "user", "content": blocks})]);
+    }
+
     let mut messages: Vec<Value> = Vec::new();
     let mut pending_tool_uses: Vec<Value> = Vec::new();
     // 从 reasoning 项里解码出来的 thinking 块，等到下一个 assistant 输出
@@ -485,6 +493,13 @@ fn extract_text(content: Option<&Value>) -> String {
             .to_string(),
         Some(other) => other.to_string(),
     }
+}
+
+fn is_content_part(part: &Value) -> bool {
+    matches!(
+        part.get("type").and_then(|t| t.as_str()),
+        Some("input_text" | "output_text" | "text" | "input_image" | "image_url")
+    )
 }
 
 /// Extract content blocks for Claude Messages API, preserving images.
@@ -1068,6 +1083,23 @@ mod tests {
         assert_eq!(blocks[1]["source"]["type"], "base64");
         assert_eq!(blocks[1]["source"]["media_type"], "image/png");
         assert_eq!(blocks[1]["source"]["data"], "abc123");
+    }
+
+    #[test]
+    fn test_convert_initial_top_level_content_parts_preserves_image() {
+        let mut system_blocks = Vec::new();
+        let items = json!([
+            {"type": "input_text", "text": "describe this"},
+            {"type": "input_image", "image_url": {"url": "data:image/png;base64,abc123"}}
+        ]);
+        let messages = convert_input_array(items.as_array().unwrap(), &mut system_blocks).unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0]["role"], "user");
+        let content = messages[0]["content"].as_array().unwrap();
+        assert_eq!(content[0], json!({"type": "text", "text": "describe this"}));
+        assert_eq!(content[1]["type"], "image");
+        assert_eq!(content[1]["source"]["media_type"], "image/png");
+        assert_eq!(content[1]["source"]["data"], "abc123");
     }
 
     #[test]

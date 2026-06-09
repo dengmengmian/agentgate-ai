@@ -35,8 +35,6 @@ pub struct GatewayState {
     pub active_requests: Arc<AtomicU64>,
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,7 +168,11 @@ mod tests {
     #[test]
     fn test_gateway_error_has_type_field() {
         let err = GatewayError(
-            AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, "Provider failed").with_detail("HTTP 502"),
+            AppError::new(
+                crate::errors::codes::UPSTREAM_STREAM_ERROR,
+                "Provider failed",
+            )
+            .with_detail("HTTP 502"),
         );
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
@@ -179,21 +181,30 @@ mod tests {
     #[test]
     fn test_gateway_error_status_mapping() {
         assert_eq!(
-            GatewayError(AppError::new(crate::errors::codes::RESPONSES_PARSE_ERROR, "bad"))
-                .into_response()
-                .status(),
+            GatewayError(AppError::new(
+                crate::errors::codes::RESPONSES_PARSE_ERROR,
+                "bad"
+            ))
+            .into_response()
+            .status(),
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
-            GatewayError(AppError::new(crate::errors::codes::PROVIDER_API_KEY_MISSING, "no key"))
-                .into_response()
-                .status(),
+            GatewayError(AppError::new(
+                crate::errors::codes::PROVIDER_API_KEY_MISSING,
+                "no key"
+            ))
+            .into_response()
+            .status(),
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            GatewayError(AppError::new(crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND, "none"))
-                .into_response()
-                .status(),
+            GatewayError(AppError::new(
+                crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND,
+                "none"
+            ))
+            .into_response()
+            .status(),
             StatusCode::SERVICE_UNAVAILABLE
         );
         assert_eq!(
@@ -207,15 +218,21 @@ mod tests {
     #[test]
     fn test_gateway_error_auth_status_codes() {
         assert_eq!(
-            GatewayError(AppError::new(crate::errors::codes::GATEWAY_AUTH_MISSING, "no auth"))
-                .into_response()
-                .status(),
+            GatewayError(AppError::new(
+                crate::errors::codes::GATEWAY_AUTH_MISSING,
+                "no auth"
+            ))
+            .into_response()
+            .status(),
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            GatewayError(AppError::new(crate::errors::codes::GATEWAY_AUTH_INVALID, "bad token"))
-                .into_response()
-                .status(),
+            GatewayError(AppError::new(
+                crate::errors::codes::GATEWAY_AUTH_INVALID,
+                "bad token"
+            ))
+            .into_response()
+            .status(),
             StatusCode::UNAUTHORIZED
         );
     }
@@ -263,26 +280,27 @@ mod tests {
 
     #[test]
     fn route_fallback_chain_marks_primary_backup_and_selected() {
-        let mk = |priority: i64, name: &str| crate::models::route_profile::RouteProfileProviderView {
-            id: format!("rpp{priority}"),
-            provider_id: format!("p{priority}"),
-            provider_name: name.into(),
-            provider_type: "openai".into(),
-            provider_protocol: "openai_responses".into(),
-            has_anthropic_url: false,
-            supports_vision: None,
-            model_capabilities: None,
-            priority,
-            enabled: true,
-            model_override: None,
-            cooldown_seconds: 600,
-            failover_on_status_codes: None,
-            failover_on_error_keywords: None,
-            routing_conditions: None,
-            runtime_available: true,
-            cooldown_until: None,
-            consecutive_failures: 0,
-        };
+        let mk =
+            |priority: i64, name: &str| crate::models::route_profile::RouteProfileProviderView {
+                id: format!("rpp{priority}"),
+                provider_id: format!("p{priority}"),
+                provider_name: name.into(),
+                provider_type: "openai".into(),
+                provider_protocol: "openai_responses".into(),
+                has_anthropic_url: false,
+                supports_vision: None,
+                model_capabilities: None,
+                priority,
+                enabled: true,
+                model_override: None,
+                cooldown_seconds: 600,
+                failover_on_status_codes: None,
+                failover_on_error_keywords: None,
+                routing_conditions: None,
+                runtime_available: true,
+                cooldown_until: None,
+                consecutive_failures: 0,
+            };
         let providers = vec![mk(1, "Primary"), mk(2, "Backup")];
 
         let chain = route_fallback_chain(&providers, "Backup");
@@ -510,6 +528,18 @@ mod tests {
         assert!(
             request_contains_images(&req),
             "current user turn with image must trigger promotion"
+        );
+    }
+
+    #[test]
+    fn request_contains_images_true_for_initial_top_level_content_parts() {
+        let req = responses_req_with_input(json!([
+            {"type": "input_text", "text": "describe this"},
+            {"type": "input_image", "image_url": {"url": "https://example.com/x.png"}}
+        ]));
+        assert!(
+            request_contains_images(&req),
+            "initial multimodal content parts must trigger promotion"
         );
     }
 

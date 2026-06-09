@@ -177,7 +177,10 @@ fn write_json(path: &PathBuf, value: &Value) -> Result<(), AppError> {
 fn upsert_applied_profile(meta_path: &PathBuf, id: &str, name: &str) -> Result<(), AppError> {
     let mut meta = read_json(meta_path).unwrap_or_else(|| json!({}));
     let obj = meta.as_object_mut().ok_or_else(|| {
-        AppError::new(crate::errors::codes::CLAUDE_DESKTOP_META_INVALID, "_meta.json 不是 JSON 对象")
+        AppError::new(
+            crate::errors::codes::CLAUDE_DESKTOP_META_INVALID,
+            "_meta.json 不是 JSON 对象",
+        )
     })?;
     let mut entries = obj
         .get("entries")
@@ -198,7 +201,10 @@ fn upsert_applied_profile(meta_path: &PathBuf, id: &str, name: &str) -> Result<(
 pub fn apply(host: &str, port: i64, token: &str) -> Result<ClaudeDesktopApplyResult, AppError> {
     let p = paths()?;
     let lib_dir = p.profile.parent().ok_or_else(|| {
-        AppError::new(crate::errors::codes::CLAUDE_DESKTOP_PATH_INVALID, "无法解析 configLibrary 路径")
+        AppError::new(
+            crate::errors::codes::CLAUDE_DESKTOP_PATH_INVALID,
+            "无法解析 configLibrary 路径",
+        )
     })?;
     if !lib_dir.exists() {
         return Err(AppError::new(

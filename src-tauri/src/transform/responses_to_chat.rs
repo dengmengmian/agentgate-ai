@@ -214,6 +214,13 @@ fn convert_input_array(
     items: &[Value],
     diagnostic_events: &mut Vec<CapabilityDegradationEvent>,
 ) -> Result<Vec<ChatMessage>, AppError> {
+    if !items.is_empty() && items.iter().all(is_content_part) {
+        return Ok(vec![msg(
+            "user",
+            extract_content(Some(&Value::Array(items.to_vec()))),
+        )]);
+    }
+
     let mut messages = Vec::new();
     let mut pending_tool_calls: Vec<ToolCall> = Vec::new();
     let mut pending_reasoning: Option<String> = None;
@@ -725,6 +732,13 @@ fn map_role(role: &str) -> String {
     }
 }
 
+fn is_content_part(part: &Value) -> bool {
+    matches!(
+        part.get("type").and_then(|t| t.as_str()),
+        Some("input_text" | "output_text" | "text" | "input_image" | "image_url")
+    )
+}
+
 fn extract_content(content: Option<&Value>) -> Value {
     match content {
         None => Value::String(String::new()),
@@ -1181,10 +1195,20 @@ mod tests {
         };
         let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
         // 期望 [assistant(content+tool_calls), tool] —— 2 条,不是拆成的 3 条
-        assert_eq!(result.messages.len(), 2, "assistant 文本 + function_call 应合并成一条");
+        assert_eq!(
+            result.messages.len(),
+            2,
+            "assistant 文本 + function_call 应合并成一条"
+        );
         assert_eq!(result.messages[0].role, "assistant");
-        assert!(result.messages[0].content.is_some(), "合并后保留文本 content");
-        assert!(result.messages[0].tool_calls.is_some(), "合并后带 tool_calls");
+        assert!(
+            result.messages[0].content.is_some(),
+            "合并后保留文本 content"
+        );
+        assert!(
+            result.messages[0].tool_calls.is_some(),
+            "合并后带 tool_calls"
+        );
         assert_eq!(result.messages[1].role, "tool");
     }
 
@@ -1203,7 +1227,10 @@ mod tests {
         // user 不被污染;function_call 自成一条 assistant(不误并进 user)。
         // 注:孤儿 tool_call 会被合成一条空 tool 输出,故总数 > 2,这里只校验前两条。
         assert_eq!(result.messages[0].role, "user");
-        assert!(result.messages[0].tool_calls.is_none(), "user 不应被挂 tool_calls");
+        assert!(
+            result.messages[0].tool_calls.is_none(),
+            "user 不应被挂 tool_calls"
+        );
         assert_eq!(result.messages[1].role, "assistant");
         assert!(result.messages[1].tool_calls.is_some());
     }
@@ -1225,9 +1252,16 @@ mod tests {
             ..Default::default()
         };
         let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
-        assert_eq!(result.thinking, Some(json!({"type": "disabled"})), "压缩应关思考");
+        assert_eq!(
+            result.thinking,
+            Some(json!({"type": "disabled"})),
+            "压缩应关思考"
+        );
         assert!(result.tools.is_none(), "压缩应去工具");
-        assert!(result.reasoning_effort.is_none(), "压缩应清 reasoning_effort");
+        assert!(
+            result.reasoning_effort.is_none(),
+            "压缩应清 reasoning_effort"
+        );
     }
 
     #[test]
@@ -1873,6 +1907,25 @@ mod tests {
         assert_eq!(arr[0]["text"], "describe this");
         assert_eq!(arr[1]["type"], "image_url");
         assert_eq!(arr[1]["image_url"]["url"], "data:image/png;base64,abc123");
+    }
+
+    #[test]
+    fn test_convert_initial_top_level_content_parts_preserves_image() {
+        let mut events = Vec::new();
+        let items = json!([
+            {"type": "input_text", "text": "describe this"},
+            {"type": "input_image", "image_url": {"url": "data:image/png;base64,abc123"}}
+        ]);
+        let msgs = convert_input_array(items.as_array().unwrap(), &mut events).unwrap();
+        assert_eq!(msgs.len(), 1);
+        assert_eq!(msgs[0].role, "user");
+        let content = msgs[0].content.as_ref().unwrap().as_array().unwrap();
+        assert_eq!(content[0], json!({"type": "text", "text": "describe this"}));
+        assert_eq!(content[1]["type"], "image_url");
+        assert_eq!(
+            content[1]["image_url"]["url"],
+            "data:image/png;base64,abc123"
+        );
     }
 
     #[test]

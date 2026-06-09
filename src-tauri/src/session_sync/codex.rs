@@ -220,10 +220,18 @@ pub fn read_conversation(
     session_id: &str,
 ) -> Result<Vec<crate::session_sync::claude::ConversationMessage>, AppError> {
     use crate::session_sync::claude::ConversationMessage;
-    let path = find_session_file(session_id)
-        .ok_or_else(|| AppError::new(crate::errors::codes::SESSION_NOT_FOUND, "找不到该 Codex 会话的本地日志"))?;
-    let content = fs::read_to_string(&path)
-        .map_err(|e| AppError::new(crate::errors::codes::SESSION_READ_FAILED, format!("读取会话日志失败: {e}")))?;
+    let path = find_session_file(session_id).ok_or_else(|| {
+        AppError::new(
+            crate::errors::codes::SESSION_NOT_FOUND,
+            "找不到该 Codex 会话的本地日志",
+        )
+    })?;
+    let content = fs::read_to_string(&path).map_err(|e| {
+        AppError::new(
+            crate::errors::codes::SESSION_READ_FAILED,
+            format!("读取会话日志失败: {e}"),
+        )
+    })?;
 
     let mut msgs = Vec::new();
     for line in content.lines() {
@@ -285,9 +293,7 @@ pub fn sync(db: &crate::storage::db::DbPool) -> Result<SyncResult, AppError> {
     }
 
     let candidate_ids: Vec<String> = all_rows.iter().map(|r| r.external_id.clone()).collect();
-    let conn = db
-        .get()
-        .map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = db.get().map_err(|_| AppError::internal("DB lock failed"))?;
     let already = storage::request_logs::external_ids_for_source(&conn, SOURCE, &candidate_ids)?;
 
     for row in all_rows {

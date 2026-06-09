@@ -91,7 +91,10 @@ pub fn distinct_models(conn: &Connection) -> Result<Vec<String>, AppError> {
 
 /// 删除某个会话在 request_logs 里的全部行，返回删除行数。
 pub fn delete_by_session(conn: &Connection, session_id: &str) -> Result<usize, AppError> {
-    let n = conn.execute("DELETE FROM request_logs WHERE session_id = ?1", [session_id])?;
+    let n = conn.execute(
+        "DELETE FROM request_logs WHERE session_id = ?1",
+        [session_id],
+    )?;
     Ok(n)
 }
 
@@ -770,8 +773,7 @@ pub fn avg_latency_by_provider(
     conn: &Connection,
     lookback_hours: i64,
 ) -> Result<std::collections::HashMap<String, f64>, AppError> {
-    let since =
-        (chrono::Utc::now() - chrono::Duration::hours(lookback_hours.max(1))).to_rfc3339();
+    let since = (chrono::Utc::now() - chrono::Duration::hours(lookback_hours.max(1))).to_rfc3339();
     let mut stmt = conn.prepare(
         "SELECT provider, AVG(latency_ms)
          FROM request_logs
@@ -1301,9 +1303,30 @@ mod tests {
         let conn = empty_logs_db();
         let ins = |rid: &str, client: &str, model: &str, cost: f64| {
             insert(
-                &conn, rid, client, "P", model, "/v1/x", 200, 10,
-                None, None, None, None, None, None, None, None,
-                Some(100), Some(20), Some(cost), None, None, Some("gateway"), None, None,
+                &conn,
+                rid,
+                client,
+                "P",
+                model,
+                "/v1/x",
+                200,
+                10,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(100),
+                Some(20),
+                Some(cost),
+                None,
+                None,
+                Some("gateway"),
+                None,
+                None,
             )
             .unwrap();
         };
@@ -1336,9 +1359,30 @@ mod tests {
         let conn = empty_logs_db();
         let ins = |rid: &str, model: &str, input: Option<i64>, output: Option<i64>| {
             insert(
-                &conn, rid, "Codex", "P", model, "/v1/x", 200, 10,
-                None, None, None, None, None, None, None, None,
-                input, output, Some(0.0), None, None, Some("gateway"), None, None,
+                &conn,
+                rid,
+                "Codex",
+                "P",
+                model,
+                "/v1/x",
+                200,
+                10,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                input,
+                output,
+                Some(0.0),
+                None,
+                None,
+                Some("gateway"),
+                None,
+                None,
             )
             .unwrap();
         };
@@ -1362,9 +1406,30 @@ mod tests {
         .unwrap();
         let ins = |rid: &str, model: &str| {
             insert(
-                &conn, rid, "Codex", "P", model, "/v1/x", 200, 10,
-                None, None, None, None, None, None, None, None,
-                Some(100), Some(20), Some(0.0), None, None, Some("gateway"), None, None,
+                &conn,
+                rid,
+                "Codex",
+                "P",
+                model,
+                "/v1/x",
+                200,
+                10,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(100),
+                Some(20),
+                Some(0.0),
+                None,
+                None,
+                Some("gateway"),
+                None,
+                None,
             )
             .unwrap();
         };
@@ -1383,9 +1448,30 @@ mod tests {
         let conn = empty_logs_db();
         let ins = |rid: &str, status: i64, err: &str| {
             insert(
-                &conn, rid, "C", "P", "m", "/x", status, 10,
-                None, None, None, None, None, None, Some(err), None,
-                None, None, None, None, None, Some("gateway"), None, None,
+                &conn,
+                rid,
+                "C",
+                "P",
+                "m",
+                "/x",
+                status,
+                10,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(err),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some("gateway"),
+                None,
+                None,
             )
             .unwrap();
         };
@@ -1394,9 +1480,17 @@ mod tests {
         ins("r3", 401, "unauthorized"); // 认证
 
         let f = |et: &str| RequestLogFilter {
-            client: None, provider: None, model: None, route_profile_id: None,
-            status: None, error_type: Some(et.to_string()), keyword: None,
-            source: None, session_id: None, limit: Some(20), offset: Some(0),
+            client: None,
+            provider: None,
+            model: None,
+            route_profile_id: None,
+            status: None,
+            error_type: Some(et.to_string()),
+            keyword: None,
+            source: None,
+            session_id: None,
+            limit: Some(20),
+            offset: Some(0),
         };
         let net = list(&conn, f("network_error")).unwrap();
         assert_eq!(net.len(), 1);
@@ -1411,9 +1505,30 @@ mod tests {
         let conn = empty_logs_db();
         let ins = |rid: &str, sess: &str| {
             insert(
-                &conn, rid, "C", "P", "m", "/x", 200, 10,
-                None, None, None, None, None, None, None, None,
-                Some(10), Some(5), Some(0.0), None, None, Some("gateway"), Some(sess), None,
+                &conn,
+                rid,
+                "C",
+                "P",
+                "m",
+                "/x",
+                200,
+                10,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(10),
+                Some(5),
+                Some(0.0),
+                None,
+                None,
+                Some("gateway"),
+                Some(sess),
+                None,
             )
             .unwrap();
         };
@@ -1425,9 +1540,17 @@ mod tests {
         assert_eq!(n, 2, "应只删 s1 的两行");
 
         let all = RequestLogFilter {
-            client: None, provider: None, model: None, route_profile_id: None,
-            status: None, error_type: None, keyword: None, source: None,
-            session_id: None, limit: Some(100), offset: Some(0),
+            client: None,
+            provider: None,
+            model: None,
+            route_profile_id: None,
+            status: None,
+            error_type: None,
+            keyword: None,
+            source: None,
+            session_id: None,
+            limit: Some(100),
+            offset: Some(0),
         };
         let remaining = list(&conn, all).unwrap();
         assert_eq!(remaining.len(), 1);
@@ -1439,16 +1562,37 @@ mod tests {
         let conn = empty_logs_db();
         let ins = |rid: &str, provider: &str, status: i64, latency: i64| {
             insert(
-                &conn, rid, "Codex", provider, "m", "/v1/x", status, latency,
-                None, None, None, None, None, None, None, None,
-                None, None, None, None, None, Some("gateway"), None, None,
+                &conn,
+                rid,
+                "Codex",
+                provider,
+                "m",
+                "/v1/x",
+                status,
+                latency,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some("gateway"),
+                None,
+                None,
             )
             .unwrap();
         };
         ins("r1", "fast", 200, 100);
         ins("r2", "fast", 200, 200); // 均值 150
         ins("r3", "slow", 200, 900);
-        ins("r4", "slow", 500, 1);   // 失败，不计入
+        ins("r4", "slow", 500, 1); // 失败，不计入
 
         let map = avg_latency_by_provider(&conn, 24).unwrap();
         assert!((map["fast"] - 150.0).abs() < 1e-9);
@@ -1469,15 +1613,57 @@ mod tests {
         };
 
         insert(
-            &conn, "r1", "Codex", "P", "m", "/v1/responses", 200, 100,
-            None, None, None, None, None, None, None, Some(&trace("rp1")),
-            Some(100), Some(20), Some(0.03), None, None, Some("gateway"), None, None,
+            &conn,
+            "r1",
+            "Codex",
+            "P",
+            "m",
+            "/v1/responses",
+            200,
+            100,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(&trace("rp1")),
+            Some(100),
+            Some(20),
+            Some(0.03),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
         )
         .unwrap();
         insert(
-            &conn, "r2", "Codex", "P", "m", "/v1/responses", 500, 300,
-            None, None, None, None, None, None, Some("boom"), Some(&trace("rp1")),
-            Some(50), Some(10), Some(0.02), None, None, Some("gateway"), None, None,
+            &conn,
+            "r2",
+            "Codex",
+            "P",
+            "m",
+            "/v1/responses",
+            500,
+            300,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("boom"),
+            Some(&trace("rp1")),
+            Some(50),
+            Some(10),
+            Some(0.02),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
         )
         .unwrap();
 
@@ -1504,15 +1690,57 @@ mod tests {
         .unwrap();
 
         insert(
-            &conn, "r1", "OpenCode", "DeepSeek", "deepseek-v4-pro", "/v1/chat/completions", 200, 100,
-            None, None, None, None, None, None, None, Some(r#"{"mode":"native_pass_through_model_mapping"}"#),
-            Some(100), Some(20), Some(0.03), None, None, Some("gateway"), None, None,
+            &conn,
+            "r1",
+            "OpenCode",
+            "DeepSeek",
+            "deepseek-v4-pro",
+            "/v1/chat/completions",
+            200,
+            100,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(r#"{"mode":"native_pass_through_model_mapping"}"#),
+            Some(100),
+            Some(20),
+            Some(0.03),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
         )
         .unwrap();
         insert(
-            &conn, "r2", "OpenCode", "DeepSeek", "deepseek-v4-pro", "/v1/chat/completions", 500, 300,
-            None, None, None, None, None, None, Some("boom"), Some(r#"{"mode":"native_pass_through_model_mapping"}"#),
-            Some(50), Some(10), Some(0.02), None, None, Some("gateway"), None, None,
+            &conn,
+            "r2",
+            "OpenCode",
+            "DeepSeek",
+            "deepseek-v4-pro",
+            "/v1/chat/completions",
+            500,
+            300,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("boom"),
+            Some(r#"{"mode":"native_pass_through_model_mapping"}"#),
+            Some(50),
+            Some(10),
+            Some(0.02),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
         )
         .unwrap();
 
@@ -1672,21 +1900,84 @@ mod tests {
         };
 
         insert(
-            &conn, "r1", "Codex", "P", "m1", "/v1/responses", 429, 100,
-            None, None, None, None, None, None, Some("rate limit exceeded"), Some(&trace("rp1")),
-            Some(10), Some(1), Some(0.01), None, None, Some("gateway"), None, None,
+            &conn,
+            "r1",
+            "Codex",
+            "P",
+            "m1",
+            "/v1/responses",
+            429,
+            100,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("rate limit exceeded"),
+            Some(&trace("rp1")),
+            Some(10),
+            Some(1),
+            Some(0.01),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
         )
         .unwrap();
         insert(
-            &conn, "r2", "Codex", "P", "m2", "/v1/responses", 401, 100,
-            None, None, None, None, None, None, Some("Unauthorized"), Some(&trace("rp1")),
-            Some(10), Some(1), Some(0.01), None, None, Some("gateway"), None, None,
+            &conn,
+            "r2",
+            "Codex",
+            "P",
+            "m2",
+            "/v1/responses",
+            401,
+            100,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("Unauthorized"),
+            Some(&trace("rp1")),
+            Some(10),
+            Some(1),
+            Some(0.01),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
         )
         .unwrap();
         insert(
-            &conn, "r3", "Codex", "P", "m1", "/v1/responses", 500, 100,
-            None, None, None, None, None, None, Some("server error"), Some(&trace("rp2")),
-            Some(10), Some(1), Some(0.01), None, None, Some("gateway"), None, None,
+            &conn,
+            "r3",
+            "Codex",
+            "P",
+            "m1",
+            "/v1/responses",
+            500,
+            100,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("server error"),
+            Some(&trace("rp2")),
+            Some(10),
+            Some(1),
+            Some(0.01),
+            None,
+            None,
+            Some("gateway"),
+            None,
+            None,
         )
         .unwrap();
 
@@ -1734,9 +2025,30 @@ mod tests {
     fn detail_includes_cost_and_cache_tokens() {
         let conn = empty_logs_db();
         insert(
-            &conn, "r1", "Codex", "P", "m1", "/v1/responses", 200, 100,
-            None, None, None, None, None, None, None, None,
-            Some(100), Some(20), Some(0.03), Some(11), Some(22), Some("gateway"), None, None,
+            &conn,
+            "r1",
+            "Codex",
+            "P",
+            "m1",
+            "/v1/responses",
+            200,
+            100,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(100),
+            Some(20),
+            Some(0.03),
+            Some(11),
+            Some(22),
+            Some("gateway"),
+            None,
+            None,
         )
         .unwrap();
 

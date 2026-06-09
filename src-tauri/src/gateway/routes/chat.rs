@@ -254,7 +254,10 @@ pub async fn handle_chat_completions(
     }
 
     Err(GatewayError(last_error.unwrap_or_else(|| {
-        AppError::new(crate::errors::codes::FAILOVER_EXHAUSTED, "All providers failed")
+        AppError::new(
+            crate::errors::codes::FAILOVER_EXHAUSTED,
+            "All providers failed",
+        )
     })))
 }
 

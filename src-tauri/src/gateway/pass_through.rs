@@ -439,7 +439,14 @@ async fn handle_stream(
                 Some(&truncate(&sanitized_sse, MAX_SSE_LOG)),
                 None,
                 None,
-                Some(&with_route_decision(&conn, &route_owned, &provider_name, &model_clone, &raw_req, &trace)),
+                Some(&with_route_decision(
+                    &conn,
+                    &route_owned,
+                    &provider_name,
+                    &model_clone,
+                    &raw_req,
+                    &trace,
+                )),
                 inp,
                 out,
                 cost,
@@ -485,7 +492,12 @@ fn with_route_decision(
     trace: &str,
 ) -> String {
     crate::gateway::routes::enrich_trace_with_route_decision(
-        conn, route, provider, model, raw_request, Some(trace),
+        conn,
+        route,
+        provider,
+        model,
+        raw_request,
+        Some(trace),
     )
     .unwrap_or_else(|| trace.to_string())
 }
@@ -504,7 +516,9 @@ fn parse_chat_usage(sse_tail: &str) -> Option<(i64, i64)> {
         }
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(data) {
             if let Some(usage) = v.get("usage").filter(|u| !u.is_null()) {
-                let inp = usage.get("prompt_tokens").and_then(serde_json::Value::as_i64);
+                let inp = usage
+                    .get("prompt_tokens")
+                    .and_then(serde_json::Value::as_i64);
                 let out = usage
                     .get("completion_tokens")
                     .and_then(serde_json::Value::as_i64);
@@ -649,7 +663,12 @@ pub async fn handle_anthropic(
         // Stream pass-through
         let resp = crate::providers::adapter::send_with_net_retry(&build_request, 1)
             .await
-            .map_err(|e| AppError::new(crate::errors::codes::PASS_THROUGH_REQUEST_FAILED, format!("Failed: {e}")))?;
+            .map_err(|e| {
+                AppError::new(
+                    crate::errors::codes::PASS_THROUGH_REQUEST_FAILED,
+                    format!("Failed: {e}"),
+                )
+            })?;
 
         let status = resp.status();
         if !status.is_success() {
@@ -742,7 +761,14 @@ pub async fn handle_anthropic(
                     Some(&truncate(&sanitized_sse, MAX_SSE_LOG)),
                     None,
                     None,
-                    Some(&with_route_decision(&conn, "/v1/messages", &provider_name, &model, &raw_req, &trace)),
+                    Some(&with_route_decision(
+                        &conn,
+                        "/v1/messages",
+                        &provider_name,
+                        &model,
+                        &raw_req,
+                        &trace,
+                    )),
                     None,
                     None,
                     None,
@@ -769,7 +795,12 @@ pub async fn handle_anthropic(
         // Non-stream
         let resp = crate::providers::adapter::send_with_net_retry(&build_request, 1)
             .await
-            .map_err(|e| AppError::new(crate::errors::codes::PASS_THROUGH_REQUEST_FAILED, format!("Failed: {e}")))?;
+            .map_err(|e| {
+                AppError::new(
+                    crate::errors::codes::PASS_THROUGH_REQUEST_FAILED,
+                    format!("Failed: {e}"),
+                )
+            })?;
         let status = resp.status();
         let body_text = resp.text().await.unwrap_or_default();
         let sanitized = sanitize(&body_text, config.api_key());

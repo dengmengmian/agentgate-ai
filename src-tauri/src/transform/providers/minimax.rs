@@ -168,7 +168,10 @@ mod tests {
         MiniMaxProvider.finalize_request(&mut r, &None);
         let systems: Vec<_> = r.messages.iter().filter(|m| m.role == "system").collect();
         assert_eq!(systems.len(), 1);
-        assert_eq!(systems[0].content.as_ref().unwrap().as_str().unwrap(), "a\n\nb");
+        assert_eq!(
+            systems[0].content.as_ref().unwrap().as_str().unwrap(),
+            "a\n\nb"
+        );
         assert_eq!(r.messages[0].role, "system");
     }
 

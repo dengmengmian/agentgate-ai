@@ -184,11 +184,18 @@ pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
     };
 
     if token.is_empty() {
-        return Err(GatewayError(AppError::new(
-            crate::errors::codes::GATEWAY_AUTH_MISSING,
-            "Gateway access token is missing",
-        ).with_detail("The request does not include Authorization: Bearer <token> or X-Api-Key <token>")
-         .with_suggestion("Re-apply the tool configuration from AgentGate or check the token file")));
+        return Err(GatewayError(
+            AppError::new(
+                crate::errors::codes::GATEWAY_AUTH_MISSING,
+                "Gateway access token is missing",
+            )
+            .with_detail(
+                "The request does not include Authorization: Bearer <token> or X-Api-Key <token>",
+            )
+            .with_suggestion(
+                "Re-apply the tool configuration from AgentGate or check the token file",
+            ),
+        ));
     }
 
     if !local_token::validate_token(token) {
@@ -201,7 +208,9 @@ pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
     Ok(())
 }
 
-pub(crate) fn get_active_provider(db: &crate::storage::db::DbPool) -> Result<Provider, GatewayError> {
+pub(crate) fn get_active_provider(
+    db: &crate::storage::db::DbPool,
+) -> Result<Provider, GatewayError> {
     let conn = db
         .get()
         .map_err(|_| GatewayError(AppError::internal("DB lock failed")))?;
@@ -209,8 +218,11 @@ pub(crate) fn get_active_provider(db: &crate::storage::db::DbPool) -> Result<Pro
 
     let provider_id = settings.active_provider_id.ok_or_else(|| {
         GatewayError(
-            AppError::new(crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND, "No active provider configured")
-                .with_suggestion("Set an active provider in the Providers page"),
+            AppError::new(
+                crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND,
+                "No active provider configured",
+            )
+            .with_suggestion("Set an active provider in the Providers page"),
         )
     })?;
 
@@ -298,7 +310,7 @@ pub(crate) fn request_contains_images(req: &ResponsesRequest) -> bool {
         Value::Array(items) => {
             // 找最后一条 user message（不是最后一条 message——尾部可能是
             // tool 结果或 function_call 等）
-            items
+            let last_user_has_images = items
                 .iter()
                 .rev()
                 .find(|item| {
@@ -307,7 +319,18 @@ pub(crate) fn request_contains_images(req: &ResponsesRequest) -> bool {
                 })
                 .and_then(|item| item.get("content"))
                 .map(content_has_images)
-                .unwrap_or(false)
+                .unwrap_or(false);
+            if last_user_has_images {
+                return true;
+            }
+
+            // 新会话首条多模态输入可能直接是 content parts 数组：
+            // [{"type":"input_text",...},{"type":"input_image",...}]
+            // 这种格式没有 message wrapper，但仍是当前 user turn。
+            let has_message_items = items
+                .iter()
+                .any(|item| item.get("type").and_then(|t| t.as_str()) == Some("message"));
+            !has_message_items && content_has_images(&req.input)
         }
         _ => false,
     }
@@ -494,11 +517,15 @@ pub(crate) fn route_candidate_skip_reasons(
     if !provider.runtime_available {
         reasons.push("runtime_unavailable".to_string());
     }
-    let in_cooldown = provider.cooldown_until.as_ref().map(|until| {
-        chrono::DateTime::parse_from_rfc3339(until)
-            .map(|cd| cd > chrono::Utc::now())
-            .unwrap_or(false)
-    }).unwrap_or(false);
+    let in_cooldown = provider
+        .cooldown_until
+        .as_ref()
+        .map(|until| {
+            chrono::DateTime::parse_from_rfc3339(until)
+                .map(|cd| cd > chrono::Utc::now())
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
     if in_cooldown {
         reasons.push("cooldown".to_string());
     }
@@ -579,8 +606,14 @@ pub(crate) fn log_request_success(
             input_tokens,
             output_tokens,
         );
-        let trace_json =
-            enrich_trace_with_route_decision(&conn, route, provider, model, raw_request, trace_json);
+        let trace_json = enrich_trace_with_route_decision(
+            &conn,
+            route,
+            provider,
+            model,
+            raw_request,
+            trace_json,
+        );
         let _ = crate::storage::request_logs::insert(
             &conn,
             request_id,
@@ -761,4 +794,3 @@ impl IntoResponse for GatewayError {
         (status, Json(body)).into_response()
     }
 }
-

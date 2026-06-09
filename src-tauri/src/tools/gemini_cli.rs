@@ -44,8 +44,12 @@ fn saved_env_path() -> PathBuf {
 
 fn save_official_settings() -> Result<(), AppError> {
     let dir = saved_dir();
-    fs::create_dir_all(&dir)
-        .map_err(|e| AppError::new(crate::errors::codes::GEMINI_SAVE_FAILED, format!("Cannot create dir: {e}")))?;
+    fs::create_dir_all(&dir).map_err(|e| {
+        AppError::new(
+            crate::errors::codes::GEMINI_SAVE_FAILED,
+            format!("Cannot create dir: {e}"),
+        )
+    })?;
     let src = settings_path();
     if src.exists() {
         fs::copy(&src, saved_settings_path()).map_err(|e| {
@@ -57,8 +61,12 @@ fn save_official_settings() -> Result<(), AppError> {
     }
     let env_src = env_file_path();
     if env_src.exists() {
-        fs::copy(&env_src, saved_env_path())
-            .map_err(|e| AppError::new(crate::errors::codes::GEMINI_SAVE_FAILED, format!("Cannot save .env: {e}")))?;
+        fs::copy(&env_src, saved_env_path()).map_err(|e| {
+            AppError::new(
+                crate::errors::codes::GEMINI_SAVE_FAILED,
+                format!("Cannot save .env: {e}"),
+            )
+        })?;
     }
     Ok(())
 }
@@ -85,7 +93,10 @@ fn restore_official_settings() -> Result<(), AppError> {
     let saved_env = saved_env_path();
     if saved_env.exists() {
         fs::copy(&saved_env, env_file_path()).map_err(|e| {
-            AppError::new(crate::errors::codes::GEMINI_RESTORE_FAILED, format!("Cannot restore .env: {e}"))
+            AppError::new(
+                crate::errors::codes::GEMINI_RESTORE_FAILED,
+                format!("Cannot restore .env: {e}"),
+            )
         })?;
     } else {
         // No original .env — remove the AgentGate one
@@ -280,8 +291,12 @@ pub fn open_config() -> Result<(), AppError> {
             "Gemini CLI settings.json does not exist",
         ));
     }
-    open::that(&sp)
-        .map_err(|e| AppError::new(crate::errors::codes::GEMINI_CONFIG_OPEN_FAILED, format!("Failed to open: {e}")))
+    open::that(&sp).map_err(|e| {
+        AppError::new(
+            crate::errors::codes::GEMINI_CONFIG_OPEN_FAILED,
+            format!("Failed to open: {e}"),
+        )
+    })
 }
 
 pub fn generate_snippet(host: &str, port: i64, model: &str) -> String {

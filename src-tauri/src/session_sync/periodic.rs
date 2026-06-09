@@ -16,7 +16,6 @@
 
 use std::time::Duration;
 
-
 use super::SyncResult;
 
 const STARTUP_DELAY: Duration = Duration::from_secs(5);

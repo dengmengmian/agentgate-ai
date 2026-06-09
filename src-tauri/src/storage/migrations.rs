@@ -621,10 +621,7 @@ mod tests {
                 |_| Ok(true),
             )
             .unwrap_or(false);
-        assert!(
-            !table_exists,
-            "baseline 跑过了,user_version=1 时不该重建表"
-        );
+        assert!(!table_exists, "baseline 跑过了,user_version=1 时不该重建表");
     }
 
     #[test]

@@ -1,0 +1,744 @@
+//! 长历史自压缩(autoCompact)。
+//!
+//! 背景:Codex 接 MiMo 这类小窗口(~128K)上游时,大对话(实测一条 ~300K tokens)有两个
+//! 连带问题:① 超过上游真实上限直接 400;② Codex 的 remote compaction 又产不出它要的格式。
+//! 根治办法是在网关侧主动摘要长历史,让请求落回阈值内。
+//!
+//! 策略(非增量,v1):
+//! 1. 估算 messages 的 token(chars/4,图片按固定值)。低于阈值零改动。
+//! 2. 按"工具配对块"切分:head = 开头 system,tail = 最近若干块(verbatim),middle = 中间老历史。
+//! 3. 把 middle 渲染成纯文本 transcript,额外调一次上游摘要(关思考、无工具)。middle 过大时
+//!    按 token 预算分块 map-reduce,避免摘要调用自身超上游上限。
+//! 4. splice 回 head + [摘要消息] + tail。
+//! 5. 摘要按 transcript 内容 hash 缓存(挡客户端重试/相同请求)。
+//!
+//! 只作用于 Chat Completions 路径(MiMo / OpenAI 兼容);Anthropic / Gemini 走各自分支不经过这里。
+//! 默认关闭,需 `AGENTGATE_AUTO_COMPACT_PROVIDERS` 显式按 provider 开启——压缩是有损操作,
+//! 不能对大窗口 provider 无脑施加。
+
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
+
+use reqwest::Client;
+use serde_json::{json, Value};
+
+use crate::protocol::chat_completions::{
+    CapabilityDegradationEvent, ChatCompletionsRequest, ChatMessage,
+};
+use crate::providers::adapter::{self, ProviderConfig};
+
+/// 默认触发阈值(绝对 token 数)。留出余量给 128K 上游的 reasoning + output。
+const DEFAULT_THRESHOLD_TOKENS: usize = 110_000;
+/// tail 预算:保留多少 token 的最近历史 verbatim。
+const TAIL_BUDGET_TOKENS: usize = 40_000;
+/// 单次摘要调用的 middle 输入分块预算(token)。须远小于上游上限,留空间给提示词+输出。
+const CHUNK_BUDGET_TOKENS: usize = 80_000;
+/// 图片块的估算 token(粗略,按低分辨率计)。
+const IMAGE_TOKENS: usize = 1024;
+/// 单条消息渲染进 transcript 时的字符上限,防止单条巨大 tool 结果撑爆分块。
+const PER_MESSAGE_CHAR_CAP: usize = 6000;
+/// 摘要调用的输出上限。
+const SUMMARY_MAX_TOKENS: i64 = 2000;
+
+// ── 摘要缓存(content hash → summary,定长 LRU)──────────────────
+
+static CACHE: Mutex<Option<HashMap<String, (String, u64)>>> = Mutex::new(None);
+static CACHE_COUNTER: AtomicU64 = AtomicU64::new(0);
+const CACHE_MAX_ENTRIES: usize = 256;
+
+fn with_cache<F, R>(f: F) -> R
+where
+    F: FnOnce(&mut HashMap<String, (String, u64)>) -> R,
+{
+    let mut guard = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+    if guard.is_none() {
+        *guard = Some(HashMap::new());
+    }
+    f(guard.as_mut().unwrap())
+}
+
+fn content_hash(text: &str) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut h1 = DefaultHasher::new();
+    text.hash(&mut h1);
+    let hash1 = h1.finish();
+    let mut h2 = DefaultHasher::new();
+    hash1.hash(&mut h2);
+    text.hash(&mut h2);
+    let hash2 = h2.finish();
+    format!("{:016x}{:016x}_{}", hash1, hash2, text.len())
+}
+
+fn cache_get(key: &str) -> Option<String> {
+    let counter = CACHE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    with_cache(|map| {
+        map.get_mut(key).map(|(v, c)| {
+            *c = counter;
+            v.clone()
+        })
+    })
+}
+
+fn cache_put(key: String, value: String) {
+    let counter = CACHE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    with_cache(|map| {
+        if map.len() >= CACHE_MAX_ENTRIES {
+            // 淘汰最旧 1/4
+            let mut entries: Vec<(String, u64)> =
+                map.iter().map(|(k, (_, c))| (k.clone(), *c)).collect();
+            entries.sort_by_key(|(_, c)| *c);
+            for (k, _) in entries.into_iter().take(CACHE_MAX_ENTRIES / 4) {
+                map.remove(&k);
+            }
+        }
+        map.insert(key, (value, counter));
+    });
+}
+
+// ── token 估算 ──────────────────────────────────────────────
+
+fn estimate_value_tokens(content: &Value) -> usize {
+    match content {
+        Value::String(s) => s.chars().count() / 4,
+        Value::Array(parts) => parts
+            .iter()
+            .map(|p| {
+                let ty = p.get("type").and_then(|t| t.as_str()).unwrap_or("");
+                if ty.contains("image") || p.get("image_url").is_some() {
+                    IMAGE_TOKENS
+                } else if let Some(t) = p.get("text").and_then(|t| t.as_str()) {
+                    t.chars().count() / 4
+                } else {
+                    p.to_string().chars().count() / 4
+                }
+            })
+            .sum(),
+        Value::Null => 0,
+        other => other.to_string().chars().count() / 4,
+    }
+}
+
+fn estimate_msg_tokens(m: &ChatMessage) -> usize {
+    let mut t = 4; // 每条消息的固定开销(role 等)
+    if let Some(c) = &m.content {
+        t += estimate_value_tokens(c);
+    }
+    if let Some(rc) = &m.reasoning_content {
+        t += rc.chars().count() / 4;
+    }
+    if let Some(tcs) = &m.tool_calls {
+        for tc in tcs {
+            t += (tc.function.name.chars().count() + tc.function.arguments.chars().count()) / 4 + 4;
+        }
+    }
+    t
+}
+
+fn estimate_tokens(messages: &[ChatMessage]) -> usize {
+    messages.iter().map(estimate_msg_tokens).sum()
+}
+
+// ── 工具配对块切分 ──────────────────────────────────────────
+
+/// 把消息序列切成"块":assistant(含 tool_calls)+ 紧随的 tool 结果算一个不可分块,
+/// 其余各自成块。只在块边界切割,保证 tool_calls ↔ tool 配对永不被切断。
+fn group_blocks(messages: &[ChatMessage]) -> Vec<Vec<ChatMessage>> {
+    let mut blocks: Vec<Vec<ChatMessage>> = Vec::new();
+    for m in messages {
+        if m.role == "tool" {
+            // tool 结果挂到上一个块(它的 assistant 调用)。无上一个块则单独成块(异常历史容错)。
+            if let Some(last) = blocks.last_mut() {
+                last.push(m.clone());
+            } else {
+                blocks.push(vec![m.clone()]);
+            }
+        } else {
+            // 其余消息(含带 tool_calls 的 assistant)各自起新块,后续 tool 结果再挂上来。
+            blocks.push(vec![m.clone()]);
+        }
+    }
+    blocks
+}
+
+fn block_tokens(block: &[ChatMessage]) -> usize {
+    block.iter().map(estimate_msg_tokens).sum()
+}
+
+// ── transcript 渲染 ─────────────────────────────────────────
+
+fn truncate_chars(s: &str, cap: usize) -> String {
+    if s.chars().count() <= cap {
+        return s.to_string();
+    }
+    let head: String = s.chars().take(cap).collect();
+    format!("{head}…[截断]")
+}
+
+fn value_to_plain(content: &Value) -> String {
+    match content {
+        Value::String(s) => s.clone(),
+        Value::Array(parts) => parts
+            .iter()
+            .map(|p| {
+                if let Some(t) = p.get("text").and_then(|t| t.as_str()) {
+                    t.to_string()
+                } else if p
+                    .get("type")
+                    .and_then(|t| t.as_str())
+                    .is_some_and(|t| t.contains("image"))
+                    || p.get("image_url").is_some()
+                {
+                    "[图片]".to_string()
+                } else {
+                    p.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        Value::Null => String::new(),
+        other => other.to_string(),
+    }
+}
+
+fn render_transcript(messages: &[ChatMessage]) -> String {
+    let mut lines = Vec::new();
+    for m in messages {
+        let mut text = m.content.as_ref().map(value_to_plain).unwrap_or_default();
+        if let Some(tcs) = &m.tool_calls {
+            for tc in tcs {
+                text.push_str(&format!(
+                    "\n[调用工具 {}({})]",
+                    tc.function.name,
+                    truncate_chars(&tc.function.arguments, 500)
+                ));
+            }
+        }
+        let role = match m.role.as_str() {
+            "tool" => "工具结果",
+            "assistant" => "助手",
+            "user" => "用户",
+            "system" => "系统",
+            other => other,
+        };
+        let text = truncate_chars(text.trim(), PER_MESSAGE_CHAR_CAP);
+        if text.is_empty() {
+            continue;
+        }
+        lines.push(format!("{role}: {text}"));
+    }
+    lines.join("\n")
+}
+
+// ── 规划:head / middle 分块 / tail ─────────────────────────
+
+struct Plan {
+    head: Vec<ChatMessage>,
+    middle_chunks: Vec<Vec<ChatMessage>>,
+    tail: Vec<ChatMessage>,
+}
+
+/// 计算压缩规划。返回 None 表示无需压缩(中段为空)。
+fn plan_compaction(messages: &[ChatMessage], tail_budget: usize) -> Option<Plan> {
+    let blocks = group_blocks(messages);
+    if blocks.is_empty() {
+        return None;
+    }
+
+    // head:开头连续的纯 system 块。
+    let mut head_end = 0;
+    while head_end < blocks.len() && blocks[head_end].iter().all(|m| m.role == "system") {
+        head_end += 1;
+    }
+
+    // tail:从末尾往前累加块,直到达到预算。
+    let mut tail_start = blocks.len();
+    let mut acc = 0usize;
+    while tail_start > head_end {
+        let bt = block_tokens(&blocks[tail_start - 1]);
+        if acc + bt > tail_budget && acc > 0 {
+            break;
+        }
+        acc += bt;
+        tail_start -= 1;
+    }
+
+    if tail_start <= head_end {
+        return None; // head + tail 已覆盖全部,无中段可压
+    }
+
+    let head: Vec<ChatMessage> = blocks[..head_end].iter().flatten().cloned().collect();
+    let tail: Vec<ChatMessage> = blocks[tail_start..].iter().flatten().cloned().collect();
+
+    // middle 块按分块预算打包,供 map-reduce 摘要。
+    let mut middle_chunks: Vec<Vec<ChatMessage>> = Vec::new();
+    let mut cur: Vec<ChatMessage> = Vec::new();
+    let mut cur_tok = 0usize;
+    for block in &blocks[head_end..tail_start] {
+        let bt = block_tokens(block);
+        if cur_tok + bt > CHUNK_BUDGET_TOKENS && !cur.is_empty() {
+            middle_chunks.push(std::mem::take(&mut cur));
+            cur_tok = 0;
+        }
+        cur.extend(block.iter().cloned());
+        cur_tok += bt;
+    }
+    if !cur.is_empty() {
+        middle_chunks.push(cur);
+    }
+
+    if middle_chunks.is_empty() {
+        return None;
+    }
+
+    Some(Plan {
+        head,
+        middle_chunks,
+        tail,
+    })
+}
+
+// ── splice ──────────────────────────────────────────────────
+
+fn summary_message(summary: &str) -> ChatMessage {
+    ChatMessage {
+        role: "user".to_string(),
+        content: Some(Value::String(format!(
+            "以下是本次对话早前历史的摘要(为控制长度已由网关压缩,细节可能有损):\n\n{summary}"
+        ))),
+        reasoning_content: None,
+        tool_calls: None,
+        tool_call_id: None,
+        name: None,
+    }
+}
+
+fn splice(head: &[ChatMessage], summary: &str, tail: &[ChatMessage]) -> Vec<ChatMessage> {
+    let mut out = Vec::with_capacity(head.len() + 1 + tail.len());
+    out.extend(head.iter().cloned());
+    out.push(summary_message(summary));
+    out.extend(tail.iter().cloned());
+    out
+}
+
+// ── 上游摘要调用 ────────────────────────────────────────────
+
+const SUMMARY_SYSTEM: &str = "你是对话历史压缩器。把给定的对话片段压成精炼摘要,务必保留:\
+关键决策与结论、代码改动与文件路径、已完成与未完成的任务、重要约束与参数。\
+丢弃寒暄与冗余过程。只输出摘要正文,不要前后缀。";
+
+async fn summarize_chunk(
+    client: &Client,
+    config: &ProviderConfig,
+    model: &str,
+    transcript: &str,
+) -> Result<String, crate::errors::AppError> {
+    let key = content_hash(transcript);
+    if let Some(cached) = cache_get(&key) {
+        return Ok(cached);
+    }
+
+    let mut req = ChatCompletionsRequest {
+        model: model.to_string(),
+        messages: vec![
+            ChatMessage {
+                role: "system".to_string(),
+                content: Some(Value::String(SUMMARY_SYSTEM.to_string())),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+            ChatMessage {
+                role: "user".to_string(),
+                content: Some(Value::String(transcript.to_string())),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            },
+        ],
+        tools: None,
+        tool_choice: None,
+        stream: false,
+        temperature: Some(0.2),
+        top_p: None,
+        max_tokens: Some(SUMMARY_MAX_TOKENS),
+        max_completion_tokens: Some(SUMMARY_MAX_TOKENS),
+        // 关思考:摘要不需要 reasoning,也避免多产 item / 吃预算。
+        thinking: Some(json!({"type": "disabled"})),
+        stream_options: None,
+        response_format: None,
+        reasoning_effort: None,
+        seed: None,
+        stop: None,
+        frequency_penalty: None,
+        presence_penalty: None,
+        parallel_tool_calls: None,
+        diagnostic_events: Vec::new(),
+    };
+
+    let resp = adapter::send_non_stream(client, config, &mut req).await?;
+    let summary = resp
+        .get("choices")
+        .and_then(|c| c.as_array())
+        .and_then(|a| a.first())
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            crate::errors::AppError::new(
+                crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
+                "auto_compact: 摘要调用返回空内容",
+            )
+        })?;
+
+    cache_put(key, summary.clone());
+    Ok(summary)
+}
+
+// ── 入口 ────────────────────────────────────────────────────
+
+/// 读取触发配置。返回 Some(threshold) 表示该 provider 已开启自压缩。
+fn threshold_for(config: &ProviderConfig) -> Option<usize> {
+    let list = std::env::var("AGENTGATE_AUTO_COMPACT_PROVIDERS").ok()?;
+    let enabled = list.split(',').any(|s| {
+        let s = s.trim();
+        !s.is_empty()
+            && (s.eq_ignore_ascii_case(&config.name)
+                || s.eq_ignore_ascii_case(&config.provider_type))
+    });
+    if !enabled {
+        return None;
+    }
+    let threshold = std::env::var("AGENTGATE_AUTO_COMPACT_TOKENS")
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|v| *v > 0)
+        .unwrap_or(DEFAULT_THRESHOLD_TOKENS);
+    Some(threshold)
+}
+
+/// 若 chat_req 历史超阈值,就地压缩 messages。失败时降级为可观测的硬截断(保留 head+tail
+/// 并插入显式标记),不静默吞错、不假成功。压缩/降级都会写 diagnostic_events 供日志追踪。
+pub async fn maybe_compact(
+    client: &Client,
+    config: &ProviderConfig,
+    chat_req: &mut ChatCompletionsRequest,
+) {
+    let Some(threshold) = threshold_for(config) else {
+        return;
+    };
+
+    let original_tokens = estimate_tokens(&chat_req.messages);
+    if original_tokens <= threshold {
+        return;
+    }
+
+    let Some(plan) = plan_compaction(&chat_req.messages, TAIL_BUDGET_TOKENS) else {
+        return;
+    };
+
+    let model = chat_req.model.clone();
+    let chunk_count = plan.middle_chunks.len();
+    let mut summaries: Vec<String> = Vec::with_capacity(chunk_count);
+    let mut failed = false;
+
+    for chunk in &plan.middle_chunks {
+        let transcript = render_transcript(chunk);
+        if transcript.is_empty() {
+            continue;
+        }
+        match summarize_chunk(client, config, &model, &transcript).await {
+            Ok(s) => summaries.push(s),
+            Err(e) => {
+                tracing::warn!(
+                    provider = %config.name,
+                    error = %e.message,
+                    "auto_compact: 摘要调用失败,降级为硬截断"
+                );
+                failed = true;
+                break;
+            }
+        }
+    }
+
+    let (summary_text, kind, message) = if failed {
+        (
+            "[摘要生成失败,早前历史已省略]".to_string(),
+            "auto_compact_truncated",
+            format!("auto_compact 摘要失败,硬截断 ~{original_tokens} tok 历史(保留 head+tail)"),
+        )
+    } else {
+        (
+            summaries.join("\n\n---\n\n"),
+            "auto_compact",
+            format!("auto_compact 压缩 {chunk_count} 段中段历史,原始 ~{original_tokens} tok"),
+        )
+    };
+
+    chat_req.messages = splice(&plan.head, &summary_text, &plan.tail);
+
+    let compacted_tokens = estimate_tokens(&chat_req.messages);
+    chat_req.diagnostic_events.push(CapabilityDegradationEvent {
+        kind: kind.to_string(),
+        capability: "context".to_string(),
+        source: "auto_compact".to_string(),
+        provider: Some(config.name.clone()),
+        model: Some(model),
+        message,
+        count: Some(compacted_tokens),
+        reason: Some(format!("threshold={threshold}")),
+    });
+
+    tracing::info!(
+        provider = %config.name,
+        original_tokens,
+        compacted_tokens,
+        chunks = chunk_count,
+        "auto_compact: 历史已压缩"
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn msg(role: &str, content: &str) -> ChatMessage {
+        ChatMessage {
+            role: role.to_string(),
+            content: Some(Value::String(content.to_string())),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    fn asst_tool_call(id: &str, name: &str, args: &str) -> ChatMessage {
+        use crate::protocol::chat_completions::{ToolCall, ToolCallFunction};
+        ChatMessage {
+            role: "assistant".to_string(),
+            content: None,
+            reasoning_content: None,
+            tool_calls: Some(vec![ToolCall {
+                id: id.to_string(),
+                call_type: "function".to_string(),
+                function: ToolCallFunction {
+                    name: name.to_string(),
+                    arguments: args.to_string(),
+                },
+            }]),
+            tool_call_id: None,
+            name: None,
+        }
+    }
+
+    fn tool_result(id: &str, content: &str) -> ChatMessage {
+        ChatMessage {
+            role: "tool".to_string(),
+            content: Some(Value::String(content.to_string())),
+            reasoning_content: None,
+            tool_calls: None,
+            tool_call_id: Some(id.to_string()),
+            name: None,
+        }
+    }
+
+    #[test]
+    fn estimate_counts_text_and_images() {
+        let mut m = msg("user", &"a".repeat(400)); // 400 chars → 100 tok + 4 overhead
+        let t1 = estimate_msg_tokens(&m);
+        assert!((100..=110).contains(&t1));
+
+        m.content = Some(json!([
+            {"type": "input_image", "image_url": "x"},
+            {"type": "text", "text": "hi"}
+        ]));
+        let t2 = estimate_msg_tokens(&m);
+        assert!(t2 >= IMAGE_TOKENS);
+    }
+
+    #[test]
+    fn group_blocks_keeps_tool_pairing_intact() {
+        let messages = vec![
+            msg("system", "sys"),
+            msg("user", "hi"),
+            asst_tool_call("c1", "read", "{}"),
+            tool_result("c1", "file contents"),
+            msg("assistant", "done"),
+        ];
+        let blocks = group_blocks(&messages);
+        // system / user / [asst+tool] / assistant = 4 块
+        assert_eq!(blocks.len(), 4);
+        // 第三块 = assistant tool_call + 其 tool 结果,绑在一起
+        assert_eq!(blocks[2].len(), 2);
+        assert_eq!(blocks[2][0].role, "assistant");
+        assert_eq!(blocks[2][1].role, "tool");
+    }
+
+    #[test]
+    fn plan_never_splits_tool_call_from_result() {
+        // 构造:system + 多轮,中间含 tool_call/tool 配对,确保 plan 后无孤儿 tool。
+        let mut messages = vec![msg("system", "sys")];
+        for i in 0..40 {
+            messages.push(msg("user", &format!("user turn {i} {}", "x".repeat(2000))));
+            messages.push(asst_tool_call(&format!("c{i}"), "read", "{}"));
+            messages.push(tool_result(&format!("c{i}"), &"r".repeat(2000)));
+            messages.push(msg("assistant", &format!("reply {i} {}", "y".repeat(2000))));
+        }
+
+        let plan = plan_compaction(&messages, TAIL_BUDGET_TOKENS).expect("should compact");
+        let spliced = splice(&plan.head, "SUMMARY", &plan.tail);
+
+        // 校验:任何 role=="tool" 的消息,其前一条必是 assistant 且带 tool_calls。
+        for (i, m) in spliced.iter().enumerate() {
+            if m.role == "tool" {
+                assert!(i > 0, "tool 不能是首条");
+                let prev = &spliced[i - 1];
+                assert_eq!(prev.role, "assistant", "tool 前必须是 assistant");
+                assert!(
+                    prev.tool_calls.as_ref().is_some_and(|t| !t.is_empty()),
+                    "tool 前的 assistant 必须带 tool_calls"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn plan_preserves_head_and_tail_verbatim() {
+        let mut messages = vec![msg("system", "SYSTEM_PROMPT")];
+        for i in 0..50 {
+            messages.push(msg("user", &format!("u{i} {}", "x".repeat(2000))));
+            messages.push(msg("assistant", &format!("a{i} {}", "y".repeat(2000))));
+        }
+        let last_user = messages[messages.len() - 2].clone();
+        let last_asst = messages[messages.len() - 1].clone();
+
+        let plan = plan_compaction(&messages, TAIL_BUDGET_TOKENS).expect("should compact");
+        let spliced = splice(&plan.head, "SUMMARY", &plan.tail);
+
+        // head 第一条仍是原 system
+        assert_eq!(spliced[0].role, "system");
+        assert_eq!(
+            spliced[0].content.as_ref().unwrap().as_str().unwrap(),
+            "SYSTEM_PROMPT"
+        );
+        // 第二条是摘要消息
+        assert_eq!(spliced[1].role, "user");
+        assert!(spliced[1]
+            .content
+            .as_ref()
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("SUMMARY"));
+        // 末尾两条仍是原始最近轮(verbatim)
+        let n = spliced.len();
+        assert_eq!(
+            spliced[n - 2].content.as_ref().unwrap().as_str().unwrap(),
+            last_user.content.as_ref().unwrap().as_str().unwrap()
+        );
+        assert_eq!(
+            spliced[n - 1].content.as_ref().unwrap().as_str().unwrap(),
+            last_asst.content.as_ref().unwrap().as_str().unwrap()
+        );
+    }
+
+    #[test]
+    fn plan_returns_none_when_short() {
+        let messages = vec![
+            msg("system", "sys"),
+            msg("user", "hi"),
+            msg("assistant", "yo"),
+        ];
+        assert!(plan_compaction(&messages, TAIL_BUDGET_TOKENS).is_none());
+    }
+
+    #[test]
+    fn large_middle_splits_into_multiple_chunks() {
+        // 中段远超 CHUNK_BUDGET_TOKENS,应分多块。
+        let mut messages = vec![msg("system", "sys")];
+        // 每条 ~5000 tok(20000 chars),200 条 → ~1M tok 中段
+        for i in 0..200 {
+            messages.push(msg("user", &format!("turn {i} {}", "x".repeat(20000))));
+        }
+        let plan = plan_compaction(&messages, TAIL_BUDGET_TOKENS).expect("should compact");
+        assert!(
+            plan.middle_chunks.len() > 1,
+            "大中段应分多块,实际 {}",
+            plan.middle_chunks.len()
+        );
+        // 每块不超预算(单块单条除外)
+        for chunk in &plan.middle_chunks {
+            let t: usize = chunk.iter().map(estimate_msg_tokens).sum();
+            assert!(t <= CHUNK_BUDGET_TOKENS + 5000, "块 {t} 超预算过多");
+        }
+    }
+
+    #[test]
+    fn render_transcript_shows_tool_calls_and_results() {
+        let messages = vec![
+            msg("user", "请读文件"),
+            asst_tool_call("c1", "read_file", r#"{"path":"a.rs"}"#),
+            tool_result("c1", "fn main() {}"),
+        ];
+        let t = render_transcript(&messages);
+        assert!(t.contains("用户: 请读文件"));
+        assert!(t.contains("[调用工具 read_file"));
+        assert!(t.contains("工具结果: fn main()"));
+    }
+
+    #[test]
+    fn cache_roundtrip_and_eviction() {
+        let key = content_hash("unique-transcript-xyz");
+        assert!(cache_get(&key).is_none());
+        cache_put(key.clone(), "summary-A".to_string());
+        assert_eq!(cache_get(&key), Some("summary-A".to_string()));
+    }
+
+    // env 全局,合成一个串行测试覆盖各场景(同 responses_to_chat 的约定)。
+    #[test]
+    fn threshold_env_scenarios() {
+        let config = test_config("mimo", "openai");
+
+        // 1. 未设 env → 关闭
+        std::env::remove_var("AGENTGATE_AUTO_COMPACT_PROVIDERS");
+        std::env::remove_var("AGENTGATE_AUTO_COMPACT_TOKENS");
+        assert!(threshold_for(&config).is_none());
+
+        // 2. 按 provider name 匹配 → 默认阈值
+        std::env::set_var("AGENTGATE_AUTO_COMPACT_PROVIDERS", "mimo");
+        assert_eq!(threshold_for(&config), Some(DEFAULT_THRESHOLD_TOKENS));
+
+        // 3. 按 provider_type 匹配 + 自定义阈值
+        std::env::set_var("AGENTGATE_AUTO_COMPACT_PROVIDERS", "openai");
+        std::env::set_var("AGENTGATE_AUTO_COMPACT_TOKENS", "50000");
+        assert_eq!(threshold_for(&config), Some(50000));
+
+        // 4. 不在列表 → 关闭
+        std::env::set_var("AGENTGATE_AUTO_COMPACT_PROVIDERS", "deepseek");
+        assert!(threshold_for(&config).is_none());
+
+        std::env::remove_var("AGENTGATE_AUTO_COMPACT_PROVIDERS");
+        std::env::remove_var("AGENTGATE_AUTO_COMPACT_TOKENS");
+    }
+
+    fn test_config(name: &str, ptype: &str) -> ProviderConfig {
+        ProviderConfig {
+            name: name.to_string(),
+            provider_type: ptype.to_string(),
+            base_url: "http://localhost".to_string(),
+            api_keys: vec!["k".to_string()],
+            default_model: "m".to_string(),
+            reasoning_model: None,
+            timeout_seconds: 60,
+            extra_headers: Default::default(),
+            anthropic_base_url: None,
+            responses_base_url: None,
+        }
+    }
+}

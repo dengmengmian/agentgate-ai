@@ -306,4 +306,3 @@ pub fn get_runtime_kpis(state: State<'_, AppState>) -> Result<RuntimeKpis, AppEr
         success_rate_lifetime: stats.success_rate,
     })
 }
-

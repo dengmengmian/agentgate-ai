@@ -46,10 +46,11 @@ impl ProviderConfig {
         // Parse api_key: JSON array → multiple keys, plain string → single key
         let api_keys = parse_api_keys(&raw);
         if api_keys.is_empty() {
-            return Err(
-                AppError::new(crate::errors::codes::PROVIDER_API_KEY_MISSING, "No valid API keys configured")
-                    .with_suggestion("Set at least one API key in the Providers page"),
-            );
+            return Err(AppError::new(
+                crate::errors::codes::PROVIDER_API_KEY_MISSING,
+                "No valid API keys configured",
+            )
+            .with_suggestion("Set at least one API key in the Providers page"));
         }
 
         let extra_headers = p
@@ -419,8 +420,12 @@ pub async fn send_non_stream(
         }
     }
 
-    Err(last_err
-        .unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_NON_STREAM_ERROR, "All retries exhausted")))
+    Err(last_err.unwrap_or_else(|| {
+        AppError::new(
+            crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
+            "All retries exhausted",
+        )
+    }))
 }
 
 /// Send a streaming chat completions request with automatic retry.
@@ -538,7 +543,12 @@ pub async fn send_stream(
         }
     }
 
-    Err(last_err.unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, "All retries exhausted")))
+    Err(last_err.unwrap_or_else(|| {
+        AppError::new(
+            crate::errors::codes::UPSTREAM_STREAM_ERROR,
+            "All retries exhausted",
+        )
+    }))
 }
 
 pub fn is_mimo_web_search_disabled_error(err: &AppError) -> bool {
@@ -738,8 +748,12 @@ pub async fn send_anthropic_non_stream(
         .with_detail(truncate(&sanitized, 2000)));
     }
 
-    Err(last_err
-        .unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_NON_STREAM_ERROR, "All retries exhausted")))
+    Err(last_err.unwrap_or_else(|| {
+        AppError::new(
+            crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
+            "All retries exhausted",
+        )
+    }))
 }
 
 /// Send a streaming request to Claude Messages API with automatic retry.
@@ -820,7 +834,12 @@ pub async fn send_anthropic_stream(
         .with_detail(truncate(&sanitized, 2000)));
     }
 
-    Err(last_err.unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, "All retries exhausted")))
+    Err(last_err.unwrap_or_else(|| {
+        AppError::new(
+            crate::errors::codes::UPSTREAM_STREAM_ERROR,
+            "All retries exhausted",
+        )
+    }))
 }
 
 /// Send a non-streaming request to Gemini API with retry.
@@ -905,8 +924,12 @@ pub async fn send_gemini_non_stream(
         .with_detail(truncate(&sanitized, 2000)));
     }
 
-    Err(last_err
-        .unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_NON_STREAM_ERROR, "All retries exhausted")))
+    Err(last_err.unwrap_or_else(|| {
+        AppError::new(
+            crate::errors::codes::UPSTREAM_NON_STREAM_ERROR,
+            "All retries exhausted",
+        )
+    }))
 }
 
 /// Send a streaming request to Gemini API with retry.
@@ -984,7 +1007,12 @@ pub async fn send_gemini_stream(
         .with_detail(truncate(&sanitized, 2000)));
     }
 
-    Err(last_err.unwrap_or_else(|| AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, "All retries exhausted")))
+    Err(last_err.unwrap_or_else(|| {
+        AppError::new(
+            crate::errors::codes::UPSTREAM_STREAM_ERROR,
+            "All retries exhausted",
+        )
+    }))
 }
 
 /// Parse api_key field: JSON array → Vec<String>, plain string → vec![string].

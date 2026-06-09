@@ -114,10 +114,7 @@ mod tests {
 
     #[test]
     fn images_skip_non_vision_providers() {
-        let cands = vec![
-            cand("a", false, Some(false)),
-            cand("b", false, Some(true)),
-        ];
+        let cands = vec![cand("a", false, Some(false)), cand("b", false, Some(true))];
         let order = build_attempt_order(&cands, "a", true, true, None);
         assert_eq!(ids(&order), vec!["b"]);
     }
@@ -125,10 +122,7 @@ mod tests {
     #[test]
     fn images_fall_back_to_original_order_when_all_filtered() {
         // 全部 provider 都不支持 vision → 退回原始顺序而非空
-        let cands = vec![
-            cand("a", false, Some(false)),
-            cand("b", false, Some(false)),
-        ];
+        let cands = vec![cand("a", false, Some(false)), cand("b", false, Some(false))];
         let order = build_attempt_order(&cands, "a", true, true, None);
         assert_eq!(ids(&order), vec!["a", "b"]);
     }

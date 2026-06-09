@@ -34,8 +34,12 @@ fn save_official_config() -> Result<(), AppError> {
         return Ok(());
     }
     let dir = saved_dir();
-    fs::create_dir_all(&dir)
-        .map_err(|e| AppError::new(crate::errors::codes::ATOMCODE_SAVE_FAILED, format!("Cannot create dir: {e}")))?;
+    fs::create_dir_all(&dir).map_err(|e| {
+        AppError::new(
+            crate::errors::codes::ATOMCODE_SAVE_FAILED,
+            format!("Cannot create dir: {e}"),
+        )
+    })?;
     fs::copy(&src, saved_config_path()).map_err(|e| {
         AppError::new(
             crate::errors::codes::ATOMCODE_SAVE_FAILED,

@@ -5,7 +5,6 @@
 
 use std::time::Duration;
 
-
 /// 启动延迟：让网关 / DB 先就绪。
 const STARTUP_DELAY: Duration = Duration::from_secs(30);
 /// 探测间隔。固定 10 分钟——1-token 探测开销极小，10 分钟粒度足够发现 provider 掉线。

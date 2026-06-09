@@ -260,8 +260,7 @@ fn sort_candidates_by_strategy(
                 .then(a.priority.cmp(&b.priority))
         }),
         "fastest" => {
-            let lat =
-                storage::request_logs::avg_latency_by_provider(conn, 24).unwrap_or_default();
+            let lat = storage::request_logs::avg_latency_by_provider(conn, 24).unwrap_or_default();
             candidates.sort_by(|a, b| {
                 let la = lat.get(&a.provider_name).copied().unwrap_or(f64::MAX);
                 let lb = lat.get(&b.provider_name).copied().unwrap_or(f64::MAX);
@@ -289,8 +288,11 @@ fn select_global_fallback(
 ) -> Result<ProviderSelection, AppError> {
     let settings = storage::gateway_settings::get(conn)?;
     let provider_id = settings.active_provider_id.ok_or_else(|| {
-        AppError::new(crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND, "No active provider configured")
-            .with_suggestion("Set an active provider in the Providers page")
+        AppError::new(
+            crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND,
+            "No active provider configured",
+        )
+        .with_suggestion("Set an active provider in the Providers page")
     })?;
 
     let provider = storage::providers::get_by_id(conn, &provider_id)?;
@@ -325,9 +327,7 @@ pub fn select_for_failover(
     requested_model: Option<&str>,
     request: Option<&ResponsesRequest>,
 ) -> Result<ProviderSelection, AppError> {
-    let conn = db
-        .get()
-        .map_err(|_| AppError::internal("DB lock failed"))?;
+    let conn = db.get().map_err(|_| AppError::internal("DB lock failed"))?;
 
     let profile = storage::route_profiles::get_default_for_protocol(&conn, input_protocol)?;
 
@@ -605,7 +605,10 @@ mod tests {
         assert_eq!(trace["route_decision"]["selected_provider_id"], "p1");
         assert_eq!(trace["route_decision"]["selected_provider_name"], "MiMo");
         assert_eq!(trace["route_decision"]["selected_model"], "mimo-v2.5-pro");
-        assert_eq!(trace["route_decision"]["candidates"][0]["provider_name"], "Test");
+        assert_eq!(
+            trace["route_decision"]["candidates"][0]["provider_name"],
+            "Test"
+        );
     }
 
     #[test]

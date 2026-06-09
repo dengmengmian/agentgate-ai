@@ -100,8 +100,9 @@ pub async fn handle_messages(
         );
         if let Some(top) = order.first() {
             if top.provider_id != selection.provider.id {
-                let replacement = lock_db(&state.db)
-                    .and_then(|conn| crate::storage::providers::get_by_id(&conn, &top.provider_id).ok());
+                let replacement = lock_db(&state.db).and_then(|conn| {
+                    crate::storage::providers::get_by_id(&conn, &top.provider_id).ok()
+                });
                 if let Some(provider) = replacement {
                     selection.model = top.model.clone();
                     selection.provider = provider;
@@ -167,7 +168,10 @@ pub async fn handle_messages(
     // No anthropic endpoint — fall back to Messages → Chat Completions transform
     let msg_req: crate::protocol::anthropic_messages::MessagesRequest = serde_json::from_str(&body)
         .map_err(|e| {
-            let err = AppError::new(crate::errors::codes::MESSAGES_PARSE_ERROR, format!("Failed to parse: {e}"));
+            let err = AppError::new(
+                crate::errors::codes::MESSAGES_PARSE_ERROR,
+                format!("Failed to parse: {e}"),
+            );
             log_request_error(
                 &state.db,
                 &client_type,
@@ -556,7 +560,6 @@ async fn handle_anthropic_fallback_stream(
         .body(body)
         .unwrap())
 }
-
 
 #[cfg(test)]
 mod tests {

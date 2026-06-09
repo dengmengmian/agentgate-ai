@@ -51,20 +51,30 @@ fn saved_auth_path() -> PathBuf {
 /// the OAuth tokens to just `{"OPENAI_API_KEY":"ag_local_..."}`).
 fn save_official_files() -> Result<(), AppError> {
     let dir = saved_dir();
-    fs::create_dir_all(&dir)
-        .map_err(|e| AppError::new(crate::errors::codes::CODEX_SAVE_FAILED, format!("Cannot create dir: {e}")))?;
+    fs::create_dir_all(&dir).map_err(|e| {
+        AppError::new(
+            crate::errors::codes::CODEX_SAVE_FAILED,
+            format!("Cannot create dir: {e}"),
+        )
+    })?;
 
     let cfg = config_path();
     if cfg.exists() {
         fs::copy(&cfg, saved_config_path()).map_err(|e| {
-            AppError::new(crate::errors::codes::CODEX_SAVE_FAILED, format!("Cannot save config.toml: {e}"))
+            AppError::new(
+                crate::errors::codes::CODEX_SAVE_FAILED,
+                format!("Cannot save config.toml: {e}"),
+            )
         })?;
     }
 
     let auth = auth_json_path();
     if auth.exists() && !auth_is_polluted(&auth) {
         fs::copy(&auth, saved_auth_path()).map_err(|e| {
-            AppError::new(crate::errors::codes::CODEX_SAVE_FAILED, format!("Cannot save auth.json: {e}"))
+            AppError::new(
+                crate::errors::codes::CODEX_SAVE_FAILED,
+                format!("Cannot save auth.json: {e}"),
+            )
         })?;
     }
 
@@ -568,8 +578,12 @@ pub fn open_config() -> Result<(), AppError> {
             "Codex config file does not exist",
         ));
     }
-    open::that(&path)
-        .map_err(|e| AppError::new(crate::errors::codes::CODEX_CONFIG_OPEN_FAILED, format!("Failed to open: {e}")))
+    open::that(&path).map_err(|e| {
+        AppError::new(
+            crate::errors::codes::CODEX_CONFIG_OPEN_FAILED,
+            format!("Failed to open: {e}"),
+        )
+    })
 }
 
 pub(crate) fn extract_toml_value(content: &str, key: &str) -> Option<String> {

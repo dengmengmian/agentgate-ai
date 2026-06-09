@@ -1,4 +1,5 @@
 pub mod anthropic_model_suffix;
+pub mod auto_compact;
 pub mod body_decode;
 pub mod circuit_breaker;
 pub mod failover;

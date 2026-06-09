@@ -17,10 +17,9 @@ use crate::providers::adapter::{self, ProviderConfig};
 use crate::transform::{responses_to_anthropic, responses_to_chat, responses_to_gemini};
 
 use super::shared::{
-    detect_client_from_ua, lock_db, log_request_error, log_request_error_full,
-    log_request_success, native_model_override, refine_struct_body, refine_value_body,
-    request_contains_images, sanitize_body, trace_with_degradation_events, truncate_str,
-    validate_auth, GatewayError,
+    detect_client_from_ua, lock_db, log_request_error, log_request_error_full, log_request_success,
+    native_model_override, refine_struct_body, refine_value_body, request_contains_images,
+    sanitize_body, trace_with_degradation_events, truncate_str, validate_auth, GatewayError,
 };
 use super::GatewayState;
 
@@ -288,6 +287,10 @@ pub async fn handle_responses(
                     break;
                 }
             };
+            // 长历史自压缩:超阈值时摘要中段历史,落回上游窗口内。仅对显式开启的
+            // provider 生效(AGENTGATE_AUTO_COMPACT_PROVIDERS),内部按需额外调一次上游。
+            crate::gateway::auto_compact::maybe_compact(&state.http_client, &config, &mut chat_req)
+                .await;
             let _refiner_log = refine_struct_body(&state.db, &provider, &mut chat_req);
             let converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
             let is_stream = chat_req.stream;
@@ -311,6 +314,7 @@ pub async fn handle_responses(
                     state.clone(),
                     config.clone(),
                     chat_req,
+                    req.clone(),
                     request_id.clone(),
                     raw_body.clone(),
                     converted_json,
@@ -393,14 +397,129 @@ pub async fn handle_responses(
 
     // All attempts exhausted
     Err(GatewayError(last_error.unwrap_or_else(|| {
-        AppError::new(crate::errors::codes::FAILOVER_EXHAUSTED, "All providers failed")
+        AppError::new(
+            crate::errors::codes::FAILOVER_EXHAUSTED,
+            "All providers failed",
+        )
     })))
+}
+
+fn build_chat_non_stream_responses_response(
+    resp_id: &str,
+    model: &str,
+    req: &ResponsesRequest,
+    chat_resp: &ChatCompletionResponse,
+    output: Vec<Value>,
+) -> Value {
+    let finish_reason = chat_resp
+        .choices
+        .as_ref()
+        .and_then(|choices| choices.first())
+        .and_then(|choice| choice.finish_reason.as_deref());
+    let incomplete = matches!(finish_reason, Some("length") | Some("max_tokens"));
+
+    let reasoning = json!({
+        "effort": req
+            .reasoning
+            .as_ref()
+            .and_then(|r| r.get("effort"))
+            .cloned()
+            .unwrap_or(Value::Null),
+        "summary": req
+            .reasoning
+            .as_ref()
+            .and_then(|r| r.get("summary"))
+            .cloned()
+            .unwrap_or(Value::Null),
+    });
+
+    let text = req
+        .text
+        .as_ref()
+        .and_then(|t| t.get("format"))
+        .map(|format| json!({ "format": format }))
+        .unwrap_or_else(|| json!({ "format": { "type": "text" } }));
+
+    json!({
+        "id": resp_id,
+        "object": "response",
+        "created_at": chrono::Utc::now().timestamp(),
+        "status": if incomplete { "incomplete" } else { "completed" },
+        "model": model,
+        "output": output,
+        "usage": map_chat_usage_to_responses(chat_resp.usage.as_ref()),
+        "parallel_tool_calls": req.parallel_tool_calls.unwrap_or(true),
+        "tool_choice": req.tool_choice.clone().unwrap_or_else(|| json!("auto")),
+        "reasoning": reasoning,
+        "text": text,
+        "incomplete_details": if incomplete {
+            json!({ "reason": "max_output_tokens" })
+        } else {
+            Value::Null
+        },
+        "error": Value::Null,
+        "metadata": req.metadata.clone().unwrap_or(Value::Null),
+        "previous_response_id": req.previous_response_id.clone().map(Value::String).unwrap_or(Value::Null),
+        "instructions": req.instructions.clone().map(Value::String).unwrap_or(Value::Null),
+        "temperature": req.temperature.map(Value::from).unwrap_or(Value::Null),
+        "top_p": req.top_p.map(Value::from).unwrap_or(Value::Null),
+        "max_output_tokens": req.max_output_tokens.map(Value::from).unwrap_or(Value::Null),
+        "tools": req.tools.clone().map(Value::Array).unwrap_or_else(|| json!([])),
+        "truncation": "disabled",
+    })
+}
+
+fn map_chat_usage_to_responses(usage: Option<&Value>) -> Value {
+    let Some(usage) = usage else {
+        return Value::Null;
+    };
+
+    let input_tokens = usage
+        .get("prompt_tokens")
+        .or_else(|| usage.get("input_tokens"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let output_tokens = usage
+        .get("completion_tokens")
+        .or_else(|| usage.get("output_tokens"))
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    let total_tokens = usage
+        .get("total_tokens")
+        .and_then(Value::as_i64)
+        .unwrap_or(input_tokens + output_tokens);
+
+    let mut out = json!({
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    });
+
+    if let Some(cached) = usage
+        .get("prompt_tokens_details")
+        .or_else(|| usage.get("input_tokens_details"))
+        .and_then(|d| d.get("cached_tokens"))
+        .cloned()
+    {
+        out["input_tokens_details"] = json!({ "cached_tokens": cached });
+    }
+    if let Some(reasoning) = usage
+        .get("completion_tokens_details")
+        .or_else(|| usage.get("output_tokens_details"))
+        .and_then(|d| d.get("reasoning_tokens"))
+        .cloned()
+    {
+        out["output_tokens_details"] = json!({ "reasoning_tokens": reasoning });
+    }
+
+    out
 }
 
 async fn handle_non_stream_response(
     state: GatewayState,
     config: ProviderConfig,
     mut chat_req: crate::protocol::chat_completions::ChatCompletionsRequest,
+    req: ResponsesRequest,
     request_id: String,
     raw_request: String,
     mut converted_request: String,
@@ -531,14 +650,9 @@ async fn handle_non_stream_response(
                 }
             }
 
-            let responses_resp = json!({
-                "id": resp_id,
-                "object": "response",
-                "created_at": chrono::Utc::now().timestamp(),
-                "status": "completed",
-                "model": model,
-                "output": output
-            });
+            let responses_resp = build_chat_non_stream_responses_response(
+                &resp_id, &model, &req, &chat_resp, output,
+            );
             let latency = start.elapsed().as_millis() as i64;
 
             // Store session for previous_response_id support
@@ -925,7 +1039,8 @@ async fn handle_stream_response(
                         );
                     }
                     Err(err_msg) => {
-                        let err = AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, &err_msg);
+                        let err =
+                            AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, &err_msg);
                         log_request_error_full(
                             &db,
                             &client_type,
@@ -1233,7 +1348,8 @@ async fn handle_anthropic_stream_response(
                         );
                     }
                     Err(err_msg) => {
-                        let err = AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, &err_msg);
+                        let err =
+                            AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, &err_msg);
                         log_request_error_full(
                             &db,
                             &client_type,
@@ -1510,7 +1626,8 @@ async fn handle_gemini_stream_response(
                         );
                     }
                     Err(err_msg) => {
-                        let err = AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, &err_msg);
+                        let err =
+                            AppError::new(crate::errors::codes::UPSTREAM_STREAM_ERROR, &err_msg);
                         log_request_error_full(
                             &db,
                             &client_type,
@@ -1560,3 +1677,87 @@ async fn handle_gemini_stream_response(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::chat_completions::{CompletionChoice, CompletionMessage};
+    use serde_json::json;
+
+    #[test]
+    fn chat_non_stream_response_envelope_preserves_responses_metadata() {
+        let req = ResponsesRequest {
+            model: Some("client-model".into()),
+            input: json!("hello"),
+            instructions: Some("Be concise".into()),
+            tools: Some(vec![json!({"type": "function", "name": "shell"})]),
+            tool_choice: Some(json!("auto")),
+            temperature: Some(0.2),
+            top_p: Some(0.9),
+            max_output_tokens: Some(123),
+            parallel_tool_calls: Some(false),
+            reasoning: Some(json!({"effort": "high"})),
+            text: Some(json!({"format": {"type": "json_object"}})),
+            metadata: Some(json!({"trace": "abc"})),
+            previous_response_id: Some("resp_prev".into()),
+            ..Default::default()
+        };
+        let chat_resp = ChatCompletionResponse {
+            id: Some("chatcmpl_1".into()),
+            usage: Some(json!({
+                "prompt_tokens": 10,
+                "completion_tokens": 3,
+                "total_tokens": 13
+            })),
+            choices: Some(vec![CompletionChoice {
+                finish_reason: Some("length".into()),
+                message: Some(CompletionMessage {
+                    role: Some("assistant".into()),
+                    content: Some("partial".into()),
+                    reasoning_content: None,
+                    tool_calls: None,
+                }),
+            }]),
+        };
+
+        let resp = build_chat_non_stream_responses_response(
+            "resp_test",
+            "mimo-v2.5-pro",
+            &req,
+            &chat_resp,
+            vec![json!({
+                "id": "msg_test",
+                "type": "message",
+                "status": "completed",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": "partial"}]
+            })],
+        );
+
+        assert_eq!(resp["status"], "incomplete");
+        assert_eq!(
+            resp["incomplete_details"],
+            json!({"reason": "max_output_tokens"})
+        );
+        assert_eq!(resp["usage"]["input_tokens"], 10);
+        assert_eq!(resp["usage"]["output_tokens"], 3);
+        assert_eq!(resp["usage"]["total_tokens"], 13);
+        assert_eq!(resp["parallel_tool_calls"], false);
+        assert_eq!(resp["tool_choice"], json!("auto"));
+        assert_eq!(
+            resp["reasoning"],
+            json!({"effort": "high", "summary": null})
+        );
+        assert_eq!(resp["text"], json!({"format": {"type": "json_object"}}));
+        assert_eq!(resp["metadata"], json!({"trace": "abc"}));
+        assert_eq!(resp["previous_response_id"], "resp_prev");
+        assert_eq!(resp["instructions"], "Be concise");
+        assert_eq!(resp["temperature"], 0.2);
+        assert_eq!(resp["top_p"], 0.9);
+        assert_eq!(resp["max_output_tokens"], 123);
+        assert_eq!(
+            resp["tools"],
+            json!([{"type": "function", "name": "shell"}])
+        );
+        assert_eq!(resp["truncation"], "disabled");
+    }
+}

@@ -113,6 +113,10 @@ impl super::ProviderTransform for MimoProvider {
             req.reasoning_effort = None;
         }
 
+        if req.parallel_tool_calls.is_none() {
+            req.parallel_tool_calls = Some(true);
+        }
+
         // Strip MiMo's web_search builtin for models that don't support it.
         // Without this strip the upstream returns 400 "webSearchEnabled is false"
         // even when the account has the plugin activated, because the model
@@ -293,6 +297,21 @@ mod tests {
         r.reasoning_effort = Some("high".into());
         MimoProvider.finalize_request(&mut r, &None);
         assert_eq!(r.reasoning_effort, Some("high".into()));
+    }
+
+    #[test]
+    fn parallel_tool_calls_defaults_true_for_mimo() {
+        let mut r = req("mimo-v2.5-pro");
+        MimoProvider.finalize_request(&mut r, &None);
+        assert_eq!(r.parallel_tool_calls, Some(true));
+    }
+
+    #[test]
+    fn explicit_parallel_tool_calls_false_is_respected() {
+        let mut r = req("mimo-v2.5-pro");
+        r.parallel_tool_calls = Some(false);
+        MimoProvider.finalize_request(&mut r, &None);
+        assert_eq!(r.parallel_tool_calls, Some(false));
     }
 
     #[test]

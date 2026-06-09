@@ -163,12 +163,19 @@ async fn messages_image_routes_to_vision_provider() {
     // Primary (non-vision) + vision candidate, failover mode. An image-bearing
     // /v1/messages request must land on the vision provider's upstream.
     let primary_mock = MockUpstream::start().await;
-    primary_mock.stub_chat_completions_ok("novis-model", "ok").await;
+    primary_mock
+        .stub_chat_completions_ok("novis-model", "ok")
+        .await;
     let vision_mock = MockUpstream::start().await;
-    vision_mock.stub_chat_completions_ok("vis-model", "ok").await;
+    vision_mock
+        .stub_chat_completions_ok("vis-model", "ok")
+        .await;
 
-    let harness =
-        GatewayHarness::start(ProviderSpec::chat_only("custom", "novis-model"), &primary_mock).await;
+    let harness = GatewayHarness::start(
+        ProviderSpec::chat_only("custom", "novis-model"),
+        &primary_mock,
+    )
+    .await;
     harness.add_vision_failover_candidate(&vision_mock, "vis-model");
     let client = harness.client();
 
@@ -189,7 +196,11 @@ async fn messages_image_routes_to_vision_provider() {
         .send()
         .await
         .expect("send /v1/messages");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let vision_hits = vision_mock.received().await;
     let primary_hits = primary_mock.received().await;
@@ -211,12 +222,19 @@ async fn messages_image_routes_to_vision_provider() {
 async fn chat_completions_image_routes_to_vision_provider() {
     // Same guarantee on the /v1/chat/completions entry.
     let primary_mock = MockUpstream::start().await;
-    primary_mock.stub_chat_completions_ok("novis-model", "ok").await;
+    primary_mock
+        .stub_chat_completions_ok("novis-model", "ok")
+        .await;
     let vision_mock = MockUpstream::start().await;
-    vision_mock.stub_chat_completions_ok("vis-model", "ok").await;
+    vision_mock
+        .stub_chat_completions_ok("vis-model", "ok")
+        .await;
 
-    let harness =
-        GatewayHarness::start(ProviderSpec::chat_only("custom", "novis-model"), &primary_mock).await;
+    let harness = GatewayHarness::start(
+        ProviderSpec::chat_only("custom", "novis-model"),
+        &primary_mock,
+    )
+    .await;
     harness.add_vision_failover_candidate(&vision_mock, "vis-model");
     let client = harness.client();
 
@@ -237,7 +255,11 @@ async fn chat_completions_image_routes_to_vision_provider() {
         .send()
         .await
         .expect("send /v1/chat/completions");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let vision_hits = vision_mock.received().await;
     let primary_hits = primary_mock.received().await;
@@ -260,12 +282,19 @@ async fn messages_text_only_stays_on_primary() {
     // Control: a text-only /v1/messages request must NOT be rerouted — it stays
     // on the primary even though a vision candidate exists.
     let primary_mock = MockUpstream::start().await;
-    primary_mock.stub_chat_completions_ok("novis-model", "ok").await;
+    primary_mock
+        .stub_chat_completions_ok("novis-model", "ok")
+        .await;
     let vision_mock = MockUpstream::start().await;
-    vision_mock.stub_chat_completions_ok("vis-model", "ok").await;
+    vision_mock
+        .stub_chat_completions_ok("vis-model", "ok")
+        .await;
 
-    let harness =
-        GatewayHarness::start(ProviderSpec::chat_only("custom", "novis-model"), &primary_mock).await;
+    let harness = GatewayHarness::start(
+        ProviderSpec::chat_only("custom", "novis-model"),
+        &primary_mock,
+    )
+    .await;
     harness.add_vision_failover_candidate(&vision_mock, "vis-model");
     let client = harness.client();
 
@@ -280,7 +309,11 @@ async fn messages_text_only_stays_on_primary() {
         .send()
         .await
         .expect("send /v1/messages");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let primary_hits = primary_mock.received().await;
     assert_eq!(

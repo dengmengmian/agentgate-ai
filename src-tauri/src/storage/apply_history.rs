@@ -228,7 +228,10 @@ pub fn delete(conn: &Connection, id: &str) -> Result<(), AppError> {
             "初始快照不可删除——它是回滚到原始配置的唯一退路",
         ));
     }
-    conn.execute("DELETE FROM client_apply_history WHERE id = ?1", params![id])?;
+    conn.execute(
+        "DELETE FROM client_apply_history WHERE id = ?1",
+        params![id],
+    )?;
     Ok(())
 }
 
@@ -298,7 +301,10 @@ mod tests {
         let conn = setup();
         let id = record(&conn, "codex", "apply", &dummy_snapshot("a"), "first").unwrap();
         assert!(delete(&conn, &id).is_err(), "initial must be protected");
-        assert!(get(&conn, &id).is_ok(), "initial still present after refused delete");
+        assert!(
+            get(&conn, &id).is_ok(),
+            "initial still present after refused delete"
+        );
     }
 
     #[test]
