@@ -499,6 +499,24 @@ fn flush_tool_calls(
         }
         None
     });
+    // Codex 把"assistant 说一句"和紧随的 function_call 作为**两个独立 item** 下发,
+    // 直译会变成两条连续 assistant 消息(一条纯文本、一条纯 tool_calls)。这在 Chat
+    // Completions 里不标准——标准是一条 assistant 同时带 content + tool_calls。部分模型
+    // (实测 MiMo)在这种拆开的历史下会"看不懂上一轮的动作链",大概率只回一句计划就
+    // stop、不接着调工具(实测:拆开 1/10 调工具,合并 8/10)。所以:若上一条正是
+    // assistant 纯文本(有 content、无 tool_calls),把本批 tool_calls 合并进去成一条。
+    if let Some(last) = messages.last_mut() {
+        if last.role == "assistant"
+            && last.tool_calls.is_none()
+            && last.content.as_ref().map_or(false, |c| !c.is_null())
+        {
+            last.tool_calls = Some(std::mem::take(pending));
+            if last.reasoning_content.is_none() {
+                last.reasoning_content = rc;
+            }
+            return;
+        }
+    }
     messages.push(ChatMessage {
         role: "assistant".to_string(),
         content: None,
@@ -1128,6 +1146,48 @@ mod tests {
         assert!(result.messages[0].tool_calls.is_some());
         assert_eq!(result.messages[1].role, "tool");
         assert_eq!(result.messages[1].tool_call_id, Some("call_1".to_string()));
+    }
+
+    #[test]
+    fn test_assistant_text_and_function_call_merge_into_one() {
+        // Codex 把"assistant 说一句"和 function_call 作为两个独立 item 下发;应合并成
+        // 一条 assistant 消息(content + tool_calls),而不是拆成两条连续 assistant。
+        let req = ResponsesRequest {
+            model: Some("gpt-4".to_string()),
+            input: json!([
+                {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "好的,我先查一下"}]},
+                {"type": "function_call", "call_id": "call_1", "name": "search", "arguments": "{\"q\":\"hi\"}"},
+                {"type": "function_call_output", "call_id": "call_1", "output": "result"}
+            ]),
+            ..Default::default()
+        };
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
+        // 期望 [assistant(content+tool_calls), tool] —— 2 条,不是拆成的 3 条
+        assert_eq!(result.messages.len(), 2, "assistant 文本 + function_call 应合并成一条");
+        assert_eq!(result.messages[0].role, "assistant");
+        assert!(result.messages[0].content.is_some(), "合并后保留文本 content");
+        assert!(result.messages[0].tool_calls.is_some(), "合并后带 tool_calls");
+        assert_eq!(result.messages[1].role, "tool");
+    }
+
+    #[test]
+    fn test_function_call_without_preceding_text_stays_standalone() {
+        // 没有前置 assistant 文本时,function_call 仍单独成一条 assistant(不误并)。
+        let req = ResponsesRequest {
+            model: Some("gpt-4".to_string()),
+            input: json!([
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "查一下"}]},
+                {"type": "function_call", "call_id": "call_1", "name": "search", "arguments": "{}"}
+            ]),
+            ..Default::default()
+        };
+        let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
+        // user 不被污染;function_call 自成一条 assistant(不误并进 user)。
+        // 注:孤儿 tool_call 会被合成一条空 tool 输出,故总数 > 2,这里只校验前两条。
+        assert_eq!(result.messages[0].role, "user");
+        assert!(result.messages[0].tool_calls.is_none(), "user 不应被挂 tool_calls");
+        assert_eq!(result.messages[1].role, "assistant");
+        assert!(result.messages[1].tool_calls.is_some());
     }
 
     #[test]
