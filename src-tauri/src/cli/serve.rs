@@ -214,6 +214,52 @@ fn open_conn(cli: &Cli) -> DbConn {
     }
 }
 
+/// 声明式配置:设了 `AGENTGATE_CONFIG_FILE` 且库里还没有任何 provider 时,从该
+/// JSON(导出的配置)导入一份。已有数据则跳过、绝不覆盖——避免重启清掉运行期改动。
+/// 失败只告警不致命:配置文件坏不该挡住网关启动。
+fn seed_config_if_empty(db: &DbPool, path: &str) {
+    let mut conn = match db.get() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Config seed: cannot acquire DB connection: {e}");
+            return;
+        }
+    };
+    match agentgate_lib::storage::providers::list_all(&conn) {
+        Ok(existing) if !existing.is_empty() => {
+            eprintln!(
+                "Config seed: {} provider(s) already present, skipping {path}",
+                existing.len()
+            );
+            return;
+        }
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("Config seed: cannot read providers: {}", e.message);
+            return;
+        }
+    }
+    let raw = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Config seed: cannot read {path}: {e}");
+            return;
+        }
+    };
+    let payload: agentgate_lib::storage::config_backups::ConfigExport =
+        match serde_json::from_str(&raw) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Config seed: invalid config JSON in {path}: {e}");
+                return;
+            }
+        };
+    match agentgate_lib::storage::config_backups::import(&mut conn, &payload) {
+        Ok(_) => eprintln!("Config seed: imported configuration from {path}"),
+        Err(e) => eprintln!("Config seed: import failed: {}", e.message),
+    }
+}
+
 /// Provider type presets: (base_url, default_model)
 fn provider_presets() -> std::collections::HashMap<&'static str, (&'static str, &'static str)> {
     [
@@ -379,6 +425,13 @@ async fn cmd_serve(
 ) {
     let db_dir = get_db_dir(cli);
     let db = open_db(cli);
+
+    // 声明式部署:AGENTGATE_CONFIG_FILE 指向一份导出的配置,库为空时种子化。
+    if let Ok(path) = std::env::var("AGENTGATE_CONFIG_FILE") {
+        if !path.trim().is_empty() {
+            seed_config_if_empty(&db, &path);
+        }
+    }
 
     let _ = agentgate_lib::security::local_token::ensure_token();
     let token = agentgate_lib::security::local_token::read_token().unwrap_or_default();
