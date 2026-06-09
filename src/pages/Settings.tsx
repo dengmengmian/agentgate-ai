@@ -1,13 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { events } from "@/lib/bindings";
-import { Shield, FolderOpen, RefreshCcw, Download, Copy, DollarSign, Plus, Trash2, Settings2, Database, Info, PawPrint, ChevronDown, ChevronRight, Share2, Upload } from "lucide-react";
+import { Shield, FolderOpen, RefreshCcw, Download, Plus, Trash2, Settings2, Database, Info, PawPrint, ChevronDown, ChevronRight, Share2, Upload } from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { toast } from "@/components/common/Toast";
-import { useI18n, type Locale } from "@/lib/i18n";
+import { GeneralTab } from "@/components/settings/GeneralTab";
+import { SecurityTab } from "@/components/settings/SecurityTab";
+import { DataTab } from "@/components/settings/DataTab";
+import { PetTab } from "@/components/settings/PetTab";
+import { AboutTab } from "@/components/settings/AboutTab";
+import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { useGatewaySettings, usePricing } from "@/store/global";
 import type { GatewaySettings as GatewaySettingsType } from "@/types/gateway";
@@ -211,276 +216,53 @@ export function Settings() {
       {/* Right Content */}
       <div className="flex-1 min-w-0 space-y-6">
         {tab === "general" && (
-          <section className="rounded-xl border border-border bg-card p-5">
-            <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.general")}</h3>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-text-primary">{t("settings.auto_start_gateway")}</p>
-                  <p className="text-xs text-text-muted">{t("settings.auto_start_desc")}</p>
-                </div>
-                <ToggleSwitch checked={settings.auto_start} onChange={handleUpdateAutoStart} />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-text-primary">{t("settings.language")}</p>
-                  <p className="text-xs text-text-muted">{t("settings.lang_desc")}</p>
-                </div>
-                <select
-                  value={locale}
-                  onChange={(e) => setLocale(e.target.value as Locale)}
-                  className="rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
-                >
-                  <option value="en">English</option>
-                  <option value="zh">中文</option>
-                </select>
-              </div>
-              <div>
-                <p className="text-sm text-text-primary">{t("settings.theme")}</p>
-                <p className="mb-3 text-xs text-text-muted">{t("settings.theme_desc")}</p>
-                <ThemePicker value={theme} onChange={setTheme} />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-text-primary">{t("settings.show_quick_setup")}</p>
-                  <p className="text-xs text-text-muted">{t("settings.show_quick_setup_desc")}</p>
-                </div>
-                <ToggleSwitch
-                  checked={localStorage.getItem("agentgate_show_quick_setup") === "1"}
-                  onChange={(val) => {
-                    if (val) {
-                      localStorage.setItem("agentgate_show_quick_setup", "1");
-                      localStorage.removeItem("agentgate_hide_quick_setup");
-                    } else {
-                      localStorage.removeItem("agentgate_show_quick_setup");
-                      localStorage.setItem("agentgate_hide_quick_setup", "1");
-                    }
-                    window.location.reload();
-                  }}
-                />
-              </div>
-
-              {/* 网关精炼层全局总闸——默认全关 = 字节级透明 pass-through */}
-              <div className="border-t border-border pt-4">
-                <p className="text-sm font-medium text-text-primary">网关精炼层 (Refiner)</p>
-                <p className="mb-3 text-xs text-text-muted">
-                  默认全部关闭，网关原样转发请求。打开后会按每个 provider 的 quirks 配置改写请求 / 响应。每个 provider 还能单独覆写为强制关。
-                </p>
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 pr-4">
-                      <p className="text-sm text-text-primary">请求字段过滤</p>
-                      <p className="text-xs text-text-muted">按 Quirks 剥不支持的请求字段，避免 400 错误</p>
-                    </div>
-                    <ToggleSwitch
-                      checked={settings.body_filter_global}
-                      onChange={(v) => handleUpdateRefinerGlobal("body_filter_global", v)}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 pr-4">
-                      <p className="text-sm text-text-primary">推理参数校正</p>
-                      <p className="text-xs text-text-muted">thinking.budget_tokens / reasoning.effort 自动归一</p>
-                    </div>
-                    <ToggleSwitch
-                      checked={settings.thinking_rectifier_global}
-                      onChange={(v) => handleUpdateRefinerGlobal("thinking_rectifier_global", v)}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 pr-4">
-                      <p className="text-sm text-text-primary">错误响应归一</p>
-                      <p className="text-xs text-text-muted">provider 错误结构改写成客户端协议期望的形态</p>
-                    </div>
-                    <ToggleSwitch
-                      checked={settings.error_mapper_global}
-                      onChange={(v) => handleUpdateRefinerGlobal("error_mapper_global", v)}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1 pr-4">
-                      <p className="text-sm text-text-primary">主动健康探测</p>
-                      <p className="text-xs text-text-muted">每 10 分钟对启用的供应商发 1-token 探测，结果显示在供应商卡片（仅展示，不影响路由）。会消耗少量额度。</p>
-                    </div>
-                    <ToggleSwitch
-                      checked={settings.health_probe_enabled}
-                      onChange={(v) => handleUpdateRefinerGlobal("health_probe_enabled", v)}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
+          <GeneralTab
+            settings={settings}
+            locale={locale}
+            setLocale={setLocale}
+            theme={theme}
+            setTheme={setTheme}
+            handleUpdateAutoStart={handleUpdateAutoStart}
+            handleUpdateRefinerGlobal={handleUpdateRefinerGlobal}
+            t={t}
+            ToggleSwitch={ToggleSwitch}
+            ThemePicker={ThemePicker}
+          />
         )}
 
         {tab === "security" && auth && (
-          <section className="rounded-xl border border-border bg-card p-5">
-            <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
-              <Shield className="h-4 w-4 text-accent" />{t("settings.gateway_security")}
-            </h3>
-            <div className="space-y-3 text-xs">
-              <div className="flex justify-between"><span className="text-text-muted">{t("settings.auth_mode")}</span><span className="text-text-primary">{auth.auth_mode}</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">{t("settings.token_path")}</span><span className="font-mono text-text-secondary text-[11px]">{auth.token_path}</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">{t("settings.local_token")}</span><span className="font-mono text-text-secondary">{auth.masked_token}</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">{t("settings.codex_auth")}</span><span className="text-text-primary">{auth.codex_auth_type}</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">{t("settings.claude_auth")}</span><span className="text-text-primary">{auth.claude_code_auth_type}</span></div>
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button onClick={handleCopyToken} className="btn-secondary"><Copy className="h-3 w-3" />{t("settings.copy_token")}</button>
-              <button onClick={() => setConfirmRegen(true)} className="btn-secondary"><RefreshCcw className="h-3 w-3" />{t("settings.regenerate_token")}</button>
-              <button onClick={() => api.openTokenFolder()} className="btn-secondary"><FolderOpen className="h-3 w-3" />{t("settings.open_token_folder")}</button>
-            </div>
-          </section>
+          <SecurityTab
+            auth={auth}
+            handleCopyToken={handleCopyToken}
+            setConfirmRegen={setConfirmRegen}
+            t={t}
+          />
         )}
 
         {tab === "data" && (
-          <>
-            <section className="rounded-xl border border-border bg-card p-5">
-              <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.data")}</h3>
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-text-primary">{t("settings.log_retention")}</p>
-                  <p className="text-xs text-text-muted">{t("settings.log_retention_desc")}</p>
-                </div>
-                <select value={settings.log_retention_days} onChange={(e) => handleUpdateRetention(parseInt(e.target.value, 10))} className="rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs text-text-primary outline-none focus:border-accent">
-                  <option value={7}>7 {t("common.days")}</option>
-                  <option value={14}>14 {t("common.days")}</option>
-                  <option value={30}>30 {t("common.days")}</option>
-                  <option value={90}>90 {t("common.days")}</option>
-                </select>
-              </div>
-            </section>
-
-            <ConfigBackupSection />
-
-
-            {/* 模型定价表默认折叠——用户配 1 次就再也不动，平铺时挤压日常常看的
-                日志保留 / 配置导入导出。点击 header 展开。 */}
-            <CollapsibleSection
-              icon={DollarSign}
-              title={t("settings.model_pricing")}
-              hint={t("settings.model_pricing_desc")}
-              badge={`${pricing.length}`}
-            >
-              <div className="overflow-hidden rounded-md border border-border">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-card-secondary">
-                      <th className="px-3 py-2 text-left font-medium text-text-muted">Provider</th>
-                      <th className="px-3 py-2 text-left font-medium text-text-muted">Model</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-muted">Input ($/1M)</th>
-                      <th className="px-3 py-2 text-right font-medium text-text-muted">Output ($/1M)</th>
-                      <th className="px-3 py-2 text-center font-medium text-text-muted">{t("settings.source")}</th>
-                      <th className="px-3 py-2 w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pricing.map((p) => (
-                      <PricingRow key={p.id} item={p} onUpdate={async (inputPrice, outputPrice) => {
-                        try {
-                          const updated = await api.upsertModelPricing(p.provider, p.model_pattern, inputPrice, outputPrice);
-                          setPricing(pricing.map(x => x.id === p.id || x.id === updated.id ? updated : x).sort((a, b) => `${a.provider}${a.model_pattern}`.localeCompare(`${b.provider}${b.model_pattern}`)));
-                          toast("success", t("settings.pricing_saved"));
-                        } catch (err) { toast("error", (err as api.AppError).message); }
-                      }} onDelete={async () => {
-                        await api.deleteModelPricing(p.id);
-                        setPricing(pricing.filter(x => x.id !== p.id));
-                        toast("success", t("common.deleted"));
-                      }} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <PricingAddForm onAdd={async (provider, model, inputPrice, outputPrice) => {
-                try {
-                  const p = await api.upsertModelPricing(provider, model, inputPrice, outputPrice);
-                  setPricing([...pricing.filter(x => x.id !== p.id), p].sort((a, b) => `${a.provider}${a.model_pattern}`.localeCompare(`${b.provider}${b.model_pattern}`)));
-                  toast("success", t("settings.pricing_saved"));
-                } catch (err) { toast("error", (err as api.AppError).message); }
-              }} />
-            </CollapsibleSection>
-          </>
+          <DataTab
+            settings={settings}
+            pricing={pricing}
+            setPricing={setPricing}
+            handleUpdateRetention={handleUpdateRetention}
+            t={t}
+          />
         )}
 
         {tab === "pet" && petSettings && (
-          <section className="rounded-xl border border-border bg-card p-5">
-            <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-text-primary">
-              <PawPrint className="h-4 w-4 text-accent" />{t("settings.pet.title")}
-            </h3>
-            <p className="mb-5 text-xs text-text-muted">{t("settings.pet.desc")}</p>
-
-            {/* Visibility toggle */}
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm text-text-primary">{t("settings.pet.visible")}</p>
-                <p className="text-xs text-text-muted">{t("settings.pet.visible_desc")}</p>
-              </div>
-              <ToggleSwitch checked={petSettings.visible} onChange={handlePetVisibleChange} />
-            </div>
-
-            {/* Click-through toggle */}
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <p className="text-sm text-text-primary">{t("settings.pet.click_through")}</p>
-                <p className="text-xs text-text-muted">{t("settings.pet.click_through_desc")}</p>
-              </div>
-              <ToggleSwitch checked={petClickThrough} onChange={handlePetClickThroughChange} />
-            </div>
-
-            {/* Pet type selection */}
-            <div>
-              <p className="mb-3 text-sm text-text-primary">{t("settings.pet.type")}</p>
-              <p className="mb-4 text-xs text-text-muted">{t("settings.pet.type_desc")}</p>
-              <div className="grid grid-cols-3 gap-3">
-                {(["robot", "pixel-cat", "slime", "fox", "octopus", "ghost", "ox", "soldier", "coder"] as PetType[]).map((type) => (
-                  <PetTypeCard
-                    key={type}
-                    type={type}
-                    selected={petSettings.pet_type === type}
-                    name={t(`settings.pet.${type}`)}
-                    desc={t(`settings.pet.${type}_desc`)}
-                    onClick={() => handlePetTypeChange(type)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            {/* FAQ */}
-            <div className="mt-8 border-t border-border pt-5">
-              <p className="mb-3 text-sm font-semibold text-text-primary">{t("settings.pet.faq.title")}</p>
-              <details className="rounded-lg border border-border bg-card-secondary p-3">
-                <summary className="cursor-pointer text-xs text-text-primary">
-                  {t("settings.pet.faq.q_windows_bg")}
-                </summary>
-                <p className="mt-2 text-xs leading-relaxed text-text-secondary">
-                  {t("settings.pet.faq.a_windows_bg")}
-                </p>
-              </details>
-            </div>
-          </section>
+          <PetTab
+            petSettings={petSettings}
+            petClickThrough={petClickThrough}
+            handlePetVisibleChange={handlePetVisibleChange}
+            handlePetClickThroughChange={handlePetClickThroughChange}
+            handlePetTypeChange={handlePetTypeChange}
+            t={t}
+            ToggleSwitch={ToggleSwitch}
+          />
         )}
 
         {tab === "about" && (
-          <section className="rounded-xl border border-border bg-card p-5">
-            <h3 className="mb-4 text-sm font-semibold text-text-primary">{t("settings.about")}</h3>
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-text-muted">{t("settings.version")}</span><span className="text-text-primary">{appVersion}</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">{t("settings.license")}</span><span className="text-text-primary">MIT</span></div>
-            </div>
-            <div className="mt-4 flex gap-2">
-              <CheckUpdateButton t={t} />
-              <a
-                href="https://github.com/dengmengmian/AgentGate"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-secondary"
-              >
-                <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-                GitHub
-              </a>
-            </div>
-          </section>
+          <AboutTab appVersion={appVersion} t={t} />
         )}
       </div>
 
@@ -520,7 +302,7 @@ function decodeShareCode(code: string): string {
 /// ConfirmDialog 弹窗确认。API key 默认**不导出**——把含密钥的 JSON 文件
 /// 随手发到群里/截图/丢仓库是常见泄密路径，所以默认安全；用户明确勾选
 /// "含密钥"才会写入，仅用于本机迁移。
-function ConfigBackupSection() {
+export function ConfigBackupSection() {
   const { t: _t } = useI18n();
   const [includeSecrets, setIncludeSecrets] = useState(false);
   const [pendingImportJson, setPendingImportJson] = useState<string | null>(null);
@@ -684,7 +466,7 @@ function ConfigBackupSection() {
 /// 可折叠 section：header 永远显示，body 默认折叠、点击展开。用于低频
 /// 但占空间的设置（如模型定价表）——避免它把日常常用的"日志保留/配置
 /// 导入导出"挤到下面要滚屏才能看见。
-function CollapsibleSection({
+export function CollapsibleSection({
   icon: Icon,
   title,
   hint,
@@ -718,7 +500,7 @@ function CollapsibleSection({
   );
 }
 
-function PetTypeCard({ type, selected, name, desc, onClick }: {
+export function PetTypeCard({ type, selected, name, desc, onClick }: {
   type: PetType; selected: boolean; name: string; desc: string; onClick: () => void;
 }) {
   const Preview = PET_PREVIEWS[type];
@@ -759,7 +541,7 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (val:
 }
 
 
-function CheckUpdateButton({ t }: { t: (key: string) => string }) {
+export function CheckUpdateButton({ t }: { t: (key: string) => string }) {
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState<"idle" | "latest" | "available">("idle");
   const [newVersion, setNewVersion] = useState("");
@@ -820,7 +602,7 @@ function CheckUpdateButton({ t }: { t: (key: string) => string }) {
   );
 }
 
-function PricingRow({ item, onUpdate, onDelete }: { item: ModelPricing; onUpdate: (inputPrice: number, outputPrice: number) => void; onDelete: () => void }) {
+export function PricingRow({ item, onUpdate, onDelete }: { item: ModelPricing; onUpdate: (inputPrice: number, outputPrice: number) => void; onDelete: () => void }) {
   const { t } = useI18n();
   const [editInput, setEditInput] = useState(String(item.input_price));
   const [editOutput, setEditOutput] = useState(String(item.output_price));
@@ -867,7 +649,7 @@ function PricingRow({ item, onUpdate, onDelete }: { item: ModelPricing; onUpdate
   );
 }
 
-function PricingAddForm({ onAdd }: { onAdd: (provider: string, model: string, inputPrice: number, outputPrice: number) => void }) {
+export function PricingAddForm({ onAdd }: { onAdd: (provider: string, model: string, inputPrice: number, outputPrice: number) => void }) {
   const { t } = useI18n();
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
