@@ -226,7 +226,7 @@ fn make_stream_error(status: u16, msg: &str, detail: &str) -> AppError {
 
 /// 把上游 `bytes_stream()` 抛出的 `reqwest::Error` 转成人类可读的消息。
 ///
-/// 当 `read_timeout` 触发（连续 60s 上游没发任何字节）时给出明确的中文文案，
+/// 当 `read_timeout` 触发（连续 600s 上游没发任何字节）时给出明确的中文文案，
 /// 指明这是 idle timeout 而非整请求超时；其它错误（连接 RST、解码失败等）
 /// 维持原 reqwest 错误描述。各 SSE/pass-through 处理器在 `Some(Err(e))` 分支
 /// 调用这个函数生成给下游的 error message / response.failed event。
@@ -242,9 +242,9 @@ pub fn describe_stream_error(e: &reqwest::Error) -> String {
     format!("上游响应流读取失败：{e}。可能是网络抖动或上游主动断连。请重试。")
 }
 
-/// 仅用于错误文案的提示数字，必须与 `gateway::server` 里 `.read_timeout(...)`
-/// 的秒数保持一致（HTTP 层 idle 超时）。
-pub const STREAM_READ_IDLE_HINT_SECS: u64 = 60;
+/// HTTP 层 SSE idle read timeout。必须与 `gateway::server` 里 `.read_timeout(...)`
+/// 保持一致；server 直接引用这个常量，错误文案也用同一个数字。
+pub const STREAM_READ_IDLE_HINT_SECS: u64 = 600;
 
 fn next_data_payload(text: &str, event_line: &str) -> Option<String> {
     let mut iter = text.lines();
@@ -368,6 +368,11 @@ mod tests {
         assert_eq!(classify_status("", "", "permission denied"), 403);
         assert_eq!(classify_status("", "", "context_length_exceeded"), 413);
         assert_eq!(classify_status("", "", "unknown failure"), 502);
+    }
+
+    #[test]
+    fn stream_read_idle_timeout_allows_long_thinking_prefill() {
+        assert_eq!(STREAM_READ_IDLE_HINT_SECS, 600);
     }
 
     fn make_stream(chunks: Vec<&'static [u8]>) -> ChunkStream {

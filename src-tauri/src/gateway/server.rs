@@ -99,11 +99,15 @@ pub async fn start(
         // connection drop 会取消上游 reqwest，资源不会泄露。
         //
         // 改用 .read_timeout()：单次 socket read 的 idle 超时。
-        // 只要持续有字节到达就一直重置；连续 60s 一个字节都没收到才 abort。
+        // 只要持续有字节到达就一直重置；连续一段时间一个字节都没收到才 abort。
+        // MiMo / DeepSeek 这类 thinking 模型在长 prompt prefill 阶段可能超过
+        // 60s 不吐 SSE 字节；这里按 10 分钟给真实思考留空间。
         // 等价于"流仍活跃就持续延长，真正卡死才放弃"——这是 streaming AI
         // 请求该有的语义。错误通过 bytes_stream() 的 Err(reqwest::Error)
         // 自然冒泡，下游各 SSE 处理器用 e.is_timeout() 识别后给中文文案。
-        .read_timeout(std::time::Duration::from_secs(60))
+        .read_timeout(std::time::Duration::from_secs(
+            crate::gateway::sse_bootstrap::STREAM_READ_IDLE_HINT_SECS,
+        ))
         // 建连超时：上游 IP 可达但 TCP 不响应（安全组拦截 / BGP 黑洞）时，不设此项
         // 会挂到 OS 默认（常 2min+），叠加重试会让网关长时间卡死。只管"建连"阶段，
         // 建连后交给 read_timeout，不影响 streaming 的长输出。
