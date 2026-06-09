@@ -16,6 +16,14 @@ use super::shared::{
 };
 use super::GatewayState;
 
+/// 检测 Claude Code 的自动压缩(/compact)请求。压缩要求模型只回
+/// 一段文本摘要、不调工具;命中后给上游关思考 + 去工具,避免 MiMo 的 thinking block /
+/// tool_call 污染摘要。这两个串是 Claude Code 压缩 prompt 专属,不会误判普通请求。
+fn is_claude_code_compaction(body: &str) -> bool {
+    body.contains("You are a helpful AI assistant tasked with summarizing conversations")
+        || body.contains("CRITICAL: Respond with TEXT ONLY. Do NOT call any tools.")
+}
+
 // ── POST /v1/messages (Anthropic Messages API) ─────────────────
 
 pub async fn handle_messages(
@@ -197,6 +205,9 @@ pub async fn handle_messages(
         .and_then(crate::protocol::anthropic_messages::thinking_to_reasoning_effort);
     let want_stream = msg_req.stream.unwrap_or(false);
 
+    // Claude Code 自动压缩请求:命中则下面关思考 + 去工具,只回干净的摘要文本。
+    let is_cc_compaction = is_claude_code_compaction(&body);
+
     let mut chat_req = crate::protocol::chat_completions::ChatCompletionsRequest {
         model: model.clone(),
         messages,
@@ -224,6 +235,14 @@ pub async fn handle_messages(
         parallel_tool_calls: None,
         diagnostic_events: Vec::new(),
     };
+
+    // 压缩请求:关思考 + 去工具,保证上游只回一段干净的摘要文本。
+    if is_cc_compaction {
+        chat_req.thinking = Some(json!({"type": "disabled"}));
+        chat_req.reasoning_effort = None;
+        chat_req.tools = None;
+        chat_req.tool_choice = None;
+    }
 
     let _refiner_log = refine_struct_body(&state.db, &selection.provider, &mut chat_req);
     let mut converted_json = serde_json::to_string_pretty(&chat_req).unwrap_or_default();
@@ -538,3 +557,26 @@ async fn handle_anthropic_fallback_stream(
         .unwrap())
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::is_claude_code_compaction;
+
+    #[test]
+    fn detects_summarizing_system_prompt() {
+        let body = r#"{"system":"You are a helpful AI assistant tasked with summarizing conversations.","messages":[]}"#;
+        assert!(is_claude_code_compaction(body));
+    }
+
+    #[test]
+    fn detects_text_only_no_tools_marker() {
+        let body = r#"{"messages":[{"role":"user","content":"... CRITICAL: Respond with TEXT ONLY. Do NOT call any tools. ..."}]}"#;
+        assert!(is_claude_code_compaction(body));
+    }
+
+    #[test]
+    fn normal_request_not_flagged() {
+        let body = r#"{"system":"You are a coding agent.","messages":[{"role":"user","content":"修个 bug"}]}"#;
+        assert!(!is_claude_code_compaction(body));
+    }
+}
