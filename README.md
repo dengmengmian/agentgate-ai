@@ -24,6 +24,16 @@
 
 AgentGate is a **local model gateway** for AI coding agents. It gives Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode one local endpoint, then routes requests to 25 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
 
+> **Run your coding agents on cheaper models — and watch the spend drop in real time.** Point Codex / Claude Code / Gemini CLI at DeepSeek, MiMo, GLM, or Kimi, and the cost dashboard shows exactly what you spend, broken down by model, client, and route.
+
+![Cost dashboard](docs/screenshots/dashboard.png)
+
+AgentGate is more than a proxy — it's an **intelligent gateway** built on three pillars:
+
+| 🧠 Smart Routing | 🔁 Self-Healing | 💰 Cost Dashboard |
+|:---|:---|:---|
+| Pick the right model per request — by capability (vision / tools / reasoning), by price, or by latency | Automatic failover, circuit breaker, and cooldown keep requests flowing when a provider rate-limits or dies | Per-request cost tracking, with breakdowns by model, client, and route over a time range |
+
 It is built for real integration problems:
 
 - Codex speaks the Responses API, while many providers only expose Chat Completions or Anthropic-compatible Messages.
@@ -33,22 +43,20 @@ It is built for real integration problems:
 - Multiple providers and multiple API keys should fail over automatically, with request logs, token stats, and cost tracking.
 - Switching models should not mean hand-editing `~/.codex/config.toml` or `~/.claude/settings.json`.
 
-AgentGate's job is: **one local gateway + protocol conversion + native pass-through + smart routing + GUI configuration**.
+AgentGate's job is: **one local gateway + protocol conversion + native pass-through + smart routing + GUI configuration** — and **⚡ zero hand-editing**: one-click apply / restore for your coding agents, no more poking at `config.toml` / `settings.json`.
 
-## Why AgentGate
+## How It Compares
 
-- 💰 **Spend less** — point Codex / Claude Code / Gemini CLI at DeepSeek, MiMo, GLM, Kimi… and see exactly how much you save, broken down by model and client.
-- 🔁 **Stay up** — automatic failover, circuit breaker, and cooldown keep requests flowing when a provider rate-limits or dies.
-- ⚡ **Zero hand-editing** — one-click apply / restore for your coding agents; no more poking at `config.toml` / `settings.json`.
+There are great LLM proxies out there. AgentGate's niche is **coding agents on the desktop** — it's the only one focused on keeping Codex / Claude Code / Gemini CLI happy with a GUI, not a server you operate.
 
-## Why Not Just a Proxy?
+| Tool | What it's best at | How AgentGate differs |
+|---|---|---|
+| **Plain proxy** | Swapping a base URL | Keeps Codex / ChatGPT login + plugins working, converts protocols, and routes by capability |
+| **claude-code-router** | Routing Claude Code (CLI) to other models | Also covers Codex Responses API, Gemini CLI, OpenCode — plus a GUI and cost dashboard |
+| **one-api / new-api** | Multi-user API reselling & billing on a server | Local-first, single-user, no account system; one-click client config built in |
+| **LiteLLM** | A Python SDK / proxy for 100+ LLMs in your own app | A desktop gateway for coding agents, not a library — zero code, GUI-driven |
 
-| Plain proxy | AgentGate |
-|---|---|
-| Makes Codex call another base URL | Keeps Codex Desktop on the OpenAI-authenticated provider path while routing model requests locally |
-| May break account/plugin assumptions | Preserves signed-in account state and plugin/account feature compatibility |
-| Usually targets one provider | Routes DeepSeek, MiMo, OpenAI, Kimi, GLM, DashScope, and more |
-| Manual config edits | One-click apply / restore for supported clients |
+> Positioning is approximate and these tools evolve fast — pick what fits your workflow. If you operate a shared API server, one-api / LiteLLM may suit you better; if you live in Codex / Claude Code, this is built for you.
 
 ## Common Use Cases
 
@@ -321,6 +329,11 @@ docker build -t agentgate . && docker run -p 9090:9090 \
 **Environment variables:** `AGENTGATE_HOST`, `AGENTGATE_PORT`, `AGENTGATE_DB_PATH`, `AGENTGATE_PROVIDER`, `AGENTGATE_API_KEY`.
 
 ## Usage Guide
+
+Most users only need the [5-Minute Quick Start](#5-minute-quick-start) above. Expand for the full reference.
+
+<details>
+<summary><b>Full usage guide — providers, clients, API calls, failover, capability routing, diagnostics</b></summary>
 
 ### 1. Add a Provider
 
@@ -610,6 +623,8 @@ On the **Diagnostics** page:
 - **Export Diagnostic Bundle** — generates a redacted diagnostic report for troubleshooting
 - Request log `trace_json` includes `degradation_events` when AgentGate strips unsupported capabilities such as images, native web search, MCP connectors, or tool-output images.
 
+</details>
+
 ## Supported Providers
 
 Providers marked **Provider-specific handling** have dedicated transform code in `src-tauri/src/transform/providers/`. The rest go through the generic Chat Completions / Anthropic pass-through path and work out-of-the-box.
@@ -647,7 +662,12 @@ Providers marked **Provider-specific handling** have dedicated transform code in
 
 > Vision / reasoning / tools / web_search capability is tracked **per-model** in the capability matrix, not at the provider level. See *Capability-Aware Routing* below.
 
-## Data Flow
+## Architecture & Internals
+
+<details>
+<summary><b>Data flow, request modes, and gateway routes</b></summary>
+
+### Data Flow
 
 AgentGate separates protocol handling from model naming. There are three common request modes:
 
@@ -795,7 +815,7 @@ Client sends Chat Completions request
   → ④ Log request
 ```
 
-## Gateway Routes
+### Gateway Routes
 
 | Method | Path | Mode | Description |
 |---|---|---|---|
@@ -804,6 +824,8 @@ Client sends Chat Completions request
 | POST | `/v1/responses` | auto | `responses_base_url` set → pass-through; Anthropic type → Claude conversion; otherwise → Chat Completions conversion |
 | POST | `/v1/chat/completions` | pass-through | Chat Completions direct |
 | POST | `/v1/messages` | auto | `anthropic_base_url` set → pass-through; otherwise → Chat Completions conversion |
+
+</details>
 
 ## Project Structure
 
@@ -842,6 +864,26 @@ AgentGate/
 - Logs and diagnostic bundles automatically redact sensitive information
 - Gateway binds only to `127.0.0.1` by default; `0.0.0.0` is rejected
 - Token file permissions set to `0600` (Unix)
+
+## FAQ
+
+**Are my API keys safe? Does AgentGate phone home?**
+Keys live only in a local SQLite file on your machine and are never sent to clients or to any AgentGate server — there is no AgentGate backend. Your keys go only to the upstream provider you configured. The local gateway binds to `127.0.0.1` and rejects `0.0.0.0`.
+
+**Will it break my Codex / ChatGPT login or Codex Desktop plugins?**
+No. AgentGate keeps Codex on the official OpenAI-authenticated provider path, so your signed-in account, plugins, Browser / Computer-Use / Mobile and quota lookup keep working while chat requests route to third-party models. **Switch to Official** restores the original config at any time — conversations are preserved.
+
+**Can I run it offline / on a server without the GUI?**
+Yes. Headless mode (`agentgate-serve`) and Docker run without a window — see [Headless / Server Mode](#headless--server-mode).
+
+**Do I have to edit `config.toml` / `settings.json` by hand?**
+No. One-click **Apply Config** writes them for you and backs up the originals; **Switch to Official** rolls back.
+
+**A client says "network connection failed" — what now?**
+First check the gateway is up: `curl http://127.0.0.1:9090/health`. If it fails, start the gateway from the app. Note `localhost:1420` is only the dev UI — clients call `127.0.0.1:9090`.
+
+**Which model does a request actually hit?**
+Open **Logs** — every request shows the client, route, resolved provider, model, status, and cost.
 
 ## Development
 
@@ -882,6 +924,20 @@ Upstream model sync is intentionally a local maintenance step, not part of the G
 # Chat Completions test
 ./scripts/test-chat-completions-pass-through.sh
 ```
+
+## Community & Support
+
+- 🐛 **Found a bug or want a feature?** Open an [Issue](https://github.com/dengmengmian/agentgate-ai/issues) — include a redacted diagnostic bundle (Diagnostics → Export) when reporting gateway problems.
+- 💡 **Questions & ideas:** [Discussions](https://github.com/dengmengmian/agentgate-ai/discussions).
+- ⭐ **If AgentGate saves you money or time, a star helps others find it** — and helps us prioritize what to build next.
+
+The three pillars — smart routing, self-healing, and the cost dashboard — are shipped. What comes next is driven by Issues and Discussions, so tell us what you need.
+
+## Star History
+
+<a href="https://star-history.com/#dengmengmian/agentgate-ai&Date">
+  <img src="https://api.star-history.com/svg?repos=dengmengmian/agentgate-ai&type=Date" alt="Star History Chart" width="600">
+</a>
 
 ## License
 

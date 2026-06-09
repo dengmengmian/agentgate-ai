@@ -24,7 +24,17 @@
 
 AgentGate 是面向 AI 编程 Agent 的**本地模型网关**。它把 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 统一接到一个本地入口，再转发到小米 MiMo、DeepSeek、OpenAI、Anthropic、Kimi、GLM、通义千问、硅基流动、火山引擎等 25 个 Provider。
 
-它解决的不是“再包一层代理”这么简单，而是这些实际问题：
+> **让你的编程 Agent 跑在更便宜的模型上，省了多少实时看得见。** 把 Codex / Claude Code / Gemini CLI 接到 DeepSeek、MiMo、GLM、Kimi，成本仪表盘按模型、客户端、路由策略清楚算出每一笔花销。
+
+![成本仪表盘](docs/screenshots/dashboard.png)
+
+AgentGate 不止是代理，而是一个建立在三大支柱上的**智能网关**：
+
+| 🧠 智能路由 | 🔁 故障自愈 | 💰 成本仪表盘 |
+|:---|:---|:---|
+| 每个请求选对模型——按能力（视觉 / 工具 / 推理）、按价格、或按延迟 | 自动故障转移、熔断、冷却，某家限流或挂了请求照常跑 | 按请求记成本，可按模型、客户端、路由策略和时间区间拆解 |
+
+它解决的不是"再包一层代理"这么简单，而是这些实际问题：
 
 - Codex 发的是 Responses API，但很多模型只支持 Chat Completions 或 Anthropic Messages。
 - Codex 桌面端的插件和账号能力依赖官方 OpenAI 登录态与 provider 识别路径，很多第三方 API 代理会破坏这层语义。
@@ -33,22 +43,20 @@ AgentGate 是面向 AI 编程 Agent 的**本地模型网关**。它把 Codex、C
 - 多个 provider / 多个 key 要能自动切换、失败重试、记录日志和成本。
 - 不想每次切模型都手动改 `~/.codex/config.toml`、`~/.claude/settings.json`。
 
-AgentGate 的定位是：**本地统一入口 + 协议转换 + 原生直连 + 智能路由 + 图形化配置**。
+AgentGate 的定位是：**本地统一入口 + 协议转换 + 原生直连 + 智能路由 + 图形化配置**——再加 **⚡ 零手改配置**：客户端一键应用 / 还原，不用再抠 `config.toml` / `settings.json`。
 
-## 为什么用 AgentGate
+## 和同类怎么选
 
-- 💰 **更省** —— 把 Codex / Claude Code / Gemini CLI 接到 DeepSeek、MiMo、GLM、Kimi…，按模型和客户端清楚看到省了多少。
-- 🔁 **不掉链子** —— 自动故障切换、熔断、冷却，某家限流或挂了请求照常跑。
-- ⚡ **零手改配置** —— 客户端一键应用 / 还原，不用再抠 `config.toml` / `settings.json`。
+LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent**——它是唯一专注于伺候 Codex / Claude Code / Gemini CLI、用图形界面而非服务器来跑的那个。
 
-## 为什么不是普通代理？
+| 工具 | 它最擅长 | AgentGate 的差异 |
+|---|---|---|
+| **普通代理** | 改一个 base URL | 保住 Codex / ChatGPT 登录态和插件，做协议转换，按能力路由 |
+| **claude-code-router** | 把 Claude Code（CLI）路由到别的模型 | 还覆盖 Codex Responses API、Gemini CLI、OpenCode，并带图形界面和成本仪表盘 |
+| **one-api / new-api** | 服务器上做多用户 API 分发与计费 | 本地优先、单用户、无账号体系；内置客户端一键配置 |
+| **LiteLLM** | 给自己应用用的 Python SDK / 代理，接 100+ 模型 | 是面向编程 Agent 的桌面网关，不是库——零代码、图形化 |
 
-| 普通代理 | AgentGate |
-|---|---|
-| 只是让 Codex 改打另一个 base URL | 保持 Codex 桌面端的 OpenAI 登录态 provider 路径，同时把模型请求路由到本地网关 |
-| 可能破坏账号/插件相关假设 | 保留登录态和插件/账号能力兼容性 |
-| 通常只围绕一个 Provider | 可路由 DeepSeek、MiMo、OpenAI、Kimi、GLM、通义千问等 |
-| 需要手改配置 | 支持的客户端可一键应用 / 恢复 |
+> 定位是大致划分，各工具也在快速演进——按自己工作流选。要运营共享 API 服务，one-api / LiteLLM 更合适；要天天泡在 Codex / Claude Code 里，这个就是为你做的。
 
 ## 常见使用场景
 
@@ -306,6 +314,11 @@ docker compose up
 ```
 
 ## 使用指南
+
+大多数人只需要上面的 [5 分钟跑通](#5-分钟跑通)。展开看完整参考。
+
+<details>
+<summary><b>完整使用指南 —— Provider、客户端、API 调用、失败转移、能力路由、诊断</b></summary>
 
 ### 1. 添加 Provider
 
@@ -595,6 +608,8 @@ Codex 发送含图片的请求
 - **导出诊断包** — 生成脱敏诊断信息用于排查问题
 - 请求日志的 `trace_json` 会记录 `degradation_events`：当 AgentGate 剥离不受支持的图片、原生 web_search、MCP connector、tool output 图片时，可用于后续 UI 展示和问题排查。
 
+</details>
+
 ## 支持的 Provider
 
 标了 **专属处理** 的 Provider 在 `src-tauri/src/transform/providers/` 下有专门转换代码。其余走通用 Chat Completions / Anthropic 透传路径，开箱即用。
@@ -632,9 +647,14 @@ Codex 发送含图片的请求
 
 > Vision / reasoning / tools / web_search 等能力是**按每个 model**追踪的，不在 provider 层。详见上文 *能力感知路由*。
 
-## 数据链路
+## 架构与内部原理
 
-AgentGate 把“协议是否转换”和“模型名是否改写”分开看。常见有三种请求模式：
+<details>
+<summary><b>数据链路、请求模式与 Gateway 路由</b></summary>
+
+### 数据链路
+
+AgentGate 把"协议是否转换"和"模型名是否改写"分开看。常见有三种请求模式：
 
 > **如何区分？** 先看客户端协议是否匹配上游原生入口。匹配就不做协议转换；模型名是另一层规则：命中 Model Mapping 时仍然会改写 `model`。
 
@@ -779,7 +799,7 @@ Claude Code 发送 Messages API 请求
   → ④ 记录日志
 ```
 
-## Gateway 路由
+### Gateway 路由
 
 | 方法 | 路径                   | 模式         | 说明                         |
 | ---- | ---------------------- | ------------ | ---------------------------- |
@@ -788,6 +808,8 @@ Claude Code 发送 Messages API 请求
 | POST | `/v1/responses`        | 自动         | 有 `responses_base_url` → 透传；Anthropic 类型 → Claude 转换；其他 → Chat Completions 转换 |
 | POST | `/v1/chat/completions` | pass-through | Chat Completions 直通        |
 | POST | `/v1/messages`         | 自动         | 有 `anthropic_base_url` → 透传；否则 → Chat Completions 转换 |
+
+</details>
 
 ## 项目结构
 
@@ -827,6 +849,26 @@ AgentGate/
 - Gateway 默认仅监听 `127.0.0.1`，拒绝绑定 `0.0.0.0`
 - 令牌文件权限设置为 `0600`（Unix）
 
+## 常见问题
+
+**我的 API Key 安全吗？AgentGate 会不会上传数据？**
+Key 只存在你本机的 SQLite 文件里，不会发给客户端，也不会发给任何 AgentGate 服务器——AgentGate 根本没有后端。你的 Key 只会发给你自己配置的上游 Provider。本地网关只监听 `127.0.0.1`，拒绝 `0.0.0.0`。
+
+**会不会把我的 Codex / ChatGPT 登录或 Codex 桌面端插件搞坏？**
+不会。AgentGate 让 Codex 保持在官方 OpenAI 登录态的 provider 路径上，登录态、插件、Browser / Computer-Use / Mobile、配额查询都正常，同时把对话请求路由到第三方模型。随时点**切换到官方**还原原始配置，对话记录保留。
+
+**能离线 / 在服务器上不带界面跑吗？**
+能。Headless 模式（`agentgate-serve`）和 Docker 都不需要窗口，见 [Headless / 服务器模式](#headless--服务器模式)。
+
+**还要手改 `config.toml` / `settings.json` 吗？**
+不用。**应用配置**一键写好并备份原文件，**切换到官方**一键回滚。
+
+**客户端报"网络连接失败"怎么办？**
+先确认网关在跑：`curl http://127.0.0.1:9090/health`。连不上就在应用里启动网关。注意 `localhost:1420` 只是开发界面，客户端走的是 `127.0.0.1:9090`。
+
+**一个请求到底打到了哪个模型？**
+打开**日志**——每条请求都显示客户端、路由、实际选中的 provider、模型、状态和成本。
+
 ## 开发
 
 ### Provider Catalog
@@ -865,6 +907,20 @@ pnpm provider:catalog:generate
 # Chat Completions 测试
 ./scripts/test-chat-completions-pass-through.sh
 ```
+
+## 社区与支持
+
+- 🐛 **发现 bug 或想要功能？** 提 [Issue](https://github.com/dengmengmian/agentgate-ai/issues)——网关问题请附上脱敏诊断包(诊断 → 导出)。
+- 💡 **提问与想法：** [Discussions](https://github.com/dengmengmian/agentgate-ai/discussions)。
+- ⭐ **如果 AgentGate 帮你省了钱或时间,点个 star** —— 既帮更多人发现它,也帮我们决定下一步做什么。
+
+三大支柱——智能路由、故障自愈、成本仪表盘——都已落地。后面做什么由 Issue 和 Discussion 驱动,缺什么告诉我们。
+
+## Star History
+
+<a href="https://star-history.com/#dengmengmian/agentgate-ai&Date">
+  <img src="https://api.star-history.com/svg?repos=dengmengmian/agentgate-ai&type=Date" alt="Star History Chart" width="600">
+</a>
 
 ## License
 
