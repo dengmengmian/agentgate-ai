@@ -5,7 +5,7 @@ pub struct SenseNovaProvider;
 
 impl super::ProviderTransform for SenseNovaProvider {
     fn finalize_request(&self, req: &mut ChatCompletionsRequest, _tools: &Option<Vec<Value>>) {
-        // 针对 SenseNova 6.x 严格 OpenAI 子集的防御性清理（参考 mimo2codex sensenova preset）：
+        // 针对 SenseNova 6.x 严格 OpenAI 子集的防御性清理：
         // SenseNova 不支持 response_format
         req.response_format = None;
 

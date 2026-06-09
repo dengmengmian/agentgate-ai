@@ -458,7 +458,7 @@ async fn process_choices(
                 // Bug #6 修复：首个 chunk 看到这个 tool_call idx 就 emit added，
                 // 不再等 name 非空。某些上游（罕见但有）首块只发 id，name 后到——
                 // 旧版 gate 会一直不发 added，后续 arguments 也被 gate 掉，整个
-                // 调用静默丢失。name 后到时不重发 added，但 mimo2codex 也这么做
+                // 调用静默丢失。name 后到时不重发 added，
                 // （openToolCall 用 name ?? ""）。
                 if !tc.emitted_added {
                     let item_id = format!("fc_{}", tc.id);

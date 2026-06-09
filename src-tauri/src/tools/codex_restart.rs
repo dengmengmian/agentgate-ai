@@ -57,7 +57,7 @@ fn restart_macos() -> CodexRestartResult {
         if status.success() {
             was_running = true;
             killed = 1;
-            // 给 Codex 关窗口、写盘的时间。1000ms 是 mimo2codex 实测值。
+            // 给 Codex 关窗口、写盘的时间。1000ms 是实测值。
             thread::sleep(Duration::from_millis(1000));
         }
     }

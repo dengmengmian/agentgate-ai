@@ -125,7 +125,7 @@ pub fn convert_with_provider_matrix(
     // A/扩展修复：两层 effort 兜底，按激进程度从弱到强：
     //
     // 1. AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS（fill）—— 仅当客户端没传时补 high。
-    //    与 mimo2codex forceHighEffort 等价，不覆盖客户端意图。
+    //    仅当客户端没传时补 high，不覆盖客户端意图。
     // 2. AGENTGATE_EFFORT_FLOOR_PROVIDERS（floor）—— 客户端传 low/medium 也强制升 high。
     //    覆盖客户端意图，最激进，针对 "Codex 显式传 medium 但模型仍偏好短回复" 场景。
     //

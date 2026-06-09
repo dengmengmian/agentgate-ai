@@ -655,7 +655,7 @@ pub fn synthesize_orphan_tool_outputs(messages: Vec<ChatMessage>) -> Vec<ChatMes
 /// invariant，400 "tool messages must be a response to a preceding assistant
 /// message with tool_calls"。
 ///
-/// 与 mimo2codex `removeOrphanToolMessages` 对齐。
+/// 移除无配对 assistant.tool_calls 的孤儿 tool 消息。
 pub fn remove_orphan_tool_messages(mut messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
     let mut valid_ids: Option<std::collections::HashSet<String>> = None;
     let mut i = 0;
@@ -744,7 +744,7 @@ pub fn fix_tool_message_order(messages: Vec<ChatMessage>) -> Result<Vec<ChatMess
             // empty placeholders so the upstream still sees a structurally valid
             // assistant→tool sequence. Without this, providers that strictly
             // enforce the Chat Completions invariant (DeepSeek, MiMo) return 400.
-            // Matches mimo2codex's lenient cleanup (reqToChat.ts:630-706).
+            // Lenient cleanup of orphan tool outputs.
             //
             // The last assistant in the conversation is exempt: that's the pending
             // tool call awaiting our response, and synthesizing an empty placeholder

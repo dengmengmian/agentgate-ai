@@ -100,7 +100,7 @@ pub fn get_price(conn: &Connection, provider: &str, model: &str) -> Option<(f64,
     // 4. Model-only match across providers —— provider 实例名几乎从不等于 pricing
     // 的类型名（"anthropic_official" vs "anthropic"），但 model 名通常全局唯一。
     // 退而按 model 跨 provider 查价（custom 优先）。这是成本计算的主路径，
-    // 参考 cc-switch 的纯 model 匹配。候选：原 model、去 qualifier 的 base，
+    // 纯 model 匹配。候选：原 model、去 qualifier 的 base，
     // 以及各自去掉 "vendor/" 前缀的形式（"z-ai/glm-5" → "glm-5"，应对 OpenRouter
     // 风格的带前缀 model id）。
     let mut model_candidates = vec![model, base];

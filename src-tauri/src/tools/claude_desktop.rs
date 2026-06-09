@@ -136,7 +136,7 @@ pub fn detect() -> ClaudeDesktopStatus {
 pub fn generate_profile(host: &str, port: i64, token: &str) -> Value {
     let base_url = format!("http://{host}:{port}");
     // 极简 3 字段——用户机器上实测确认的 Claude Desktop 3p profile 真实 schema。
-    // cc-switch 那套 authScheme / inferenceModels 等额外字段实际不存在：Claude Desktop
+    // 外部工具那套 authScheme / inferenceModels 等额外字段实际不存在：Claude Desktop
     // 从 gateway 动态拉模型列表，不需要预枚举模型。
     json!({
         "inferenceProvider": "gateway",

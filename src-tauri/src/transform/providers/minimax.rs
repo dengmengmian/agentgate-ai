@@ -10,7 +10,7 @@ impl super::ProviderTransform for MiniMaxProvider {
         // MiniMax doesn't support response_format
         req.response_format = None;
 
-        // 以下针对 MiniMax 严格 API 的兼容（参考 mimo2codex minimaxCompat）：
+        // 以下针对 MiniMax 严格 API 的兼容：
         // 1. tool_choice="auto" 是默认值，MiniMax 拒显式传 → 省略
         if req.tool_choice.as_ref().and_then(Value::as_str) == Some("auto") {
             req.tool_choice = None;

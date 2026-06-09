@@ -46,7 +46,7 @@ impl super::ProviderTransform for MimoProvider {
         // 下严格 enforce → 400 "The reasoning_content in the thinking mode must
         // be passed back"。
         //
-        // 与 mimo2codex 对齐：所有缺 reasoning_content 的历史 assistant 注入
+        // 所有缺 reasoning_content 的历史 assistant 注入
         // 占位（lookup_store 命中优先，否则用 "(this turn ran without thinking
         // mode)" 显式占位——比 " " 单空格更可读，也告诉模型这条历史是非
         // thinking 模式产出，不要据此推 reasoning 链）。
