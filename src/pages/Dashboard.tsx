@@ -302,6 +302,15 @@ export function Dashboard() {
             <StripMetric label={t("stats.cost_today") || "今日费用"} value={formatCost(stats.today_cost)} />
             <StripMetric label={t("stats.avg_latency")} value={formatLatency(stats.avg_latency_ms)} />
           </div>
+          {stats.today_codex_compact > 0 && (
+            <div className="mt-3 flex items-center gap-2 border-t border-border pt-3 text-[11px] text-text-muted">
+              <span className="font-medium text-text-secondary">{t("stats.codex_compact") || "Codex 压缩"}</span>
+              <span>
+                {t("stats.codex_compact_today") || "今日触发"} <span className="font-mono text-text-primary">{stats.today_codex_compact}</span> {t("stats.codex_compact_times") || "次"}
+              </span>
+              <span className="ml-auto text-text-muted/70">{t("stats.codex_compact_hint") || "本地代替 OpenAI 远程压缩"}</span>
+            </div>
+          )}
           {(stats.today_cache_read_tokens > 0 || stats.today_cache_write_tokens > 0) && (
             <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border pt-3 text-[11px] text-text-muted">
               <span className="font-medium text-text-secondary">{t("stats.cache")}</span>

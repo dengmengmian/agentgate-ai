@@ -211,9 +211,26 @@ fn extract_message_text(content: Option<&Value>) -> String {
     }
 }
 
-/// Codex v2 compaction 的 SSE 响应:一个 output_item.done(item type=compaction)+ 一个 completed。
-fn build_compaction_sse(response_id: &str, summary: &str) -> String {
+/// Codex v2 compaction 的 SSE 响应。Codex CLI 的 SSE parser 至少要这套:
+///
+/// 1. `response.created`:让 stream state 进入 active
+/// 2. `response.output_item.done`:带 type=compaction 的 item(实际负载)
+/// 3. `response.completed`:必须带 `usage` 字段(`input_tokens/output_tokens/total_tokens`
+///    + `*_details: null`),否则 Codex 端 `RemoteCompactionV2Output.token_usage`
+///    解析失败、stream 卡住,用户输入 "继续" 没反应就是这种状态
+///
+/// 参考 codex fixture `tests/common/responses.rs::sse_completed / ev_completed`。
+pub(crate) fn build_compaction_sse(
+    response_id: &str,
+    summary: &str,
+    input_tokens: i64,
+    output_tokens: i64,
+) -> String {
     let encrypted = encode_summary(summary);
+    let created_event = json!({
+        "type": "response.created",
+        "response": { "id": response_id }
+    });
     let item_event = json!({
         "type": "response.output_item.done",
         "item": {
@@ -223,14 +240,24 @@ fn build_compaction_sse(response_id: &str, summary: &str) -> String {
     });
     let completed_event = json!({
         "type": "response.completed",
-        "response": { "id": response_id }
+        "response": {
+            "id": response_id,
+            "usage": {
+                "input_tokens": input_tokens,
+                "input_tokens_details": null,
+                "output_tokens": output_tokens,
+                "output_tokens_details": null,
+                "total_tokens": input_tokens + output_tokens,
+            }
+        }
     });
     format!(
-        "event: response.output_item.done\n\
-         data: {}\n\n\
+        "event: response.created\n\
+         data: {created_event}\n\n\
+         event: response.output_item.done\n\
+         data: {item_event}\n\n\
          event: response.completed\n\
-         data: {}\n\n",
-        item_event, completed_event,
+         data: {completed_event}\n\n",
     )
 }
 
@@ -281,7 +308,10 @@ pub async fn handle_codex_compaction(
         }
     };
 
-    let sse_body = build_compaction_sse(request_id, &summary);
+    // 字符数估算 token,Codex 端只看数值是否合理,不验证精确性。
+    let input_tokens = (transcript.len() as i64) / 4;
+    let output_tokens = (summary.len() as i64) / 4;
+    let sse_body = build_compaction_sse(request_id, &summary, input_tokens, output_tokens);
     tracing::info!(
         provider = %config.name,
         request_id = %request_id,
@@ -418,13 +448,21 @@ mod tests {
 
     #[test]
     fn sse_includes_required_events() {
-        let sse = build_compaction_sse("resp-123", "test summary");
-        assert!(sse.contains("event: response.output_item.done"));
-        assert!(sse.contains("event: response.completed"));
+        let sse = build_compaction_sse("resp-123", "test summary", 100, 50);
+        // 3 个事件按顺序出现
+        let created_idx = sse.find("event: response.created").expect("created");
+        let item_idx = sse.find("event: response.output_item.done").expect("item");
+        let done_idx = sse.find("event: response.completed").expect("completed");
+        assert!(created_idx < item_idx && item_idx < done_idx);
         assert!(sse.contains("\"type\":\"compaction\""));
         assert!(sse.contains("\"encrypted_content\":\""));
         assert!(sse.contains("\"id\":\"resp-123\""));
+        // usage 必填,token_usage parser 会用
+        assert!(sse.contains("\"input_tokens\":100"));
+        assert!(sse.contains("\"output_tokens\":50"));
+        assert!(sse.contains("\"total_tokens\":150"));
+        assert!(sse.contains("\"input_tokens_details\":null"));
         // SSE 事件必须用 \n\n 分隔
-        assert!(sse.contains("\n\n"));
+        assert_eq!(sse.matches("\n\n").count(), 3);
     }
 }

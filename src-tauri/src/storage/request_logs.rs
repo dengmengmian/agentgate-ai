@@ -969,6 +969,18 @@ pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<Reque
         .filter_map(|r| r.ok())
         .collect();
 
+    // 今日 codex_compact 计数 — 单独查 trace_json,跟主聚合解耦。
+    let today_codex_compact: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM request_logs
+             WHERE source = 'gateway' AND timestamp LIKE ?1
+               AND trace_json IS NOT NULL
+               AND trace_json LIKE '%\"mode\":\"codex_compact\"%'",
+            [&today_prefix],
+            |r| r.get(0),
+        )
+        .unwrap_or(0);
+
     Ok(RequestStats {
         total,
         success,
@@ -991,6 +1003,7 @@ pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<Reque
         total_cache_read_tokens: total_cache_read,
         today_cache_write_tokens: today_cache_write,
         today_cache_read_tokens: today_cache_read,
+        today_codex_compact,
         daily,
         providers,
     })
@@ -1017,6 +1030,8 @@ pub struct RequestStats {
     pub total_cache_read_tokens: i64,
     pub today_cache_write_tokens: i64,
     pub today_cache_read_tokens: i64,
+    /// 今日触发本地 Codex remote compaction 的次数(trace.mode = "codex_compact")。
+    pub today_codex_compact: i64,
     pub daily: Vec<DailyStat>,
     pub providers: Vec<ProviderStat>,
 }

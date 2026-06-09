@@ -710,6 +710,13 @@ const translations: Record<string, Record<Locale, string>> = {
   "stats.success_rate_label": { en: "success", zh: "成功" },
   "stats.avg_per_request": { en: "avg", zh: "均" },
   "stats.req_unit": { en: "req", zh: "次" },
+  "stats.codex_compact": { en: "Codex Compact", zh: "Codex 压缩" },
+  "stats.codex_compact_today": { en: "Triggered today", zh: "今日触发" },
+  "stats.codex_compact_times": { en: "times", zh: "次" },
+  "stats.codex_compact_hint": {
+    en: "Local summary stands in for OpenAI remote compaction",
+    zh: "本地代替 OpenAI 远程压缩",
+  },
   "stats.cache": { en: "Cache", zh: "缓存" },
   "stats.cache_write": { en: "write", zh: "写入" },
   "stats.cache_hit": { en: "hit", zh: "命中" },

@@ -1635,7 +1635,11 @@ source: string | null;
  * 会话指纹：gateway 来源走 session_affinity；客户端日志来源是文件里的 session id
  */
 session_id: string | null }
-export type RequestStats = { total: number; success: number; errors: number; success_rate: number; avg_latency_ms: number; today_total: number; today_errors: number; total_input_tokens: number; total_output_tokens: number; today_input_tokens: number; today_output_tokens: number; total_cost: number; today_cost: number; total_cache_write_tokens: number; total_cache_read_tokens: number; today_cache_write_tokens: number; today_cache_read_tokens: number; daily: DailyStat[]; providers: ProviderStat[] }
+export type RequestStats = { total: number; success: number; errors: number; success_rate: number; avg_latency_ms: number; today_total: number; today_errors: number; total_input_tokens: number; total_output_tokens: number; today_input_tokens: number; today_output_tokens: number; total_cost: number; today_cost: number; total_cache_write_tokens: number; total_cache_read_tokens: number; today_cache_write_tokens: number; today_cache_read_tokens: number; 
+/**
+ * 今日触发本地 Codex remote compaction 的次数(trace.mode = "codex_compact")。
+ */
+today_codex_compact: number; daily: DailyStat[]; providers: ProviderStat[] }
 export type RouteProfileDetail = { profile: RouteProfileView; providers: RouteProfileProviderView[] }
 export type RouteProfileProviderView = { id: string; provider_id: string; provider_name: string; provider_type: string; provider_protocol: string; has_anthropic_url: boolean; supports_vision: boolean | null; model_capabilities: string | null; priority: number; enabled: boolean; model_override: string | null; cooldown_seconds: number; failover_on_status_codes: string | null; failover_on_error_keywords: string | null; routing_conditions: string | null; runtime_available: boolean; cooldown_until: string | null; consecutive_failures: number }
 export type RouteProfileStats = { route_profile_id: string; request_count: number; success_count: number; error_count: number; success_rate: number; avg_latency_ms: number; cost: number }
