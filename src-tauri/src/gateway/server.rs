@@ -186,6 +186,38 @@ pub async fn start(
         ))
         .with_state(state);
 
+    // 可选 per-IP 限流(默认关)。AGENTGATE_RATE_LIMIT = 每 IP 每秒最大请求数。
+    // 在请求入口计一次,不占整条 SSE 流;SmartIp 提取器兼容反代,否则回落 peer IP。
+    let rate = std::env::var("AGENTGATE_RATE_LIMIT")
+        .ok()
+        .and_then(|s| s.trim().parse::<u32>().ok())
+        .filter(|n| *n > 0);
+    let app = if let Some(r) = rate {
+        use tower_governor::governor::GovernorConfigBuilder;
+        use tower_governor::key_extractor::SmartIpKeyExtractor;
+        use tower_governor::GovernorLayer;
+        let conf = Arc::new(
+            GovernorConfigBuilder::default()
+                .period(Duration::from_nanos(1_000_000_000u64 / r as u64))
+                .burst_size(r)
+                .key_extractor(SmartIpKeyExtractor)
+                .finish()
+                .expect("build governor config"),
+        );
+        // 后台定期清理过期 IP 桶,防止内存随不同 IP 数无界增长。
+        let limiter = conf.limiter().clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                limiter.retain_recent();
+            }
+        });
+        tracing::info!(per_ip_rps = r, "per-IP rate limiting enabled");
+        app.layer(GovernorLayer { config: conf })
+    } else {
+        app
+    };
+
     let addr: SocketAddr = format!("{host}:{port}")
         .parse()
         .map_err(|e| AppError::new(crate::errors::codes::GATEWAY_BIND_ERROR, format!("Invalid address: {e}")))?;
@@ -223,7 +255,8 @@ pub async fn start(
         });
     }
 
-    let make_service = app.into_make_service();
+    // with_connect_info:SmartIpKeyExtractor 在没有 X-Forwarded-For 时回落到 peer IP。
+    let make_service = app.into_make_service_with_connect_info::<SocketAddr>();
 
     tracing::info!(
         host = %host,

@@ -93,6 +93,7 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter", "fmt"]
 # Prometheus metrics 暴露：GET /metrics 给监控系统抓。
 metrics = "0.24"
 metrics-exporter-prometheus = { version = "0.16", default-features = false }
+tower_governor = "0.4"
 
 [dev-dependencies]
 # 离线 fixture 测试用：本地起 mock 上游，断言 AgentGate 转换后的请求体。
