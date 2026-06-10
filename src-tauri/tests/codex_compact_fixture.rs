@@ -16,8 +16,14 @@ use common::gateway_harness::{GatewayHarness, ProviderSpec};
 use common::mock_upstream::MockUpstream;
 use serde_json::json;
 
+/// codex_compact 处理器默认关。测试里要 env 开。
+fn enable_codex_compact() {
+    std::env::set_var("AGENTGATE_CODEX_COMPACT", "1");
+}
+
 #[tokio::test]
 async fn codex_v2_compaction_via_header_returns_full_sse() {
+    enable_codex_compact();
     let mock = MockUpstream::start().await;
     mock.stub_chat_completions_ok("mock-default", "用户讨论了 FCP 调色,选 ProRes 4K 交付。")
         .await;
@@ -157,6 +163,7 @@ async fn non_codex_request_bypasses_compact_branch() {
 async fn prior_compaction_item_is_restored_to_user_message() {
     // 验证下一轮:Codex 把上次的 compaction item 塞回 input,
     // 网关在 transform 层应该解出 summary 注入到 chat messages。
+    // 这条路径不依赖 codex_compact handler,所以不用开 env。
     let mock = MockUpstream::start().await;
     mock.stub_chat_completions_ok("mock-default", "回复").await;
     let harness = GatewayHarness::start(

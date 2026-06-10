@@ -56,11 +56,26 @@ const ENCRYPTED_PREFIX: &str = "AGENTGATE_COMPACT_V1:";
 
 /// 探嗅一个 POST /v1/responses 是不是 Codex remote compaction v2 请求。
 ///
-/// 规则(OR):
-/// - header `x-codex-beta-features` 包含 token `remote_compaction_v2`
-/// - 或 header `x-codex-turn-metadata` 是 JSON 含 `"request_kind":"compaction"`
-/// - 或 URL path 含 `/compact`(旧 Codex 用 sub-path,兼容)
+/// **默认关闭**(env `AGENTGATE_CODEX_COMPACT=1` 才打开),因为现实里发现:
+/// Codex 端 SSE parser 对 `response.completed.usage` 的字段要求比 fixture
+/// 看上去严格,我们返回的 SSE 即使带 usage 也会被丢弃,造成 Codex stream 不
+/// 完成、用户输入 "继续" 没反应,**连带普通对话都被阻断**(每个 turn 前都
+/// 先尝试 compaction)。
+///
+/// 关掉后 compact 请求走原 chat 转换路径,上游(MiMo 等)会因不识别专属模型
+/// 返 503,Codex CLI 收到 503 后会向用户报错(而不是静默 hang),用户可以
+/// `/clear` 或显式手动 compact 恢复。
+///
+/// 修好 SSE 真兼容后把 env 默认改回 on,或换成 gateway_settings 字段读 DB。
+///
+/// 规则(任一为真且 env 启用):
+/// - URL path 含 `/compact`(旧 Codex sub-path)
+/// - header `x-codex-beta-features` 含 `remote_compaction_v2`
+/// - header `x-codex-turn-metadata` 是 JSON 含 `"request_kind":"compaction"`
 pub fn is_codex_v2_compaction(headers: &HeaderMap, uri_path: &str) -> bool {
+    if !is_enabled() {
+        return false;
+    }
     if uri_path.contains("/compact") {
         return true;
     }
@@ -85,6 +100,13 @@ pub fn is_codex_v2_compaction(headers: &HeaderMap, uri_path: &str) -> bool {
         }
     }
     false
+}
+
+fn is_enabled() -> bool {
+    std::env::var("AGENTGATE_CODEX_COMPACT")
+        .ok()
+        .map(|v| matches!(v.trim(), "1" | "true" | "on" | "yes"))
+        .unwrap_or(false)
 }
 
 /// 把 summary 文本编码成 `encrypted_content`。
@@ -346,14 +368,29 @@ mod tests {
         hm
     }
 
+    struct EnvGuard;
+    impl EnvGuard {
+        fn on() -> Self {
+            std::env::set_var("AGENTGATE_CODEX_COMPACT", "1");
+            EnvGuard
+        }
+    }
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            std::env::remove_var("AGENTGATE_CODEX_COMPACT");
+        }
+    }
+
     #[test]
     fn detect_via_beta_features_header() {
+        let _g = EnvGuard::on();
         let hm = h("x-codex-beta-features", "alpha,remote_compaction_v2,beta");
         assert!(is_codex_v2_compaction(&hm, "/v1/responses"));
     }
 
     #[test]
     fn detect_via_turn_metadata_header() {
+        let _g = EnvGuard::on();
         let hm = h(
             "x-codex-turn-metadata",
             r#"{"request_kind":"compaction","other":"x"}"#,
@@ -363,14 +400,25 @@ mod tests {
 
     #[test]
     fn detect_via_legacy_url_path() {
+        let _g = EnvGuard::on();
         let hm = HeaderMap::new();
         assert!(is_codex_v2_compaction(&hm, "/v1/responses/compact"));
     }
 
     #[test]
     fn not_detected_for_normal_request() {
+        let _g = EnvGuard::on();
         let hm = h("x-codex-beta-features", "other_feature");
         assert!(!is_codex_v2_compaction(&hm, "/v1/responses"));
+    }
+
+    #[test]
+    fn off_by_default_so_all_paths_bypass() {
+        // 不设 env:任何 header / URL 组合都不应触发,保留原 chat 路径
+        std::env::remove_var("AGENTGATE_CODEX_COMPACT");
+        let hm = h("x-codex-beta-features", "remote_compaction_v2");
+        assert!(!is_codex_v2_compaction(&hm, "/v1/responses"));
+        assert!(!is_codex_v2_compaction(&HeaderMap::new(), "/v1/responses/compact"));
     }
 
     #[test]
