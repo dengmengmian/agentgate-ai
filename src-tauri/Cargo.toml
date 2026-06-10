@@ -103,3 +103,6 @@ tower_governor = "0.4"
 # 不依赖真实 provider key、不依赖网络。
 wiremock = "0.6"
 tempfile = "3"
+# Codex CLI 用的同款 SSE parser,集成测试拿它解析我们返给 Codex 的 SSE,
+# 验证 wire-level 真正兼容(不是只字符串断言)。
+eventsource-stream = "0.2"

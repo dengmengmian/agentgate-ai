@@ -494,6 +494,131 @@ mod tests {
         assert!(restored.contains("Prior compacted history"));
     }
 
+    /// 镜像 codex-rs/codex-api/src/sse/responses.rs 的 deserialize 路径,
+    /// 把我们生成的 SSE bytes 跑过同一个 parser,断言每条 event 都被识别
+    /// 为有意义的 ResponseEvent variant。任何 None / parse error 都意味着
+    /// Codex CLI 也会 silently drop 这条 event,导致 stream 卡住。
+    mod codex_parser_compat {
+        use serde::Deserialize;
+        use serde_json::Value;
+
+        #[derive(Debug, Deserialize)]
+        pub(super) struct ResponsesStreamEvent {
+            #[serde(rename = "type")]
+            pub(super) kind: String,
+            pub(super) response: Option<Value>,
+            pub(super) item: Option<Value>,
+        }
+
+        #[derive(Debug, Deserialize)]
+        pub(super) struct ResponseCompleted {
+            pub(super) id: String,
+            #[serde(default)]
+            pub(super) usage: Option<ResponseCompletedUsage>,
+        }
+
+        #[derive(Debug, Deserialize)]
+        #[allow(dead_code)]
+        pub(super) struct ResponseCompletedUsage {
+            pub(super) input_tokens: i64,
+            pub(super) input_tokens_details: Option<Value>,
+            pub(super) output_tokens: i64,
+            pub(super) output_tokens_details: Option<Value>,
+            pub(super) total_tokens: i64,
+        }
+
+        /// codex `protocol::models::ResponseItem` 的子集——只列我们关心的
+        /// variant + Other 兜底。tag/snake_case 等 serde 行为完全跟原版一致。
+        #[derive(Debug, Deserialize)]
+        #[serde(tag = "type", rename_all = "snake_case")]
+        #[allow(dead_code)]
+        pub(super) enum ResponseItem {
+            Message {
+                role: String,
+            },
+            Reasoning {
+                #[serde(default)]
+                summary: Vec<Value>,
+            },
+            #[serde(alias = "compaction_summary")]
+            Compaction {
+                encrypted_content: String,
+            },
+            CompactionTrigger,
+            ContextCompaction {
+                #[serde(default)]
+                encrypted_content: Option<String>,
+            },
+            #[serde(other)]
+            Other,
+        }
+
+        /// 按 SSE wire 格式拆 events。eventsource 协议:`event: <kind>\ndata: <json>\n\n`。
+        pub(super) fn split_events(sse: &str) -> Vec<(String, String)> {
+            let mut out = Vec::new();
+            for chunk in sse.split("\n\n") {
+                let mut kind = None;
+                let mut data = None;
+                for line in chunk.lines() {
+                    if let Some(rest) = line.strip_prefix("event: ") {
+                        kind = Some(rest.to_string());
+                    } else if let Some(rest) = line.strip_prefix("data: ") {
+                        data = Some(rest.to_string());
+                    }
+                }
+                if let (Some(k), Some(d)) = (kind, data) {
+                    out.push((k, d));
+                }
+            }
+            out
+        }
+    }
+
+    #[test]
+    fn sse_parses_through_mirror_of_codex_parser() {
+        use codex_parser_compat::*;
+
+        let sse = build_compaction_sse("resp-test", "this is a summary", 123, 45);
+        let events = split_events(&sse);
+        assert_eq!(events.len(), 3, "应解出 3 个 event,实际 {}", events.len());
+
+        // 1. response.created — 必须含 response 字段
+        let (k0, d0) = &events[0];
+        assert_eq!(k0, "response.created");
+        let e0: ResponsesStreamEvent =
+            serde_json::from_str(d0).expect("response.created data parse 失败");
+        assert!(e0.response.is_some(), "created 必须含 response 字段");
+
+        // 2. response.output_item.done — item 必须能 deserialize 成 Compaction variant
+        let (k1, d1) = &events[1];
+        assert_eq!(k1, "response.output_item.done");
+        let e1: ResponsesStreamEvent =
+            serde_json::from_str(d1).expect("output_item.done data parse 失败");
+        let item_val = e1.item.expect("output_item.done 必须含 item 字段");
+        let parsed_item: ResponseItem = serde_json::from_value(item_val.clone())
+            .expect(&format!("item 解析 ResponseItem 失败,raw={item_val}"));
+        match parsed_item {
+            ResponseItem::Compaction { encrypted_content } => {
+                assert!(encrypted_content.starts_with(ENCRYPTED_PREFIX));
+            }
+            other => panic!("item 应是 Compaction variant,实际 {other:?}"),
+        }
+
+        // 3. response.completed — usage 字段必须能 deserialize 成 ResponseCompletedUsage
+        let (k2, d2) = &events[2];
+        assert_eq!(k2, "response.completed");
+        let e2: ResponsesStreamEvent =
+            serde_json::from_str(d2).expect("response.completed data parse 失败");
+        let resp_val = e2.response.expect("completed 必须含 response 字段");
+        let completed: ResponseCompleted = serde_json::from_value(resp_val.clone())
+            .expect(&format!("ResponseCompleted parse 失败,raw={resp_val}"));
+        assert_eq!(completed.id, "resp-test");
+        let usage = completed.usage.expect("completed.usage 必须存在");
+        assert_eq!(usage.input_tokens, 123);
+        assert_eq!(usage.output_tokens, 45);
+        assert_eq!(usage.total_tokens, 168);
+    }
+
     #[test]
     fn sse_includes_required_events() {
         let sse = build_compaction_sse("resp-123", "test summary", 100, 50);

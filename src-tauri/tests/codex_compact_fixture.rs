@@ -14,6 +14,8 @@ mod common;
 
 use common::gateway_harness::{GatewayHarness, ProviderSpec};
 use common::mock_upstream::MockUpstream;
+use eventsource_stream::Eventsource;
+use futures::StreamExt;
 use serde_json::json;
 
 /// codex_compact 处理器默认关。测试里要 env 开。
@@ -123,6 +125,96 @@ async fn codex_v2_compaction_via_header_returns_full_sse() {
         1,
         "压缩流程应该正好调上游 1 次(summary 调用)"
     );
+}
+
+/// Wire-level 测试:用 Codex CLI 同款的 eventsource-stream 真实解析我们的
+/// HTTP 响应,验证它能拿到 3 个 events(created / output_item.done / completed)
+/// 且 event type + data 都正确。这是字符串断言抓不到的层。
+#[tokio::test]
+async fn sse_decodes_through_real_eventsource_stream() {
+    enable_codex_compact();
+    let mock = MockUpstream::start().await;
+    mock.stub_chat_completions_ok("mock-default", "MOCK_SUMMARY_PAYLOAD")
+        .await;
+    let harness = GatewayHarness::start(
+        ProviderSpec::chat_only("mimo", "mock-default"),
+        &mock,
+    )
+    .await;
+
+    let resp = harness
+        .client()
+        .post(harness.url("/v1/responses"))
+        .header("Authorization", format!("Bearer {}", harness.token))
+        .header("x-codex-beta-features", "remote_compaction_v2")
+        .json(&json!({
+            "model": "gpt-5.5-openai-compact",
+            "stream": true,
+            "input": [
+                {"type": "message", "role": "user", "content": [
+                    {"type": "input_text", "text": "test content"}
+                ]}
+            ]
+        }))
+        .send()
+        .await
+        .expect("send");
+    assert_eq!(resp.status(), 200);
+
+    // Codex 用的就是这个解析路径:bytes_stream → Eventsource
+    let mut events = resp.bytes_stream().eventsource();
+
+    let mut kinds = Vec::new();
+    let mut item_payload: Option<String> = None;
+    let mut completed_payload: Option<String> = None;
+    while let Some(item) = events.next().await {
+        let ev = item.expect("eventsource 解析失败");
+        kinds.push(ev.event.clone());
+        if ev.event == "response.output_item.done" {
+            item_payload = Some(ev.data);
+        } else if ev.event == "response.completed" {
+            completed_payload = Some(ev.data);
+        }
+    }
+
+    assert_eq!(
+        kinds,
+        vec![
+            "response.created".to_string(),
+            "response.output_item.done".to_string(),
+            "response.completed".to_string(),
+        ],
+        "eventsource 应解出三个 event,实际:{kinds:?}"
+    );
+
+    // Codex 端 process_responses_event 路径:item 字段 deserialize 成 ResponseItem
+    let item_data: serde_json::Value =
+        serde_json::from_str(&item_payload.expect("item event missing")).unwrap();
+    let item_inner = item_data.get("item").expect("item field missing");
+    assert_eq!(
+        item_inner.get("type").and_then(|v| v.as_str()),
+        Some("compaction"),
+        "item.type 必须是 compaction"
+    );
+    let enc = item_inner
+        .get("encrypted_content")
+        .and_then(|v| v.as_str())
+        .expect("encrypted_content 必须是字符串");
+    assert!(enc.starts_with("AGENTGATE_COMPACT_V1:"));
+
+    // response.completed.usage 必须能让 Codex 的 ResponseCompletedUsage(i64/Option) parse
+    let completed_data: serde_json::Value =
+        serde_json::from_str(&completed_payload.expect("completed event missing")).unwrap();
+    let usage = completed_data
+        .get("response")
+        .and_then(|r| r.get("usage"))
+        .expect("usage 必填(Codex parser 用)");
+    for required_i64 in &["input_tokens", "output_tokens", "total_tokens"] {
+        assert!(
+            usage.get(*required_i64).and_then(|v| v.as_i64()).is_some(),
+            "usage.{required_i64} 必须是 i64,不能 missing/null"
+        );
+    }
 }
 
 #[tokio::test]
