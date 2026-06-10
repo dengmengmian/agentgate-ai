@@ -1,5 +1,17 @@
 # Changelog / 更新日志
 
+## [1.3.7] - 2026-06-10
+
+### 新增
+
+- **配置分享码** —— 客户端配置可一键导出为单行分享码,另一台机器粘贴即导入,免去手敲端口、token、模型映射。
+
+### 改进
+
+- **Codex 远程压缩(实验性,默认关)** —— 接住 Codex CLI 的 `remote_compaction_v2` 协议:Codex 在长上下文时把摘要请求发到网关,网关用当前主供应商生成摘要再以 SSE 返回,避免硬编码 `gpt-5.5-openai-compact` 模型导致的 503。设 `AGENTGATE_CODEX_COMPACT=1` 开启;SSE 协议层兼容性已被镜像 + 真实 `eventsource-stream` 解析两层测试覆盖。
+- **首页"今日 Codex 压缩"卡片** —— Dashboard 加一张计数卡,展示当天通过网关完成的 Codex compaction 次数,便于看实验功能是否真的命中。
+- **大组件拆分** —— Settings / Tools / Routes 三个超长页面拆成更小子组件,降低后续维护改动半径,对外行为不变。
+
 ## [1.3.6] - 2026-06-09
 
 ### 新增
