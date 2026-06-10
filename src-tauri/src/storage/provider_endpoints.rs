@@ -243,6 +243,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: Some(true),
         }
     }
@@ -339,6 +340,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             protocol: None,
             timeout_seconds: None,
             enabled: None,
@@ -380,6 +382,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             protocol: Some(r#"["openai_chat_completions","anthropic_messages"]"#.into()),
             timeout_seconds: None,
             enabled: None,
@@ -421,6 +424,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: Some(true),
         };
         apply_to_create_input(&mut input);
@@ -462,6 +466,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: Some(true),
         };
         apply_to_create_input(&mut input);

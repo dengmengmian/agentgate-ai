@@ -159,6 +159,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.toast_auto_setup": { en: "models auto-configured", zh: "个模型已自动配置（默认/推理已选最新）" },
   "providers.cap_matrix_toggle": { en: "Capability matrix (advanced)", zh: "能力矩阵（高级）" },
   "providers.cap_matrix_hint": { en: "Tweak per-model capability flags. The gateway uses these to route requests with images/audio to the right model.", zh: "微调每个模型的能力。请求带图片/音频时网关会自动路由到匹配的模型。" },
+  "providers.ctx_window_col": { en: "Context window", zh: "上下文窗口" },
+  "providers.ctx_window_hint": { en: "Per-model context window (tokens) for auto-compaction threshold. Leave empty to use the built-in catalog, falling back to 110000.", zh: "每个模型的上下文窗口(token),用于自压缩阈值。留空走内置 catalog,再退回 110000。" },
   "providers.base_url_custom_hint": { en: "Required for custom providers.", zh: "Custom 类型必须填写。" },
   "providers.advanced_hint": { en: "Usually no need to touch", zh: "通常无需修改" },
   "providers.endpoints": { en: "Native Protocol Endpoints", zh: "上游原生协议入口" },

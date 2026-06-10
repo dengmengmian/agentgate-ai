@@ -69,6 +69,12 @@ function validateProvider(provider, file) {
       assert(typeof model.pricing.inputPerMillion === "number", `${file}: ${model.id} pricing.inputPerMillion must be a number`);
       assert(typeof model.pricing.outputPerMillion === "number", `${file}: ${model.id} pricing.outputPerMillion must be a number`);
     }
+    if (model.contextWindow !== undefined) {
+      assert(
+        Number.isInteger(model.contextWindow) && model.contextWindow > 0,
+        `${file}: ${model.id} contextWindow must be a positive integer`,
+      );
+    }
   }
 }
 
@@ -177,6 +183,12 @@ function renderRust(providers) {
       .map((model) => ({ provider, model })))
     .map(({ provider, model }) => `    (${rustStr(provider.type)}, ${rustStr(model.id)}, ${rustFloat(model.pricing.inputPerMillion)}, ${rustFloat(model.pricing.outputPerMillion)}),`)
     .join("\n");
+  const contextWindowTuples = providers
+    .flatMap((provider) => provider.models
+      .filter((model) => typeof model.contextWindow === "number")
+      .map((model) => ({ provider, model })))
+    .map(({ provider, model }) => `    (${rustStr(provider.type)}, ${rustStr(model.id)}, ${model.contextWindow}),`)
+    .join("\n");
   const deprecatedTuples = providers
     .flatMap((provider) => (provider.deprecatedModels ?? []).map((model) => ({ provider, model })))
     .map(({ provider, model }) => `    (${rustStr(provider.type)}, ${rustStr(model)}),`)
@@ -219,6 +231,10 @@ ${capabilityTuples}
 
 pub const MODEL_PRICING_DEFAULTS: &[(&str, &str, f64, f64)] = &[
 ${pricingTuples}
+];
+
+pub const MODEL_CONTEXT_WINDOW: &[(&str, &str, u32)] = &[
+${contextWindowTuples}
 ];
 
 pub const DEPRECATED_MODELS: &[(&str, &str)] = &[

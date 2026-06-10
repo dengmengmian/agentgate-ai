@@ -4,7 +4,7 @@ use crate::errors::AppError;
 
 /// 当前 schema 版本。每加一段新迁移就 +1,放到 `run_versioned_migrations`
 /// 里 match 上对应的 version。读 `PRAGMA user_version` 决定该跑哪些。
-const CURRENT_SCHEMA_VERSION: u32 = 2;
+const CURRENT_SCHEMA_VERSION: u32 = 3;
 
 fn get_user_version(conn: &Connection) -> Result<u32, AppError> {
     let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -67,6 +67,12 @@ fn run_versioned_migrations(conn: &Connection, from_version: u32) -> Result<(), 
              ALTER TABLE gateway_settings ADD COLUMN codex_compact_summary_max_tokens INTEGER NOT NULL DEFAULT 1500;",
         )?;
         set_user_version(conn, 2)?;
+    }
+    if from_version < 3 {
+        // v3:per-model 上下文窗口覆盖({model_id → window_tokens} JSON)。
+        // 用户在 UI 覆盖 catalog 内置窗口;auto_compact 据此算自压缩阈值。
+        conn.execute_batch("ALTER TABLE providers ADD COLUMN model_context_windows TEXT;")?;
+        set_user_version(conn, 3)?;
     }
     Ok(())
 }
@@ -623,6 +629,28 @@ mod tests {
             .prepare("SELECT codex_compact_enabled FROM gateway_settings LIMIT 0")
             .is_ok();
         assert!(has_col, "v2 ALTER 应加上 codex_compact_enabled 列");
+    }
+
+    #[test]
+    fn migration_v3_adds_model_context_windows() {
+        // 复现 bug:user_version=2 的老库升级时必须加上 model_context_windows 列。
+        // 之前误把该列加在 legacy_baseline_v1(老用户 user_version≥1 后不再执行),
+        // 导致列缺失、providers 查询 "no such column" 报错、UI 供应商列表全空。
+        let conn = Connection::open_in_memory().unwrap();
+        legacy_baseline_v1(&conn).unwrap();
+        set_user_version(&conn, 2).unwrap();
+        assert!(
+            conn.prepare("SELECT model_context_windows FROM providers LIMIT 0")
+                .is_err(),
+            "v2 库此时不该有该列"
+        );
+        run_migrations(&conn).unwrap();
+        assert_eq!(get_user_version(&conn).unwrap(), 3);
+        assert!(
+            conn.prepare("SELECT model_context_windows FROM providers LIMIT 0")
+                .is_ok(),
+            "v3 迁移应加上 model_context_windows 列"
+        );
     }
 
     #[test]

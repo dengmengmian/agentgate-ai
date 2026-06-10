@@ -264,6 +264,7 @@ mod tests {
                 thinking_rectifier_enabled: None,
                 error_mapper_enabled: None,
                 model_degradation_chain: None,
+                model_context_windows: None,
                 enabled: Some(true),
             },
         )

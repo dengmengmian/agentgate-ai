@@ -119,6 +119,16 @@ fn catalog_capabilities(provider_type: &str, model_id: &str) -> Option<Vec<Strin
         .map(|(_, _, caps)| dedup_sort(caps.iter().map(|cap| (*cap).to_string()).collect()))
 }
 
+/// 查模型的上下文窗口(token 数),数据来自 provider-catalog。
+/// 未收录的模型返回 None,调用方自行决定 fallback。
+pub fn context_window_for(provider_type: &str, model_id: &str) -> Option<u32> {
+    let pt = catalog_provider_type(provider_type).unwrap_or(provider_type);
+    catalog::MODEL_CONTEXT_WINDOW
+        .iter()
+        .find(|(provider, model, _)| *provider == pt && *model == model_id)
+        .map(|(_, _, window)| *window)
+}
+
 fn is_catalog_deprecated_model(provider_type: &str, model_id: &str) -> bool {
     catalog::DEPRECATED_MODELS
         .iter()

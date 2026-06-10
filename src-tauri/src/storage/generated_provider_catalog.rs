@@ -117,6 +117,16 @@ pub const MODEL_PRICING_DEFAULTS: &[(&str, &str, f64, f64)] = &[
     ("cerebras", "*", 0.0, 0.0),
 ];
 
+pub const MODEL_CONTEXT_WINDOW: &[(&str, &str, u32)] = &[
+    ("mimo", "mimo-v2.5-pro", 128000),
+    ("mimo", "mimo-v2-pro", 128000),
+    ("mimo", "mimo-v2.5", 128000),
+    ("mimo", "mimo-v2-omni", 128000),
+    ("mimo", "mimo-v2-flash", 128000),
+    ("deepseek", "deepseek-v4-flash", 128000),
+    ("deepseek", "deepseek-v4-pro", 128000),
+];
+
 pub const DEPRECATED_MODELS: &[(&str, &str)] = &[
     ("deepseek", "deepseek-chat"),
     ("deepseek", "deepseek-reasoner"),

@@ -407,6 +407,7 @@ mod tests {
             extra_headers: std::collections::HashMap::new(),
             anthropic_base_url: None,
             responses_base_url: None,
+            model_context_windows: std::collections::HashMap::new(),
         }
     }
 

@@ -7,6 +7,7 @@ import {
   resolveKnownProviderEndpoints,
   resolveProviderPresetForKey,
 } from "@/data/providerPresets";
+import { GENERATED_PROVIDER_CATALOG } from "@/data/generatedProviderCatalog";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "@/components/common/Toast";
 import * as api from "@/lib/api";
@@ -23,6 +24,17 @@ interface ProviderFormDialogProps {
   provider?: ProviderView | null;
   onSubmit: (data: CreateProviderInput | UpdateProviderInput) => void;
   onClose: () => void;
+}
+
+/** catalog 内置的该模型上下文窗口,用作输入框 placeholder(让用户看到默认值)。 */
+function catalogContextWindow(providerType: string, model: string): number | undefined {
+  const entry = (
+    GENERATED_PROVIDER_CATALOG as unknown as Record<
+      string,
+      { models?: Array<{ id: string; contextWindow?: number }> }
+    >
+  )[providerType];
+  return entry?.models?.find((m) => m.id === model)?.contextWindow;
 }
 
 export function ProviderFormDialog({
@@ -42,6 +54,7 @@ export function ProviderFormDialog({
   const [reasoningModel, setReasoningModel] = useState("");
   const [supportedModels, setSupportedModels] = useState("");
   const [modelCapabilities, setModelCapabilities] = useState<Record<string, string[]>>({});
+  const [modelContextWindows, setModelContextWindows] = useState<Record<string, number>>({});
   const [seedingCaps, setSeedingCaps] = useState(false);
   const [modelMapping, setModelMapping] = useState<Record<string, string>>({});
   const [extraHeaders, setExtraHeaders] = useState("");
@@ -145,6 +158,7 @@ export function ProviderFormDialog({
       setReasoningModel(provider.reasoning_model ?? "");
       setSupportedModels(provider.supported_models ?? "");
       try { setModelCapabilities(provider.model_capabilities ? JSON.parse(provider.model_capabilities) : {}); } catch { setModelCapabilities({}); }
+      try { setModelContextWindows(provider.model_context_windows ? JSON.parse(provider.model_context_windows) : {}); } catch { setModelContextWindows({}); }
       try { setModelMapping(provider.model_mapping ? JSON.parse(provider.model_mapping) : {}); } catch { setModelMapping({}); }
       setExtraHeaders(provider.extra_headers ?? "");
       setAnthropicBaseUrl(provider.anthropic_base_url ?? "");
@@ -164,6 +178,7 @@ export function ProviderFormDialog({
       setReasoningModel(preset?.reasoningModel ?? "");
       setSupportedModels("");
       setModelCapabilities({});
+      setModelContextWindows({});
       setModelMapping({});
       setExtraHeaders(preset?.extraHeaders ?? "");
       setAnthropicBaseUrl(preset?.anthropicBaseUrl ?? "");
@@ -200,6 +215,7 @@ export function ProviderFormDialog({
     const abuStr = anthropicBaseUrl || undefined;
     const rbuStr = responsesBaseUrl || undefined;
     const mcStr = Object.keys(modelCapabilities).length > 0 ? JSON.stringify(modelCapabilities) : undefined;
+    const mcwStr = Object.keys(modelContextWindows).length > 0 ? JSON.stringify(modelContextWindows) : undefined;
     const validKeys = apiKeys.filter(k => k.trim());
     const keyEndpoints = resolveKnownProviderEndpoints(providerType, validKeys[0]);
     const submitBaseUrl = keyEndpoints && isKnownMimoEndpointUrl(baseUrl) ? keyEndpoints.baseUrl : baseUrl;
@@ -214,6 +230,7 @@ export function ProviderFormDialog({
         supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: submitAnthropicBaseUrl, responses_base_url: rbuStr,
         auto_cache_control: autoCacheControl,
         model_capabilities: mcStr,
+        model_context_windows: mcwStr,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
       if (validKeys.length === 1) input.api_key = validKeys[0];
@@ -226,6 +243,7 @@ export function ProviderFormDialog({
         supported_models: smStr, model_mapping: mmStr, extra_headers: ehStr, anthropic_base_url: submitAnthropicBaseUrl, responses_base_url: rbuStr,
         auto_cache_control: autoCacheControl,
         model_capabilities: mcStr,
+        model_context_windows: mcwStr,
         protocol: JSON.stringify(protocols), timeout_seconds: parseInt(timeoutSeconds, 10), enabled,
       };
       if (validKeys.length === 1) input.api_key = validKeys[0];
@@ -460,6 +478,9 @@ export function ProviderFormDialog({
                                 {CAPABILITY_LABELS[cap]}
                               </th>
                             ))}
+                            <th className="px-2 py-1.5 text-center font-medium text-text-secondary" title={t("providers.ctx_window_hint")}>
+                              {t("providers.ctx_window_col")}
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -486,6 +507,25 @@ export function ProviderFormDialog({
                                     />
                                   </td>
                                 ))}
+                                <td className="px-2 py-1.5 text-center">
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={modelContextWindows[m] ?? ""}
+                                    placeholder={catalogContextWindow(providerType, m)?.toString() ?? "auto"}
+                                    onChange={(e) => {
+                                      const raw = e.target.value.trim();
+                                      setModelContextWindows((prev) => {
+                                        const next = { ...prev };
+                                        const n = parseInt(raw, 10);
+                                        if (raw === "" || isNaN(n) || n <= 0) delete next[m];
+                                        else next[m] = n;
+                                        return next;
+                                      });
+                                    }}
+                                    className="w-20 rounded border border-border bg-bg px-1 py-0.5 text-center text-[11px]"
+                                  />
+                                </td>
                               </tr>
                             );
                           })}

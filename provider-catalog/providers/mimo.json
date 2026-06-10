@@ -49,7 +49,8 @@
       "pricing": {
         "inputPerMillion": 0.435,
         "outputPerMillion": 0.87
-      }
+      },
+      "contextWindow": 128000
     },
     {
       "id": "mimo-v2-pro",
@@ -57,7 +58,8 @@
       "pricing": {
         "inputPerMillion": 1,
         "outputPerMillion": 3
-      }
+      },
+      "contextWindow": 128000
     },
     {
       "id": "mimo-v2.5",
@@ -65,7 +67,8 @@
       "pricing": {
         "inputPerMillion": 0.14,
         "outputPerMillion": 0.28
-      }
+      },
+      "contextWindow": 128000
     },
     {
       "id": "mimo-v2-omni",
@@ -73,7 +76,8 @@
       "pricing": {
         "inputPerMillion": 0.4,
         "outputPerMillion": 2
-      }
+      },
+      "contextWindow": 128000
     },
     {
       "id": "mimo-v2-flash",
@@ -81,7 +85,8 @@
       "pricing": {
         "inputPerMillion": 0.1,
         "outputPerMillion": 0.3
-      }
+      },
+      "contextWindow": 128000
     },
     {
       "id": "mimo-v2.5-tts",

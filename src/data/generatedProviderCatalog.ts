@@ -63,7 +63,8 @@ export const GENERATED_PROVIDER_CATALOG = {
         "pricing": {
           "inputPerMillion": 0.435,
           "outputPerMillion": 0.87
-        }
+        },
+        "contextWindow": 128000
       },
       {
         "id": "mimo-v2-pro",
@@ -76,7 +77,8 @@ export const GENERATED_PROVIDER_CATALOG = {
         "pricing": {
           "inputPerMillion": 1,
           "outputPerMillion": 3
-        }
+        },
+        "contextWindow": 128000
       },
       {
         "id": "mimo-v2.5",
@@ -92,7 +94,8 @@ export const GENERATED_PROVIDER_CATALOG = {
         "pricing": {
           "inputPerMillion": 0.14,
           "outputPerMillion": 0.28
-        }
+        },
+        "contextWindow": 128000
       },
       {
         "id": "mimo-v2-omni",
@@ -106,7 +109,8 @@ export const GENERATED_PROVIDER_CATALOG = {
         "pricing": {
           "inputPerMillion": 0.4,
           "outputPerMillion": 2
-        }
+        },
+        "contextWindow": 128000
       },
       {
         "id": "mimo-v2-flash",
@@ -119,7 +123,8 @@ export const GENERATED_PROVIDER_CATALOG = {
         "pricing": {
           "inputPerMillion": 0.1,
           "outputPerMillion": 0.3
-        }
+        },
+        "contextWindow": 128000
       },
       {
         "id": "mimo-v2.5-tts",
@@ -220,7 +225,8 @@ export const GENERATED_PROVIDER_CATALOG = {
         "pricing": {
           "inputPerMillion": 0.5,
           "outputPerMillion": 2
-        }
+        },
+        "contextWindow": 128000
       },
       {
         "id": "deepseek-v4-pro",
@@ -232,7 +238,8 @@ export const GENERATED_PROVIDER_CATALOG = {
         "pricing": {
           "inputPerMillion": 2,
           "outputPerMillion": 8
-        }
+        },
+        "contextWindow": 128000
       }
     ],
     "docs": {

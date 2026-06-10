@@ -13,8 +13,11 @@
 //! 5. 摘要按 transcript 内容 hash 缓存(挡客户端重试/相同请求)。
 //!
 //! 只作用于 Chat Completions 路径(MiMo / OpenAI 兼容);Anthropic / Gemini 走各自分支不经过这里。
-//! 默认关闭,需 `AGENTGATE_AUTO_COMPACT_PROVIDERS` 显式按 provider 开启——压缩是有损操作,
-//! 不能对大窗口 provider 无脑施加。
+//! 默认开启。阈值按 provider-catalog 里模型的上下文窗口 ×85% 自适应(留 15% 给 reasoning +
+//! output),未收录的模型退回默认 110K。窗口自适应保证大窗口 provider 不会被过早压缩,所以
+//! 不再需要逐 provider 白名单。覆盖手段:`AGENTGATE_AUTO_COMPACT=off` 全关;
+//! `AGENTGATE_AUTO_COMPACT_PROVIDERS` 设置后收窄为白名单;`AGENTGATE_AUTO_COMPACT_TOKENS`
+//! 显式覆盖阈值。
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -27,9 +30,12 @@ use crate::protocol::chat_completions::{
     CapabilityDegradationEvent, ChatCompletionsRequest, ChatMessage,
 };
 use crate::providers::adapter::{self, ProviderConfig};
+use crate::providers::capabilities;
 
-/// 默认触发阈值(绝对 token 数)。留出余量给 128K 上游的 reasoning + output。
+/// 未收录窗口的模型退回的默认触发阈值(绝对 token 数)。按 128K 上游留余量。
 const DEFAULT_THRESHOLD_TOKENS: usize = 110_000;
+/// 上下文窗口的可用比例:留 15% 给 reasoning + output,其余可装 history。
+const CONTEXT_WINDOW_USAGE_PERCENT: usize = 85;
 /// tail 预算:保留多少 token 的最近历史 verbatim。
 const TAIL_BUDGET_TOKENS: usize = 40_000;
 /// 单次摘要调用的 middle 输入分块预算(token)。须远小于上游上限,留空间给提示词+输出。
@@ -403,24 +409,62 @@ pub(crate) async fn summarize_chunk(
 
 // ── 入口 ────────────────────────────────────────────────────
 
-/// 读取触发配置。返回 Some(threshold) 表示该 provider 已开启自压缩。
-fn threshold_for(config: &ProviderConfig) -> Option<usize> {
-    let list = std::env::var("AGENTGATE_AUTO_COMPACT_PROVIDERS").ok()?;
-    let enabled = list.split(',').any(|s| {
+/// 判断该请求是否启用自压缩,并返回触发阈值(token 数)。
+/// 默认开启;返回 None 表示本次不压缩。
+fn threshold_for(config: &ProviderConfig, model: &str) -> Option<usize> {
+    if auto_compact_disabled() || !provider_allowed(config) {
+        return None;
+    }
+    Some(resolve_threshold(config, model))
+}
+
+/// `AGENTGATE_AUTO_COMPACT=off|0|false|no` 显式全关。
+fn auto_compact_disabled() -> bool {
+    std::env::var("AGENTGATE_AUTO_COMPACT")
+        .ok()
+        .map(|v| {
+            matches!(
+                v.trim().to_ascii_lowercase().as_str(),
+                "off" | "0" | "false" | "no"
+            )
+        })
+        .unwrap_or(false)
+}
+
+/// 未设 `AGENTGATE_AUTO_COMPACT_PROVIDERS` → 全部 provider 允许(默认开);
+/// 设置后只允许名单内的 provider name / type。
+fn provider_allowed(config: &ProviderConfig) -> bool {
+    let Ok(list) = std::env::var("AGENTGATE_AUTO_COMPACT_PROVIDERS") else {
+        return true;
+    };
+    if list.trim().is_empty() {
+        return true;
+    }
+    list.split(',').any(|s| {
         let s = s.trim();
         !s.is_empty()
             && (s.eq_ignore_ascii_case(&config.name)
                 || s.eq_ignore_ascii_case(&config.provider_type))
-    });
-    if !enabled {
-        return None;
-    }
-    let threshold = std::env::var("AGENTGATE_AUTO_COMPACT_TOKENS")
+    })
+}
+
+/// 阈值优先级:`AGENTGATE_AUTO_COMPACT_TOKENS` 显式覆盖 > 用户配置的模型窗口 ×85%
+/// > catalog 内置窗口 ×85% > 默认 110K。
+fn resolve_threshold(config: &ProviderConfig, model: &str) -> usize {
+    if let Some(explicit) = std::env::var("AGENTGATE_AUTO_COMPACT_TOKENS")
         .ok()
         .and_then(|v| v.trim().parse::<usize>().ok())
         .filter(|v| *v > 0)
-        .unwrap_or(DEFAULT_THRESHOLD_TOKENS);
-    Some(threshold)
+    {
+        return explicit;
+    }
+    config
+        .model_context_windows
+        .get(model)
+        .copied()
+        .or_else(|| capabilities::context_window_for(&config.provider_type, model))
+        .map(|window| (window as usize) * CONTEXT_WINDOW_USAGE_PERCENT / 100)
+        .unwrap_or(DEFAULT_THRESHOLD_TOKENS)
 }
 
 /// 若 chat_req 历史超阈值,就地压缩 messages。失败时降级为可观测的硬截断(保留 head+tail
@@ -430,7 +474,7 @@ pub async fn maybe_compact(
     config: &ProviderConfig,
     chat_req: &mut ChatCompletionsRequest,
 ) {
-    let Some(threshold) = threshold_for(config) else {
+    let Some(threshold) = threshold_for(config, &chat_req.model) else {
         return;
     };
 
@@ -439,7 +483,10 @@ pub async fn maybe_compact(
         return;
     }
 
-    let Some(plan) = plan_compaction(&chat_req.messages, TAIL_BUDGET_TOKENS) else {
+    // 小窗口 provider 阈值低于 tail 预算时,tail 会比整个阈值还大导致压缩失效;
+    // 让 tail 不超过阈值的一半。
+    let tail_budget = TAIL_BUDGET_TOKENS.min(threshold / 2);
+    let Some(plan) = plan_compaction(&chat_req.messages, tail_budget) else {
         return;
     };
 
@@ -706,26 +753,47 @@ mod tests {
     fn threshold_env_scenarios() {
         let config = test_config("mimo", "openai");
 
-        // 1. 未设 env → 关闭
+        // 1. 默认(未设任何 env)→ 开启;未收录窗口的模型退回默认阈值
+        std::env::remove_var("AGENTGATE_AUTO_COMPACT");
         std::env::remove_var("AGENTGATE_AUTO_COMPACT_PROVIDERS");
         std::env::remove_var("AGENTGATE_AUTO_COMPACT_TOKENS");
-        assert!(threshold_for(&config).is_none());
+        assert_eq!(threshold_for(&config, "m"), Some(DEFAULT_THRESHOLD_TOKENS));
 
-        // 2. 按 provider name 匹配 → 默认阈值
-        std::env::set_var("AGENTGATE_AUTO_COMPACT_PROVIDERS", "mimo");
-        assert_eq!(threshold_for(&config), Some(DEFAULT_THRESHOLD_TOKENS));
+        // 2. 显式全关
+        std::env::set_var("AGENTGATE_AUTO_COMPACT", "off");
+        assert!(threshold_for(&config, "m").is_none());
+        std::env::remove_var("AGENTGATE_AUTO_COMPACT");
 
-        // 3. 按 provider_type 匹配 + 自定义阈值
+        // 3. 白名单收窄:在名单内 → 开启
         std::env::set_var("AGENTGATE_AUTO_COMPACT_PROVIDERS", "openai");
-        std::env::set_var("AGENTGATE_AUTO_COMPACT_TOKENS", "50000");
-        assert_eq!(threshold_for(&config), Some(50000));
+        assert_eq!(threshold_for(&config, "m"), Some(DEFAULT_THRESHOLD_TOKENS));
 
-        // 4. 不在列表 → 关闭
+        // 4. 白名单收窄:不在名单内 → 关闭
         std::env::set_var("AGENTGATE_AUTO_COMPACT_PROVIDERS", "deepseek");
-        assert!(threshold_for(&config).is_none());
-
+        assert!(threshold_for(&config, "m").is_none());
         std::env::remove_var("AGENTGATE_AUTO_COMPACT_PROVIDERS");
+
+        // 5. 显式 tokens 覆盖
+        std::env::set_var("AGENTGATE_AUTO_COMPACT_TOKENS", "50000");
+        assert_eq!(threshold_for(&config, "m"), Some(50000));
         std::env::remove_var("AGENTGATE_AUTO_COMPACT_TOKENS");
+
+        // 6. 窗口自适应:catalog 收录的模型按窗口 ×85%
+        let mimo = test_config("mimo", "mimo");
+        assert_eq!(
+            threshold_for(&mimo, "mimo-v2.5-pro"),
+            Some(128_000 * CONTEXT_WINDOW_USAGE_PERCENT / 100)
+        );
+
+        // 7. 用户配置覆盖 catalog(256K > catalog 的 128K)
+        let mut custom = test_config("x", "mimo");
+        custom
+            .model_context_windows
+            .insert("mimo-v2.5-pro".to_string(), 256_000);
+        assert_eq!(
+            threshold_for(&custom, "mimo-v2.5-pro"),
+            Some(256_000 * CONTEXT_WINDOW_USAGE_PERCENT / 100)
+        );
     }
 
     fn test_config(name: &str, ptype: &str) -> ProviderConfig {
@@ -740,6 +808,7 @@ mod tests {
             extra_headers: Default::default(),
             anthropic_base_url: None,
             responses_base_url: None,
+            model_context_windows: Default::default(),
         }
     }
 }

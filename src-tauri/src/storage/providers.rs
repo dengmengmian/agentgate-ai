@@ -4,7 +4,7 @@ use crate::errors::AppError;
 use crate::models::provider::{CreateProviderInput, Provider, UpdateProviderInput};
 
 const PROVIDER_COLUMNS: &str = "id, name, provider_type, base_url, api_key, default_model, reasoning_model, supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url, \
-                                 protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, model_capabilities, provider_quirks, body_filter_enabled, thinking_rectifier_enabled, error_mapper_enabled, model_degradation_chain, enabled, is_active, created_at, updated_at";
+                                 protocol, timeout_seconds, status, supports_vision, auto_cache_control, supports_cache, model_capabilities, provider_quirks, body_filter_enabled, thinking_rectifier_enabled, error_mapper_enabled, model_degradation_chain, model_context_windows, enabled, is_active, created_at, updated_at";
 
 fn map_provider_row(row: &rusqlite::Row) -> rusqlite::Result<Provider> {
     Ok(Provider {
@@ -32,10 +32,11 @@ fn map_provider_row(row: &rusqlite::Row) -> rusqlite::Result<Provider> {
         thinking_rectifier_enabled: row.get(21)?,
         error_mapper_enabled: row.get(22)?,
         model_degradation_chain: row.get(23)?,
-        enabled: row.get(24)?,
-        is_active: row.get(25)?,
-        created_at: row.get(26)?,
-        updated_at: row.get(27)?,
+        model_context_windows: row.get(24)?,
+        enabled: row.get(25)?,
+        is_active: row.get(26)?,
+        created_at: row.get(27)?,
+        updated_at: row.get(28)?,
     })
 }
 
@@ -72,9 +73,9 @@ pub fn create(conn: &Connection, mut input: CreateProviderInput) -> Result<Provi
     conn.execute(
         "INSERT INTO providers (id, name, provider_type, base_url, api_key, default_model, reasoning_model,
                                 supported_models, model_mapping, extra_headers, anthropic_base_url, responses_base_url, protocol, timeout_seconds, status, auto_cache_control, model_capabilities,
-                                provider_quirks, body_filter_enabled, thinking_rectifier_enabled, error_mapper_enabled, model_degradation_chain,
+                                provider_quirks, body_filter_enabled, thinking_rectifier_enabled, error_mapper_enabled, model_degradation_chain, model_context_windows,
                                 enabled, is_active, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tested', ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, 0, ?23, ?23)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tested', ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, 0, ?24, ?24)",
         params![
             &id,
             &input.name,
@@ -97,6 +98,7 @@ pub fn create(conn: &Connection, mut input: CreateProviderInput) -> Result<Provi
             &input.thinking_rectifier_enabled,
             &input.error_mapper_enabled,
             &input.model_degradation_chain,
+            &input.model_context_windows,
             enabled,
             &now,
         ],
@@ -159,14 +161,17 @@ pub fn update(
     let model_degradation_chain = input
         .model_degradation_chain
         .or(existing.model_degradation_chain);
+    let model_context_windows = input
+        .model_context_windows
+        .or(existing.model_context_windows);
     let enabled = input.enabled.unwrap_or(existing.enabled);
 
     conn.execute(
         "UPDATE providers SET name=?1, provider_type=?2, base_url=?3, api_key=?4, default_model=?5,
                 reasoning_model=?6, supported_models=?7, model_mapping=?8, extra_headers=?9, anthropic_base_url=?10, responses_base_url=?11, protocol=?12, timeout_seconds=?13, auto_cache_control=?14, model_capabilities=?15,
-                provider_quirks=?16, body_filter_enabled=?17, thinking_rectifier_enabled=?18, error_mapper_enabled=?19, model_degradation_chain=?20,
-                enabled=?21, updated_at=?22
-         WHERE id=?23",
+                provider_quirks=?16, body_filter_enabled=?17, thinking_rectifier_enabled=?18, error_mapper_enabled=?19, model_degradation_chain=?20, model_context_windows=?21,
+                enabled=?22, updated_at=?23
+         WHERE id=?24",
         params![
             &name,
             &provider_type,
@@ -188,6 +193,7 @@ pub fn update(
             thinking_rectifier_enabled,
             error_mapper_enabled,
             &model_degradation_chain,
+            &model_context_windows,
             enabled,
             &now,
             id,
@@ -346,6 +352,7 @@ mod tests {
                 timeout_seconds: Some(120),
                 auto_cache_control: None,
                 model_capabilities: None,
+                model_context_windows: None,
                 provider_quirks: None,
                 body_filter_enabled: None,
                 thinking_rectifier_enabled: None,
@@ -398,6 +405,7 @@ mod tests {
                 timeout_seconds: Some(120),
                 auto_cache_control: None,
                 model_capabilities: None,
+                model_context_windows: None,
                 provider_quirks: None,
                 body_filter_enabled: None,
                 thinking_rectifier_enabled: None,

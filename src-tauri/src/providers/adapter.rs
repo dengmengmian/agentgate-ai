@@ -31,6 +31,9 @@ pub struct ProviderConfig {
     pub extra_headers: std::collections::HashMap<String, String>,
     pub anthropic_base_url: Option<String>,
     pub responses_base_url: Option<String>,
+    /// 用户覆盖的 per-model 上下文窗口({model_id → window_tokens}),来自
+    /// provider.model_context_windows。auto_compact 优先用它,再退回 catalog。
+    pub model_context_windows: std::collections::HashMap<String, u32>,
 }
 
 impl ProviderConfig {
@@ -70,6 +73,7 @@ impl ProviderConfig {
             extra_headers,
             anthropic_base_url: p.anthropic_base_url.clone().filter(|s| !s.is_empty()),
             responses_base_url: p.responses_base_url.clone().filter(|s| !s.is_empty()),
+            model_context_windows: p.parse_context_windows(),
         })
     }
 
@@ -1126,6 +1130,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),

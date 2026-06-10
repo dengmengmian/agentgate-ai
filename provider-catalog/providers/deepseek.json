@@ -28,7 +28,8 @@
       "pricing": {
         "inputPerMillion": 0.5,
         "outputPerMillion": 2
-      }
+      },
+      "contextWindow": 128000
     },
     {
       "id": "deepseek-v4-pro",
@@ -36,7 +37,8 @@
       "pricing": {
         "inputPerMillion": 2,
         "outputPerMillion": 8
-      }
+      },
+      "contextWindow": 128000
     }
   ],
   "docs": {

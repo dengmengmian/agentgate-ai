@@ -347,8 +347,8 @@ pub async fn handle_responses(
                     break;
                 }
             };
-            // 长历史自压缩:超阈值时摘要中段历史,落回上游窗口内。仅对显式开启的
-            // provider 生效(AGENTGATE_AUTO_COMPACT_PROVIDERS),内部按需额外调一次上游。
+            // 长历史自压缩:超阈值时摘要中段历史,落回上游窗口内。默认开启,阈值按模型
+            // 上下文窗口 ×85% 自适应(详见 auto_compact),内部按需额外调一次上游。
             crate::gateway::auto_compact::maybe_compact(&state.http_client, &config, &mut chat_req)
                 .await;
             let _refiner_log = refine_struct_body(&state.db, &provider, &mut chat_req);

@@ -36,6 +36,9 @@ pub struct Provider {
     /// JSON: {"requested_model": ["fallback1","fallback2"]}. Walked when the
     /// primary model fails before moving to the next failover provider.
     pub model_degradation_chain: Option<String>,
+    /// JSON: {"model_id": context_window_tokens}. 用户覆盖 catalog 的上下文窗口值,
+    /// 供 auto_compact 计算压缩阈值;优先级高于内置 catalog。
+    pub model_context_windows: Option<String>,
     pub enabled: bool,
     pub is_active: bool,
     pub created_at: String,
@@ -97,6 +100,9 @@ pub struct ProviderView {
     pub thinking_rectifier_enabled: Option<i64>,
     pub error_mapper_enabled: Option<i64>,
     pub model_degradation_chain: Option<String>,
+    /// JSON: {"model_id": context_window_tokens}. 用户覆盖 catalog 的上下文窗口值,
+    /// 供 auto_compact 计算压缩阈值;优先级高于内置 catalog。
+    pub model_context_windows: Option<String>,
     pub enabled: bool,
     pub is_active: bool,
     pub created_at: String,
@@ -125,6 +131,7 @@ pub struct CreateProviderInput {
     pub thinking_rectifier_enabled: Option<i64>,
     pub error_mapper_enabled: Option<i64>,
     pub model_degradation_chain: Option<String>,
+    pub model_context_windows: Option<String>,
     pub enabled: Option<bool>,
 }
 
@@ -148,6 +155,7 @@ pub struct UpdateProviderInput {
     pub thinking_rectifier_enabled: Option<i64>,
     pub error_mapper_enabled: Option<i64>,
     pub model_degradation_chain: Option<String>,
+    pub model_context_windows: Option<String>,
     pub protocol: Option<String>,
     pub timeout_seconds: Option<i64>,
     pub enabled: Option<bool>,
@@ -194,6 +202,7 @@ impl Provider {
             thinking_rectifier_enabled: self.thinking_rectifier_enabled,
             error_mapper_enabled: self.error_mapper_enabled,
             model_degradation_chain: self.model_degradation_chain.clone(),
+            model_context_windows: self.model_context_windows.clone(),
             enabled: self.enabled,
             is_active: self.is_active,
             created_at: self.created_at.clone(),
@@ -283,6 +292,15 @@ impl Provider {
             .and_then(|s| {
                 serde_json::from_str::<std::collections::HashMap<String, Vec<String>>>(s).ok()
             })
+            .unwrap_or_default()
+    }
+
+    /// Parse `model_context_windows` JSON into a {model_id → window_tokens} map.
+    /// Returns empty map on missing/invalid JSON.
+    pub fn parse_context_windows(&self) -> std::collections::HashMap<String, u32> {
+        self.model_context_windows
+            .as_deref()
+            .and_then(|s| serde_json::from_str::<std::collections::HashMap<String, u32>>(s).ok())
             .unwrap_or_default()
     }
 
@@ -418,6 +436,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -458,6 +477,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -495,6 +515,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -532,6 +553,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -569,6 +591,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -610,6 +633,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
@@ -648,6 +672,7 @@ mod tests {
             thinking_rectifier_enabled: None,
             error_mapper_enabled: None,
             model_degradation_chain: None,
+            model_context_windows: None,
             enabled: true,
             is_active: true,
             created_at: "2024-01-01".to_string(),
