@@ -617,6 +617,7 @@ fn log_to_db(
 
 /// Anthropic Messages API pass-through — forward directly to provider's Anthropic endpoint.
 /// Used when provider has `anthropic_base_url` set (e.g. DeepSeek, Kimi).
+#[allow(clippy::too_many_arguments)]
 pub async fn handle_anthropic(
     http_client: &reqwest::Client,
     db: &crate::storage::db::DbPool,
@@ -624,6 +625,7 @@ pub async fn handle_anthropic(
     target_url: &str,
     raw_body: &str,
     model_override: Option<&str>,
+    auto_cache: bool,
     request_id: &str,
     start: Instant,
     client_type: &str,
@@ -649,6 +651,11 @@ pub async fn handle_anthropic(
     let model =
         crate::gateway::anthropic_model_suffix::for_anthropic(&config.provider_type, &base_model);
     body_json["model"] = serde_json::json!(&model);
+    // Prompt cache 断点注入(预算感知:Claude Code 自带的断点优先,只补剩余
+    // 预算)。长对话省钱直接体现在成本仪表盘的 cache_read 上。
+    if auto_cache {
+        crate::transform::responses_to_anthropic::inject_cache_control(&mut body_json);
+    }
     let rewritten_body = body_json.to_string();
 
     // Anthropic uses x-api-key header instead of Bearer.

@@ -125,8 +125,8 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
     // 8. max_tokens (required by Claude)
     let max_tokens = req.max_output_tokens.unwrap_or(8192);
 
-    // 9. Thinking configuration
-    let thinking = convert_thinking(&req.reasoning);
+    // 9. Thinking configuration (model-aware: haiku 剥除 / 新模型 adaptive / 其他 budget)
+    let thinking = convert_thinking(&req.reasoning, model);
 
     // 10. Build request body
     let mut body = json!({
@@ -183,24 +183,46 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
 /// 1. Last system block
 /// 2. Last tool definition
 /// 3. Last assistant message's last non-thinking block
-fn inject_cache_control(body: &mut Value) {
+///
+/// Anthropic 全请求上限 4 个断点。转换路径的 body 是全新的(0 个已有断点);
+/// pass-through 的 body 来自 Claude Code,可能已带自己的断点——先计数,
+/// 只用剩余预算,已标记的位置跳过不覆盖(保留 client 设置的 ttl)。
+pub(crate) fn inject_cache_control(body: &mut Value) {
     let marker = json!({"type": "ephemeral"});
+    let mut budget = 4usize.saturating_sub(count_cache_controls(body));
 
     // 1. System: last block
-    if let Some(system) = body.get_mut("system").and_then(|s| s.as_array_mut()) {
-        if let Some(last) = system.last_mut() {
-            last["cache_control"] = marker.clone();
+    if budget > 0 {
+        if let Some(last) = body
+            .get_mut("system")
+            .and_then(|s| s.as_array_mut())
+            .and_then(|s| s.last_mut())
+        {
+            if last.get("cache_control").is_none() {
+                last["cache_control"] = marker.clone();
+                budget -= 1;
+            }
         }
     }
 
     // 2. Tools: last item
-    if let Some(tools) = body.get_mut("tools").and_then(|t| t.as_array_mut()) {
-        if let Some(last) = tools.last_mut() {
-            last["cache_control"] = marker.clone();
+    if budget > 0 {
+        if let Some(last) = body
+            .get_mut("tools")
+            .and_then(|t| t.as_array_mut())
+            .and_then(|t| t.last_mut())
+        {
+            if last.get("cache_control").is_none() {
+                last["cache_control"] = marker.clone();
+                budget -= 1;
+            }
         }
     }
 
     // 3. Messages: last assistant message's last non-thinking block
+    if budget == 0 {
+        return;
+    }
     if let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
         // Reverse iterate to find the last assistant message
         for msg in messages.iter_mut().rev() {
@@ -212,7 +234,9 @@ fn inject_cache_control(body: &mut Value) {
                 for block in content.iter_mut().rev() {
                     let block_type = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
                     if block_type != "thinking" && block_type != "redacted_thinking" {
-                        block["cache_control"] = marker;
+                        if block.get("cache_control").is_none() {
+                            block["cache_control"] = marker;
+                        }
                         return;
                     }
                 }
@@ -220,6 +244,30 @@ fn inject_cache_control(body: &mut Value) {
             break; // Only process the last assistant message
         }
     }
+}
+
+/// 统计 body 里已有的 cache_control 断点数(system / tools / messages 全算)。
+fn count_cache_controls(body: &Value) -> usize {
+    let mut n = 0;
+    for key in ["system", "tools"] {
+        if let Some(arr) = body.get(key).and_then(|v| v.as_array()) {
+            n += arr
+                .iter()
+                .filter(|b| b.get("cache_control").is_some())
+                .count();
+        }
+    }
+    if let Some(msgs) = body.get("messages").and_then(|v| v.as_array()) {
+        for m in msgs {
+            if let Some(content) = m.get("content").and_then(|c| c.as_array()) {
+                n += content
+                    .iter()
+                    .filter(|b| b.get("cache_control").is_some())
+                    .count();
+            }
+        }
+    }
+    n
 }
 
 /// Convert the Responses API `input` field to Claude messages.
@@ -781,7 +829,12 @@ fn convert_tool_choice(tc: &Value) -> Value {
 }
 
 /// Convert reasoning effort to Claude thinking configuration.
-fn convert_thinking(reasoning: &Option<Value>) -> Option<Value> {
+/// reasoning.effort → 按目标模型选 thinking 形态(参考 cc-switch thinking_optimizer
+/// 的模型分发,但只做防错与形态适配,不强制开思考):
+/// - haiku:不支持 thinking,一律剥(防 400);
+/// - opus-4.6+ / sonnet-4.6:adaptive 形态(这些模型上 budget 是 legacy);
+/// - 其他:legacy enabled + budget_tokens。
+fn convert_thinking(reasoning: &Option<Value>, model: &str) -> Option<Value> {
     let effort = reasoning
         .as_ref()
         .and_then(|r| r.get("effort"))
@@ -795,6 +848,17 @@ fn convert_thinking(reasoning: &Option<Value>) -> Option<Value> {
         "none" | "off" | "auto" | "" => return None,
         _ => return None,
     };
+
+    let m = model.to_ascii_lowercase().replace('.', "-");
+    if m.contains("haiku") {
+        return None;
+    }
+    if ["opus-4-8", "opus-4-7", "opus-4-6", "sonnet-4-6"]
+        .iter()
+        .any(|fam| m.contains(fam))
+    {
+        return Some(json!({"type": "adaptive"}));
+    }
 
     Some(json!({"type": "enabled", "budget_tokens": budget}))
 }
@@ -1009,20 +1073,48 @@ mod tests {
 
     #[test]
     fn test_convert_thinking() {
+        let m = "claude-3-5-sonnet";
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "low"}))),
+            convert_thinking(&Some(json!({"effort": "low"})), m),
             Some(json!({"type": "enabled", "budget_tokens": 4096}))
         );
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "medium"}))),
+            convert_thinking(&Some(json!({"effort": "medium"})), m),
             Some(json!({"type": "enabled", "budget_tokens": 8192}))
         );
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "high"}))),
+            convert_thinking(&Some(json!({"effort": "high"})), m),
             Some(json!({"type": "enabled", "budget_tokens": 16384}))
         );
-        assert_eq!(convert_thinking(&Some(json!({"effort": "auto"}))), None);
-        assert_eq!(convert_thinking(&None), None);
+        assert_eq!(convert_thinking(&Some(json!({"effort": "auto"})), m), None);
+        assert_eq!(convert_thinking(&None, m), None);
+    }
+
+    #[test]
+    fn test_thinking_stripped_for_haiku() {
+        // Haiku 不支持 thinking,带上会 400 —— 客户端要思考也得剥。
+        assert_eq!(
+            convert_thinking(&Some(json!({"effort": "high"})), "claude-haiku-4-5"),
+            None
+        );
+    }
+
+    #[test]
+    fn test_thinking_adaptive_for_new_models() {
+        // opus-4.6+/sonnet-4.6 用 adaptive 形态(参考 cc-switch thinking_optimizer
+        // 的模型分发),不再发 legacy budget。
+        for m in ["claude-opus-4-8", "claude-opus-4.6", "claude-sonnet-4-6"] {
+            assert_eq!(
+                convert_thinking(&Some(json!({"effort": "high"})), m),
+                Some(json!({"type": "adaptive"})),
+                "{m} 应使用 adaptive thinking"
+            );
+        }
+        // 老模型保持 legacy budget 形态
+        assert_eq!(
+            convert_thinking(&Some(json!({"effort": "high"})), "claude-sonnet-4-5"),
+            Some(json!({"type": "enabled", "budget_tokens": 16384}))
+        );
     }
 
     #[test]
@@ -1140,6 +1232,53 @@ mod tests {
     }
 
     // ── cache_control injection tests ──
+
+    #[test]
+    fn test_inject_respects_anthropic_four_breakpoint_budget() {
+        // pass-through 场景:Claude Code 自己已带 4 个断点(Anthropic 硬上限),
+        // 再注入会超限 400。已满时必须零注入。
+        let marked = json!({"type": "ephemeral"});
+        let mut body = json!({
+            "system": [{"type": "text", "text": "s", "cache_control": marked}],
+            "tools": [{"name": "t", "input_schema": {}, "cache_control": marked}],
+            "messages": [
+                {"role": "user", "content": [
+                    {"type": "text", "text": "u1", "cache_control": marked},
+                    {"type": "text", "text": "u2", "cache_control": marked}
+                ]},
+                {"role": "assistant", "content": [{"type": "text", "text": "a"}]}
+            ]
+        });
+        inject_cache_control(&mut body);
+        assert!(
+            body["messages"][1]["content"][0].get("cache_control").is_none(),
+            "预算用尽不得再注入"
+        );
+    }
+
+    #[test]
+    fn test_inject_uses_remaining_budget_and_skips_marked() {
+        // 已有 3 个断点(system/tools/user),剩 1 个预算 → 只给 assistant 补 1 个,
+        // 已标记的位置跳过不重写。
+        let marked = json!({"type": "ephemeral", "ttl": "1h"});
+        let mut body = json!({
+            "system": [{"type": "text", "text": "s", "cache_control": marked}],
+            "tools": [{"name": "t", "input_schema": {}, "cache_control": marked}],
+            "messages": [
+                {"role": "user", "content": [
+                    {"type": "text", "text": "u", "cache_control": marked}
+                ]},
+                {"role": "assistant", "content": [{"type": "text", "text": "a"}]}
+            ]
+        });
+        inject_cache_control(&mut body);
+        assert_eq!(
+            body["messages"][1]["content"][0]["cache_control"]["type"],
+            "ephemeral"
+        );
+        // 已标记的 system 不被覆盖(ttl 保留)
+        assert_eq!(body["system"][0]["cache_control"]["ttl"], "1h");
+    }
 
     #[test]
     fn test_inject_cache_control_system_and_tools() {

@@ -202,6 +202,7 @@ pub async fn handle_messages(
                 &target,
                 &body,
                 model_override.as_deref(),
+                selection.provider.auto_cache_control.unwrap_or(true),
                 &request_id,
                 start,
                 &client_type,
