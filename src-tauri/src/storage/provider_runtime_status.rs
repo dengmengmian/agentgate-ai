@@ -85,6 +85,17 @@ pub fn list_all(conn: &Connection) -> Result<Vec<ProviderRuntimeStatus>, AppErro
     rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
 }
 
+/// 熔断跳闸阈值:连续失败达到 N 次才置 `available=0` + 设冷却。默认 1
+/// (首败即跳,现行为);偶发抖动误伤健康 provider 时可调大,
+/// `AGENTGATE_CB_FAILURE_THRESHOLD=3` 即 3-strike。
+fn failure_threshold() -> i64 {
+    std::env::var("AGENTGATE_CB_FAILURE_THRESHOLD")
+        .ok()
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .filter(|v| *v >= 1)
+        .unwrap_or(1)
+}
+
 pub fn mark_failure(
     conn: &Connection,
     provider_id: &str,
@@ -97,20 +108,24 @@ pub fn mark_failure(
     let now_str = now.to_rfc3339();
     let is_quota = error_msg.to_lowercase().contains("quota")
         || error_msg.to_lowercase().contains("insufficient balance");
+    let threshold = failure_threshold();
 
+    // 计数每次都加;只有计数达到阈值才跳闸(available=0 + cooldown)。
+    // 未达阈值时 available / cooldown_until 保持原值,错误信息照常记录。
     conn.execute(
         "INSERT INTO provider_runtime_status (provider_id, available, consecutive_failures, last_error, last_error_code, last_error_at, cooldown_until, quota_exhausted, updated_at)
-         VALUES (?1, 0, 1, ?2, ?3, ?4, ?5, ?6, ?4)
+         VALUES (?1, CASE WHEN 1 >= ?7 THEN 0 ELSE 1 END, 1, ?2, ?3, ?4,
+                 CASE WHEN 1 >= ?7 THEN ?5 ELSE NULL END, ?6, ?4)
          ON CONFLICT(provider_id) DO UPDATE SET
-           available = 0,
+           available = CASE WHEN consecutive_failures + 1 >= ?7 THEN 0 ELSE available END,
+           cooldown_until = CASE WHEN consecutive_failures + 1 >= ?7 THEN ?5 ELSE cooldown_until END,
            consecutive_failures = consecutive_failures + 1,
            last_error = ?2,
            last_error_code = ?3,
            last_error_at = ?4,
-           cooldown_until = ?5,
            quota_exhausted = CASE WHEN ?6 THEN 1 ELSE quota_exhausted END,
            updated_at = ?4",
-        params![provider_id, error_msg, error_code, &now_str, &cooldown_until, is_quota],
+        params![provider_id, error_msg, error_code, &now_str, &cooldown_until, is_quota, threshold],
     )?;
     Ok(())
 }

@@ -14,12 +14,11 @@
 //!                   `mark_failure` reopens it with the same cooldown formula
 //!                   the runtime_status layer already applies.
 //!
-//! Failure-threshold semantics: the existing `mark_failure` opens the breaker
-//! on the *first* failure (consecutive_failures jumps from 0 → 1 and
-//! `available` flips to 0). That's intentional — short cooldowns (60s default)
-//! cost less than letting a broken provider eat the next request. If you want
-//! N-strike behaviour, configure `cooldown_seconds` to 0 for the first N-1
-//! failures via the route_profile_providers row.
+//! Failure-threshold semantics: `mark_failure` 默认首败即跳闸
+//! (consecutive_failures 0 → 1 且 `available` 翻 0)——短冷却(默认 60s)比让
+//! 坏 provider 再吃一个请求便宜。偶发抖动误伤健康 provider 时,可设
+//! `AGENTGATE_CB_FAILURE_THRESHOLD=N` 改为 N-strike:计数每次都加,
+//! 达到 N 才置 available=0 + 冷却,成功即清零。
 //!
 //! NOTE: this module deliberately does *not* write to runtime_status. Writes
 //! still flow through `provider_runtime_status::mark_failure / mark_success`,
@@ -99,7 +98,34 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial(env)]
+    fn n_strike_threshold_keeps_closed_until_n_failures() {
+        // 可配阈值:连续失败 N 次才跳闸,缓解偶发抖动误伤健康 provider。
+        std::env::set_var("AGENTGATE_CB_FAILURE_THRESHOLD", "3");
+        let conn = setup();
+        provider_runtime_status::mark_failure(&conn, "p1", "X", "boom", 60).unwrap();
+        assert_eq!(
+            check_state(&conn, "p1").unwrap(),
+            CircuitState::Closed,
+            "第 1 次失败未达阈值,不跳闸"
+        );
+        provider_runtime_status::mark_failure(&conn, "p1", "X", "boom", 60).unwrap();
+        assert_eq!(check_state(&conn, "p1").unwrap(), CircuitState::Closed);
+        provider_runtime_status::mark_failure(&conn, "p1", "X", "boom", 60).unwrap();
+        assert!(
+            matches!(check_state(&conn, "p1").unwrap(), CircuitState::Open { .. }),
+            "第 3 次失败达到阈值,跳闸"
+        );
+        // 成功复位计数,回到 Closed
+        provider_runtime_status::mark_success(&conn, "p1").unwrap();
+        assert_eq!(check_state(&conn, "p1").unwrap(), CircuitState::Closed);
+        std::env::remove_var("AGENTGATE_CB_FAILURE_THRESHOLD");
+    }
+
+    #[test]
+    #[serial_test::serial(env)]
     fn failure_opens_breaker_with_future_cooldown() {
+        std::env::remove_var("AGENTGATE_CB_FAILURE_THRESHOLD");
         let conn = setup();
         provider_runtime_status::mark_failure(&conn, "p1", "RATE", "rate limit", 60).unwrap();
         match check_state(&conn, "p1").unwrap() {
@@ -116,7 +142,9 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial(env)]
     fn elapsed_cooldown_classifies_as_half_open() {
+        std::env::remove_var("AGENTGATE_CB_FAILURE_THRESHOLD");
         let conn = setup();
         // Negative cooldown puts `cooldown_until` in the past immediately,
         // simulating the elapsed-cooldown case without sleeping.
@@ -129,7 +157,9 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial(env)]
     fn success_after_failure_closes_breaker() {
+        std::env::remove_var("AGENTGATE_CB_FAILURE_THRESHOLD");
         let conn = setup();
         provider_runtime_status::mark_failure(&conn, "p1", "X", "boom", 60).unwrap();
         provider_runtime_status::mark_success(&conn, "p1").unwrap();
