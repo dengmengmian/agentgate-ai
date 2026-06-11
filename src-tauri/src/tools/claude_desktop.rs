@@ -10,7 +10,9 @@
 //! Desktop 版本可能不同**。第一阶段只做 detect（只读）+ generate_profile（预览，
 //! 不写盘），用于和用户机器上实际的 3p 配置对比、确认 schema 后再做写盘 apply。
 //!
-//! 目前仅实现 macOS 路径；Windows/Linux 留 TODO。
+//! 路径支持 macOS（~/Library/Application Support）和 Windows（%APPDATA%），
+//! 两者目录布局相同（Claude/ 与 Claude-3p/）；Linux 无官方包，明确报不支持。
+//! ⚠️ Windows 的 Claude-3p 目录位置基于「与 1p 配置同级」推断，待真机确认。
 
 use std::fs;
 use std::path::PathBuf;
@@ -36,25 +38,45 @@ pub struct DesktopPaths {
     pub meta: PathBuf,
 }
 
-/// 解析当前平台的 Claude Desktop 路径。目前只支持 macOS。
+/// 由「应用数据根目录」拼出全部相关路径。macOS 传 `~/Library/Application Support`，
+/// Windows 传 `%APPDATA%`。纯路径拼接，平台无关，便于单测。
+fn paths_from_base(base: &std::path::Path) -> DesktopPaths {
+    let threep = base.join("Claude-3p");
+    DesktopPaths {
+        normal_config: base.join("Claude").join("claude_desktop_config.json"),
+        threep_config: threep.join("claude_desktop_config.json"),
+        profile: threep
+            .join("configLibrary")
+            .join(format!("{PROFILE_ID}.json")),
+        meta: threep.join("configLibrary").join("_meta.json"),
+    }
+}
+
+/// 解析当前平台的 Claude Desktop 路径。支持 macOS 和 Windows。
 pub fn paths() -> Result<DesktopPaths, AppError> {
     #[cfg(target_os = "macos")]
     {
         let home = std::env::var("HOME").unwrap_or_default();
         let app_support = PathBuf::from(&home).join("Library/Application Support");
-        let threep = app_support.join("Claude-3p");
-        Ok(DesktopPaths {
-            normal_config: app_support.join("Claude/claude_desktop_config.json"),
-            threep_config: threep.join("claude_desktop_config.json"),
-            profile: threep.join(format!("configLibrary/{PROFILE_ID}.json")),
-            meta: threep.join("configLibrary/_meta.json"),
-        })
+        Ok(paths_from_base(&app_support))
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
+    {
+        // Windows 官方配置目录在 %APPDATA%\Claude\（Roaming）。
+        let appdata = std::env::var("APPDATA").unwrap_or_default();
+        if appdata.trim().is_empty() {
+            return Err(AppError::new(
+                crate::errors::codes::CLAUDE_DESKTOP_PATH_INVALID,
+                "无法读取 %APPDATA% 环境变量，无法定位 Claude Desktop 配置目录",
+            ));
+        }
+        Ok(paths_from_base(std::path::Path::new(&appdata)))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         Err(AppError::new(
             crate::errors::codes::CLAUDE_DESKTOP_UNSUPPORTED_OS,
-            "Claude Desktop 接入目前仅支持 macOS",
+            "Claude Desktop 接入目前仅支持 macOS 和 Windows",
         ))
     }
 }
@@ -227,6 +249,24 @@ pub fn apply(host: &str, port: i64, token: &str) -> Result<ClaudeDesktopApplyRes
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn paths_from_base_layout() {
+        let base = std::path::Path::new("/tmp/AppDataRoot");
+        let p = paths_from_base(base);
+        // 全部挂在 base 之下
+        assert!(p.normal_config.starts_with(base));
+        assert!(p.threep_config.starts_with(base));
+        assert!(p.profile.starts_with(base));
+        assert!(p.meta.starts_with(base));
+        // 相对布局与 macOS 现状完全一致
+        assert!(p.normal_config.ends_with("Claude/claude_desktop_config.json"));
+        assert!(p.threep_config.ends_with("Claude-3p/claude_desktop_config.json"));
+        assert!(p
+            .profile
+            .ends_with(format!("Claude-3p/configLibrary/{PROFILE_ID}.json")));
+        assert!(p.meta.ends_with("Claude-3p/configLibrary/_meta.json"));
+    }
 
     #[test]
     fn generate_profile_shape() {
