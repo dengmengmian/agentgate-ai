@@ -1,5 +1,35 @@
 # Changelog / 更新日志
 
+## [1.4.0] - 2026-06-11
+
+### 新增
+
+- **GitHub Copilot 接入** —— 新增 `copilot` Provider 类型:用 Copilot 订阅(Pro / Business)跑 Claude Code / Codex,无需单独的 Anthropic API。GitHub OAuth token(`gho_`/`ghu_`)自动换取并续期 Copilot 凭证(hash 缓存、不落明文);工具续写 / 历史压缩请求自动标记 `x-initiator: agent`,不消耗 premium 请求额度;模型名 dash→dot 自动归一化;粘贴 `gho_` token 自动识别为 Copilot 类型。⚠️ 在官方客户端之外使用 Copilot 订阅属 GitHub ToS 灰色地带,功能完全可选,详见 README 风险声明。
+- **Windows 客户端集成** —— 运行中客户端检测、应用配置后自动重启 Codex、Claude Desktop 集成补齐 Windows 实现(此前仅 macOS)。
+
+### 改进
+
+- **思考质量优先** —— 转换到 Claude 系模型时"支持就开"思考(opus-4.6+/sonnet-4.6 用 adaptive、其余用 budget),显式 `effort: none/off` 才关;同时守住 haiku 不支持、强制工具调用互斥、budget 须小于 max_tokens 三类约束,避免 400。
+- **Prompt cache 自动注入扩展到直通路径** —— Claude Code 直连 Anthropic 兼容上游时也自动注入 `cache_control` 断点,预算感知不超 4 断点上限;长对话缓存命中省的钱直接体现在成本仪表盘。
+- **最快路由冷启动兜底** —— 开启主动健康探测后,"最快"路由策略对无近期请求记录的 provider 用探测延迟兜底,不再盲排末尾(探测消耗少量 token,需 `AGENTGATE_LATENCY_PROBE_MINUTES` 显式开启)。
+- **熔断阈值可配** —— `AGENTGATE_CB_FAILURE_THRESHOLD=N` 改为连续失败 N 次才跳闸(默认 1 保持原行为),缓解偶发抖动误伤健康 provider。
+- **会话污染错误提示** —— 历史残留截断工具参数导致上游 JSON 解析 400 时,改写为"开新会话 / 升级"的可操作提示,不再丢裸错误。
+
+### 修复
+
+- **概览页大库首屏慢** —— 成本聚合查询改走索引 + 新增 `(source, timestamp)` 复合索引;实测数万行级库首屏 DB 时间从约 4 秒降到约 0.2 秒。
+- **流式中文/emoji 乱码** —— 修复 SSE 多字节字符被网络包边界切断时变 `�` 的问题(8 处流式路径统一处理)。
+- **Windows 用量统计与 MCP 配置失效** —— Windows 无 `HOME` 环境变量导致官方客户端用量同步、MCP 配置读取静默失败,补 `USERPROFILE` 回退。
+- **Windows 桌面宠物白底** —— 透明窗口补 `shadow(false)`,与 macOS 一致全透明。
+- **Claude Code 压缩请求误判** —— 压缩检测从全文匹配收窄到 system 前缀 + 最后一条用户消息,避免读到含标记串的文件内容时整个会话被剥工具。
+- **Kimi reasoning_effort** —— 不再向 Kimi 透传它不识别的 `reasoning_effort`,避免潜在 400。
+- **中文长对话压缩不触发** —— 自压缩的 token 估算对 CJK 按 1 字 1 token,修正此前低估导致中文重对话压缩不触发。
+
+### 安全
+
+- 请求日志 / 诊断包脱敏扩展到 `x-api-key`、`api_key` 字段、Gemini 风格 `?key=` 查询参数。
+- Headless 模式新增 Host / Origin 校验,防 DNS rebinding;域名访问需 `AGENTGATE_ALLOWED_HOSTS` 白名单放行。
+
 ## [1.3.7] - 2026-06-10
 
 ### 新增
