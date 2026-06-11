@@ -261,9 +261,16 @@ fn sort_candidates_by_strategy(
         }),
         "fastest" => {
             let lat = storage::request_logs::avg_latency_by_provider(conn, 24).unwrap_or_default();
+            // 冷启动/闲置 provider 没有请求延迟,用主动探测值兜底(默认关,
+            // 见 probe_latency 模块说明),都没有才排末尾。
+            let probes = crate::gateway::probe_latency::snapshot(
+                crate::gateway::probe_latency::PROBE_STALE_MS,
+            );
             candidates.sort_by(|a, b| {
-                let la = lat.get(&a.provider_name).copied().unwrap_or(f64::MAX);
-                let lb = lat.get(&b.provider_name).copied().unwrap_or(f64::MAX);
+                let la =
+                    crate::gateway::probe_latency::resolve_latency(&lat, &probes, &a.provider_name);
+                let lb =
+                    crate::gateway::probe_latency::resolve_latency(&lat, &probes, &b.provider_name);
                 la.partial_cmp(&lb)
                     .unwrap_or(std::cmp::Ordering::Equal)
                     .then(a.priority.cmp(&b.priority))

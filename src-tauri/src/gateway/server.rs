@@ -130,6 +130,44 @@ pub async fn start(
         active_requests: active_requests.clone(),
     };
 
+    // ── 主动延迟探测循环(喂 fastest 路由的冷启动)──
+    // 默认关:探测发的是真实最小补全(speedtest::probe),会产生少量 token
+    // 费用,不能静默烧钱。设 AGENTGATE_LATENCY_PROBE_MINUTES=N(分钟)开启;
+    // 开启后也只在存在 selection_strategy="fastest" 的路由档位时才真正探测。
+    if let Some(minutes) = std::env::var("AGENTGATE_LATENCY_PROBE_MINUTES")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|m| *m >= 1)
+    {
+        let probe_db = state.db.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(minutes * 60)).await;
+                let providers = {
+                    let Ok(conn) = probe_db.get() else { continue };
+                    let has_fastest = crate::storage::route_profiles::list_all(&conn)
+                        .map(|ps| {
+                            ps.iter()
+                                .any(|p| p.selection_strategy == "fastest")
+                        })
+                        .unwrap_or(false);
+                    if !has_fastest {
+                        continue;
+                    }
+                    crate::storage::providers::list_all(&conn)
+                        .map(|ps| ps.into_iter().filter(|p| p.enabled).collect::<Vec<_>>())
+                        .unwrap_or_default()
+                };
+                for p in &providers {
+                    let report = crate::diagnostics::speedtest::probe(p).await;
+                    if report.success {
+                        crate::gateway::probe_latency::record(&p.name, report.total_ms as f64);
+                    }
+                }
+            }
+        });
+    }
+
     // metrics recorder 幂等初始化（重复调 init 直接返回 false 不报错）。
     crate::gateway::metrics::init();
 

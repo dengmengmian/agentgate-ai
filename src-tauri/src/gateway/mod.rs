@@ -6,6 +6,7 @@ pub mod circuit_breaker;
 pub mod failover;
 pub mod metrics;
 pub mod pass_through;
+pub mod probe_latency;
 pub mod provider_selector;
 pub mod refiner_log;
 pub mod refiners;
