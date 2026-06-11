@@ -47,6 +47,8 @@ export function detectProviderType(key: string): string | null {
 
   // Explicit-prefix providers — unambiguous.
   if (k.startsWith("sk-ant-")) return "anthropic";
+  // GitHub OAuth token(gho_/ghu_)→ Copilot 接入,网关自动换 Copilot 凭证
+  if (k.startsWith("gho_") || k.startsWith("ghu_")) return "copilot";
   if (k.startsWith("sk-or-")) return "openrouter";
   if (k.startsWith("gsk_")) return "groq";
   if (k.startsWith("xai-")) return "xai";

@@ -12,6 +12,11 @@ describe("detectProviderType", () => {
     expect(detectProviderType("sk-ant-api03-XXXXX")).toBe("anthropic");
   });
 
+  it("recognizes GitHub Copilot by gho_/ghu_ prefix", () => {
+    expect(detectProviderType("gho_16C7e42F292c6912E7710c838347Ae178")).toBe("copilot");
+    expect(detectProviderType("ghu_16C7e42F292c6912E7710c838347Ae178")).toBe("copilot");
+  });
+
   it("recognizes OpenRouter by sk-or- prefix", () => {
     expect(detectProviderType("sk-or-v1-abcdef")).toBe("openrouter");
   });

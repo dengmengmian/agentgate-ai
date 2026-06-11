@@ -43,6 +43,7 @@ export type { TestDiagnostic } from "@/lib/bindings";
 export const PROVIDER_TYPES = [
   // Tier 1: Major providers
   { value: "anthropic", label: "Anthropic (Claude)" },
+  { value: "copilot", label: "GitHub Copilot" },
   { value: "deepseek", label: "DeepSeek" },
   { value: "openai", label: "OpenAI" },
   { value: "google_gemini", label: "Google Gemini" },
