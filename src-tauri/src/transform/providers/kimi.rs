@@ -18,6 +18,12 @@ impl super::ProviderTransform for KimiProvider {
         "kimi"
     }
 
+    /// Kimi 不识别 reasoning_effort,思考强度由 thinking:{enabled/disabled}
+    /// 控制(对齐 mimo2codex Kimi 预设),任何 effort 都不透传。
+    fn map_reasoning_effort(&self, _effort: &str) -> Option<String> {
+        None
+    }
+
     fn enhance_error(&self, status: u16, body: &str) -> Option<String> {
         use crate::transform::providers as p;
         if p::detect_insufficient_balance(status, body) {
@@ -76,6 +82,20 @@ mod tests {
             presence_penalty: None,
             parallel_tool_calls: None,
             diagnostic_events: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn kimi_drops_reasoning_effort_entirely() {
+        // Kimi 不识别 reasoning_effort(思考由 thinking:{enabled/disabled} 控制,
+        // 参考 mimo2codex Kimi 预设),不能透传——默认 trait 会折叠成 "high" 发出去。
+        use crate::transform::providers::ProviderTransform;
+        for effort in ["low", "medium", "high", "xhigh", "max", "auto", ""] {
+            assert_eq!(
+                KimiProvider.map_reasoning_effort(effort),
+                None,
+                "effort '{effort}' 不应透传给 Kimi"
+            );
         }
     }
 
