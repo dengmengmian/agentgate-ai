@@ -226,6 +226,8 @@ LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent*
 | Windows | `.exe` |
 | Linux | `.AppImage` / `.deb` |
 
+> **平台支持说明**：核心网关（协议转换、路由、故障自愈、成本仪表盘、客户端配置一键应用/还原）三平台均可用。少数便利功能目前 **仅支持 macOS**：应用配置后自动重启 Codex、Claude Desktop 集成、运行中客户端检测——Windows / Linux 上应用配置后请手动重启客户端。欢迎贡献。
+
 <details>
 <summary><b>macOS 首次打开提示"无法验证开发者"？</b>（点击展开）</summary>
 

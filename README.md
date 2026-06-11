@@ -234,6 +234,8 @@ Download the installer for your platform from the [Releases](../../releases) pag
 | Windows | `.exe` |
 | Linux | `.AppImage` / `.deb` |
 
+> **Platform support**: the core gateway (protocol conversion, routing, failover, cost dashboard, client config apply/restore) works on all three platforms. A few conveniences are currently **macOS-only**: Codex auto-restart after config apply, Claude Desktop integration, and running-client detection — on Windows/Linux, restart the client manually after applying config. Contributions welcome.
+
 <details>
 <summary><b>macOS: "Cannot verify the developer"?</b> (click to expand)</summary>
 
