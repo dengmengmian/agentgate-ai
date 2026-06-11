@@ -106,3 +106,5 @@ tempfile = "3"
 # Codex CLI 用的同款 SSE parser,集成测试拿它解析我们返给 Codex 的 SSE,
 # 验证 wire-level 真正兼容(不是只字符串断言)。
 eventsource-stream = "0.2"
+# env 是进程全局,动 std::env 的测试用 #[serial(env)] 互斥,替代手工合成串行测试的约定。
+serial_test = "3"

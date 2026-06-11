@@ -360,6 +360,7 @@ pub async fn handle_codex_compaction(
 mod tests {
     use super::*;
     use axum::http::HeaderValue;
+    use serial_test::serial;
 
     fn h(name: &str, value: &str) -> HeaderMap {
         let mut hm = HeaderMap::new();
@@ -382,6 +383,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(env)]
     fn detect_via_beta_features_header() {
         let _g = EnvGuard::on();
         let hm = h("x-codex-beta-features", "alpha,remote_compaction_v2,beta");
@@ -389,6 +391,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(env)]
     fn detect_via_turn_metadata_header() {
         let _g = EnvGuard::on();
         let hm = h(
@@ -399,6 +402,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(env)]
     fn detect_via_legacy_url_path() {
         let _g = EnvGuard::on();
         let hm = HeaderMap::new();
@@ -406,6 +410,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(env)]
     fn not_detected_for_normal_request() {
         let _g = EnvGuard::on();
         let hm = h("x-codex-beta-features", "other_feature");
@@ -413,6 +418,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(env)]
     fn off_by_default_so_all_paths_bypass() {
         // 不设 env:任何 header / URL 组合都不应触发,保留原 chat 路径
         std::env::remove_var("AGENTGATE_CODEX_COMPACT");
