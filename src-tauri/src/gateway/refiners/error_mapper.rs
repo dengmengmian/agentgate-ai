@@ -73,6 +73,15 @@ pub fn apply(
             "{} — 建议：清理对话历史或换用更长上下文模型。",
             mapped_message.trim_end_matches(['。', '.', ' '])
         );
+    } else if status == 400 && detect_malformed_history_json(&mapped_message) {
+        // 会话被污染(历史里残留截断的 tool_call.arguments 等),严格上游
+        // JSON 解析失败。裸 400 没人看得懂,改写成可操作的恢复提示。
+        mapped_code = "malformed_history".to_string();
+        mapped_message = format!(
+            "{} — 会话历史里可能残留了被截断的工具参数,上游无法解析。\
+             建议:开一个新会话;若反复出现请升级 AgentGate(新版本会在转发前自动修复截断参数)。",
+            mapped_message.trim_end_matches(['。', '.', ' '])
+        );
     }
 
     let reshaped = reshape(client_protocol, &mapped_code, &mapped_message, status);
@@ -146,6 +155,20 @@ fn classify(status: u16, upstream_code: Option<&str>) -> String {
 ///
 /// Code path is checked first because some providers (OpenAI) already return
 /// `context_length_exceeded` as the code — that's a free hit without regex.
+/// 上游把请求体里的历史内容按 JSON 解析失败时的特征串(Python json 风格报错,
+/// MiMo / DeepSeek / SenseNova 等严格上游会原样吐回)。模式刻意收紧,
+/// 只认解析器签名,不碰 "json" 一词的普通用法。
+fn detect_malformed_history_json(message: &str) -> bool {
+    let m = message.to_ascii_lowercase();
+    const PATTERNS: &[&str] = &[
+        "unexpected end of data",
+        "unterminated string starting at",
+        "expecting value: line",
+        "expecting ',' delimiter",
+    ];
+    PATTERNS.iter().any(|p| m.contains(p))
+}
+
 fn detect_context_overflow(message: &str, upstream_code: Option<&str>) -> bool {
     if let Some(code) = upstream_code {
         let lc = code.to_ascii_lowercase();
@@ -399,6 +422,68 @@ mod tests {
         let m = apply(&p, &body, 400, "openai_responses").unwrap();
         assert_eq!(m.action.mapped_code, "invalid_request_error");
         assert!(!m.action.mapped_message.contains("建议"));
+    }
+
+    #[test]
+    fn malformed_history_json_400_rewritten_with_recovery_hint() {
+        // 会话被污染的经典症状(参考 mimo2codex detectMalformedJsonField):
+        // 历史里残留被截断的 tool_call.arguments,严格上游 JSON 解析失败,
+        // 返回 Python 风格解析错误。要给出可操作的恢复提示,而不是裸 400。
+        let p = provider("mimo");
+        let body = json!({
+            "error": {"message": "unexpected end of data: line 1 column 46 (char 45)", "code": "invalid_request_error"}
+        });
+        let m = apply(&p, &body, 400, "openai_responses").unwrap();
+        assert_eq!(m.action.mapped_code, "malformed_history");
+        assert!(
+            m.action.mapped_message.contains("新会话"),
+            "应包含开新会话的恢复提示: {}",
+            m.action.mapped_message
+        );
+    }
+
+    #[test]
+    fn ordinary_json_word_in_400_not_misclassified_as_malformed() {
+        let p = provider("openai");
+        let body = json!({
+            "error": {"message": "response_format must be json_object", "type": "invalid_request_error"}
+        });
+        let m = apply(&p, &body, 400, "openai_responses").unwrap();
+        assert_ne!(m.action.mapped_code, "malformed_history");
+    }
+
+    #[test]
+    fn top_level_message_without_envelope_is_extracted() {
+        // 有些上游 5xx 直接返回 {"message": "..."}，没有 error 包裹，
+        // 也要能提取 message 并按 status 归类。
+        let p = provider("openai");
+        let body = json!({"message": "internal boom"});
+        let m = apply(&p, &body, 500, "openai_responses").unwrap();
+        assert_eq!(m.action.upstream_message.as_deref(), Some("internal boom"));
+        assert_eq!(m.action.mapped_code, "api_error");
+        assert_eq!(m.body["error"]["message"], "internal boom");
+    }
+
+    #[test]
+    fn empty_body_5xx_falls_back_to_generic_server_error() {
+        // 上游 503 给空体：code 按 status 归类，message 用兜底文案。
+        let p = provider("openai");
+        let body = json!({});
+        let m = apply(&p, &body, 503, "openai_responses").unwrap();
+        assert_eq!(m.action.mapped_code, "service_unavailable");
+        assert_eq!(m.action.mapped_message, "Upstream server error");
+    }
+
+    #[test]
+    fn overflow_detected_from_code_even_with_unrelated_message() {
+        // OpenAI 有时只在 code 里给 string_above_max_length，
+        // message 不含任何关键词——code 路径应先命中。
+        let p = provider("openai");
+        let body = json!({
+            "error": {"code": "string_above_max_length", "message": "invalid value"}
+        });
+        let m = apply(&p, &body, 400, "openai_responses").unwrap();
+        assert_eq!(m.action.mapped_code, "context_length_exceeded");
     }
 
     #[test]
