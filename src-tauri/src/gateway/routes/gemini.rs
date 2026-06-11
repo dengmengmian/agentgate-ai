@@ -210,7 +210,13 @@ pub async fn handle_gemini_generate(
             let client_type_owned = client_type.clone();
             tokio::spawn(async move {
                 use futures::StreamExt;
-                let prefix_text = String::from_utf8_lossy(&boot.prefix).into_owned();
+                let mut utf8_pending: Vec<u8> = Vec::new();
+                let mut prefix_text = String::new();
+                crate::gateway::stream_utf8::append_utf8_safe(
+                    &mut prefix_text,
+                    &mut utf8_pending,
+                    &boot.prefix,
+                );
                 if !prefix_text.is_empty() {
                     let _ = tx.send(prefix_text).await;
                 }
@@ -221,11 +227,13 @@ pub async fn handle_gemini_generate(
                 while let Some(chunk) = stream.next().await {
                     match chunk {
                         Ok(b) => {
-                            if tx
-                                .send(String::from_utf8_lossy(&b).into_owned())
-                                .await
-                                .is_err()
-                            {
+                            let mut text = String::new();
+                            crate::gateway::stream_utf8::append_utf8_safe(
+                                &mut text,
+                                &mut utf8_pending,
+                                &b,
+                            );
+                            if tx.send(text).await.is_err() {
                                 break; // 客户端断开，正常结束
                             }
                         }
@@ -421,7 +429,13 @@ pub async fn handle_gemini_generate(
         tokio::spawn(async move {
             use futures::StreamExt;
             let mut stream = boot.stream;
-            let mut buffer = String::from_utf8_lossy(&boot.prefix).into_owned();
+            let mut utf8_pending: Vec<u8> = Vec::new();
+            let mut buffer = String::new();
+            crate::gateway::stream_utf8::append_utf8_safe(
+                &mut buffer,
+                &mut utf8_pending,
+                &boot.prefix,
+            );
             buffer = buffer.replace("\r\n", "\n");
             let mut full_text = String::new();
             let mut bootstrap_replayed = false;
@@ -441,7 +455,11 @@ pub async fn handle_gemini_generate(
                         }
                         None => break,
                     };
-                    buffer.push_str(&String::from_utf8_lossy(&chunk));
+                    crate::gateway::stream_utf8::append_utf8_safe(
+                        &mut buffer,
+                        &mut utf8_pending,
+                        &chunk,
+                    );
                     buffer = buffer.replace("\r\n", "\n");
                 }
                 bootstrap_replayed = true;

@@ -142,7 +142,9 @@ pub async fn process_upstream_stream_inner(
     // emitting a spurious empty message item for tool-call-only responses.
 
     let mut stream = boot.stream;
-    let mut buffer = String::from_utf8_lossy(&boot.prefix).into_owned();
+    let mut utf8_pending: Vec<u8> = Vec::new();
+    let mut buffer = String::new();
+    crate::gateway::stream_utf8::append_utf8_safe(&mut buffer, &mut utf8_pending, &boot.prefix);
     let mut has_text = false;
     let mut has_tool_calls = false;
     let mut message_item_emitted = false;
@@ -193,7 +195,7 @@ pub async fn process_upstream_stream_inner(
             }
         };
 
-        buffer.push_str(&String::from_utf8_lossy(&chunk_bytes));
+        crate::gateway::stream_utf8::append_utf8_safe(&mut buffer, &mut utf8_pending, &chunk_bytes);
     }
 }
 

@@ -18,4 +18,5 @@ pub mod sse;
 pub mod sse_anthropic;
 pub mod sse_bootstrap;
 pub mod sse_gemini;
+pub(crate) mod stream_utf8;
 pub mod usage;

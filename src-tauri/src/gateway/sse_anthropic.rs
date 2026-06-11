@@ -85,7 +85,9 @@ pub async fn process_anthropic_stream(
 
     // Seed buffer with the bootstrap prefix; first loop iteration parses any
     // complete frames already present without pulling from the live stream.
-    let mut buffer = String::from_utf8_lossy(&boot.prefix).into_owned();
+    let mut utf8_pending: Vec<u8> = Vec::new();
+    let mut buffer = String::new();
+    crate::gateway::stream_utf8::append_utf8_safe(&mut buffer, &mut utf8_pending, &boot.prefix);
     buffer = buffer.replace("\r\n", "\n");
     let mut current_event_type = String::new();
     let mut stream = boot.stream;
@@ -106,7 +108,7 @@ pub async fn process_anthropic_stream(
                 }
                 None => break,
             };
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
+            crate::gateway::stream_utf8::append_utf8_safe(&mut buffer, &mut utf8_pending, &chunk);
             buffer = buffer.replace("\r\n", "\n");
         }
         bootstrap_replayed = true;

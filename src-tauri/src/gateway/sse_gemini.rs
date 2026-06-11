@@ -73,7 +73,9 @@ pub async fn process_gemini_stream(
     send(&tx, &ev::response_created(&acc.response_id, &acc.model)).await;
     send(&tx, &ev::response_in_progress(&acc.response_id, &acc.model)).await;
 
-    let mut buffer = String::from_utf8_lossy(&boot.prefix).into_owned();
+    let mut utf8_pending: Vec<u8> = Vec::new();
+    let mut buffer = String::new();
+    crate::gateway::stream_utf8::append_utf8_safe(&mut buffer, &mut utf8_pending, &boot.prefix);
     buffer = buffer.replace("\r\n", "\n");
     let mut stream = boot.stream;
     let mut bootstrap_replayed = false;
@@ -93,7 +95,7 @@ pub async fn process_gemini_stream(
                 }
                 None => break,
             };
-            buffer.push_str(&String::from_utf8_lossy(&chunk));
+            crate::gateway::stream_utf8::append_utf8_safe(&mut buffer, &mut utf8_pending, &chunk);
             buffer = buffer.replace("\r\n", "\n");
         }
         bootstrap_replayed = true;

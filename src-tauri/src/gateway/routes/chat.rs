@@ -478,7 +478,9 @@ async fn client_chat_to_anthropic_stream(
         use crate::transform::anthropic_to_chat_stream::AnthropicToChatStream;
 
         let mut converter = AnthropicToChatStream::new(model_clone.clone());
-        let mut buffer = String::from_utf8_lossy(&boot.prefix).into_owned();
+        let mut utf8_pending: Vec<u8> = Vec::new();
+        let mut buffer = String::new();
+        crate::gateway::stream_utf8::append_utf8_safe(&mut buffer, &mut utf8_pending, &boot.prefix);
         buffer = buffer.replace("\r\n", "\n");
         let mut stream = boot.stream;
         let mut bootstrap_replayed = false;
@@ -496,7 +498,7 @@ async fn client_chat_to_anthropic_stream(
                     }
                     None => break,
                 };
-                buffer.push_str(&String::from_utf8_lossy(&chunk));
+                crate::gateway::stream_utf8::append_utf8_safe(&mut buffer, &mut utf8_pending, &chunk);
                 buffer = buffer.replace("\r\n", "\n");
             }
             bootstrap_replayed = true;

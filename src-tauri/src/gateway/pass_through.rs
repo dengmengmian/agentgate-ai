@@ -332,16 +332,23 @@ async fn handle_stream(
     let client_type_owned = client_type.to_string();
 
     tokio::spawn(async move {
-        let prefix_text = String::from_utf8_lossy(&boot.prefix).to_string();
+        let mut utf8_pending: Vec<u8> = Vec::new();
+        let mut prefix_text = String::new();
+        crate::gateway::stream_utf8::append_utf8_safe(
+            &mut prefix_text,
+            &mut utf8_pending,
+            &boot.prefix,
+        );
         let mut sse_log = String::new();
         let mut sse_size: usize = 0;
 
         // Replay the bootstrap prefix first so any bytes already pulled
         // during the scan reach the client.
         if !prefix_text.is_empty() {
-            let to_add = prefix_text.len().min(MAX_SSE_LOG);
-            sse_log.push_str(&prefix_text[..to_add]);
-            sse_size += to_add;
+            let slice =
+                crate::gateway::stream_utf8::truncate_at_char_boundary(&prefix_text, MAX_SSE_LOG);
+            sse_log.push_str(slice);
+            sse_size += slice.len();
             if tx.send(prefix_text).await.is_err() {
                 // Client dropped before first byte landed—放弃 stream，避免
                 // 继续把上游 token 灌进黑洞。
@@ -356,12 +363,20 @@ async fn handle_stream(
         while let Some(chunk_result) = stream.next().await {
             match chunk_result {
                 Ok(bytes) => {
-                    let text = String::from_utf8_lossy(&bytes).to_string();
+                    let mut text = String::new();
+                    crate::gateway::stream_utf8::append_utf8_safe(
+                        &mut text,
+                        &mut utf8_pending,
+                        &bytes,
+                    );
                     // Log (limited)
                     if sse_size < MAX_SSE_LOG {
-                        let to_add = text.len().min(MAX_SSE_LOG - sse_size);
-                        sse_log.push_str(&text[..to_add]);
-                        sse_size += to_add;
+                        let slice = crate::gateway::stream_utf8::truncate_at_char_boundary(
+                            &text,
+                            MAX_SSE_LOG - sse_size,
+                        );
+                        sse_log.push_str(slice);
+                        sse_size += slice.len();
                     }
                     usage_tail.push_str(&text);
                     if usage_tail.len() > 16384 {
@@ -714,16 +729,25 @@ pub async fn handle_anthropic(
 
         tokio::spawn(async move {
             let mut stream = resp.bytes_stream();
+            let mut utf8_pending: Vec<u8> = Vec::new();
             let mut sse_log = String::new();
             let mut sse_size: usize = 0;
             while let Some(chunk_result) = stream.next().await {
                 match chunk_result {
                     Ok(bytes) => {
-                        let text = String::from_utf8_lossy(&bytes).to_string();
+                        let mut text = String::new();
+                        crate::gateway::stream_utf8::append_utf8_safe(
+                            &mut text,
+                            &mut utf8_pending,
+                            &bytes,
+                        );
                         if sse_size < MAX_SSE_LOG {
-                            let to_add = text.len().min(MAX_SSE_LOG - sse_size);
-                            sse_log.push_str(&text[..to_add]);
-                            sse_size += to_add;
+                            let slice = crate::gateway::stream_utf8::truncate_at_char_boundary(
+                                &text,
+                                MAX_SSE_LOG - sse_size,
+                            );
+                            sse_log.push_str(slice);
+                            sse_size += slice.len();
                         }
                         // Client 断开则提前退出，省 upstream token。
                         if tx.send(text).await.is_err() {
