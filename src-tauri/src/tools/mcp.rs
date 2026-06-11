@@ -116,7 +116,13 @@ pub struct McpExportEnv {
 }
 
 fn home() -> PathBuf {
-    PathBuf::from(std::env::var("HOME").unwrap_or_default())
+    // Windows 没有 HOME,缺 USERPROFILE fallback 时返回空路径,
+    // MCP 配置(~/.codex/config.toml 等)全部读不到。
+    PathBuf::from(
+        std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap_or_default(),
+    )
 }
 
 fn read_codex_mcp_from_home(home: &Path) -> Vec<McpServer> {
@@ -992,6 +998,15 @@ fn command_in_path(command: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn home_falls_back_to_userprofile_on_windows_style_env() {
+        // Windows 没有 HOME,home() 返回空路径 → MCP 配置(~/.codex/config.toml
+        // 等)读取全部失败。
+        crate::test_utils::with_windows_style_home(|fake| {
+            assert!(home().starts_with(fake));
+        });
+    }
 
     #[test]
     fn parses_codex_toml_mcp_block() {

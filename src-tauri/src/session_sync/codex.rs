@@ -46,7 +46,9 @@ const ROUTE: &str = "/v1/responses";
 
 /// `~/.codex/sessions/`. Returns the path even if missing — caller no-ops.
 fn codex_sessions_dir() -> PathBuf {
+    // Windows 没有 HOME,补 USERPROFILE fallback(同 claude.rs)。
     let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/"));
     home.join(".codex").join("sessions")
@@ -343,6 +345,14 @@ pub fn sync(db: &crate::storage::db::DbPool) -> Result<SyncResult, AppError> {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn sessions_dir_falls_back_to_userprofile_on_windows_style_env() {
+        // Windows 没有 HOME,原实现退 "/" → ~/.codex/sessions 找不到,同步 no-op。
+        crate::test_utils::with_windows_style_home(|fake| {
+            assert!(codex_sessions_dir().starts_with(fake));
+        });
+    }
 
     #[test]
     fn parse_file_tracks_session_then_model_then_token_count() {

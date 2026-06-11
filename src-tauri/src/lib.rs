@@ -1016,6 +1016,36 @@ pub(crate) mod test_utils {
     pub fn cleanup(temp: &std::path::PathBuf) {
         let _ = std::fs::remove_dir_all(temp);
     }
+
+    /// 模拟 Windows 式环境跑闭包:HOME 不存在、只有 USERPROFILE。
+    /// 持 FS_LOCK 与其他动 HOME 的测试互斥;RAII 恢复原 env,闭包 panic 也不泄漏。
+    pub fn with_windows_style_home<F: FnOnce(&std::path::Path)>(f: F) {
+        struct EnvRestore {
+            home: Option<String>,
+            profile: Option<String>,
+        }
+        impl Drop for EnvRestore {
+            fn drop(&mut self) {
+                match &self.home {
+                    Some(h) => std::env::set_var("HOME", h),
+                    None => std::env::remove_var("HOME"),
+                }
+                match &self.profile {
+                    Some(p) => std::env::set_var("USERPROFILE", p),
+                    None => std::env::remove_var("USERPROFILE"),
+                }
+            }
+        }
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _restore = EnvRestore {
+            home: std::env::var("HOME").ok(),
+            profile: std::env::var("USERPROFILE").ok(),
+        };
+        let fake = std::env::temp_dir().join("agentgate_fake_userprofile");
+        std::env::remove_var("HOME");
+        std::env::set_var("USERPROFILE", &fake);
+        f(&fake);
+    }
 }
 
 #[cfg(all(test, feature = "desktop"))]

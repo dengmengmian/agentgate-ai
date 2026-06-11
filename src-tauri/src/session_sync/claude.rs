@@ -48,7 +48,10 @@ const ROUTE: &str = "/v1/messages";
 /// Falls back to `/` when HOME isn't set; in practice that means the dir
 /// won't exist and sync becomes a no-op.
 fn claude_projects_dir() -> PathBuf {
+    // Windows 没有 HOME(只有 USERPROFILE),不补 fallback 会退到 "/",
+    // 目录永远找不到,用量统计同步静默变 no-op。
     let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/"));
     home.join(".claude").join("projects")
@@ -389,6 +392,19 @@ mod tests {
     use super::*;
     use rusqlite::Connection;
     use std::io::Write;
+
+    #[test]
+    fn projects_dir_falls_back_to_userprofile_on_windows_style_env() {
+        // 复现 bug:Windows 没有 HOME(只有 USERPROFILE),原实现退到 "/",
+        // ~/.claude/projects 永远找不到,用量统计同步静默变 no-op。
+        crate::test_utils::with_windows_style_home(|fake| {
+            let dir = claude_projects_dir();
+            assert!(
+                dir.starts_with(fake),
+                "应退到 USERPROFILE,实际 {dir:?}"
+            );
+        });
+    }
 
     #[test]
     fn parse_usage_handles_full_anthropic_shape() {

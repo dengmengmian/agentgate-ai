@@ -49,7 +49,9 @@ const PROVIDER_LABEL: &str = "google_official";
 const ROUTE: &str = "/v1beta/generateContent";
 
 fn gemini_chats_root() -> PathBuf {
+    // Windows 没有 HOME,补 USERPROFILE fallback(同 claude.rs)。
     let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/"));
     home.join(".gemini").join("tmp")
@@ -255,6 +257,14 @@ pub fn sync(db: &crate::storage::db::DbPool) -> Result<SyncResult, AppError> {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn chats_root_falls_back_to_userprofile_on_windows_style_env() {
+        // Windows 没有 HOME,原实现退 "/" → ~/.gemini/tmp 找不到,同步 no-op。
+        crate::test_utils::with_windows_style_home(|fake| {
+            assert!(gemini_chats_root().starts_with(fake));
+        });
+    }
 
     fn write_session_file(content: &str) -> tempfile::NamedTempFile {
         let tmp = tempfile::NamedTempFile::new().unwrap();
