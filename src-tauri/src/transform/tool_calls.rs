@@ -115,6 +115,16 @@ pub fn sanitize_tool_name(name: &str) -> Cow<'_, str> {
 /// Convert Responses API tools to Chat Completions tools format —— 简化入口，
 /// 适用于不需要 provider-type / capability matrix 的场景（如 Anthropic
 /// fallback 转 Chat 时）。完整能力请走 [`convert_tools_with_matrix`]。
+/// 去掉模型 id 的 `[1m]` / `[...]` 限定后缀,得到能力矩阵的 key(矩阵按 base id 存)。
+pub(crate) fn model_base(model: &str) -> &str {
+    if let Some(stripped) = model.strip_suffix(']') {
+        if let Some(open) = stripped.rfind('[') {
+            return &stripped[..open];
+        }
+    }
+    model
+}
+
 pub fn convert_tools(tools: &[Value], clean_for_deepseek: bool) -> Vec<Value> {
     convert_tools_with_matrix(tools, clean_for_deepseek, "", "", &Default::default())
 }
@@ -140,18 +150,7 @@ pub fn convert_tools_with_matrix(
         provider_type == "mimo" || provider_type == "xiaomi" || provider_type.contains("mimo");
 
     // Strip [1m]/[...] qualifier before looking up in matrix (matrix keys use base id).
-    let model_base = {
-        let m = model;
-        if let Some(stripped) = m.strip_suffix(']') {
-            if let Some(open) = stripped.rfind('[') {
-                &stripped[..open]
-            } else {
-                m
-            }
-        } else {
-            m
-        }
-    };
+    let model_base = model_base(model);
     // Whether to emit web_search for MiMo: only suppress when matrix has an
     // explicit entry that excludes web_search. Empty matrix → emit (back-compat).
     let mimo_emit_web_search = matrix
