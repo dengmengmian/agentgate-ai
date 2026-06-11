@@ -589,32 +589,26 @@ pub fn run() {
                 .resizable(false)
                 .visible(pet_visible);
 
-                // 平台差异：mac/linux 走 transparent，Windows 给 dark 底色 widget。
+                // 全平台透明窗口。macOS 上 NSWindow 的 contentView 仍可能带浅色
+                // fill(尤其系统"减少透明度"开时),显式叠一层 RGBA(0,0,0,0) 把
+                // 底色彻底打掉;Windows 见下面 shadow 的说明。
+                builder = builder
+                    .transparent(true)
+                    .background_color(tauri::window::Color(0, 0, 0, 0));
+
+                // Windows:无边框 + 透明窗口必须显式关 DWM 阴影,否则 DWM 会给
+                // 窗口垫一层不透明底,WebView2 默认白底直接露出来。
                 //
-                // 原因：Windows 上 `transparent(true)` 依赖 3 个用户环境因素同时满足
-                //   ① WebView2 Runtime ≥ 1.0.1466（否则 wry 的 SetDefaultBackgroundColor cast 失败）
-                //   ② Windows 系统设置"透明效果"打开
-                //   ③ DWM compositing 正常
-                // 任一失败 WebView2 控件就画不透明白底（v1.2.2 真实用户反馈）。
-                //
-                // Windows 上改成显式 dark card 颜色（var(--color-card) = #1C1A18），
-                // 视觉上是一个 widget 风格浮卡，行为 100% 可预期。pet.css 里
-                // body 仍 transparent，所以透到窗口底色，dark / mac 透明两套
-                // CSS 不用分流。
-                #[cfg(not(target_os = "windows"))]
-                {
-                    // transparent(true) 启用窗口级合成,但在 macOS 上 NSWindow 的
-                    // contentView 仍可能带浅色 fill(尤其系统"减少透明度"开时)。
-                    // 显式叠一层 RGBA(0,0,0,0) 把底色彻底打掉。
-                    builder = builder
-                        .transparent(true)
-                        .background_color(tauri::window::Color(0, 0, 0, 0));
-                }
+                // 历史:v1.2.2 试过 transparent 失败,当时归因为 WebView2 环境
+                // (runtime 版本/系统透明效果开关),退成显式深色卡片
+                // (#1C1A18)。但用户实测连深色 background_color 都画成白的——
+                // 说明问题在窗口合成层而非取色:builder 从未设置过 shadow,
+                // 默认开启的 DWM 阴影 + transparent 的组合才是白底根因。
+                // (Evergreen WebView2 自动更新,2022+ 的 runtime 都支持
+                // 透明背景色,当年怀疑的 ① 在 2026 已不成立。)
                 #[cfg(target_os = "windows")]
                 {
-                    builder = builder.background_color(
-                        tauri::window::Color(0x1C, 0x1A, 0x18, 0xFF),
-                    );
+                    builder = builder.shadow(false);
                 }
 
                 // Restore saved position
