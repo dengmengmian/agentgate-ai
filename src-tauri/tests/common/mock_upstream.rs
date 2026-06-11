@@ -100,6 +100,20 @@ impl MockUpstream {
             .await;
     }
 
+    /// Stub `GET /copilot_internal/v2/token` — GitHub token → Copilot bearer
+    /// token 交换端点(配合 `AGENTGATE_COPILOT_GITHUB_API_BASE` 注入)。
+    pub async fn stub_copilot_token_ok(&self, token: &str, expires_at: i64) {
+        Mock::given(method("GET"))
+            .and(path("/copilot_internal/v2/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "token": token,
+                "expires_at": expires_at,
+                "refresh_in": 1500
+            })))
+            .mount(&self.server)
+            .await;
+    }
+
     /// Two-stage stub for MiMo's "web_search plugin not enabled" path:
     /// first call returns 400 with the upstream's plugin error marker
     /// (`webSearchEnabled is false`), every subsequent call returns 200.

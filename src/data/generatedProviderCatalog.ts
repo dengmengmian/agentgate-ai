@@ -331,6 +331,82 @@ export const GENERATED_PROVIDER_CATALOG = {
       }
     }
   },
+  "copilot": {
+    "schemaVersion": 1,
+    "order": 35,
+    "type": "copilot",
+    "displayName": "GitHub Copilot",
+    "displayNameZh": "GitHub Copilot",
+    "aliases": [
+      "copilot",
+      "github_copilot"
+    ],
+    "protocols": [
+      "anthropic_messages",
+      "openai_chat_completions"
+    ],
+    "endpoints": {
+      "baseUrl": "https://api.githubcopilot.com",
+      "anthropicBaseUrl": "https://api.githubcopilot.com"
+    },
+    "defaultModel": "claude-sonnet-4.6",
+    "supportedModels": [
+      "claude-sonnet-4.6",
+      "claude-sonnet-4.6-1m",
+      "claude-sonnet-4.5",
+      "claude-opus-4.6",
+      "claude-opus-4.6-1m",
+      "claude-haiku-4.5"
+    ],
+    "models": [
+      {
+        "id": "claude-sonnet-4.6",
+        "pricing": {
+          "inputPerMillion": 0,
+          "outputPerMillion": 0
+        }
+      },
+      {
+        "id": "claude-sonnet-4.6-1m",
+        "pricing": {
+          "inputPerMillion": 0,
+          "outputPerMillion": 0
+        }
+      },
+      {
+        "id": "claude-sonnet-4.5",
+        "pricing": {
+          "inputPerMillion": 0,
+          "outputPerMillion": 0
+        }
+      },
+      {
+        "id": "claude-opus-4.6",
+        "pricing": {
+          "inputPerMillion": 0,
+          "outputPerMillion": 0
+        }
+      },
+      {
+        "id": "claude-opus-4.6-1m",
+        "pricing": {
+          "inputPerMillion": 0,
+          "outputPerMillion": 0
+        }
+      },
+      {
+        "id": "claude-haiku-4.5",
+        "pricing": {
+          "inputPerMillion": 0,
+          "outputPerMillion": 0
+        }
+      }
+    ],
+    "docs": {
+      "handlingEn": "GitHub token → Copilot bearer exchange, `x-initiator` billing classification, Claude model dash→dot normalization",
+      "handlingZh": "GitHub token → Copilot bearer 交换、`x-initiator` 计费分类、Claude 模型 dash→dot 归一化"
+    }
+  },
   "openai": {
     "schemaVersion": 1,
     "order": 40,
@@ -1197,6 +1273,15 @@ export const GENERATED_PROVIDER_PRESETS = {
       "anthropic_messages"
     ],
     "defaultModel": "claude-opus-4-8"
+  },
+  "copilot": {
+    "baseUrl": "https://api.githubcopilot.com",
+    "protocols": [
+      "anthropic_messages",
+      "openai_chat_completions"
+    ],
+    "defaultModel": "claude-sonnet-4.6",
+    "anthropicBaseUrl": "https://api.githubcopilot.com"
   },
   "openai": {
     "baseUrl": "https://api.openai.com",

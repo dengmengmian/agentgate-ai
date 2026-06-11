@@ -313,6 +313,13 @@ pub async fn send_non_stream(
 
     'retry: for attempt in 0..=MAX_RETRIES {
         let api_key = config.select_api_key().to_string();
+        // Copilot:api_key 是 GitHub OAuth token,真正鉴权用交换来的 Copilot
+        // bearer token(进程内缓存,到期前自动重换)。交换失败带建议直接报错。
+        let bearer = if crate::providers::copilot::is_copilot(&config.provider_type) {
+            crate::providers::copilot::get_copilot_token(client, &api_key).await?
+        } else {
+            api_key.clone()
+        };
         let mut effective_request = request.clone();
         maybe_strip_mimo_web_search_for_account(config, &api_key, &mut effective_request);
         let mut body = serde_json::to_value(&effective_request).map_err(|e| {
@@ -326,11 +333,14 @@ pub async fn send_non_stream(
         'send_attempt: loop {
             let mut req_builder = client
                 .post(&url)
-                .header("Authorization", format!("Bearer {api_key}"))
+                .header("Authorization", format!("Bearer {bearer}"))
                 .header("Content-Type", "application/json");
 
             for (k, v) in &config.extra_headers {
                 req_builder = req_builder.header(k.as_str(), v.as_str());
+            }
+            if crate::providers::copilot::is_copilot(&config.provider_type) {
+                req_builder = crate::providers::copilot::apply_request_headers(req_builder);
             }
 
             let resp = match req_builder.json(&body).send().await {
@@ -444,6 +454,12 @@ pub async fn send_stream(
 
     'retry: for attempt in 0..=MAX_RETRIES {
         let api_key = config.select_api_key().to_string();
+        // Copilot:同 send_non_stream,GitHub token → Copilot bearer token。
+        let bearer = if crate::providers::copilot::is_copilot(&config.provider_type) {
+            crate::providers::copilot::get_copilot_token(client, &api_key).await?
+        } else {
+            api_key.clone()
+        };
         let mut effective_request = request.clone();
         maybe_strip_mimo_web_search_for_account(config, &api_key, &mut effective_request);
         let mut body = serde_json::to_value(&effective_request).map_err(|e| {
@@ -457,12 +473,15 @@ pub async fn send_stream(
         'send_attempt: loop {
             let mut req_builder = client
                 .post(&url)
-                .header("Authorization", format!("Bearer {api_key}"))
+                .header("Authorization", format!("Bearer {bearer}"))
                 .header("Content-Type", "application/json")
                 .header("Accept", "text/event-stream");
 
             for (k, v) in &config.extra_headers {
                 req_builder = req_builder.header(k.as_str(), v.as_str());
+            }
+            if crate::providers::copilot::is_copilot(&config.provider_type) {
+                req_builder = crate::providers::copilot::apply_request_headers(req_builder);
             }
 
             let resp = match req_builder.json(&body).send().await {

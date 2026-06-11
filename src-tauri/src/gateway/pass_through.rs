@@ -656,6 +656,19 @@ pub async fn handle_anthropic(
     if auto_cache {
         crate::transform::responses_to_anthropic::inject_cache_control(&mut body_json);
     }
+    // Copilot:api_key 字段存的是 GitHub OAuth token(gho_/ghu_),先交换成
+    // 短期 Copilot bearer token(进程内缓存);同时按请求体分类 x-initiator
+    // ——agent(工具续写/压缩)不计 premium 额度。交换失败直接返回带建议的
+    // AppError,不静默降级。
+    let copilot_auth = if crate::providers::copilot::is_copilot(&config.provider_type) {
+        let token =
+            crate::providers::copilot::get_copilot_token(http_client, config.select_api_key())
+                .await?;
+        let initiator = crate::providers::copilot::classify_initiator(&body_json);
+        Some((token, initiator))
+    } else {
+        None
+    };
     let rewritten_body = body_json.to_string();
 
     // Anthropic uses x-api-key header instead of Bearer.
@@ -665,12 +678,23 @@ pub async fn handle_anthropic(
     let build_request = || {
         let mut b = http_client
             .post(target_url)
-            .header("x-api-key", config.select_api_key())
             .header("content-type", "application/json")
             // 默认 anthropic-version；若 client 显式带了同名 header，
             // 下面 forward_client_headers 会覆盖这条——reqwest 同 header
             // 重复 set 会保留最后一次的值。
             .header("anthropic-version", "2023-06-01");
+        match &copilot_auth {
+            Some((token, initiator)) => {
+                // Copilot 用 Bearer 鉴权(替代 x-api-key),并带上模拟
+                // VS Code Copilot Chat 的必备 headers + 计费分类。
+                b = b.header("Authorization", format!("Bearer {token}"));
+                b = crate::providers::copilot::apply_request_headers(b);
+                b = b.header("x-initiator", *initiator);
+            }
+            None => {
+                b = b.header("x-api-key", config.select_api_key());
+            }
+        }
         for (k, v) in &config.extra_headers {
             b = b.header(k.as_str(), v.as_str());
         }

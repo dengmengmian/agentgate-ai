@@ -14,6 +14,13 @@ pub fn for_anthropic(provider_type: &str, model: &str) -> String {
     {
         return model.trim_end_matches("[1m]").to_string();
     }
+    // Copilot 上游只接受 dot 形式的 Claude 4.x 模型 ID(claude-sonnet-4.6),
+    // Claude Code 发 dash 形式会 400 model_not_supported。
+    if crate::providers::copilot::is_copilot(&pt) {
+        if let Some(normalized) = crate::providers::copilot::normalize_model(model) {
+            return normalized;
+        }
+    }
     model.to_string()
 }
 
@@ -92,6 +99,29 @@ mod tests {
             for_anthropic("deepseek", "deepseek-v4-pro[1m]"),
             "deepseek-v4-pro"
         );
+    }
+
+    // ── Copilot ──
+
+    #[test]
+    fn copilot_dash_model_normalized_to_dot() {
+        assert_eq!(
+            for_anthropic("copilot", "claude-sonnet-4-6"),
+            "claude-sonnet-4.6"
+        );
+        assert_eq!(
+            for_anthropic("copilot", "claude-sonnet-4-6[1m]"),
+            "claude-sonnet-4.6-1m"
+        );
+    }
+
+    #[test]
+    fn copilot_already_dotted_untouched() {
+        assert_eq!(
+            for_anthropic("copilot", "claude-sonnet-4.6"),
+            "claude-sonnet-4.6"
+        );
+        assert_eq!(for_anthropic("copilot", "gpt-5"), "gpt-5");
     }
 
     // ── Other providers ──
