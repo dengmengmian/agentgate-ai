@@ -90,6 +90,35 @@ impl MockUpstream {
             .await;
     }
 
+    /// Stub `POST /v1/chat/completions` returning a streaming SSE body
+    /// (`text/event-stream`): two content deltas (含 CJK,验证转换不破坏多字节)、
+    /// 一个带 usage 的终块、`[DONE]`。用于端到端验证上游 chat SSE → 网关转换 →
+    /// 客户端拿到合法的 responses / anthropic 事件流。
+    pub async fn stub_chat_completions_sse(&self, model: &str) {
+        let sse = format!(
+            "data: {}\n\n\
+             data: {}\n\n\
+             data: {}\n\n\
+             data: [DONE]\n\n",
+            json!({"id":"c1","object":"chat.completion.chunk","model":model,
+                   "choices":[{"index":0,"delta":{"role":"assistant","content":"你好"},"finish_reason":null}]}),
+            json!({"id":"c1","object":"chat.completion.chunk","model":model,
+                   "choices":[{"index":0,"delta":{"content":"世界"},"finish_reason":null}]}),
+            json!({"id":"c1","object":"chat.completion.chunk","model":model,
+                   "choices":[{"index":0,"delta":{},"finish_reason":"stop"}],
+                   "usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}),
+        );
+        Mock::given(method("POST"))
+            .and(path("/v1/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_raw(sse.into_bytes(), "text/event-stream"),
+            )
+            .mount(&self.server)
+            .await;
+    }
+
     /// Stub `POST /v1/messages` returning a minimal Anthropic message.
     pub async fn stub_anthropic_messages_ok(&self, model: &str, content: &str) {
         let body = anthropic_message_body(model, content);

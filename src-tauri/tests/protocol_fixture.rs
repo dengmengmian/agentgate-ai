@@ -483,3 +483,172 @@ async fn l2_agentgate_virtual_model_resolves_to_real_model() {
 
     harness.shutdown().await;
 }
+
+// ── L4: error-triggered failover ────────────────────────────────────────
+//
+// 故障自愈的核心承诺:主 provider 返回 5xx 时自动切到下一个候选,客户端无感。
+// 此前集成层从未验证过——只有能力路由(vision)的 e2e。这里 stub 主上游 500、
+// 次上游 200,断言两个上游都被打到且客户端拿到 200。
+
+#[tokio::test]
+async fn responses_failover_on_upstream_500() {
+    let primary = MockUpstream::start().await;
+    primary
+        .stub_chat_completions_err(500, json!({"error": {"message": "boom"}}))
+        .await;
+    let secondary = MockUpstream::start().await;
+    secondary
+        .stub_chat_completions_ok("backup-model", "recovered")
+        .await;
+
+    let harness =
+        GatewayHarness::start(ProviderSpec::chat_only("custom", "primary-model"), &primary).await;
+    harness.add_failover_candidate(&secondary, "backup-model");
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/responses"))
+        .bearer_auth(&harness.token)
+        .json(&json!({ "model": "primary-model", "input": "hi" }))
+        .send()
+        .await
+        .expect("send /v1/responses");
+
+    assert!(
+        res.status().is_success(),
+        "client should get 200 after failover, got {}",
+        res.status()
+    );
+    // primary 被打多次是 adapter 对 5xx 的内部重试(MAX_RETRIES),重试耗尽后才
+    // failover——这里只断言"主被尝试过"+"failover 真的切到了次"。
+    assert!(
+        !primary.received().await.is_empty(),
+        "primary must be tried first"
+    );
+    assert!(
+        !secondary.received().await.is_empty(),
+        "failover must reach the secondary after primary's 500"
+    );
+
+    harness.shutdown().await;
+}
+
+#[tokio::test]
+async fn responses_all_providers_fail_returns_error() {
+    // 全部候选都 500 → 候选耗尽 → 客户端拿到错误(非 2xx),不静默假成功。
+    let primary = MockUpstream::start().await;
+    primary
+        .stub_chat_completions_err(500, json!({"error": {"message": "boom1"}}))
+        .await;
+    let secondary = MockUpstream::start().await;
+    secondary
+        .stub_chat_completions_err(500, json!({"error": {"message": "boom2"}}))
+        .await;
+
+    let harness =
+        GatewayHarness::start(ProviderSpec::chat_only("custom", "primary-model"), &primary).await;
+    harness.add_failover_candidate(&secondary, "backup-model");
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/responses"))
+        .bearer_auth(&harness.token)
+        .json(&json!({ "model": "primary-model", "input": "hi" }))
+        .send()
+        .await
+        .expect("send /v1/responses");
+
+    assert!(
+        !res.status().is_success(),
+        "exhausted failover must surface an error, got {}",
+        res.status()
+    );
+    assert!(!primary.received().await.is_empty());
+    assert!(
+        !secondary.received().await.is_empty(),
+        "both candidates must be attempted before giving up"
+    );
+
+    harness.shutdown().await;
+}
+
+// ── L5: streaming conversion (chat SSE → Responses events) ───────────────
+//
+// 日常最高频的流式链路此前只有 codex_compact 一条专路有 wire 级 e2e。这里走
+// 常规 /v1/responses 流式:上游吐 chat SSE(含 CJK)→ 网关转 Responses 事件 →
+// 断言客户端拿到合法事件流且中文内容完整(不被转换破坏)。
+
+#[tokio::test]
+async fn responses_stream_converts_chat_sse_to_events() {
+    let mock = MockUpstream::start().await;
+    mock.stub_chat_completions_sse("stream-model").await;
+
+    let harness =
+        GatewayHarness::start(ProviderSpec::chat_only("custom", "stream-model"), &mock).await;
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1/responses"))
+        .bearer_auth(&harness.token)
+        .json(&json!({ "model": "stream-model", "input": "hi", "stream": true }))
+        .send()
+        .await
+        .expect("send streaming /v1/responses");
+
+    assert!(res.status().is_success(), "stream status {}", res.status());
+    let body = res.text().await.expect("read stream body");
+
+    // 客户端应收到 Responses SSE 事件,且 CJK 内容完整拼回。
+    assert!(
+        body.contains("response.") || body.contains("output_text"),
+        "expected Responses event frames, got: {}",
+        &body[..body.len().min(300)]
+    );
+    assert!(
+        body.contains("你好") && body.contains("世界"),
+        "CJK content must survive SSE conversion intact"
+    );
+
+    harness.shutdown().await;
+}
+
+// ── L6: Gemini route (generateContent → chat conversion) ─────────────────
+
+#[tokio::test]
+async fn gemini_generate_converts_to_chat() {
+    let mock = MockUpstream::start().await;
+    mock.stub_chat_completions_ok("gemini-backed", "hello from chat")
+        .await;
+
+    let harness =
+        GatewayHarness::start(ProviderSpec::chat_only("custom", "gemini-backed"), &mock).await;
+    let client = harness.client();
+
+    let res = client
+        .post(harness.url("/v1beta/models/gemini-backed:generateContent"))
+        .bearer_auth(&harness.token)
+        .json(&json!({
+            "contents": [{ "role": "user", "parts": [{ "text": "hi" }] }]
+        }))
+        .send()
+        .await
+        .expect("send gemini generateContent");
+
+    assert!(
+        res.status().is_success(),
+        "gemini route status {}",
+        res.status()
+    );
+    let received = mock.received().await;
+    assert_eq!(
+        received.len(),
+        1,
+        "gemini request must reach the chat upstream"
+    );
+    assert!(
+        received[0].body.get("messages").is_some(),
+        "Gemini contents must be converted to chat messages"
+    );
+
+    harness.shutdown().await;
+}

@@ -279,6 +279,73 @@ impl GatewayHarness {
         vision_id
     }
 
+    /// Turn this single-provider harness into a 2-provider **error-failover**
+    /// scenario: inserts a second chat provider wired to `mock` at lower
+    /// priority and flips default profiles to `failover` mode. Unlike the
+    /// vision helper this leaves capabilities untouched — routing is purely by
+    /// priority, so the primary is tried first and the secondary only on
+    /// failover. Returns the secondary provider's id.
+    pub fn add_failover_candidate(&self, mock: &MockUpstream, model: &str) -> String {
+        let conn = self.db.get().expect("borrow conn");
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO providers (
+                id, name, provider_type, base_url, api_key, default_model, reasoning_model,
+                supported_models, model_mapping, extra_headers, anthropic_base_url,
+                responses_base_url, protocol, timeout_seconds, status, auto_cache_control,
+                model_capabilities, enabled, is_active, created_at, updated_at
+             ) VALUES (
+                ?1, 'mock-secondary', 'custom', ?2, 'sk-test-key', ?3, NULL,
+                NULL, NULL, NULL, NULL,
+                NULL, ?4, 30, 'ok', 0,
+                NULL, 1, 0, ?5, ?5
+             )",
+            params![
+                &id,
+                &mock.url(),
+                model,
+                r#"["openai_chat_completions"]"#,
+                &now,
+            ],
+        )
+        .expect("insert secondary provider");
+
+        let profile_ids: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT id FROM route_profiles WHERE is_default = 1")
+                .expect("prepare profile lookup");
+            stmt.query_map([], |row| row.get::<_, String>(0))
+                .expect("query profiles")
+                .filter_map(|r| r.ok())
+                .collect()
+        };
+        for profile_id in &profile_ids {
+            storage::route_profiles::add_provider(
+                &conn,
+                profile_id,
+                &id,
+                agentgate_lib::models::route_profile::AddProviderToRouteInput {
+                    priority: Some(2),
+                    model_override: None,
+                    cooldown_seconds: Some(0),
+                    // default failover codes [429,500] — the primary returning
+                    // HTTP 500 must trigger failover to this candidate.
+                    failover_on_status_codes: None,
+                    failover_on_error_keywords: None,
+                    routing_conditions: None,
+                },
+            )
+            .expect("add secondary to route profile");
+            conn.execute(
+                "UPDATE route_profiles SET mode = 'failover' WHERE id = ?1",
+                params![profile_id],
+            )
+            .expect("set failover mode");
+        }
+        id
+    }
+
     pub fn client(&self) -> reqwest::Client {
         reqwest::Client::builder()
             .timeout(Duration::from_secs(15))
