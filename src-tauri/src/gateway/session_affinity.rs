@@ -333,6 +333,60 @@ mod tests {
         assert_eq!(entry.hit_count, 1, "hit_count resets on provider change");
     }
 
+    // now_ms() 直接读系统时钟、不可注入，TTL 测试通过回拨 store 里的
+    // last_hit_at_ms 来模拟时间流逝（tests 与生产代码同模块，可访问 store()）。
+    #[test]
+    fn lookup_expired_entry_returns_none_and_purges() {
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        clear();
+        record("sa_ttl_expired", "prov_t");
+        {
+            let mut g = store().lock().unwrap_or_else(|e| e.into_inner());
+            g.get_mut("sa_ttl_expired").unwrap().last_hit_at_ms = now_ms() - TTL_MS - 1;
+        }
+        assert!(lookup("sa_ttl_expired").is_none(), "超过 1h 的条目不应命中");
+        let g = store().lock().unwrap_or_else(|e| e.into_inner());
+        assert!(
+            !g.contains_key("sa_ttl_expired"),
+            "过期条目应在 lookup 时被 purge"
+        );
+    }
+
+    #[test]
+    fn lookup_near_ttl_but_not_expired_still_hits() {
+        // 临近 1h 但未过期（留 5s 余量避免边界毫秒抖动）仍应命中。
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        clear();
+        record("sa_ttl_near", "prov_t");
+        {
+            let mut g = store().lock().unwrap_or_else(|e| e.into_inner());
+            g.get_mut("sa_ttl_near").unwrap().last_hit_at_ms = now_ms() - (TTL_MS - 5_000);
+        }
+        let entry = lookup("sa_ttl_near").expect("未过期应命中");
+        assert_eq!(entry.provider_id, "prov_t");
+    }
+
+    #[test]
+    fn capacity_overflow_evicts_least_recently_hit() {
+        // 填满 512 条后再插第 513 条，应淘汰 last_hit_at_ms 最旧的那条。
+        // 批量 record 的时间戳几乎相同，回拨其中一条使最旧者确定。
+        let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        clear();
+        for i in 0..MAX_ENTRIES {
+            record(&format!("sa_cap_{i}"), "prov_x");
+        }
+        {
+            let mut g = store().lock().unwrap_or_else(|e| e.into_inner());
+            assert_eq!(g.len(), MAX_ENTRIES);
+            g.get_mut("sa_cap_7").unwrap().last_hit_at_ms = now_ms() - 60_000;
+        }
+        record("sa_cap_overflow", "prov_x");
+        let g = store().lock().unwrap_or_else(|e| e.into_inner());
+        assert_eq!(g.len(), MAX_ENTRIES, "淘汰后回到容量上限");
+        assert!(!g.contains_key("sa_cap_7"), "最久未命中的条目被淘汰");
+        assert!(g.contains_key("sa_cap_overflow"), "新条目保留");
+    }
+
     #[test]
     fn lookup_returns_none_for_unknown_session() {
         let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());

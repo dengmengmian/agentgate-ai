@@ -200,4 +200,52 @@ mod tests {
         assert_eq!(apply(&p, &mut body).len(), 1);
         assert!(apply(&p, &mut body).is_empty());
     }
+
+    #[test]
+    fn effort_falls_back_to_first_value_when_medium_absent() {
+        // provider 接受列表里没有 medium 时，未知值改写成列表第一个。
+        let p = provider(
+            "brand-new",
+            Some(r#"{"reasoning_effort_values":["low","high"]}"#),
+        );
+        let mut body = json!({"reasoning": {"effort": "extreme"}});
+        let actions = apply(&p, &mut body);
+        assert_eq!(actions.len(), 1);
+        assert_eq!(body["reasoning"]["effort"].as_str(), Some("low"));
+    }
+
+    #[test]
+    fn budget_and_effort_rectified_in_one_pass() {
+        // thinking 与 reasoning 同时越界：一次 apply 产出两条 action。
+        let p = provider(
+            "brand-new",
+            Some(
+                r#"{"thinking_budget":{"min":1024,"max":2048},"reasoning_effort_values":["low","medium","high"]}"#,
+            ),
+        );
+        let mut body = json!({
+            "thinking": {"budget_tokens": 10},
+            "reasoning": {"effort": "max"},
+        });
+        let actions = apply(&p, &mut body);
+        assert_eq!(actions.len(), 2);
+        assert_eq!(body["thinking"]["budget_tokens"].as_i64(), Some(1024));
+        assert_eq!(body["reasoning"]["effort"].as_str(), Some("medium"));
+    }
+
+    #[test]
+    fn non_object_thinking_field_is_noop() {
+        // thinking 不是对象（如 true）时拿不到 budget_tokens，原样透传。
+        let p = provider("mimo", None);
+        let mut body = json!({"thinking": true});
+        assert!(apply(&p, &mut body).is_empty());
+        assert_eq!(body["thinking"], json!(true));
+    }
+
+    #[test]
+    fn non_object_body_is_noop() {
+        let p = provider("mimo", None);
+        let mut body = json!("not an object");
+        assert!(apply(&p, &mut body).is_empty());
+    }
 }

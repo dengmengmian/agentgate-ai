@@ -138,4 +138,33 @@ mod tests {
         let mut body = json!([1, 2, 3]);
         assert!(apply(&p, &mut body).is_none());
     }
+
+    #[test]
+    fn null_valued_banned_field_is_stripped() {
+        // 字段值为 null 也算"出现"——上游 400 看的是字段是否存在，不看值。
+        let p = provider_with_quirks("deepseek", r#"{}"#);
+        let mut body = json!({"web_search": null});
+        let action = apply(&p, &mut body).expect("null 值字段也应剔除");
+        assert_eq!(action.stripped_fields, vec!["web_search".to_string()]);
+        assert!(body.get("web_search").is_none());
+    }
+
+    #[test]
+    fn nested_field_with_same_name_is_untouched() {
+        // 契约：只剔顶层字段，嵌套在 messages 里的同名字段不动。
+        let p = provider_with_quirks("deepseek", r#"{}"#);
+        let mut body = json!({
+            "messages": [{"role": "user", "content": "x", "web_search": true}],
+        });
+        assert!(apply(&p, &mut body).is_none());
+        assert_eq!(body["messages"][0]["web_search"], json!(true));
+    }
+
+    #[test]
+    fn empty_object_body_is_noop() {
+        // 空请求体：没有任何字段可剔，返回 None 且不报错。
+        let p = provider_with_quirks("deepseek", r#"{}"#);
+        let mut body = json!({});
+        assert!(apply(&p, &mut body).is_none());
+    }
 }
