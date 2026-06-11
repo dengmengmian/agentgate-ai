@@ -12,7 +12,9 @@
 //! 4. splice 回 head + [摘要消息] + tail。
 //! 5. 摘要按 transcript 内容 hash 缓存(挡客户端重试/相同请求)。
 //!
-//! 只作用于 Chat Completions 路径(MiMo / OpenAI 兼容);Anthropic / Gemini 走各自分支不经过这里。
+//! 只作用于 Responses→Chat 路径(Codex → MiMo / OpenAI 兼容)。Claude Code 不需要网关侧
+//! 自压缩:它在客户端自己做 /compact,网关只在 messages 路由识别其压缩请求并关思考 +
+//! 去工具(见 routes/messages.rs 的 is_claude_code_compaction)。Gemini 走各自分支不经过这里。
 //! 默认开启。阈值按 provider-catalog 里模型的上下文窗口 ×85% 自适应(留 15% 给 reasoning +
 //! output),未收录的模型退回默认 110K。窗口自适应保证大窗口 provider 不会被过早压缩,所以
 //! 不再需要逐 provider 白名单。覆盖手段:`AGENTGATE_AUTO_COMPACT=off` 全关;
@@ -105,9 +107,38 @@ fn cache_put(key: String, value: String) {
 
 // ── token 估算 ──────────────────────────────────────────────
 
+/// CJK 字符(中日韩 + 全角标点)。这类字符 1 字 ≈ 1 token,套 chars/4 会低估 2.5~4 倍,
+/// 中文重的对话就估不到阈值、压缩不触发。
+fn is_cjk(c: char) -> bool {
+    matches!(c as u32,
+        0x4E00..=0x9FFF      // CJK 统一表意文字
+        | 0x3400..=0x4DBF    // 扩展 A
+        | 0x20000..=0x2A6DF  // 扩展 B
+        | 0xF900..=0xFAFF    // 兼容表意文字
+        | 0x3040..=0x30FF    // 日文平假名/片假名
+        | 0xAC00..=0xD7AF    // 韩文音节
+        | 0x3000..=0x303F    // CJK 标点
+        | 0xFF00..=0xFFEF    // 全角形式
+    )
+}
+
+/// 文本 token 估算:CJK 按 1 字 1 token,其余按 chars/4(英文/代码的经验值)。
+fn estimate_text_tokens(s: &str) -> usize {
+    let mut cjk = 0usize;
+    let mut other = 0usize;
+    for c in s.chars() {
+        if is_cjk(c) {
+            cjk += 1;
+        } else {
+            other += 1;
+        }
+    }
+    cjk + other / 4
+}
+
 fn estimate_value_tokens(content: &Value) -> usize {
     match content {
-        Value::String(s) => s.chars().count() / 4,
+        Value::String(s) => estimate_text_tokens(s),
         Value::Array(parts) => parts
             .iter()
             .map(|p| {
@@ -115,14 +146,14 @@ fn estimate_value_tokens(content: &Value) -> usize {
                 if ty.contains("image") || p.get("image_url").is_some() {
                     IMAGE_TOKENS
                 } else if let Some(t) = p.get("text").and_then(|t| t.as_str()) {
-                    t.chars().count() / 4
+                    estimate_text_tokens(t)
                 } else {
-                    p.to_string().chars().count() / 4
+                    estimate_text_tokens(&p.to_string())
                 }
             })
             .sum(),
         Value::Null => 0,
-        other => other.to_string().chars().count() / 4,
+        other => estimate_text_tokens(&other.to_string()),
     }
 }
 
@@ -132,11 +163,13 @@ fn estimate_msg_tokens(m: &ChatMessage) -> usize {
         t += estimate_value_tokens(c);
     }
     if let Some(rc) = &m.reasoning_content {
-        t += rc.chars().count() / 4;
+        t += estimate_text_tokens(rc);
     }
     if let Some(tcs) = &m.tool_calls {
         for tc in tcs {
-            t += (tc.function.name.chars().count() + tc.function.arguments.chars().count()) / 4 + 4;
+            t += estimate_text_tokens(&tc.function.name)
+                + estimate_text_tokens(&tc.function.arguments)
+                + 4;
         }
     }
     t
@@ -385,7 +418,8 @@ fn build_summary_request(
 /// 认识 `thinking` 字段的上游返回 `{"type":"disabled"}`,其余返回 None(不发)。
 /// 名单与 transform/providers 的方言处理保持一致:MiMo / Kimi(moonshot)/ DeepSeek。
 /// 漏列的代价只是摘要调用按上游默认跑(可能开思考),不会 400;错列才会 400,从严。
-fn thinking_disabled_for(provider_type: &str) -> Option<Value> {
+/// messages 路由处理 Claude Code 压缩请求时也用它关思考。
+pub(crate) fn thinking_disabled_for(provider_type: &str) -> Option<Value> {
     let pt = provider_type.to_ascii_lowercase();
     let knows_thinking = pt == "deepseek"
         || pt == "kimi"
@@ -514,16 +548,26 @@ pub async fn maybe_compact(
     };
 
     let model = chat_req.model.clone();
-    let chunk_count = plan.middle_chunks.len();
+    // 分块摘要并发调用(join_all 保序):长对话首压可能有 3-4 块,串行要 30s+,
+    // 并发后墙钟时间 ≈ 最慢一块。
+    let transcripts: Vec<String> = plan
+        .middle_chunks
+        .iter()
+        .map(|chunk| render_transcript(chunk))
+        .filter(|t| !t.is_empty())
+        .collect();
+    let chunk_count = transcripts.len();
+    let results = futures::future::join_all(
+        transcripts
+            .iter()
+            .map(|t| summarize_chunk(client, config, &model, t)),
+    )
+    .await;
+
     let mut summaries: Vec<String> = Vec::with_capacity(chunk_count);
     let mut failed = false;
-
-    for chunk in &plan.middle_chunks {
-        let transcript = render_transcript(chunk);
-        if transcript.is_empty() {
-            continue;
-        }
-        match summarize_chunk(client, config, &model, &transcript).await {
+    for r in results {
+        match r {
             Ok(s) => summaries.push(s),
             Err(e) => {
                 tracing::warn!(
@@ -617,6 +661,23 @@ mod tests {
             tool_call_id: Some(id.to_string()),
             name: None,
         }
+    }
+
+    #[test]
+    fn estimate_counts_cjk_as_one_token_per_char() {
+        // 复现 bug:chars/4 对中文低估 2.5~4 倍(中文 1 字 ≈ 1 token),
+        // 中文重的长对话估不到阈值、压缩不触发,上游 400 照样出现。
+        let m = msg("user", &"中".repeat(400));
+        let t = estimate_msg_tokens(&m);
+        assert!(
+            (400..=410).contains(&t),
+            "400 个中文字应估 ~400 token,实际 {t}"
+        );
+
+        // 混合文本:200 中文 + 400 英文字符 → ~200 + ~100
+        let m2 = msg("user", &format!("{}{}", "字".repeat(200), "a".repeat(400)));
+        let t2 = estimate_msg_tokens(&m2);
+        assert!((300..=315).contains(&t2), "混合文本应分开累计,实际 {t2}");
     }
 
     #[test]
@@ -802,8 +863,9 @@ mod tests {
         assert_eq!(cache_get(&key), Some("summary-A".to_string()));
     }
 
-    // env 全局,合成一个串行测试覆盖各场景(同 responses_to_chat 的约定)。
+    // env 是进程全局,用 #[serial(env)] 与其他动 env 的测试互斥。
     #[test]
+    #[serial_test::serial(env)]
     fn threshold_env_scenarios() {
         let config = test_config("mimo", "openai");
 

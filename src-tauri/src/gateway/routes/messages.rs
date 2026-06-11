@@ -18,10 +18,69 @@ use super::GatewayState;
 
 /// 检测 Claude Code 的自动压缩(/compact)请求。压缩要求模型只回
 /// 一段文本摘要、不调工具;命中后给上游关思考 + 去工具,避免 MiMo 的 thinking block /
-/// tool_call 污染摘要。这两个串是 Claude Code 压缩 prompt 专属,不会误判普通请求。
-fn is_claude_code_compaction(body: &str) -> bool {
-    body.contains("You are a helpful AI assistant tasked with summarizing conversations")
-        || body.contains("CRITICAL: Respond with TEXT ONLY. Do NOT call any tools.")
+/// tool_call 污染摘要。
+///
+/// 两个信号都限定在历史内容污染不到的位置(对齐 cc-switch 的 compact 检测),
+/// 否则标记串一旦出现在历史消息或 tool_result 里(典型:用 Claude Code 开发
+/// AgentGate 本身,读到本文件源码),整个会话后续请求都会被误判、工具被剥掉:
+/// 1. system 文本**以**压缩专用前缀开头(用户控制不了 system);
+/// 2. **最后一条** user 消息的 text 块(排除 tool_result)含压缩机器指令。
+fn is_claude_code_compaction(req: &crate::protocol::anthropic_messages::MessagesRequest) -> bool {
+    if system_text(req)
+        .starts_with("You are a helpful AI assistant tasked with summarizing conversations")
+    {
+        return true;
+    }
+    let Some(last) = req.messages.last() else {
+        return false;
+    };
+    if last.role != "user" {
+        return false;
+    }
+    message_text_blocks(last).contains("CRITICAL: Respond with TEXT ONLY. Do NOT call any tools.")
+}
+
+/// 提取 system 文本:string 直取;block 数组取各 text 拼接(Claude Code 常带 cache_control)。
+fn system_text(req: &crate::protocol::anthropic_messages::MessagesRequest) -> String {
+    match &req.system {
+        Some(serde_json::Value::String(s)) => s.clone(),
+        Some(serde_json::Value::Array(blocks)) => blocks
+            .iter()
+            .filter_map(|b| b.get("text").and_then(|t| t.as_str()))
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => String::new(),
+    }
+}
+
+/// 提取消息里 type=="text" 块的文本,显式排除 tool_result 等其他块。
+fn message_text_blocks(msg: &crate::protocol::anthropic_messages::AnthropicMessage) -> String {
+    match &msg.content {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(blocks) => blocks
+            .iter()
+            .filter_map(|b| {
+                (b.get("type").and_then(|t| t.as_str()) == Some("text"))
+                    .then(|| b.get("text").and_then(|t| t.as_str()))
+                    .flatten()
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => String::new(),
+    }
+}
+
+/// 压缩请求:关思考 + 去工具,保证上游只回一段干净的摘要文本。
+/// `thinking` 是 MiMo / Kimi / DeepSeek 的方言字段,其余上游带上会 400,
+/// 按 provider 类型门控(同 auto_compact 的摘要请求)。
+fn apply_compaction_overrides(
+    chat_req: &mut crate::protocol::chat_completions::ChatCompletionsRequest,
+    provider_type: &str,
+) {
+    chat_req.thinking = crate::gateway::auto_compact::thinking_disabled_for(provider_type);
+    chat_req.reasoning_effort = None;
+    chat_req.tools = None;
+    chat_req.tool_choice = None;
 }
 
 // ── POST /v1/messages (Anthropic Messages API) ─────────────────
@@ -210,7 +269,7 @@ pub async fn handle_messages(
     let want_stream = msg_req.stream.unwrap_or(false);
 
     // Claude Code 自动压缩请求:命中则下面关思考 + 去工具,只回干净的摘要文本。
-    let is_cc_compaction = is_claude_code_compaction(&body);
+    let is_cc_compaction = is_claude_code_compaction(&msg_req);
 
     let mut chat_req = crate::protocol::chat_completions::ChatCompletionsRequest {
         model: model.clone(),
@@ -240,12 +299,8 @@ pub async fn handle_messages(
         diagnostic_events: Vec::new(),
     };
 
-    // 压缩请求:关思考 + 去工具,保证上游只回一段干净的摘要文本。
     if is_cc_compaction {
-        chat_req.thinking = Some(json!({"type": "disabled"}));
-        chat_req.reasoning_effort = None;
-        chat_req.tools = None;
-        chat_req.tool_choice = None;
+        apply_compaction_overrides(&mut chat_req, &config.provider_type);
     }
 
     let _refiner_log = refine_struct_body(&state.db, &selection.provider, &mut chat_req);
@@ -401,7 +456,9 @@ async fn handle_anthropic_fallback_stream(
         use crate::transform::chat_to_anthropic_stream::ChatToAnthropicStream;
 
         let mut converter = ChatToAnthropicStream::new(model_clone.clone());
-        let mut buffer = String::from_utf8_lossy(&boot.prefix).into_owned();
+        let mut utf8_pending: Vec<u8> = Vec::new();
+        let mut buffer = String::new();
+        crate::gateway::stream_utf8::append_utf8_safe(&mut buffer, &mut utf8_pending, &boot.prefix);
         buffer = buffer.replace("\r\n", "\n");
         let mut stream = boot.stream;
         let mut bootstrap_replayed = false;
@@ -474,7 +531,11 @@ async fn handle_anthropic_fallback_stream(
             // 就会返 timeout error；describe_stream_error 会识别并产出中文文案。
             match stream.next().await {
                 Some(Ok(bytes)) => {
-                    buffer.push_str(&String::from_utf8_lossy(&bytes));
+                    crate::gateway::stream_utf8::append_utf8_safe(
+                        &mut buffer,
+                        &mut utf8_pending,
+                        &bytes,
+                    );
                     buffer = buffer.replace("\r\n", "\n");
                     bootstrap_replayed = true;
                 }
@@ -563,23 +624,122 @@ async fn handle_anthropic_fallback_stream(
 
 #[cfg(test)]
 mod tests {
-    use super::is_claude_code_compaction;
+    use super::{apply_compaction_overrides, is_claude_code_compaction};
+    use crate::protocol::anthropic_messages::MessagesRequest;
+    use serde_json::json;
 
-    #[test]
-    fn detects_summarizing_system_prompt() {
-        let body = r#"{"system":"You are a helpful AI assistant tasked with summarizing conversations.","messages":[]}"#;
-        assert!(is_claude_code_compaction(body));
+    fn req(body: &str) -> MessagesRequest {
+        serde_json::from_str(body).unwrap()
     }
 
     #[test]
-    fn detects_text_only_no_tools_marker() {
-        let body = r#"{"messages":[{"role":"user","content":"... CRITICAL: Respond with TEXT ONLY. Do NOT call any tools. ..."}]}"#;
-        assert!(is_claude_code_compaction(body));
+    fn detects_summarizing_system_prompt() {
+        let r = req(
+            r#"{"system":"You are a helpful AI assistant tasked with summarizing conversations.","messages":[]}"#,
+        );
+        assert!(is_claude_code_compaction(&r));
+    }
+
+    #[test]
+    fn detects_summarizing_system_prompt_in_blocks() {
+        // Claude Code 的 system 常是 block 数组形态(带 cache_control)。
+        let r = req(
+            r#"{"system":[{"type":"text","text":"You are a helpful AI assistant tasked with summarizing conversations."}],"messages":[]}"#,
+        );
+        assert!(is_claude_code_compaction(&r));
+    }
+
+    #[test]
+    fn detects_text_only_no_tools_marker_in_last_user_message() {
+        let r = req(
+            r#"{"messages":[{"role":"user","content":"... CRITICAL: Respond with TEXT ONLY. Do NOT call any tools. ..."}]}"#,
+        );
+        assert!(is_claude_code_compaction(&r));
     }
 
     #[test]
     fn normal_request_not_flagged() {
-        let body = r#"{"system":"You are a coding agent.","messages":[{"role":"user","content":"修个 bug"}]}"#;
-        assert!(!is_claude_code_compaction(body));
+        let r = req(
+            r#"{"system":"You are a coding agent.","messages":[{"role":"user","content":"修个 bug"}]}"#,
+        );
+        assert!(!is_claude_code_compaction(&r));
+    }
+
+    #[test]
+    fn marker_inside_tool_result_not_flagged() {
+        // 复现 bug:用 Claude Code(走 AgentGate)开发 AgentGate 时读到本文件源码,
+        // tool_result 里带着标记串字面量,曾让该会话后续所有请求被当成压缩请求,
+        // 工具被剥掉、agent 无法继续调工具。
+        let r = req(
+            r#"{"system":"You are a coding agent.","messages":[
+                {"role":"user","content":"读下 messages.rs"},
+                {"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"read","input":{}}]},
+                {"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"fn is_claude_code_compaction ... CRITICAL: Respond with TEXT ONLY. Do NOT call any tools. ..."}]}
+            ]}"#,
+        );
+        assert!(!is_claude_code_compaction(&r));
+    }
+
+    #[test]
+    fn marker_in_history_not_flagged_when_last_message_is_normal() {
+        let r = req(
+            r#"{"system":"You are a coding agent.","messages":[
+                {"role":"user","content":"上一轮提到 CRITICAL: Respond with TEXT ONLY. Do NOT call any tools. 这个串"},
+                {"role":"assistant","content":"好的"},
+                {"role":"user","content":"继续修"}
+            ]}"#,
+        );
+        assert!(!is_claude_code_compaction(&r));
+    }
+
+    #[test]
+    fn system_prefix_must_be_at_start() {
+        // 对齐 cc-switch:system 信号用 starts_with,正文里引用该串不算。
+        let r = req(
+            r#"{"system":"Some preamble. You are a helpful AI assistant tasked with summarizing conversations","messages":[]}"#,
+        );
+        assert!(!is_claude_code_compaction(&r));
+    }
+
+    fn chat_req_with_tools() -> crate::protocol::chat_completions::ChatCompletionsRequest {
+        crate::protocol::chat_completions::ChatCompletionsRequest {
+            model: "m".to_string(),
+            messages: Vec::new(),
+            tools: Some(vec![json!({"type":"function"})]),
+            tool_choice: Some(json!("auto")),
+            stream: false,
+            temperature: None,
+            top_p: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            thinking: None,
+            stream_options: None,
+            response_format: None,
+            reasoning_effort: Some("high".to_string()),
+            seed: None,
+            stop: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            parallel_tool_calls: None,
+            diagnostic_events: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn compaction_overrides_gate_thinking_by_provider() {
+        // 同 auto_compact 修过的一类 bug:OpenAI 类上游不认识 thinking 字段,带上会 400。
+        let mut mimo = chat_req_with_tools();
+        apply_compaction_overrides(&mut mimo, "mimo");
+        assert_eq!(mimo.thinking, Some(json!({"type": "disabled"})));
+        assert!(mimo.tools.is_none() && mimo.tool_choice.is_none());
+        assert!(mimo.reasoning_effort.is_none());
+
+        let mut openai = chat_req_with_tools();
+        apply_compaction_overrides(&mut openai, "openai");
+        assert!(
+            openai.thinking.is_none(),
+            "OpenAI 类上游不认识 thinking 字段,不该带"
+        );
+        assert!(openai.tools.is_none() && openai.tool_choice.is_none());
     }
 }
