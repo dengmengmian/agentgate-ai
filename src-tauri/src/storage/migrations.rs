@@ -4,7 +4,7 @@ use crate::errors::AppError;
 
 /// 当前 schema 版本。每加一段新迁移就 +1,放到 `run_versioned_migrations`
 /// 里 match 上对应的 version。读 `PRAGMA user_version` 决定该跑哪些。
-const CURRENT_SCHEMA_VERSION: u32 = 3;
+const CURRENT_SCHEMA_VERSION: u32 = 4;
 
 fn get_user_version(conn: &Connection) -> Result<u32, AppError> {
     let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -73,6 +73,17 @@ fn run_versioned_migrations(conn: &Connection, from_version: u32) -> Result<(), 
         // 用户在 UI 覆盖 catalog 内置窗口;auto_compact 据此算自压缩阈值。
         conn.execute_batch("ALTER TABLE providers ADD COLUMN model_context_windows TEXT;")?;
         set_user_version(conn, 3)?;
+    }
+    if from_version < 4 {
+        // v4:(source, timestamp) 复合索引。Dashboard 的"按策略成本"等查询带
+        // `WHERE source='gateway' AND timestamp >= ?`,此前只有单列 timestamp 索引,
+        // 时间区间内所有 source 的行(含数万条 session 用量)都要回表过滤 source。
+        // 复合索引让 gateway 行的时间区间被直接定位,大库冷缓存首屏明显变快。
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_request_logs_source_timestamp
+                ON request_logs(source, timestamp);",
+        )?;
+        set_user_version(conn, 4)?;
     }
     Ok(())
 }
@@ -645,12 +656,31 @@ mod tests {
             "v2 库此时不该有该列"
         );
         run_migrations(&conn).unwrap();
-        assert_eq!(get_user_version(&conn).unwrap(), 3);
+        assert_eq!(get_user_version(&conn).unwrap(), 4);
         assert!(
             conn.prepare("SELECT model_context_windows FROM providers LIMIT 0")
                 .is_ok(),
             "v3 迁移应加上 model_context_windows 列"
         );
+    }
+
+    #[test]
+    fn migration_v4_adds_source_timestamp_index() {
+        // v4:(source, timestamp) 复合索引,修 Dashboard 大库冷缓存首屏慢
+        // (gateway 过滤查询此前全表扫 / 单列索引回表过滤 source)。
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+        assert_eq!(get_user_version(&conn).unwrap(), 4);
+        let has_index: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master
+                 WHERE type='index' AND name='idx_request_logs_source_timestamp'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .map(|n| n > 0)
+            .unwrap();
+        assert!(has_index, "v4 迁移应建 (source, timestamp) 复合索引");
     }
 
     #[test]

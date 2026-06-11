@@ -89,6 +89,14 @@ fn aggregate_cost_grouped(
     let limit = limit.clamp(1, 1000);
     // since 为 None 时统计全量；为 Some 时只统计该时间点之后（与 Dashboard 的
     // rangeDays 区间口径一致）。
+    // timestamp 过滤用条件拼接而非 `(?1 IS NULL OR timestamp >= ?1)`——后者的
+    // OR-null 会让 SQLite 放弃 timestamp 索引退化成全表扫(大库冷缓存首屏很慢)。
+    // since 有值时拼 `AND timestamp >= ?`,走索引;无值(全量统计)时不拼。
+    let (time_clause, limit_idx) = if since.is_some() {
+        (" AND timestamp >= ?1", 2)
+    } else {
+        ("", 1)
+    };
     let sql = format!(
         "SELECT {col} AS k,
             MAX(provider) AS provider,
@@ -99,19 +107,24 @@ fn aggregate_cost_grouped(
             COALESCE(SUM(cache_write_tokens), 0) AS cache_write_tokens,
             COALESCE(SUM(cost), 0.0) AS cost
         FROM request_logs
-        WHERE {col} IS NOT NULL AND {col} != ''
-          AND (?1 IS NULL OR timestamp >= ?1)
+        WHERE {col} IS NOT NULL AND {col} != ''{time_clause}
           -- 过滤无 token 用量的噪音条目（失败请求 / synthetic 错误兜底 / 上游未返回
           -- usage 的直通请求），它们对成本统计零贡献。
           AND (COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0)) > 0
         GROUP BY {col}
         ORDER BY cost DESC, request_count DESC
-        LIMIT ?2",
+        LIMIT ?{limit_idx}",
         col = group_col
     );
 
     let mut stmt = conn.prepare(&sql)?;
-    let rows = stmt.query_map(rusqlite::params![since, limit], |r| {
+    // 顺序与 SQL 占位符一致:since 有值时 ?1=timestamp、?2=limit;无值时 ?1=limit。
+    let mut params: Vec<&dyn rusqlite::types::ToSql> = Vec::new();
+    if let Some(ref s) = since {
+        params.push(s);
+    }
+    params.push(&limit);
+    let rows = stmt.query_map(params.as_slice(), |r| {
         Ok(crate::models::request_log::CostBreakdown {
             key: r.get(0)?,
             provider: r.get(1)?,
