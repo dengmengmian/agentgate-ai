@@ -6,7 +6,8 @@
 
 <p align="center">
   <b>Run Codex, Claude Code & Gemini CLI on cheaper models — without breaking them.</b><br>
-  Automatic failover · cost tracking · one-click setup. One local gateway, 25 providers.
+  Automatic failover · cost tracking · one-click setup. One local gateway, 26 providers.<br>
+  Plus: <b>run Claude Code on your GitHub Copilot subscription</b> — tool continuations don't burn premium requests.
 </p>
 
 <p align="center">
@@ -22,7 +23,7 @@
 
 ---
 
-AgentGate is a **local model gateway** for AI coding agents. It gives Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode one local endpoint, then routes requests to 25 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
+AgentGate is a **local model gateway** for AI coding agents. It gives Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode one local endpoint, then routes requests to 26 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, GitHub Copilot, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
 
 > **Run your coding agents on cheaper models — and watch the spend drop in real time.** Point Codex / Claude Code / Gemini CLI at DeepSeek, MiMo, GLM, or Kimi, and the cost dashboard shows exactly what you spend, broken down by model, client, and route.
 
@@ -66,6 +67,8 @@ Guides: [Use Codex Desktop with third-party APIs and plugins](./docs/use-codex-d
 |---|---|
 | Use Codex with DeepSeek | Converts Codex's OpenAI Responses API requests to DeepSeek-compatible Chat Completions or Anthropic-compatible endpoints. |
 | Use Codex with Xiaomi MiMo | Routes Codex through a local gateway to MiMo models with model mapping, reasoning support, and capability checks. |
+| Run Claude Code on a GitHub Copilot subscription | Exchanges your GitHub token for Copilot credentials automatically and tags tool continuations / compaction as agent traffic so they don't consume premium requests. See [the dedicated section](#run-claude-code--codex-on-your-github-copilot-subscription). |
+| Long sessions on small-context models | When history exceeds the model's context window, the gateway auto-summarizes the middle of the conversation (keeping system + recent turns verbatim) — a 128K-window model survives 300K+ token sessions. |
 | Use Codex Desktop plugins with third-party APIs | Keeps Codex Desktop on its official OpenAI-authenticated provider path so plugin and account features can keep working while model requests route through AgentGate. |
 | Use Claude Code with DeepSeek / MiMo | Uses Anthropic-compatible pass-through plus model mapping for DeepSeek and MiMo endpoints. |
 | Switch Codex between providers | One local endpoint lets Codex switch between DeepSeek, MiMo, OpenAI, Kimi, GLM, DashScope, and more without hand-editing config files. |
@@ -80,6 +83,22 @@ Guides: [Use Codex Desktop with third-party APIs and plugins](./docs/use-codex-d
 6. Send a test message in the client. Click **Switch to Official** whenever you want to restore the original client config.
 
 Most users only need these steps. Model mapping, protocol endpoints, and capability matrices can be left alone at first; AgentGate fills the common defaults for you.
+
+## Run Claude Code / Codex on Your GitHub Copilot Subscription
+
+If you have a Copilot subscription (Pro / Business), Claude Code can run on the Claude models it includes — **no separate Anthropic API billing**. AgentGate handles three things:
+
+1. **Credential exchange**: you provide a GitHub OAuth token (`gho_...`); the gateway exchanges and renews the Copilot API credential automatically (cached by hash, never stored in plaintext).
+2. **Premium-request optimization**: most agent-workflow requests are tool-result continuations and history compaction — AgentGate tags those `x-initiator: agent`, so **only the messages you actually send consume premium requests**. One instruction with 10 tool round-trips counts as 1.
+3. **Model name normalization**: `claude-sonnet-4-6` from Claude Code becomes the `claude-sonnet-4.6` form the Copilot endpoint expects — no mapping needed.
+
+**Steps:**
+
+1. Get a GitHub token: if you're signed into VS Code Copilot, read `oauth_token` from `~/.config/github-copilot/apps.json`.
+2. AgentGate → Providers → Add, choose type **GitHub Copilot**, paste the `gho_` token as the API key (base URL and models auto-fill).
+3. Apply the Claude Code config on the Clients page and start chatting. The Logs page shows the `x-initiator` classification per request.
+
+> ⚠️ **Risk disclosure**: using a Copilot subscription outside official clients is a gray area under GitHub's Terms of Service. Similar community tools have existed for a long time without mass enforcement, but **account risk cannot be ruled out — evaluate it yourself**, and avoid important corporate accounts. This feature is entirely opt-in; if you never add a copilot-type provider, none of this applies.
 
 ## Three Modes
 
@@ -102,6 +121,9 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 - Native Gemini API: `contents`/`functionCall`/`functionResponse`, `generationConfig`
 - Full DeepSeek reasoning_content (thinking mode) support without degradation
 - Automatic request retry (429/5xx, exponential backoff, Retry-After)
+- **Auto-compaction for long histories**: when history exceeds the model's context window (adaptive threshold at 85% of the cataloged window, per-model overridable), the gateway summarizes the middle of the conversation while keeping system and recent turns verbatim — small-window models survive very long sessions instead of hitting 400
+- **Quality-first thinking**: conversions targeting Claude models enable thinking whenever the model supports it (adaptive for newer models, budget for older ones) while guarding the Anthropic constraints (budget bounds, sampling params, forced tool choice) that would otherwise 400
+- **Automatic prompt-cache injection**: Anthropic-bound requests (both conversion and pass-through) get `cache_control` breakpoints at tools / system / history — budget-aware, never exceeding the 4-breakpoint limit; cache savings show up directly in the cost dashboard
 
 **Cost Tracking & Multi-Key Pooling**
 - 22+ built-in model prices, auto-calculate cost per request
@@ -136,9 +158,9 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 - Providers that don't support images at the chosen model strip the image content at the provider-specific layer, avoiding upstream 400/404
 
 **Multi-Provider Management**
-- **25 built-in presets** (auto-fill base URL / protocols / Anthropic endpoint / default model):
+- **26 built-in presets** (auto-fill base URL / protocols / Anthropic endpoint / default model):
   - **Domestic**: Xiaomi MiMo, DeepSeek, Kimi/Moonshot, MiniMax, GLM (Zhipu BigModel), DashScope (Aliyun Qwen), SiliconFlow, Volcengine (Doubao), Baichuan, StepFun, SenseNova, ModelScope, Yi (01.AI)
-  - **International**: OpenAI, Anthropic (Claude), Google Gemini, xAI (Grok), Mistral, Groq, Together, Fireworks, Cerebras, Perplexity, Cohere
+  - **International**: OpenAI, Anthropic (Claude), GitHub Copilot, Google Gemini, xAI (Grok), Mistral, Groq, Together, Fireworks, Cerebras, Perplexity, Cohere
   - **Aggregator**: OpenRouter
   - **Custom**: any OpenAI-compatible endpoint (vLLM / Ollama / LiteLLM / local proxies)
 - MiMo first-class support: 5 chat models (`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`), multi-turn `reasoning_content` round-trip, `sk-*` / `tp-*` keys auto-route to the correct Open API or Token Plan host, region-aware Token Plan URLs (`cn` / `sgp` / `ams`), and automatic `web_search` degradation when the paid plugin is unavailable
@@ -157,7 +179,7 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 - Codex Desktop compatibility: routes model requests to third-party APIs while preserving the official OpenAI provider path, signed-in account state, and plugin/account feature compatibility
 - Claude Code: one-click config + toggle between official and AgentGate
 - OpenCode: one-click config
-- Claude Desktop (macOS): point its third-party inference gateway at AgentGate; one-click apply with history rollback
+- Claude Desktop (macOS / Windows): point its third-party inference gateway at AgentGate; one-click apply with history rollback
 - Global instruction files: edit `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md` from inside AgentGate with 6 built-in templates grouped by purpose (general / coding / review / debug / security / docs); overwrite or append, with auto-snapshot, one-click rollback, and JSON backup/restore
 - MCP servers: read, add, edit, delete, and sync MCP server configs across Codex and Claude Code from one panel; env values are never shown in the list; JSON import/export with keys excluded by default
 - Local skills: list, enable/disable, and delete skills under `~/.claude/skills` and `~/.codex/skills`; install from a local `.zip` (zip-slip guarded, no network download) and JSON backup/restore
@@ -177,7 +199,7 @@ Rule of thumb: **protocol match decides pass-through vs conversion; Model Mappin
 **Diagnostics & Observability**
 - Request logs, token stats, cost estimates, and provider runtime status
 - Provider failure state visible on cards: cooldown / consecutive failures / quota exhausted, with one-click reset
-- Active health probing (optional, off by default): periodic 1-token probe per provider, shown on the card — display-only, never affects routing
+- Active health probing (optional, off by default since probes consume a few tokens): periodic minimal probe per provider, shown on the card; when enabled it also seeds cold-start latency for the "fastest" routing strategy (providers with no recent traffic no longer sort blindly last)
 - Self-check and redacted diagnostic bundle export
 - Capability degradation events: image stripping, web_search downgrade, MCP advisory, and omitted tool-output images
 
@@ -234,7 +256,7 @@ Download the installer for your platform from the [Releases](../../releases) pag
 | Windows | `.exe` |
 | Linux | `.AppImage` / `.deb` |
 
-> **Platform support**: the core gateway (protocol conversion, routing, failover, cost dashboard, client config apply/restore) works on all three platforms. A few conveniences are currently **macOS-only**: Codex auto-restart after config apply, Claude Desktop integration, and running-client detection — on Windows/Linux, restart the client manually after applying config. Contributions welcome.
+> **Platform support**: the core gateway (protocol conversion, routing, failover, cost dashboard, client config apply/restore) works on all three platforms. Convenience features (Codex auto-restart after config apply, Claude Desktop integration, running-client detection) support macOS and Windows (the Windows implementations are recent — please file an issue if anything misbehaves); on Linux, restart the client manually after applying config. Contributions welcome.
 
 <details>
 <summary><b>macOS: "Cannot verify the developer"?</b> (click to expand)</summary>
@@ -864,14 +886,17 @@ AgentGate/
 - Gateway uses local token authentication by default
 - Provider API keys are stored only in local SQLite and never sent to clients
 - Client tokens are never forwarded to upstream providers
-- Logs and diagnostic bundles automatically redact sensitive information
-- Gateway binds only to `127.0.0.1` by default; `0.0.0.0` is rejected
+- Request logs and diagnostic bundles redact secrets across the board: `sk-` keys, Bearer tokens, `x-api-key`, `api_key` fields, and Gemini-style `?key=` query params
+- The desktop app binds only to `127.0.0.1`; headless mode (`agentgate-serve`) exposes the gateway only with an explicit `--host`, and ships Host / Origin validation against DNS rebinding (domain access requires the `AGENTGATE_ALLOWED_HOSTS` allowlist)
 - Token file permissions set to `0600` (Unix)
 
 ## FAQ
 
 **Are my API keys safe? Does AgentGate phone home?**
-Keys live only in a local SQLite file on your machine and are never sent to clients or to any AgentGate server — there is no AgentGate backend. Your keys go only to the upstream provider you configured. The local gateway binds to `127.0.0.1` and rejects `0.0.0.0`.
+Keys live only in a local SQLite file on your machine and are never sent to clients or to any AgentGate server — there is no AgentGate backend. Your keys go only to the upstream provider you configured. The desktop app binds to `127.0.0.1`; only headless mode with an explicit `--host 0.0.0.0` exposes it, with built-in Host / Origin validation.
+
+**Can running Claude Code on a Copilot subscription get my account banned?**
+It's a gray area under GitHub's Terms of Service: similar community tools have existed for a long time without mass enforcement, but the risk can't be ruled out — see the [risk disclosure](#run-claude-code--codex-on-your-github-copilot-subscription). If you never add a copilot-type provider, none of this applies.
 
 **Will it break my Codex / ChatGPT login or Codex Desktop plugins?**
 No. AgentGate keeps Codex on the official OpenAI-authenticated provider path, so your signed-in account, plugins, Browser / Computer-Use / Mobile and quota lookup keep working while chat requests route to third-party models. **Switch to Official** restores the original config at any time — conversations are preserved.

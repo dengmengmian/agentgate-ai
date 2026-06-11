@@ -6,7 +6,8 @@
 
 <p align="center">
   <b>让 Codex、Claude Code、Gemini CLI 跑在更便宜的模型上 —— 还不掉链子。</b><br>
-  自动故障切换 · 成本统计 · 一键配置。一个本地网关，接入 25 个 Provider。
+  自动故障切换 · 成本统计 · 一键配置。一个本地网关，接入 26 个 Provider。<br>
+  还能<b>用 GitHub Copilot 订阅跑 Claude Code</b>，工具续写不烧 premium 额度。
 </p>
 
 <p align="center">
@@ -22,7 +23,7 @@
 
 ---
 
-AgentGate 是面向 AI 编程 Agent 的**本地模型网关**。它把 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 统一接到一个本地入口，再转发到小米 MiMo、DeepSeek、OpenAI、Anthropic、Kimi、GLM、通义千问、硅基流动、火山引擎等 25 个 Provider。
+AgentGate 是面向 AI 编程 Agent 的**本地模型网关**。它把 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 统一接到一个本地入口，再转发到小米 MiMo、DeepSeek、OpenAI、Anthropic、GitHub Copilot、Kimi、GLM、通义千问、硅基流动、火山引擎等 26 个 Provider。
 
 > **让你的编程 Agent 跑在更便宜的模型上，省了多少实时看得见。** 把 Codex / Claude Code / Gemini CLI 接到 DeepSeek、MiMo、GLM、Kimi，成本仪表盘按模型、客户端、路由策略清楚算出每一笔花销。
 
@@ -66,6 +67,8 @@ LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent*
 |---|---|
 | 让 Codex 使用 DeepSeek | 把 Codex 的 OpenAI Responses API 请求转换到 DeepSeek 兼容的 Chat Completions 或 Anthropic 兼容端点。 |
 | 让 Codex 使用小米 MiMo | 通过本地网关把 Codex 路由到 MiMo 模型，自动处理模型映射、reasoning 和能力矩阵。 |
+| 用 GitHub Copilot 订阅跑 Claude Code | GitHub token 自动换 Copilot 凭证，工具续写 / 压缩请求标记为 agent 续写，不重复消耗 premium 额度。见 [专门章节](#用-github-copilot-订阅跑-claude-code--codex)。 |
+| Codex 接小窗口模型跑超长会话 | 历史超过模型上下文窗口时网关自动摘要压缩中段历史（保留 system 与最近轮原文），128K 窗口也能撑住 300K+ token 的长会话。 |
 | 让 Codex 桌面端用第三方 API 且保留插件能力 | 让 Codex 桌面端继续走官方 OpenAI 登录态和 provider 识别路径，插件和账号相关能力可继续工作，对话模型请求则路由到 AgentGate。 |
 | 让 Claude Code 使用 DeepSeek / MiMo | 通过 Anthropic 兼容直通和模型映射连接 DeepSeek / MiMo。 |
 | 在多个 Provider 间切换 Codex | 一个本地入口切换 DeepSeek、MiMo、OpenAI、Kimi、GLM、通义千问等，无需手改配置文件。 |
@@ -80,6 +83,22 @@ LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent*
 6. 回到对应客户端发送一句话测试。需要恢复官方配置时，点 **切换到官方**。
 
 新手通常只需要做这 6 步。模型映射、协议端点、能力矩阵都可以先不碰；AgentGate 会按 Provider 预设和测试结果自动补齐。
+
+## 用 GitHub Copilot 订阅跑 Claude Code / Codex
+
+有 Copilot 订阅（Pro / Business）就能让 Claude Code 跑在订阅包含的 Claude 模型上，**不用单独买 Anthropic API**。AgentGate 处理三件事：
+
+1. **凭证自动交换**：你只需提供一个 GitHub OAuth token（`gho_` 开头），网关自动换取并续期 Copilot API 凭证，token 不落明文。
+2. **premium 额度优化**：Agent 工作流里大量请求是工具结果续写和历史压缩——AgentGate 自动把这类请求标记为 `x-initiator: agent`，**只有你真正发出的消息消耗 premium 请求额度**，一条带 10 次工具往返的指令只计 1 次。
+3. **模型名归一化**：Claude Code 发的 `claude-sonnet-4-6` 自动转成 Copilot 端点接受的 `claude-sonnet-4.6`，不用配映射。
+
+**步骤：**
+
+1. 拿 GitHub token：已登录 VS Code Copilot 的话直接读 `~/.config/github-copilot/apps.json` 里的 `oauth_token`。
+2. AgentGate → 供应商 → 新建，类型选 **GitHub Copilot**，API Key 粘贴 `gho_` token（base URL、模型列表自动填好）。
+3. 客户端页给 Claude Code 应用配置，开聊。日志页能看到每个请求的 `x-initiator` 分类。
+
+> ⚠️ **风险声明**：在官方客户端之外使用 Copilot 订阅属于 GitHub 服务条款的灰色地带。同类社区工具长期存在、目前未见大规模处罚，但**理论上存在账号风险，请自行评估**——建议避免在重要的企业账号上使用。该功能完全可选，不添加 copilot 类型的 Provider 就不会涉及。
 
 ## 三种工作模式
 
@@ -101,6 +120,9 @@ LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent*
 - Anthropic Claude API 原生支持：`tool_use`/`tool_result`、`input_schema`、`thinking.budget_tokens`、SSE 事件流转换
 - DeepSeek reasoning_content 思考模式完整支持（不降智）
 - 工具调用（function_call）流式拼接与多轮对话
+- **长历史自压缩**：历史超过模型上下文窗口时（按 catalog 内置窗口 ×85% 自适应，可按模型覆盖），网关自动摘要中段历史、保留 system 和最近轮原文——Codex 接 128K 小窗口模型也能跑超长会话，不再撞 400
+- **思考质量优先**：转换到 Claude 系模型时支持 thinking 就开（新模型 adaptive / 旧模型 budget 自动选型），并守住 budget/采样参数/强制工具调用三类 Anthropic 约束防 400
+- **Prompt cache 自动注入**：Anthropic 方向（转换与直通都覆盖）自动在 tools / system / 历史断点注入 `cache_control`，预算感知不超 4 断点上限——长对话省的钱直接体现在成本仪表盘的缓存命中里
 
 **多模态支持与模型能力矩阵**
 
@@ -123,9 +145,9 @@ LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent*
 
 **多 Provider 管理**
 
-- **25 个内置 Provider 预设**（选 type 后 base URL / 协议 / Anthropic 端点 / 默认模型自动填好）：
+- **26 个内置 Provider 预设**（选 type 后 base URL / 协议 / Anthropic 端点 / 默认模型自动填好）：
   - **国内**：小米 MiMo、DeepSeek、Kimi/Moonshot、MiniMax、智谱 GLM、通义千问 DashScope、硅基流动 SiliconFlow、火山引擎（豆包）、百川、阶跃星辰 StepFun、商汤 SenseNova、魔搭 ModelScope、零一万物 Yi
-  - **海外**：OpenAI、Anthropic（Claude）、Google Gemini、xAI（Grok）、Mistral、Groq、Together、Fireworks、Cerebras、Perplexity、Cohere
+  - **海外**：OpenAI、Anthropic（Claude）、GitHub Copilot、Google Gemini、xAI（Grok）、Mistral、Groq、Together、Fireworks、Cerebras、Perplexity、Cohere
   - **聚合器**：OpenRouter
   - **自定义**：任意 OpenAI 兼容接口（vLLM / Ollama / LiteLLM / 本地代理）
 - MiMo 一等公民：5 个聊天模型（`mimo-v2.5-pro` / `mimo-v2-pro` / `mimo-v2.5` / `mimo-v2-omni` / `mimo-v2-flash`）、多轮 `reasoning_content` 回环、`sk-*` / `tp-*` key 自动切到对应开放 API 或 Token Plan host、Token Plan 区域域名自动保持（`cn` / `sgp` / `ams`）、付费 `web_search` 未开通时自动降级重试
@@ -145,7 +167,7 @@ LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent*
 - Codex 桌面端兼容：模型请求可路由到第三方 API，同时保留官方 OpenAI provider 路径、登录态和插件/账号能力兼容性
 - Claude Code 一键配置 + 官方/AgentGate 一键切换
 - OpenCode 一键配置写入
-- Claude Desktop（macOS）：把它的第三方推理网关指向 AgentGate，一键应用 + 历史回滚
+- Claude Desktop（macOS / Windows）：把它的第三方推理网关指向 AgentGate，一键应用 + 历史回滚
 - 全局指令文件管理：在 AgentGate 内直接编辑 `~/.claude/CLAUDE.md` / `~/.codex/AGENTS.md`，内置 6 个模板按用途分组（通用 / 编码 / 评审 / 调试 / 安全 / 文档）可覆盖或追加，写盘前自动 snapshot 可一键回滚，并支持 JSON 备份/恢复
 - MCP 服务器管理：在一个面板里读取、新增、编辑、删除、同步 Codex 与 Claude Code 的 MCP 配置；列表不展示 env value；支持 JSON 导入/导出，默认不含密钥
 - 本地技能（Skills）管理：列出、启用/禁用、删除 `~/.claude/skills` 与 `~/.codex/skills` 下的技能；支持从本地 `.zip` 导入（zip-slip 防护、不联网下载）和 JSON 备份/恢复
@@ -169,7 +191,7 @@ LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent*
 - 请求日志、token 统计、成本估算、Provider 运行状态
 - 成本分解：按模型 / 按客户端 / 按路由策略，可选时间区间（7/30 天）
 - Provider 异常态在卡片可见：冷却 / 连续失败 / 配额耗尽，一键重置
-- 主动健康探测（可选，默认关）：定期对每个 provider 发 1-token 探测，结果显示在卡片——仅展示，不影响路由
+- 主动健康探测（可选，默认关，探测消耗少量 token 所以需显式开启）：定期对每个 provider 发最小探测，结果显示在卡片；开启后还为"最快"路由策略提供冷启动延迟兜底（无近期请求记录的 provider 不再盲排末尾）
 - 诊断自检和脱敏诊断包导出
 - 能力降级事件记录：图片剥离、web_search 降级、MCP advisory、tool output 图片省略
 
@@ -226,7 +248,7 @@ LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent*
 | Windows | `.exe` |
 | Linux | `.AppImage` / `.deb` |
 
-> **平台支持说明**：核心网关（协议转换、路由、故障自愈、成本仪表盘、客户端配置一键应用/还原）三平台均可用。少数便利功能目前 **仅支持 macOS**：应用配置后自动重启 Codex、Claude Desktop 集成、运行中客户端检测——Windows / Linux 上应用配置后请手动重启客户端。欢迎贡献。
+> **平台支持说明**：核心网关（协议转换、路由、故障自愈、成本仪表盘、客户端配置一键应用/还原）三平台均可用。便利功能（应用配置后自动重启 Codex、Claude Desktop 集成、运行中客户端检测）支持 macOS 和 Windows（Windows 实现较新，遇到问题请提 Issue）；Linux 上应用配置后请手动重启客户端。欢迎贡献。
 
 <details>
 <summary><b>macOS 首次打开提示"无法验证开发者"？</b>（点击展开）</summary>
@@ -845,17 +867,20 @@ AgentGate/
 
 ## 安全
 
-- Gateway 默认启用本地令牌认证
+- Gateway 默认启用本地令牌认证（恒定时间比较，防时序攻击）
 - Provider API Key 仅存储在本地 SQLite，不会发送给客户端
 - 客户端传入的令牌不会转发给上游 Provider
-- 日志和诊断包自动脱敏敏感信息
-- Gateway 默认仅监听 `127.0.0.1`，拒绝绑定 `0.0.0.0`
+- 请求日志与诊断包自动脱敏：`sk-` 系 key、Bearer、`x-api-key`、`api_key` 字段、Gemini 风格 `?key=` 查询参数全覆盖
+- 桌面应用仅监听 `127.0.0.1`；Headless 模式（`agentgate-serve`）需显式 `--host` 才会对外，并内置 Host / Origin 校验防 DNS rebinding（域名访问需 `AGENTGATE_ALLOWED_HOSTS` 白名单放行）
 - 令牌文件权限设置为 `0600`（Unix）
 
 ## 常见问题
 
 **我的 API Key 安全吗？AgentGate 会不会上传数据？**
-Key 只存在你本机的 SQLite 文件里，不会发给客户端，也不会发给任何 AgentGate 服务器——AgentGate 根本没有后端。你的 Key 只会发给你自己配置的上游 Provider。本地网关只监听 `127.0.0.1`，拒绝 `0.0.0.0`。
+Key 只存在你本机的 SQLite 文件里，不会发给客户端，也不会发给任何 AgentGate 服务器——AgentGate 根本没有后端。你的 Key 只会发给你自己配置的上游 Provider。桌面应用只监听 `127.0.0.1`；只有 Headless 模式显式传 `--host 0.0.0.0` 才会对外，且自带 Host / Origin 校验。
+
+**用 Copilot 订阅跑 Claude Code 会不会被封号？**
+这属于 GitHub 服务条款的灰色地带：同类社区工具长期存在、目前未见大规模处罚，但风险无法排除，请自行评估（详见 [Copilot 章节](#用-github-copilot-订阅跑-claude-code--codex) 的风险声明）。不添加 copilot 类型的 Provider 就完全不涉及此功能。
 
 **会不会把我的 Codex / ChatGPT 登录或 Codex 桌面端插件搞坏？**
 不会。AgentGate 让 Codex 保持在官方 OpenAI 登录态的 provider 路径上，登录态、插件、Browser / Computer-Use / Mobile、配额查询都正常，同时把对话请求路由到第三方模型。随时点**切换到官方**还原原始配置，对话记录保留。
