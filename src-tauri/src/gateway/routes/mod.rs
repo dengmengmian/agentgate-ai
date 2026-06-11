@@ -19,6 +19,8 @@ pub(crate) use shared::{
     route_candidate_skip_reasons, route_fallback_chain, sanitize_body,
     trace_with_degradation_events, truncate_str, validate_auth, GatewayError,
 };
+#[allow(unused_imports)]
+pub(crate) use shared::{host_is_allowed, origin_is_allowed, validate_request_boundary};
 
 // 子模块 endpoint 入口重导出,server.rs 不用改 route 注册路径。
 pub use chat::handle_chat_completions;
@@ -146,14 +148,24 @@ mod tests {
         let body = r#"{"key": "sk-abcdefghij1234567890"}"#;
         let sanitized = sanitize_body(body);
         assert!(!sanitized.contains("abcdefghij1234567890"));
-        assert!(sanitized.contains("sk-****"));
+        assert!(sanitized.contains("sk-"));
     }
 
     #[test]
     fn test_sanitize_body_multiple_keys() {
-        let body = r#"sk-firstkeyvalue sk-secondkeyvalue"#;
+        let body = r#"sk-firstkeyvalue1 sk-secondkeyvalue2"#;
         let sanitized = sanitize_body(body);
-        assert_eq!(sanitized.matches("sk-****").count(), 2);
+        assert!(!sanitized.contains("firstkeyvalue1"));
+        assert!(!sanitized.contains("secondkeyvalue2"));
+    }
+
+    #[test]
+    fn test_sanitize_body_redacts_x_api_key_and_fields() {
+        // 复现 serve 模式落库泄密:非 sk- 形态的密钥之前原文进 request_logs。
+        let body = r#"{"x-api-key": "supersecretvalue123", "api_key": "anotherlongsecret456"}"#;
+        let sanitized = sanitize_body(body);
+        assert!(!sanitized.contains("supersecretvalue123"));
+        assert!(!sanitized.contains("anotherlongsecret456"));
     }
 
     #[test]
@@ -161,6 +173,62 @@ mod tests {
         let body = "sk-short";
         let sanitized = sanitize_body(body);
         assert_eq!(sanitized, "sk-short");
+    }
+
+    // ── Host/Origin 边界防护(DNS rebinding)──
+
+    #[test]
+    fn host_allows_ip_localhost_rejects_dns_names() {
+        // 放行:IP 字面量(带/不带端口)、localhost、IPv6、空(非浏览器客户端)
+        assert!(host_is_allowed("127.0.0.1:9090", ""));
+        assert!(host_is_allowed("192.168.1.5:9090", ""));
+        assert!(host_is_allowed("localhost:9090", ""));
+        assert!(host_is_allowed("LOCALHOST", ""));
+        assert!(host_is_allowed("[::1]:9090", ""));
+        assert!(host_is_allowed("::1", ""));
+        assert!(host_is_allowed("", ""));
+        // 拒绝:DNS 名(rebinding 攻击载体)
+        assert!(!host_is_allowed("evil.com", ""));
+        assert!(!host_is_allowed("evil.com:9090", ""));
+        // 白名单放行
+        assert!(host_is_allowed("my.box.local:9090", "my.box.local"));
+        assert!(host_is_allowed("a.example.com", "b.example.com, a.example.com"));
+    }
+
+    #[test]
+    fn origin_rules_reject_cross_site_by_default() {
+        // 非浏览器(无 Origin)放行
+        assert!(origin_is_allowed("", "", ""));
+        // localhost / IP origin 放行(本机 UI、Tauri webview)
+        assert!(origin_is_allowed("http://localhost:1420", "", ""));
+        assert!(origin_is_allowed("http://127.0.0.1:1420", "", ""));
+        assert!(origin_is_allowed("tauri://localhost", "", ""));
+        // 跨站默认拒绝
+        assert!(!origin_is_allowed("https://evil.com", "", ""));
+        assert!(!origin_is_allowed("null", "", ""));
+        // 白名单整条放行
+        assert!(origin_is_allowed(
+            "https://my.app",
+            "https://my.app",
+            ""
+        ));
+    }
+
+    #[test]
+    #[serial_test::serial(env)]
+    fn boundary_rejects_rebinding_host_via_headers() {
+        std::env::remove_var("AGENTGATE_ALLOWED_HOSTS");
+        std::env::remove_var("AGENTGATE_ALLOWED_ORIGINS");
+        let mut hm = HeaderMap::new();
+        hm.insert("host", "127.0.0.1:9090".parse().unwrap());
+        assert!(validate_request_boundary(&hm).is_ok());
+
+        let mut hm = HeaderMap::new();
+        hm.insert("host", "evil.com".parse().unwrap());
+        assert!(
+            validate_request_boundary(&hm).is_err(),
+            "DNS 名 Host 默认必须拒绝"
+        );
     }
 
     // ── GatewayError format tests ──

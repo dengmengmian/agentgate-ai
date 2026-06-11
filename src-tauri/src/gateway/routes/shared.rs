@@ -162,7 +162,110 @@ pub(crate) fn detect_client_from_ua(headers: &HeaderMap, route_default: &str) ->
     }
 }
 
+/// 浏览器侧边界防护(DNS rebinding):Host 必须是 IP 字面量 / localhost /
+/// `AGENTGATE_ALLOWED_HOSTS` 白名单;带 Origin 的请求(浏览器跨站)按同规则
+/// 校验 origin 的 host 部分,`AGENTGATE_ALLOWED_ORIGINS` 可整条放行。
+/// CLI 客户端 Host 是 IP/localhost 且不发 Origin,不受影响。
+pub(crate) fn validate_request_boundary(headers: &HeaderMap) -> Result<(), GatewayError> {
+    let hosts_allow = std::env::var("AGENTGATE_ALLOWED_HOSTS").unwrap_or_default();
+    let host = headers
+        .get("host")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !host_is_allowed(host, &hosts_allow) {
+        return Err(GatewayError(
+            AppError::new(
+                crate::errors::codes::GATEWAY_HOST_REJECTED,
+                format!("Host '{host}' is not allowed"),
+            )
+            .with_detail("仅接受 IP 字面量 / localhost 的 Host,防 DNS rebinding")
+            .with_suggestion("如确需域名访问,设置 AGENTGATE_ALLOWED_HOSTS=your.host"),
+        ));
+    }
+    let origins_allow = std::env::var("AGENTGATE_ALLOWED_ORIGINS").unwrap_or_default();
+    let origin = headers
+        .get("origin")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !origin_is_allowed(origin, &origins_allow, &hosts_allow) {
+        return Err(GatewayError(
+            AppError::new(
+                crate::errors::codes::GATEWAY_ORIGIN_REJECTED,
+                format!("Origin '{origin}' is not allowed"),
+            )
+            .with_detail("网关默认拒绝浏览器跨站请求")
+            .with_suggestion("如确需浏览器调用,设置 AGENTGATE_ALLOWED_ORIGINS=https://your.app"),
+        ));
+    }
+    Ok(())
+}
+
+/// Host 是否放行:空(非浏览器客户端)/ localhost / IP 字面量 / 白名单。
+/// DNS 名默认拒绝——rebinding 攻击的载体必然是攻击者可控的域名。
+pub(crate) fn host_is_allowed(host: &str, allowlist: &str) -> bool {
+    let h = host.trim();
+    if h.is_empty() {
+        return true;
+    }
+    let bare = strip_host_port(h);
+    if bare.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    if bare.parse::<std::net::IpAddr>().is_ok() {
+        return true;
+    }
+    allowlist.split(',').any(|a| {
+        let a = a.trim();
+        !a.is_empty() && (a.eq_ignore_ascii_case(bare) || a.eq_ignore_ascii_case(h))
+    })
+}
+
+/// 去掉 Host 的端口部分。支持 `host:port`、`[v6]:port`、裸 IPv6。
+fn strip_host_port(h: &str) -> &str {
+    if let Some(rest) = h.strip_prefix('[') {
+        if let Some(end) = rest.find(']') {
+            return &rest[..end];
+        }
+    }
+    match h.rfind(':') {
+        // 仅当冒号后全是数字、且前段不含冒号(排除裸 IPv6)时才视作端口。
+        Some(i)
+            if !h[i + 1..].is_empty()
+                && h[i + 1..].bytes().all(|b| b.is_ascii_digit())
+                && !h[..i].contains(':') =>
+        {
+            &h[..i]
+        }
+        _ => h,
+    }
+}
+
+/// Origin 是否放行:空(非浏览器)/ 整条白名单 / host 部分按 host 规则。
+pub(crate) fn origin_is_allowed(
+    origin: &str,
+    origin_allowlist: &str,
+    host_allowlist: &str,
+) -> bool {
+    let o = origin.trim();
+    if o.is_empty() {
+        return true;
+    }
+    if origin_allowlist.split(',').any(|a| {
+        let a = a.trim();
+        !a.is_empty() && a.eq_ignore_ascii_case(o)
+    }) {
+        return true;
+    }
+    // 取 scheme:// 后的 authority;无 scheme(如 "null")一律拒。
+    let Some((_, after)) = o.split_once("://") else {
+        return false;
+    };
+    let authority = after.split('/').next().unwrap_or("");
+    !authority.is_empty() && host_is_allowed(authority, host_allowlist)
+}
+
 pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
+    validate_request_boundary(headers)?;
     // 1. Try standard Authorization: Bearer <token>
     let auth_header = headers
         .get("authorization")
@@ -376,24 +479,10 @@ pub(crate) fn anthropic_request_has_images(body: &str) -> bool {
 }
 
 pub(crate) fn sanitize_body(body: &str) -> String {
-    // Simple api key sanitization in request bodies
-    let mut s = body.to_string();
-    // Match patterns like sk-... and redact them
-    let mut search_from = 0;
-    while let Some(offset) = s[search_from..].find("sk-") {
-        let start = search_from + offset;
-        let end = s[start..]
-            .find(|c: char| c.is_whitespace() || c == '"' || c == '\'')
-            .map(|e| start + e)
-            .unwrap_or(s.len());
-        if end - start > 8 {
-            s.replace_range(start..end, "sk-****");
-            search_from = start + 7; // skip past "sk-****"
-        } else {
-            search_from = end;
-        }
-    }
-    truncate_str(&s, 50000)
+    // 统一走 security::redaction(sk- / ag_local_ / Bearer / x-api-key /
+    // api_key 字段 / ?key= 查询参数等)。之前只认 sk- 前缀,serve 模式下
+    // 其他形态的密钥会原文落进 request_logs。
+    truncate_str(&crate::security::redaction::redact_text(body), 50000)
 }
 
 pub(crate) fn truncate_str(s: &str, max: usize) -> String {
