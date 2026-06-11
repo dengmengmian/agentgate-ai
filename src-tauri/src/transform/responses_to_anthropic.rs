@@ -125,8 +125,15 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
     // 8. max_tokens (required by Claude)
     let max_tokens = req.max_output_tokens.unwrap_or(8192);
 
-    // 9. Thinking configuration (model-aware: haiku 剥除 / 新模型 adaptive / 其他 budget)
-    let thinking = convert_thinking(&req.reasoning, model);
+    // 9. Thinking configuration:claude 系支持就开(质量优先),haiku/强制
+    //    工具调用/显式 off 除外。详见 convert_thinking。
+    let forced_tool_choice = tool_choice
+        .as_ref()
+        .and_then(|tc| tc.get("type"))
+        .and_then(|t| t.as_str())
+        .is_some_and(|t| t == "any" || t == "tool");
+    let thinking = convert_thinking(&req.reasoning, model, max_tokens, forced_tool_choice);
+    let thinking_on = thinking.is_some();
 
     // 10. Build request body
     let mut body = json!({
@@ -153,17 +160,21 @@ pub fn convert(req: &ResponsesRequest, model: &str, auto_cache: bool) -> Result<
     if let Some(stream) = req.stream {
         body["stream"] = json!(stream);
     }
-    if let Some(temp) = req.temperature {
-        // Anthropic temperature 上限 1.0；OpenAI 上限 2.0。透传 1.5 会被
-        // Anthropic 400 (`temperature: Input should be less than or equal to 1`)。
-        // clamp 是悄悄修正而非报错——用户感知不到差异（温度 1.5 vs 1.0 对
-        // 模型输出多样性差异不大），却避免了一次请求失败。
-        body["temperature"] = json!(temp.clamp(0.0, 1.0));
-    }
-    if let Some(top_p) = req.top_p {
-        // 双方都是 [0, 1]，理论上无需 clamp；防御性 clamp 一次免得 client
-        // 传 1.5 之类的非法值漏到上游。
-        body["top_p"] = json!(top_p.clamp(0.0, 1.0));
+    // thinking 开启时 Anthropic 要求 temperature 只能省略或为 1、top_p 受限
+    // (须 ≥0.95)——带上自定义采样参数直接 400。开思考时一律省略,走 API 默认。
+    if !thinking_on {
+        if let Some(temp) = req.temperature {
+            // Anthropic temperature 上限 1.0；OpenAI 上限 2.0。透传 1.5 会被
+            // Anthropic 400 (`temperature: Input should be less than or equal to 1`)。
+            // clamp 是悄悄修正而非报错——用户感知不到差异（温度 1.5 vs 1.0 对
+            // 模型输出多样性差异不大），却避免了一次请求失败。
+            body["temperature"] = json!(temp.clamp(0.0, 1.0));
+        }
+        if let Some(top_p) = req.top_p {
+            // 双方都是 [0, 1]，理论上无需 clamp；防御性 clamp 一次免得 client
+            // 传 1.5 之类的非法值漏到上游。
+            body["top_p"] = json!(top_p.clamp(0.0, 1.0));
+        }
     }
     if let Some(ref stop) = req.stop {
         body["stop_sequences"] = stop.clone();
@@ -829,30 +840,45 @@ fn convert_tool_choice(tc: &Value) -> Value {
 }
 
 /// Convert reasoning effort to Claude thinking configuration.
-/// reasoning.effort → 按目标模型选 thinking 形态(参考 cc-switch thinking_optimizer
-/// 的模型分发,但只做防错与形态适配,不强制开思考):
-/// - haiku:不支持 thinking,一律剥(防 400);
-/// - opus-4.6+ / sonnet-4.6:adaptive 形态(这些模型上 budget 是 legacy);
-/// - 其他:legacy enabled + budget_tokens。
-fn convert_thinking(reasoning: &Option<Value>, model: &str) -> Option<Value> {
+/// Anthropic 要求 thinking budget 最低 1024。
+const MIN_THINKING_BUDGET: i64 = 1024;
+
+/// 按目标模型决定 thinking 配置。质量优先:**claude 系支持就开**(参考
+/// cc-switch thinking_optimizer),显式 `effort: none/off` 是唯一逃生口。
+/// 同时守住三个 Anthropic 硬约束防 400:
+/// 1. haiku 不支持 thinking → 一律不带;
+/// 2. thinking 与强制工具调用(tool_choice: any/tool)不兼容 → 不带;
+/// 3. budget_tokens 必须 ∈ [1024, max_tokens) → clamp,装不下就不开。
+/// 形态:opus-4.6+ / sonnet-4.6 用 adaptive;其他 claude 用 enabled+budget,
+/// 未指定 effort 时 budget 顶到 max_tokens-1(对齐 cc-switch 的质量取向)。
+/// 非 claude 的 anthropic 兼容上游(MiMo 等)思考方言各异,只跟随显式 effort。
+fn convert_thinking(
+    reasoning: &Option<Value>,
+    model: &str,
+    max_tokens: i64,
+    forced_tool_choice: bool,
+) -> Option<Value> {
+    let m = model.to_ascii_lowercase().replace('.', "-");
+    if m.contains("haiku") || forced_tool_choice {
+        return None;
+    }
+
     let effort = reasoning
         .as_ref()
         .and_then(|r| r.get("effort"))
-        .and_then(|e| e.as_str())?;
-
-    let budget = match effort.trim().to_ascii_lowercase().as_str() {
-        "low" | "minimal" => 4096,
-        "medium" => 8192,
-        "high" => 16384,
-        "xhigh" | "max" | "highest" => 32768,
-        "none" | "off" | "auto" | "" => return None,
-        _ => return None,
-    };
-
-    let m = model.to_ascii_lowercase().replace('.', "-");
-    if m.contains("haiku") {
+        .and_then(|e| e.as_str())
+        .map(|s| s.trim().to_ascii_lowercase());
+    if matches!(effort.as_deref(), Some("none") | Some("off")) {
         return None;
     }
+    let effort_budget: Option<i64> = match effort.as_deref() {
+        Some("low") | Some("minimal") => Some(4096),
+        Some("medium") => Some(8192),
+        Some("high") => Some(16384),
+        Some("xhigh") | Some("max") | Some("highest") => Some(32768),
+        _ => None,
+    };
+
     if ["opus-4-8", "opus-4-7", "opus-4-6", "sonnet-4-6"]
         .iter()
         .any(|fam| m.contains(fam))
@@ -860,6 +886,16 @@ fn convert_thinking(reasoning: &Option<Value>, model: &str) -> Option<Value> {
         return Some(json!({"type": "adaptive"}));
     }
 
+    // budget 形态:claude 未指定 effort 时强开并顶满;非 claude 只跟随显式 effort。
+    let budget = match effort_budget {
+        Some(b) => b,
+        None if m.contains("claude") => max_tokens - 1,
+        None => return None,
+    };
+    let budget = budget.min(max_tokens - 1);
+    if budget < MIN_THINKING_BUDGET {
+        return None;
+    }
     Some(json!({"type": "enabled", "budget_tokens": budget}))
 }
 
@@ -1074,47 +1110,120 @@ mod tests {
     #[test]
     fn test_convert_thinking() {
         let m = "claude-3-5-sonnet";
+        let mt = 64000;
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "low"})), m),
+            convert_thinking(&Some(json!({"effort": "low"})), m, mt, false),
             Some(json!({"type": "enabled", "budget_tokens": 4096}))
         );
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "medium"})), m),
+            convert_thinking(&Some(json!({"effort": "medium"})), m, mt, false),
             Some(json!({"type": "enabled", "budget_tokens": 8192}))
         );
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "high"})), m),
+            convert_thinking(&Some(json!({"effort": "high"})), m, mt, false),
             Some(json!({"type": "enabled", "budget_tokens": 16384}))
         );
-        assert_eq!(convert_thinking(&Some(json!({"effort": "auto"})), m), None);
-        assert_eq!(convert_thinking(&None, m), None);
+        // 显式 none/off 是唯一逃生口
+        assert_eq!(
+            convert_thinking(&Some(json!({"effort": "none"})), m, mt, false),
+            None
+        );
+        // 质量优先:未指定 / auto → claude 系强开,budget 顶到 max_tokens-1
+        assert_eq!(
+            convert_thinking(&None, m, mt, false),
+            Some(json!({"type": "enabled", "budget_tokens": 63999}))
+        );
+        assert_eq!(
+            convert_thinking(&Some(json!({"effort": "auto"})), m, mt, false),
+            Some(json!({"type": "enabled", "budget_tokens": 63999}))
+        );
     }
 
     #[test]
     fn test_thinking_stripped_for_haiku() {
         // Haiku 不支持 thinking,带上会 400 —— 客户端要思考也得剥。
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "high"})), "claude-haiku-4-5"),
+            convert_thinking(&Some(json!({"effort": "high"})), "claude-haiku-4-5", 64000, false),
             None
         );
+        // 强开也不适用于 haiku
+        assert_eq!(convert_thinking(&None, "claude-haiku-4-5", 64000, false), None);
     }
 
     #[test]
     fn test_thinking_adaptive_for_new_models() {
         // opus-4.6+/sonnet-4.6 用 adaptive 形态(参考 cc-switch thinking_optimizer
-        // 的模型分发),不再发 legacy budget。
+        // 的模型分发),不再发 legacy budget;未指定 effort 同样强开。
         for m in ["claude-opus-4-8", "claude-opus-4.6", "claude-sonnet-4-6"] {
             assert_eq!(
-                convert_thinking(&Some(json!({"effort": "high"})), m),
+                convert_thinking(&Some(json!({"effort": "high"})), m, 64000, false),
                 Some(json!({"type": "adaptive"})),
                 "{m} 应使用 adaptive thinking"
+            );
+            assert_eq!(
+                convert_thinking(&None, m, 64000, false),
+                Some(json!({"type": "adaptive"})),
+                "{m} 未指定 effort 也应强开 adaptive"
             );
         }
         // 老模型保持 legacy budget 形态
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "high"})), "claude-sonnet-4-5"),
+            convert_thinking(&Some(json!({"effort": "high"})), "claude-sonnet-4-5", 64000, false),
             Some(json!({"type": "enabled", "budget_tokens": 16384}))
         );
+    }
+
+    #[test]
+    fn test_thinking_budget_clamped_below_max_tokens() {
+        // Anthropic 要求 budget_tokens < max_tokens,否则 400。
+        // 此前 effort=high 固定给 16384,而 max_tokens 默认 8192,本就有潜在 400。
+        assert_eq!(
+            convert_thinking(&Some(json!({"effort": "high"})), "claude-3-5-sonnet", 8192, false),
+            Some(json!({"type": "enabled", "budget_tokens": 8191}))
+        );
+        // max_tokens 装不下最低 1024 budget → 不开
+        assert_eq!(
+            convert_thinking(&None, "claude-3-5-sonnet", 1000, false),
+            None
+        );
+    }
+
+    #[test]
+    fn test_thinking_skipped_when_tool_choice_forced() {
+        // thinking 与强制工具调用(tool_choice: any/tool)不兼容,带上 400。
+        assert_eq!(
+            convert_thinking(&Some(json!({"effort": "high"})), "claude-3-5-sonnet", 64000, true),
+            None
+        );
+        assert_eq!(convert_thinking(&None, "claude-opus-4-8", 64000, true), None);
+    }
+
+    #[test]
+    fn test_thinking_not_forced_for_non_claude_models() {
+        // anthropic 兼容上游(MiMo / DeepSeek 等)思考方言各异,只跟随显式
+        // effort,不强开。
+        assert_eq!(convert_thinking(&None, "mimo-v2.5-pro", 64000, false), None);
+        assert_eq!(
+            convert_thinking(&Some(json!({"effort": "high"})), "mimo-v2.5-pro", 64000, false),
+            Some(json!({"type": "enabled", "budget_tokens": 16384}))
+        );
+    }
+
+    #[test]
+    fn test_temperature_dropped_when_thinking_on() {
+        // thinking 开启时 temperature 只能省略或为 1,带 0.7 会 400。
+        let mut req = make_req(json!([{"type": "message", "role": "user", "content": "hi"}]));
+        req.temperature = Some(0.7);
+        req.top_p = Some(0.9);
+        req.max_output_tokens = Some(32000);
+        let body = convert(&req, "claude-sonnet-4-5", false).unwrap();
+        assert_eq!(body["thinking"]["type"], "enabled");
+        assert!(body.get("temperature").is_none(), "开思考时不得带 temperature");
+        assert!(body.get("top_p").is_none(), "开思考时不得带 top_p");
+        // haiku 不开思考 → 采样参数照常透传
+        let body = convert(&req, "claude-haiku-4-5", false).unwrap();
+        assert!(body.get("thinking").is_none());
+        assert_eq!(body["temperature"], json!(0.7));
     }
 
     #[test]
