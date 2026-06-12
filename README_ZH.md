@@ -21,6 +21,18 @@
   <a href="./README.md">English</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">下载安装</a> · <a href="#5-分钟跑通">5 分钟跑通</a> · <a href="./docs/use-codex-desktop-with-third-party-api-and-plugins.md">Codex 桌面端插件</a> · <a href="./docs/use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./docs/use-codex-with-mimo.md">Codex + MiMo</a>
 </p>
 
+## 按系统下载
+
+| 你的机器 | 下载 |
+|---|---|
+| 🍎 macOS — Apple 芯片（M1–M4） | [AgentGate_1.4.0_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.0/AgentGate_1.4.0_aarch64.dmg) |
+| 🍎 macOS — Intel 芯片 | [AgentGate_1.4.0_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.0/AgentGate_1.4.0_x64.dmg) |
+| 🪟 Windows 10 / 11 | [AgentGate_1.4.0_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.0/AgentGate_1.4.0_x64-setup.exe) |
+| 🐧 Linux — Debian / Ubuntu | [AgentGate_1.4.0_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.0/AgentGate_1.4.0_amd64.deb) |
+| 🐧 Linux — 其他发行版 | [AgentGate_1.4.0_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.0/AgentGate_1.4.0_amd64.AppImage) |
+
+> 无界面 CLI（`agentgate-serve`）压缩包和历史版本：[Releases](https://github.com/dengmengmian/agentgate-ai/releases)
+
 ---
 
 AgentGate 是面向 AI 编程 Agent 的**本地模型网关**。它把 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 统一接到一个本地入口，再转发到小米 MiMo、DeepSeek、OpenAI、Anthropic、GitHub Copilot、Kimi、GLM、通义千问、硅基流动、火山引擎等 26 个 Provider。

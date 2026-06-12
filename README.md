@@ -21,6 +21,18 @@
   <a href="./README_ZH.md">中文</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">Download</a> · <a href="#5-minute-quick-start">5-Minute Quick Start</a> · <a href="./docs/use-codex-desktop-with-third-party-api-and-plugins.md">Codex Desktop Plugins</a> · <a href="./docs/use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./docs/use-codex-with-mimo.md">Codex + MiMo</a>
 </p>
 
+## Download for your OS
+
+| Your machine | Download |
+|---|---|
+| 🍎 macOS — Apple Silicon (M1–M4) | [AgentGate_1.4.0_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.0/AgentGate_1.4.0_aarch64.dmg) |
+| 🍎 macOS — Intel | [AgentGate_1.4.0_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.0/AgentGate_1.4.0_x64.dmg) |
+| 🪟 Windows 10 / 11 | [AgentGate_1.4.0_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.0/AgentGate_1.4.0_x64-setup.exe) |
+| 🐧 Linux — Debian / Ubuntu | [AgentGate_1.4.0_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.0/AgentGate_1.4.0_amd64.deb) |
+| 🐧 Linux — other distros | [AgentGate_1.4.0_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.0/AgentGate_1.4.0_amd64.AppImage) |
+
+> Headless CLI (`agentgate-serve`) tarballs and all versions: [Releases](https://github.com/dengmengmian/agentgate-ai/releases)
+
 ---
 
 AgentGate is a **local model gateway** for AI coding agents. It gives Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode one local endpoint, then routes requests to 26 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, GitHub Copilot, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
