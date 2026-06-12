@@ -19,12 +19,17 @@ pub struct StoredTurn {
     pub assistant_messages: Vec<ChatMessage>,
     pub response_id: String,
     pub reasoning_content: Option<String>,
+    /// 序列化后的 JSON 字节数，用于按字节预算淘汰。
+    approx_bytes: usize,
     access: u64,
 }
 
 static L1: Mutex<Option<HashMap<String, StoredTurn>>> = Mutex::new(None);
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 const MAX_L1: usize = 1000;
+/// L1 字节预算。长 agent 会话单轮历史可达数 MB，只按条数封顶会涨到
+/// 数 GB；字节预算保证 L1 只是个有界缓存，miss 由 L2 兜底。
+const MAX_L1_BYTES: usize = 64 * 1024 * 1024;
 
 fn next() -> u64 {
     COUNTER.fetch_add(1, Ordering::Relaxed)
@@ -39,6 +44,28 @@ where
         *g = Some(HashMap::new());
     }
     f(g.as_mut().unwrap())
+}
+
+/// 按字节预算淘汰：超出预算时从最久未访问的条目开始删，至少保留一条
+/// （刚插入的条目 access 最大，永远最后才轮到）。被淘汰的条目 L2 仍有，
+/// miss 时回填。
+fn evict_to_byte_budget(map: &mut HashMap<String, StoredTurn>, max_bytes: usize) {
+    let mut total: usize = map.values().map(|t| t.approx_bytes).sum();
+    if total <= max_bytes {
+        return;
+    }
+    let mut entries: Vec<(String, u64, usize)> = map
+        .iter()
+        .map(|(k, v)| (k.clone(), v.access, v.approx_bytes))
+        .collect();
+    entries.sort_by_key(|(_, access, _)| *access);
+    for (k, _, bytes) in entries {
+        if total <= max_bytes || map.len() <= 1 {
+            break;
+        }
+        map.remove(&k);
+        total -= bytes;
+    }
 }
 
 /// Get or create the L2 SQLite connection path.
@@ -70,11 +97,20 @@ pub fn store_turn(
     assistant_messages: Vec<ChatMessage>,
     reasoning_content: Option<String>,
 ) {
+    // 只序列化一次：既给 L2 持久化，也作为 L1 字节预算的依据。
+    let data_str = serde_json::json!({
+        "messages": &messages,
+        "assistant_messages": &assistant_messages,
+        "reasoning_content": &reasoning_content,
+    })
+    .to_string();
+
     let turn = StoredTurn {
-        messages: messages.clone(),
-        assistant_messages: assistant_messages.clone(),
+        messages,
+        assistant_messages,
         response_id: response_id.to_string(),
-        reasoning_content: reasoning_content.clone(),
+        reasoning_content,
+        approx_bytes: data_str.len(),
         access: next(),
     };
 
@@ -89,22 +125,14 @@ pub fn store_turn(
             }
         }
         map.insert(response_id.to_string(), turn);
+        evict_to_byte_budget(map, MAX_L1_BYTES);
     });
 
     // L2 persist (best effort)
     if let Some(conn) = ensure_l2() {
-        let data = serde_json::json!({
-            "messages": messages,
-            "assistant_messages": assistant_messages,
-            "reasoning_content": reasoning_content,
-        });
         let _ = conn.execute(
             "INSERT OR REPLACE INTO sessions (response_id, data, created_at) VALUES (?1, ?2, ?3)",
-            rusqlite::params![
-                response_id,
-                data.to_string(),
-                chrono::Utc::now().to_rfc3339()
-            ],
+            rusqlite::params![response_id, data_str, chrono::Utc::now().to_rfc3339()],
         );
 
         // Clean old sessions (>24h)
@@ -159,14 +187,21 @@ pub fn get_history(previous_response_id: &str) -> Option<Vec<ChatMessage>> {
                 assistant_messages: asst.clone(),
                 response_id: previous_response_id.to_string(),
                 reasoning_content: rc,
+                approx_bytes: data_str.len(),
                 access: next(),
             },
         );
+        evict_to_byte_budget(map, MAX_L1_BYTES);
     });
 
     let mut history = messages;
     history.extend(asst);
     Some(history)
+}
+
+#[cfg(test)]
+fn l1_total_bytes() -> usize {
+    with_l1(|map| map.values().map(|t| t.approx_bytes).sum())
 }
 
 #[cfg(test)]
@@ -178,6 +213,38 @@ mod tests {
 
     fn clear_l1() {
         with_l1(|map| map.clear());
+    }
+
+    #[test]
+    fn test_l1_evicts_by_byte_budget() {
+        // 长 agent 会话单轮历史可达数 MB，L1 只按条数封顶会涨到数 GB。
+        // 塞 10 条 8MB（共 ~80MB > 64MB 预算），字节总量必须回到预算内，
+        // 且淘汰旧条目、保留新条目。
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        clear_l1();
+        let temp = setup_temp_home();
+        let big = "x".repeat(8 * 1024 * 1024);
+        for i in 0..10 {
+            let msgs = vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!(big.clone())),
+                reasoning_content: None,
+                tool_calls: None,
+                tool_call_id: None,
+                name: None,
+            }];
+            store_turn(&format!("resp_big_{i}"), msgs, vec![], None);
+        }
+        let total = l1_total_bytes();
+        assert!(
+            total <= MAX_L1_BYTES,
+            "L1 字节总量 {total} 超出预算 {MAX_L1_BYTES}"
+        );
+        with_l1(|map| {
+            assert!(map.contains_key("resp_big_9"), "最新条目不应被淘汰");
+            assert!(!map.contains_key("resp_big_0"), "最旧条目应先被淘汰");
+        });
+        cleanup(&temp);
     }
 
     fn dummy_messages() -> (Vec<ChatMessage>, Vec<ChatMessage>) {
