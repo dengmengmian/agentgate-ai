@@ -6,8 +6,7 @@
 
 <p align="center">
   <b>Run Codex, Claude Code & Gemini CLI on cheaper models — without breaking them.</b><br>
-  Automatic failover · cost tracking · one-click setup. One local gateway, 26 providers.<br>
-  Plus: <b>run Claude Code on your GitHub Copilot subscription</b> — tool continuations don't burn premium requests.
+  Automatic failover · cost tracking · one-click setup. One local gateway, 26 providers.
 </p>
 
 <p align="center">
@@ -18,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="./README_ZH.md">中文</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">Download</a> · <a href="#5-minute-quick-start">5-Minute Quick Start</a> · <a href="./docs/use-codex-desktop-with-third-party-api-and-plugins.md">Codex Desktop Plugins</a> · <a href="./docs/use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./docs/use-codex-with-mimo.md">Codex + MiMo</a>
+  <a href="./README_ZH.md">中文</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">Download</a> · <a href="#5-minute-quick-start">5-Minute Quick Start</a> · <a href="./docs/use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./docs/use-claude-code-with-deepseek.md">Claude Code + DeepSeek</a> · <a href="./docs/use-gemini-cli-with-agentgate.md">Gemini CLI</a>
 </p>
 
 ## Download for your OS
@@ -73,7 +72,7 @@ There are great LLM proxies out there. AgentGate's niche is **coding agents on t
 
 ## Common Use Cases
 
-Guides: [Use Codex Desktop with third-party APIs and plugins](./docs/use-codex-desktop-with-third-party-api-and-plugins.md) · [Use Codex with DeepSeek](./docs/use-codex-with-deepseek.md) · [Use Codex with Xiaomi MiMo](./docs/use-codex-with-mimo.md)
+Guides: [Codex Desktop plugins](./docs/use-codex-desktop-with-third-party-api-and-plugins.md) · [Codex + DeepSeek](./docs/use-codex-with-deepseek.md) · [Codex + Xiaomi MiMo](./docs/use-codex-with-mimo.md) · [Claude Code + DeepSeek](./docs/use-claude-code-with-deepseek.md) · [Claude Code + GitHub Copilot](./docs/use-claude-code-with-github-copilot.md) · [Gemini CLI](./docs/use-gemini-cli-with-agentgate.md) · [OpenCode](./docs/use-opencode-with-agentgate.md)
 
 | Goal | What AgentGate does |
 |---|---|
@@ -96,7 +95,9 @@ Guides: [Use Codex Desktop with third-party APIs and plugins](./docs/use-codex-d
 
 Most users only need these steps. Model mapping, protocol endpoints, and capability matrices can be left alone at first; AgentGate fills the common defaults for you.
 
-## Run Claude Code / Codex on Your GitHub Copilot Subscription
+<a id="run-claude-code--codex-on-your-github-copilot-subscription"></a>
+
+## Optional: Run Claude Code / Codex on Your GitHub Copilot Subscription
 
 If you have a Copilot subscription (Pro / Business), Claude Code can run on the Claude models it includes — **no separate Anthropic API billing**. AgentGate handles three things:
 
@@ -968,7 +969,8 @@ Upstream model sync is intentionally a local maintenance step, not part of the G
 ## Community & Support
 
 - 🐛 **Found a bug or want a feature?** Open an [Issue](https://github.com/dengmengmian/agentgate-ai/issues) — include a redacted diagnostic bundle (Diagnostics → Export) when reporting gateway problems.
-- 💡 **Questions & ideas:** [Discussions](https://github.com/dengmengmian/agentgate-ai/discussions).
+- 💡 **Questions & ideas:** use [Discussions](https://github.com/dengmengmian/agentgate-ai/discussions) for setup help, provider requests, workflow ideas, and success stories.
+- 🧩 **Want to contribute?** Start with [CONTRIBUTING.md](./CONTRIBUTING.md), the [PR template](./.github/pull_request_template.md), and issues labeled `good first issue`.
 - ⭐ **If AgentGate saves you money or time, a star helps others find it** — and helps us prioritize what to build next.
 
 The three pillars — smart routing, self-healing, and the cost dashboard — are shipped. What comes next is driven by Issues and Discussions, so tell us what you need.

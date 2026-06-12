@@ -11,6 +11,7 @@
     "provider:catalog:check": "node scripts/generate-provider-catalog.mjs --check",
     "provider:catalog:sync": "node scripts/sync-provider-catalog.mjs",
     "provider:catalog:sync:check": "node scripts/sync-provider-catalog.mjs --check",
+    "release:notes": "node scripts/extract-release-notes.mjs",
     "release:preflight": "bash scripts/release-preflight.sh",
     "tauri": "tauri"
   },

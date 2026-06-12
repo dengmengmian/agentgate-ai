@@ -6,14 +6,16 @@ Thanks for your interest in contributing! AgentGate is a local AI gateway built 
 
 ### Reporting Bugs
 
-- Use the [Bug Report](https://github.com/dengmengmian/AgentGate/issues/new?template=bug_report.yml) template
+- Use the [Bug Report](https://github.com/dengmengmian/agentgate-ai/issues/new?template=bug_report.yml) template
 - Include your OS, AgentGate version, provider, and client
-- Redact API keys from any logs you share
+- Attach a redacted diagnostic bundle from **Diagnostics -> Export** when the issue involves gateway behavior
+- Redact API keys, account tokens, private endpoints, and local secrets from any logs you share
 
 ### Suggesting Features
 
-- Use the [Feature Request](https://github.com/dengmengmian/AgentGate/issues/new?template=feature_request.yml) template
+- Use the [Feature Request](https://github.com/dengmengmian/agentgate-ai/issues/new?template=feature_request.yml) template
 - Describe the problem you're solving, not just the solution
+- For provider or client requests, include the official API documentation link and the minimum workflow you want to support
 
 ### Submitting Pull Requests
 
@@ -22,11 +24,16 @@ Thanks for your interest in contributing! AgentGate is a local AI gateway built 
 3. Make your changes
 4. Run tests:
    ```bash
-   cd src-tauri && cargo test --lib   # 268 unit tests
-   bash scripts/test-integration.sh    # 31 integration tests
-   npx tsc --noEmit                    # TypeScript check
+   pnpm build
+   cd src-tauri && cargo test --test capability_fixture \
+                              --test mimo_capabilities \
+                              --test deepseek_capabilities \
+                              --test kimi_capabilities \
+                              --test protocol_fixture
    ```
-5. Open a PR with a clear description of what changed and why
+5. Open a PR with a clear description of what changed, why it changed, and how you verified it
+
+For user-facing behavior, include screenshots or concise reproduction notes. For routing, provider, or protocol changes, include the client, provider, route profile, and whether streaming was tested.
 
 ### Smoke tests before releasing
 
@@ -49,13 +56,15 @@ AG_RUN_SMOKE_TESTS=1 bash scripts/release-smoke.sh
 
 真实 smoke 要从本地 SQLite 拿 provider key，永远不会在 GitHub 上跑。env 参数（`AG_SMOKE_ANTHROPIC_PROVIDER_ID` 等）在 `src-tauri/tests/smoke_test.rs` 顶部有说明。
 
+Release operations notes live in [`docs/release-operations.md`](./docs/release-operations.md), including how to interpret GitHub download counts and how bilingual release notes are generated.
+
 ### Adding a New Provider
 
 Adding a provider preset is the easiest way to contribute:
 
-1. Edit `src/components/providers/ProviderFormDialog.tsx` — add to `PROVIDER_PRESETS`
-2. Edit `src/types/provider.ts` — add to `PROVIDER_TYPES`
-3. Add default pricing in `src-tauri/src/storage/pricing.rs` — `DEFAULTS` array
+1. Add or update the provider catalog JSON under `provider-catalog/providers/`
+2. Run `pnpm provider:catalog:generate`
+3. Add provider-specific runtime behavior only when the generic OpenAI-compatible or Anthropic-compatible path is not enough
 
 If the provider needs special handling (like DeepSeek's schema cleaning or Kimi's web_search), add a provider module in `src-tauri/src/transform/providers/`.
 

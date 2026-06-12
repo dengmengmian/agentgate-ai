@@ -6,8 +6,7 @@
 
 <p align="center">
   <b>让 Codex、Claude Code、Gemini CLI 跑在更便宜的模型上 —— 还不掉链子。</b><br>
-  自动故障切换 · 成本统计 · 一键配置。一个本地网关，接入 26 个 Provider。<br>
-  还能<b>用 GitHub Copilot 订阅跑 Claude Code</b>，工具续写不烧 premium 额度。
+  自动故障切换 · 成本统计 · 一键配置。一个本地网关，接入 26 个 Provider。
 </p>
 
 <p align="center">
@@ -18,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">下载安装</a> · <a href="#5-分钟跑通">5 分钟跑通</a> · <a href="./docs/use-codex-desktop-with-third-party-api-and-plugins.md">Codex 桌面端插件</a> · <a href="./docs/use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./docs/use-codex-with-mimo.md">Codex + MiMo</a>
+  <a href="./README.md">English</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">下载安装</a> · <a href="#5-分钟跑通">5 分钟跑通</a> · <a href="./docs/use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./docs/use-claude-code-with-deepseek.md">Claude Code + DeepSeek</a> · <a href="./docs/use-gemini-cli-with-agentgate.md">Gemini CLI</a>
 </p>
 
 ## 按系统下载
@@ -73,7 +72,7 @@ LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent*
 
 ## 常见使用场景
 
-教程：[让 Codex 桌面端使用第三方 API 并保留插件能力](./docs/use-codex-desktop-with-third-party-api-and-plugins.md) · [让 Codex 使用 DeepSeek](./docs/use-codex-with-deepseek.md) · [让 Codex 使用小米 MiMo](./docs/use-codex-with-mimo.md)
+教程：[Codex 桌面端插件兼容](./docs/use-codex-desktop-with-third-party-api-and-plugins.md) · [Codex + DeepSeek](./docs/use-codex-with-deepseek.md) · [Codex + 小米 MiMo](./docs/use-codex-with-mimo.md) · [Claude Code + DeepSeek](./docs/use-claude-code-with-deepseek.md) · [Claude Code + GitHub Copilot](./docs/use-claude-code-with-github-copilot.md) · [Gemini CLI](./docs/use-gemini-cli-with-agentgate.md) · [OpenCode](./docs/use-opencode-with-agentgate.md)
 
 | 目标 | AgentGate 做什么 |
 |---|---|
@@ -96,7 +95,9 @@ LLM 代理有很多好工具。AgentGate 的定位是**桌面端的编程 Agent*
 
 新手通常只需要做这 6 步。模型映射、协议端点、能力矩阵都可以先不碰；AgentGate 会按 Provider 预设和测试结果自动补齐。
 
-## 用 GitHub Copilot 订阅跑 Claude Code / Codex
+<a id="用-github-copilot-订阅跑-claude-code--codex"></a>
+
+## 可选玩法：用 GitHub Copilot 订阅跑 Claude Code / Codex
 
 有 Copilot 订阅（Pro / Business）就能让 Claude Code 跑在订阅包含的 Claude 模型上，**不用单独买 Anthropic API**。AgentGate 处理三件事：
 
@@ -951,7 +952,8 @@ pnpm provider:catalog:generate
 ## 社区与支持
 
 - 🐛 **发现 bug 或想要功能？** 提 [Issue](https://github.com/dengmengmian/agentgate-ai/issues)——网关问题请附上脱敏诊断包(诊断 → 导出)。
-- 💡 **提问与想法：** [Discussions](https://github.com/dengmengmian/agentgate-ai/discussions)。
+- 💡 **提问与想法：** 到 [Discussions](https://github.com/dengmengmian/agentgate-ai/discussions) 交流安装问题、Provider 请求、工作流建议和成功案例。
+- 🧩 **想参与贡献？** 从 [CONTRIBUTING.md](./CONTRIBUTING.md)、[PR 模板](./.github/pull_request_template.md) 和 `good first issue` 开始。
 - ⭐ **如果 AgentGate 帮你省了钱或时间,点个 star** —— 既帮更多人发现它,也帮我们决定下一步做什么。
 
 三大支柱——智能路由、故障自愈、成本仪表盘——都已落地。后面做什么由 Issue 和 Discussion 驱动,缺什么告诉我们。
