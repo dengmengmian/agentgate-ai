@@ -5,6 +5,7 @@ vi.mock("@/lib/api", () => ({
   getGatewaySettings: vi.fn(),
   listModelPricing: vi.fn(),
   listRouteProfiles: vi.fn(),
+  getGatewayStatus: vi.fn(),
 }));
 
 import * as api from "@/lib/api";
@@ -13,6 +14,7 @@ import {
   useGatewaySettings,
   usePricing,
   useRouteProfiles,
+  useGatewayStatus,
   __resetGlobalStoresForTest,
 } from "./global";
 
@@ -23,6 +25,7 @@ describe("global store", () => {
     vi.mocked(api.getGatewaySettings).mockReset();
     vi.mocked(api.listModelPricing).mockReset();
     vi.mocked(api.listRouteProfiles).mockReset();
+    vi.mocked(api.getGatewayStatus).mockReset();
   });
 
   afterEach(() => {
@@ -128,6 +131,47 @@ describe("global store", () => {
       const s = useRouteProfiles.getState();
       expect(s.error).toBe("rpc err");
       expect(s.items).toEqual([]);
+    });
+  });
+
+  describe("useGatewayStatus", () => {
+    const running = { running: true, host: "127.0.0.1", port: 9090 } as any;
+
+    it("fetch loads status value", async () => {
+      vi.mocked(api.getGatewayStatus).mockResolvedValue(running);
+      await useGatewayStatus.getState().fetch();
+      const s = useGatewayStatus.getState();
+      expect(s.value).toEqual(running);
+      expect(s.loading).toBe(false);
+      expect(s.error).toBeNull();
+    });
+
+    it("concurrent fetch coalesces into single invoke", async () => {
+      let resolve!: (v: any) => void;
+      vi.mocked(api.getGatewayStatus).mockReturnValue(
+        new Promise((r) => { resolve = r; })
+      );
+      const p1 = useGatewayStatus.getState().fetch();
+      const p2 = useGatewayStatus.getState().fetch();
+      resolve(running);
+      await Promise.all([p1, p2]);
+      expect(api.getGatewayStatus).toHaveBeenCalledTimes(1);
+      expect(useGatewayStatus.getState().value).toEqual(running);
+    });
+
+    it("setValue 直接写入，不发请求", () => {
+      const stopped = { running: false } as any;
+      useGatewayStatus.getState().setValue(stopped);
+      expect(useGatewayStatus.getState().value).toEqual(stopped);
+      expect(api.getGatewayStatus).not.toHaveBeenCalled();
+    });
+
+    it("fetch records error message on failure", async () => {
+      vi.mocked(api.getGatewayStatus).mockRejectedValue({ message: "down" });
+      await useGatewayStatus.getState().fetch();
+      const s = useGatewayStatus.getState();
+      expect(s.error).toBe("down");
+      expect(s.value).toBeNull();
     });
   });
 });

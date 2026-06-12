@@ -23,6 +23,7 @@ import type {
   ModelPricing,
   RouteProfileView,
 } from "@/lib/bindings";
+import type { GatewayStatus } from "@/types/gateway";
 
 /// 一个 slice 的通用形态——把 list/single-value 都套进 `items`/`value`
 /// 仍然太异质，所以分别写两种基础类型：list 用 items: T[]，single 用
@@ -242,14 +243,69 @@ export const useRouteProfiles = create<RouteProfilesStore>((set, get) => ({
   },
 }));
 
+// ── gateway status ─────────────────────────────────────────────────
+// Topbar（常驻）是唯一轮询源，Dashboard 等页面只订阅；start/stop/restart
+// 返回的新状态通过 setValue 直接写入，所有订阅者即时更新。
+
+interface GatewayStatusStore extends ValueSlice<GatewayStatus> {
+  /// start/stop/restart 命令的返回值直接写入，不用再发一次查询。
+  setValue: (value: GatewayStatus) => void;
+}
+
+let gatewayStatusInflight: Promise<void> | null = null;
+
+export const useGatewayStatus = create<GatewayStatusStore>((set, get) => ({
+  value: null,
+  loading: false,
+  error: null,
+  setValue: (value) => set({ value }),
+  fetch: async () => {
+    if (gatewayStatusInflight) return gatewayStatusInflight;
+    if (get().loading) return;
+    gatewayStatusInflight = (async () => {
+      set({ loading: true, error: null });
+      try {
+        const value = await api.getGatewayStatus();
+        set({ value, loading: false });
+      } catch (err) {
+        const message = (err as api.AppError)?.message ?? String(err);
+        set({ loading: false, error: message });
+      } finally {
+        gatewayStatusInflight = null;
+      }
+    })();
+    return gatewayStatusInflight;
+  },
+  refetch: async () => {
+    if (gatewayStatusInflight) {
+      await gatewayStatusInflight;
+    }
+    gatewayStatusInflight = (async () => {
+      set({ loading: true, error: null });
+      try {
+        const value = await api.getGatewayStatus();
+        set({ value, loading: false });
+      } catch (err) {
+        const message = (err as api.AppError)?.message ?? String(err);
+        set({ loading: false, error: message });
+      } finally {
+        gatewayStatusInflight = null;
+      }
+    })();
+    return gatewayStatusInflight;
+  },
+}));
+
 /// 测试辅助：清空所有 store——单测之间互不污染。生产代码不应调用。
 export function __resetGlobalStoresForTest() {
   providersInflight = null;
   gatewaySettingsInflight = null;
   pricingInflight = null;
   routeProfilesInflight = null;
+  gatewayStatusInflight = null;
   useProviders.setState({ items: [], loading: false, error: null });
   useGatewaySettings.setState({ value: null, loading: false, error: null });
   usePricing.setState({ items: [], loading: false, error: null });
   useRouteProfiles.setState({ items: [], loading: false, error: null });
+  useGatewayStatus.setState({ value: null, loading: false, error: null });
 }

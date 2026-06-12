@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Stethoscope, Search } from "lucide-react";
-import * as api from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
-import type { GatewayStatus } from "@/types/gateway";
+import { usePolling } from "@/lib/usePolling";
+import { useGatewayStatus } from "@/store/global";
 
 const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 
@@ -25,18 +25,17 @@ export function Topbar({ onOpenCmdK }: { onOpenCmdK?: () => void }) {
   };
 
   const titleKey = pageTitleKeys[location.pathname] ?? "nav.overview";
-  const [status, setStatus] = useState<GatewayStatus | null>(null);
+  // Topbar 常驻所有页面，是 gateway status 的轮询源；Dashboard 等组件
+  // 只订阅 store，不再各自起定时器拉同一份状态。
+  const status = useGatewayStatus((s) => s.value);
 
   const refresh = useCallback(() => {
-    api.getGatewayStatus().then(setStatus).catch(() => {});
+    // fetch 内部已捕获错误写入 store.error，这里无需处理。
+    useGatewayStatus.getState().fetch();
   }, []);
 
   useEffect(() => { refresh(); }, [location.pathname, refresh]);
-
-  useEffect(() => {
-    const timer = setInterval(refresh, 3000);
-    return () => clearInterval(timer);
-  }, [refresh]);
+  usePolling(refresh, 3000);
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-sidebar px-6" style={{ boxShadow: "var(--shadow-sm)" }}>

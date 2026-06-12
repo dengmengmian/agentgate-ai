@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import { formatOptionalLatency } from "@/lib/utils";
 import * as api from "@/lib/api";
 import { useProviders, useRouteProfiles } from "@/store/global";
@@ -30,6 +31,9 @@ export function Logs() {
 
   // Filters
   const [keyword, setKeyword] = useState("");
+  // 搜索防抖：输入框即时响应，查询用停止输入 300ms 后的值——
+  // 避免每个键击都打 listRequestLogs + countRequestLogs 两次查询。
+  const debouncedKeyword = useDebouncedValue(keyword, 300);
   const [statusFilter, setStatusFilter] = useState("");
   const [providerFilter, setProviderFilter] = useState("");
   const [modelFilter, setModelFilter] = useState("");
@@ -68,13 +72,13 @@ export function Logs() {
   // Reset to page 1 whenever filters change.
   useEffect(() => {
     setPage(1);
-  }, [keyword, statusFilter, providerFilter, modelFilter, routeProfileFilter, errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter]);
+  }, [debouncedKeyword, statusFilter, providerFilter, modelFilter, routeProfileFilter, errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter]);
 
   const loadLogs = useCallback(async () => {
     setLoading(true);
     try {
       const filter = {
-        keyword: keyword || undefined,
+        keyword: debouncedKeyword || undefined,
         status: statusFilter || undefined,
         provider: providerFilter || undefined,
         model: modelFilter || undefined,
@@ -97,7 +101,7 @@ export function Logs() {
     } finally {
       setLoading(false);
     }
-  }, [keyword, statusFilter, providerFilter, modelFilter, routeProfileFilter, errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter, page]);
+  }, [debouncedKeyword, statusFilter, providerFilter, modelFilter, routeProfileFilter, errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter, page]);
 
   useEffect(() => {
     loadLogs();
@@ -379,7 +383,7 @@ export function Logs() {
       {viewMode === "session" ? (
         <SessionGroupView
           filter={{
-            keyword: keyword || undefined,
+            keyword: debouncedKeyword || undefined,
             status: statusFilter || undefined,
             provider: providerFilter || undefined,
             model: modelFilter || undefined,

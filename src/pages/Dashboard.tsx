@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Radio,
   Play,
@@ -15,10 +15,10 @@ import { RuntimeFooter } from "@/components/common/RuntimeFooter";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
+import { usePolling } from "@/lib/usePolling";
 import { formatLatency } from "@/lib/utils";
 import * as api from "@/lib/api";
-import { useProviders, useRouteProfiles } from "@/store/global";
-import type { GatewayStatus } from "@/types/gateway";
+import { useProviders, useRouteProfiles, useGatewayStatus } from "@/store/global";
 import type { ToolConfigView } from "@/types/tool";
 import type { RequestLogListItem, CostBreakdown } from "@/types/request-log";
 import type { RequestStats } from "@/types/stats";
@@ -124,7 +124,8 @@ const RANGE_OPTIONS: { days: RangeDays; labelZh: string; labelEn: string }[] = [
 
 export function Dashboard() {
   const { t, locale } = useI18n();
-  const [status, setStatus] = useState<GatewayStatus | null>(null);
+  // gateway status 走全局 store——Topbar 已经在 3s 轮询，这里只订阅。
+  const status = useGatewayStatus((s) => s.value);
   const [tools, setTools] = useState<ToolConfigView[]>([]);
   const [recentLogs, setRecentLogs] = useState<RequestLogListItem[]>([]);
   const [stats, setStats] = useState<RequestStats | null>(null);
@@ -134,20 +135,19 @@ export function Dashboard() {
   const [costByStrategy, setCostByStrategy] = useState<CostBreakdown[]>([]);
   const [rangeDays, setRangeDays] = useState<RangeDays>(7);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
+  const load = useCallback(async () => {
       try {
-        // providers / route profiles 走全局 store——5s 轮询刷新到 store,其它
-        // 页面切回来不会再重发 invoke。
-        const [s, tl, l, st, cm, cc, rs] = await Promise.all([
-          api.getGatewayStatus(),
+        // providers / route profiles / gateway status 走全局 store——刷新到
+        // store,其它页面切回来不会再重发 invoke。status 的 fetch 与 Topbar
+        // 轮询并发时自动合并成一次 invoke。
+        const [tl, l, st, cm, cc, rs] = await Promise.all([
           api.listTools(),
           api.listRequestLogs({ limit: 5 }),
           api.getRequestStatsRange(rangeDays),
           api.aggregateCostByModel(rangeDays, 8),
           api.aggregateCostByClient(rangeDays, 8),
           api.aggregateRouteProfileStats(rangeDays).catch(() => []),
+          useGatewayStatus.getState().fetch(),
           useProviders.getState().refetch(),
           useRouteProfiles.getState().refetch().catch(() => {}),
         ]);
@@ -170,39 +170,37 @@ export function Dashboard() {
           }))
           .filter((x) => x.request_count > 0)
           .sort((a, b) => b.cost - a.cost);
-        if (!cancelled) {
-          // 首次请求 celebration：lifetime total 从 0 翻到 ≥1 时 toast 一次。
-          // 用 localStorage 标记"已庆祝过"——避免清日志后再次触发。
-          const lifetimeTotal = st.total;
-          if (
-            lifetimeTotal >= 1
-            && localStorage.getItem("agentgate_first_req_seen") !== "1"
-          ) {
-            localStorage.setItem("agentgate_first_req_seen", "1");
-            toast("success", t("dashboard.first_request_seen"));
-          }
-
-          // Incremental update：只在数据实际变化时 setState，避免每 5 秒整页
-          // re-render 让数字闪烁、按钮跳动。浅比对 JSON 字符串虽然不最高效，
-          // 但对这点 payload 来说是常数时间，且写法最直接。
-          setStatus(prev => shallowEqual(prev, s) ? prev : s);
-          setTools(prev => shallowEqual(prev, tl) ? prev : tl);
-          setProviderCount(prev => prev === ps.length ? prev : ps.length);
-          setRecentLogs(prev => shallowEqual(prev, l) ? prev : l);
-          setStats(prev => shallowEqual(prev, st) ? prev : st);
-          setCostByModel(prev => shallowEqual(prev, cm) ? prev : cm);
-          setCostByClient(prev => shallowEqual(prev, cc) ? prev : cc);
-          setCostByStrategy(prev => shallowEqual(prev, byStrategy) ? prev : byStrategy);
+        // 首次请求 celebration：lifetime total 从 0 翻到 ≥1 时 toast 一次。
+        // 用 localStorage 标记"已庆祝过"——避免清日志后再次触发。
+        const lifetimeTotal = st.total;
+        if (
+          lifetimeTotal >= 1
+          && localStorage.getItem("agentgate_first_req_seen") !== "1"
+        ) {
+          localStorage.setItem("agentgate_first_req_seen", "1");
+          toast("success", t("dashboard.first_request_seen"));
         }
+
+        // Incremental update：只在数据实际变化时 setState，避免每 5 秒整页
+        // re-render 让数字闪烁、按钮跳动。浅比对 JSON 字符串虽然不最高效，
+        // 但对这点 payload 来说是常数时间，且写法最直接。
+        setTools(prev => shallowEqual(prev, tl) ? prev : tl);
+        setProviderCount(prev => prev === ps.length ? prev : ps.length);
+        setRecentLogs(prev => shallowEqual(prev, l) ? prev : l);
+        setStats(prev => shallowEqual(prev, st) ? prev : st);
+        setCostByModel(prev => shallowEqual(prev, cm) ? prev : cm);
+        setCostByClient(prev => shallowEqual(prev, cc) ? prev : cc);
+        setCostByStrategy(prev => shallowEqual(prev, byStrategy) ? prev : byStrategy);
       } catch (err) {
-        if (!cancelled) toast("error", (err as api.AppError).message);
+        toast("error", (err as api.AppError).message);
       }
-    };
-    load();
-    const timer = setInterval(load, 5000);
-    return () => { cancelled = true; clearInterval(timer); };
   }, [rangeDays, t]);
 
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 5000);
+
+  // 命令返回最新状态，直接写入 store——Topbar 徽章同步更新，无需等下个轮询。
+  const setStatus = useGatewayStatus.getState().setValue;
   const handleStart = async () => { try { setStatus(await api.startGateway()); toast("success", t("gateway.started")); } catch (err) { toast("error", (err as api.AppError).message); } };
   const handleStop = async () => { try { setStatus(await api.stopGateway()); toast("success", t("gateway.stopped")); } catch (err) { toast("error", (err as api.AppError).message); } };
   const handleRestart = async () => { try { setStatus(await api.restartGateway()); toast("success", t("gateway.restarted")); } catch (err) { toast("error", (err as api.AppError).message); } };

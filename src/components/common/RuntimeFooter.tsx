@@ -8,10 +8,11 @@
 // covers them, and duplicating them here led to two overlapping bottom
 // blocks. Polls every 5 s.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Activity, Clock, TrendingUp, Database, DollarSign, CheckCircle2 } from "lucide-react";
 import * as api from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { usePolling } from "@/lib/usePolling";
 import type { RuntimeKpis } from "@/types/stats";
 
 function formatUptime(secs: number): string {
@@ -69,23 +70,17 @@ export function RuntimeFooter() {
   const { t } = useI18n();
   const [kpis, setKpis] = useState<RuntimeKpis | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const k = await api.getRuntimeKpis();
-        if (!cancelled) setKpis(k);
-      } catch {
-        // Silent — footer is a passive observer, don't toast errors.
-      }
-    };
-    load();
-    const timer = setInterval(load, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
+  const load = useCallback(async () => {
+    try {
+      const k = await api.getRuntimeKpis();
+      setKpis(k);
+    } catch {
+      // Silent — footer is a passive observer, don't toast errors.
+    }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
+  usePolling(load, 5000);
 
   if (!kpis) return null;
 
