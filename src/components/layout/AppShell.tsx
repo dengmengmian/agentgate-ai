@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
@@ -25,7 +25,11 @@ export function AppShell() {
         <Topbar onOpenCmdK={() => setCmdkOpen(true)} />
         <main className="flex-1 overflow-y-auto scroll-smooth p-6">
           <div className="animate-fade-in">
-            <Outlet />
+            {/* 懒加载页面 chunk 时只替换内容区，侧边栏 / 顶栏保持不动。
+                本地磁盘加载 chunk 是毫秒级，骨架几乎不可见，仅防白屏。 */}
+            <Suspense fallback={<div className="skeleton h-40 w-full" />}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>

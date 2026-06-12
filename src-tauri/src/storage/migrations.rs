@@ -4,7 +4,7 @@ use crate::errors::AppError;
 
 /// 当前 schema 版本。每加一段新迁移就 +1,放到 `run_versioned_migrations`
 /// 里 match 上对应的 version。读 `PRAGMA user_version` 决定该跑哪些。
-const CURRENT_SCHEMA_VERSION: u32 = 4;
+const CURRENT_SCHEMA_VERSION: u32 = 5;
 
 fn get_user_version(conn: &Connection) -> Result<u32, AppError> {
     let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -84,6 +84,19 @@ fn run_versioned_migrations(conn: &Connection, from_version: u32) -> Result<(), 
                 ON request_logs(source, timestamp);",
         )?;
         set_user_version(conn, 4)?;
+    }
+    if from_version < 5 {
+        // v5:lifetime 统计的覆盖索引。get_stats / get_runtime_kpis 每 5s 对全表
+        // SUM(tokens/cost/cache),而 request_logs 行含数 KB 的 trace_json,全表扫
+        // 等于读整个库文件(实测 306MB 库:74ms 热缓存,冷缓存秒级)。覆盖索引把
+        // 聚合需要的窄列单独存一份(~3MB),实测同查询降到 15ms 且冷缓存不再读大行。
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_request_logs_stats
+                ON request_logs(source, timestamp, status_code, latency_ms,
+                                input_tokens, output_tokens, cost,
+                                cache_write_tokens, cache_read_tokens);",
+        )?;
+        set_user_version(conn, 5)?;
     }
     Ok(())
 }
@@ -606,6 +619,37 @@ mod tests {
     }
 
     #[test]
+    fn v5_stats_covering_index_serves_lifetime_aggregates() {
+        // request_logs 行里 trace_json 动辄数 KB,lifetime SUM 全表扫等于把
+        // 整个库文件读一遍(实测 306MB 库冷缓存秒级)。覆盖索引让聚合只扫
+        // 数 MB 的索引。断言:索引存在 + 查询计划确实走 COVERING INDEX。
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_request_logs_stats'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1, "v5 应创建 idx_request_logs_stats");
+
+        let plan: String = conn
+            .query_row(
+                "EXPLAIN QUERY PLAN SELECT SUM(input_tokens), SUM(output_tokens), SUM(cost),
+                    SUM(cache_read_tokens), SUM(cache_write_tokens) FROM request_logs",
+                [],
+                |r| r.get(3),
+            )
+            .unwrap();
+        assert!(
+            plan.contains("COVERING INDEX idx_request_logs_stats"),
+            "lifetime 聚合应走覆盖索引,实际计划: {plan}"
+        );
+    }
+
+    #[test]
     fn db_newer_than_app_is_rejected() {
         // 模拟用户装过更新版(user_version 高于当前 app),回退旧版启动应明确报错。
         let conn = Connection::open_in_memory().unwrap();
@@ -656,7 +700,7 @@ mod tests {
             "v2 库此时不该有该列"
         );
         run_migrations(&conn).unwrap();
-        assert_eq!(get_user_version(&conn).unwrap(), 4);
+        assert_eq!(get_user_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
         assert!(
             conn.prepare("SELECT model_context_windows FROM providers LIMIT 0")
                 .is_ok(),
@@ -670,7 +714,7 @@ mod tests {
         // (gateway 过滤查询此前全表扫 / 单列索引回表过滤 source)。
         let conn = Connection::open_in_memory().unwrap();
         run_migrations(&conn).unwrap();
-        assert_eq!(get_user_version(&conn).unwrap(), 4);
+        assert_eq!(get_user_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
         let has_index: bool = conn
             .query_row(
                 "SELECT COUNT(*) FROM sqlite_master
