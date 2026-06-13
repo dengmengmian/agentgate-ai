@@ -1,5 +1,25 @@
 # Changelog / 更新日志
 
+## [1.4.2] - 2026-06-13
+
+### 新增
+
+- **独立传播入口（GitHub Pages 站点）** —— 上线 https://dengmengmian.github.io/agentgate-ai/，中英双语，CLI 美学落地页；下载区接 GitHub Releases API 自动拉最新版安装包，按浏览器 UA 推荐对应平台；含 sitemap / robots / OG / Twitter card / JSON-LD 完整 SEO。
+- **docs 双语化** —— 新增 8 个中文版 docs（`full-reference-zh.md` + 7 篇 `use-*-zh.md` 教程）；英文版顶部加双向切换链接，中文站点 guide 链接全部指向中文版。
+- **Dashboard 引导提示** —— Dashboard 按当前状态（供应商没配 / 网关没启动 / 没配客户端 / 还没请求）显示不同的引导卡片和操作入口，新手按提示一路点过去就能跑通第一条请求。
+- **Setup Wizard 完成引导** —— 配置成功后跳"配客户端"或回概览，失败提供错误恢复入口（编辑 key 重试 / 跳设置）。
+
+### 改进
+
+- **README 与站点 slogan 统一** —— "让 AI Agent 的官方接口，变成你的本地模型入口" + 三卖点（官方体验不变 / 模型入口归你管 / 请求链路看得见）中英双向对齐。
+- **README 瘦身** —— 主 README 从 990 行压到 117 行，长内容拆到 `docs/full-reference.md`；30 秒首访转化、深度文档单独承接。
+- **demo 图换新版** —— 替换为贴 CLI 美学的 trace 流图（客户端 → AgentGate → providers + 实时 trace 日志），呼应三卖点。
+
+### 性能
+
+- **release 二进制开 LTO+strip** —— Cargo release profile 加 `lto = "thin"` / `codegen-units = 1` / `strip`，二进制体积压 30-50%。
+- **请求日志写入移出响应热路径** —— pass_through 的 `log_to_db` 改 `tokio::task::spawn_blocking`，非流式 / 错误响应不再同步等 SQLite INSERT 才返回，首字节延迟省几毫秒到几十毫秒。
+
 ## [1.4.1] - 2026-06-13
 
 ### 修复
