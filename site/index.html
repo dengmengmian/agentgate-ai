@@ -253,11 +253,17 @@
           <p class="comment-zh zh mt-2">
             // 选你的系统。免费、开源，跑在你自己的机器上。
           </p>
+          <p class="mt-3 text-xs text-muted">
+            <span class="text-faint"># latest </span>
+            <span data-version class="text-cyan">v1.4.1</span>
+            <span class="text-faint">·</span>
+            <span data-released class="text-ink-soft">recently</span>
+          </p>
         </div>
 
         <div class="reveal mt-12 frame rounded">
           <table class="w-full text-sm">
-            <tbody>
+            <tbody data-downloads>
               <tr class="border-b border-border-soft">
                 <td class="px-5 py-4">
                   <span class="text-faint">▸</span>
@@ -372,28 +378,28 @@
             href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-codex-with-deepseek.md"
           >
             codex + deepseek
-            <span class="text-faint">— guide</span>
+            <span class="text-faint">— responses → chat-completions conversion</span>
           </a>
           <a
             class="hover-prompt block py-1 text-ink-soft hover:text-ink"
             href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-claude-code-with-deepseek.md"
           >
             claude code + deepseek
-            <span class="text-faint">— guide</span>
+            <span class="text-faint">— anthropic-compatible passthrough + model mapping</span>
           </a>
           <a
             class="hover-prompt block py-1 text-ink-soft hover:text-ink"
             href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-claude-code-with-github-copilot.md"
           >
             claude code on github copilot subscription
-            <span class="text-faint">— guide</span>
+            <span class="text-faint">— token exchange + x-initiator agent tagging</span>
           </a>
           <a
             class="hover-prompt block py-1 text-ink-soft hover:text-ink"
             href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-gemini-cli-with-agentgate.md"
           >
             gemini cli
-            <span class="text-faint">— guide</span>
+            <span class="text-faint">— gemini route conversion + generateContent endpoint</span>
           </a>
         </div>
       </div>
@@ -429,5 +435,7 @@
         </nav>
       </div>
     </footer>
+
+    <script src="./js/releases.js" defer></script>
   </body>
 </html>
