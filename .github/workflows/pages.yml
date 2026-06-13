@@ -1,0 +1,74 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; new pushes wait.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: site
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tailwind
+        working-directory: site
+        run: pnpm build
+
+      - name: Stage deployable files
+        # 把可发布的静态文件复制到 _site/,排除 node_modules / 源文件 / 配置。
+        # 用 rsync exclude 而不是 whitelist,让未来加新子页面(download/ guides/ faq/)
+        # 不用回来改 workflow。
+        run: |
+          mkdir -p _site
+          rsync -a \
+            --exclude='node_modules' \
+            --exclude='package.json' \
+            --exclude='pnpm-lock.yaml' \
+            --exclude='input.css' \
+            --exclude='.gitignore' \
+            --exclude='README.md' \
+            site/ _site/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

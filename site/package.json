@@ -1,0 +1,15 @@
+{
+  "name": "agentgate-site",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AgentGate landing site",
+  "scripts": {
+    "build:css": "tailwindcss -i ./input.css -o ./assets/tailwind.css --minify",
+    "dev:css": "tailwindcss -i ./input.css -o ./assets/tailwind.css --watch",
+    "build": "pnpm build:css"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
+    "tailwindcss": "^4.3.0"
+  }
+}
