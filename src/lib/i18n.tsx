@@ -47,6 +47,24 @@ const translations: Record<string, Record<Locale, string>> = {
     zh: "粘贴任意 AI 供应商的 API key——AgentGate 自动识别厂商、配置 Codex / Claude Code / Gemini CLI 等编码 agent，开箱即用。",
   },
   "dashboard.empty_cta": { en: "Start with Quick Setup", zh: "用快速配置开始" },
+  "dashboard.gateway_empty_title": { en: "Provider ready. Start the local gateway.", zh: "供应商已就绪，启动本地网关" },
+  "dashboard.gateway_empty_desc": {
+    en: "Your provider is configured, but the local AgentGate service is stopped. Start it before running a client.",
+    zh: "供应商已经配置好，但 AgentGate 本地服务还没启动。先启动服务，再运行客户端。",
+  },
+  "dashboard.gateway_empty_cta": { en: "Start gateway", zh: "启动网关" },
+  "dashboard.no_requests_ready_title": { en: "Ready for the first request", zh: "可以发起第一次请求了" },
+  "dashboard.no_requests_ready_desc": {
+    en: "Gateway is running and at least one client config exists. Open your terminal and run Codex, Claude Code, or another configured client.",
+    zh: "网关已运行，且已有客户端配置。打开终端运行 Codex、Claude Code 或其它已配置客户端即可。",
+  },
+  "dashboard.no_requests_ready_cta": { en: "Open request logs", zh: "查看请求日志" },
+  "dashboard.no_requests_config_title": { en: "Connect a coding client", zh: "接入一个编码客户端" },
+  "dashboard.no_requests_config_desc": {
+    en: "Gateway is running, but no client config has been applied yet. Pick a client and apply its config so requests flow through AgentGate.",
+    zh: "网关已运行，但还没有应用客户端配置。选择一个客户端并应用配置，让请求经过 AgentGate。",
+  },
+  "dashboard.no_requests_config_cta": { en: "Configure clients", zh: "配置客户端" },
   "dashboard.gateway": { en: "Gateway", zh: "网关" },
   "dashboard.provider": { en: "Provider", zh: "供应商" },
   "dashboard.input": { en: "Input", zh: "输入" },
@@ -860,7 +878,18 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "AgentGate is listening locally and your clients (Codex / Claude Code / …) are wired. Open your terminal and run your agent — requests will flow through.",
     zh: "AgentGate 本地服务已经在监听，客户端（Codex / Claude Code 等）也已配置完毕。打开终端跑你的命令，请求会自动通过。",
   },
+  "onboarding.recovery_title": {
+    en: "Some steps need attention",
+    zh: "还有几步需要处理",
+  },
+  "onboarding.recovery_desc": {
+    en: "Review the failed item above. You can edit the key, retry setup, or inspect client configs before running your agent.",
+    zh: "看一下上方失败项。你可以返回修改 key、重新配置，或先去客户端页检查配置后再运行 agent。",
+  },
+  "onboarding.edit_key": { en: "Edit key", zh: "修改 Key" },
+  "onboarding.retry": { en: "Retry setup", zh: "重新配置" },
   "onboarding.go_to_clients": { en: "View Clients →", zh: "查看客户端 →" },
+  "onboarding.review_clients": { en: "Review Clients →", zh: "检查客户端 →" },
   "onboarding.back_to_overview": { en: "Back to Overview", zh: "返回概览" },
 
   // ── Settings about ──

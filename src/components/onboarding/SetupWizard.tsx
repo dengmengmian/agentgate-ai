@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Zap, CheckCircle, XCircle, Loader2, ArrowRight, Key, Monitor, Rocket } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
@@ -28,6 +29,7 @@ interface SetupLogEntry {
 
 export function SetupWizard({ onComplete }: Props) {
   const { t } = useI18n();
+  const navigate = useNavigate();
   const [step, setStep] = useState<Step>("key");
   const [apiKey, setApiKey] = useState("");
   const [detectedProvider, setDetectedProvider] = useState<{ type: string; name: string } | null>(null);
@@ -177,6 +179,15 @@ export function SetupWizard({ onComplete }: Props) {
   };
 
   const allOk = setupLog.length > 0 && setupLog.every(l => l.status === "ok");
+  const hasErrors = setupLog.some(l => l.status === "error");
+  const goToClients = () => {
+    onComplete();
+    navigate("/tools");
+  };
+  const closeToOverview = () => {
+    onComplete();
+    navigate("/");
+  };
 
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center">
@@ -331,10 +342,36 @@ export function SetupWizard({ onComplete }: Props) {
             </div>
 
             {step === "done" && (
-              <div className="flex justify-end">
-                <button onClick={onComplete} className="btn-primary">
-                  {allOk ? t("onboarding.done") : t("common.close")}
-                </button>
+              <div className="space-y-4">
+                {allOk ? (
+                  <div className="rounded-lg border border-success/30 bg-success-soft p-3">
+                    <p className="text-xs font-medium text-success">{t("onboarding.next_step_title")}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">{t("onboarding.next_step_desc")}</p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-warning/30 bg-warning-soft p-3">
+                    <p className="text-xs font-medium text-warning">{t("onboarding.recovery_title")}</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">{t("onboarding.recovery_desc")}</p>
+                  </div>
+                )}
+                <div className="flex flex-wrap justify-end gap-2">
+                  {hasErrors && (
+                    <>
+                      <button onClick={() => setStep("key")} className="btn-secondary">
+                        {t("onboarding.edit_key")}
+                      </button>
+                      <button onClick={handleSetup} className="btn-secondary">
+                        {t("onboarding.retry")}
+                      </button>
+                    </>
+                  )}
+                  <button onClick={closeToOverview} className="btn-secondary">
+                    {t("onboarding.back_to_overview")}
+                  </button>
+                  <button onClick={goToClients} className="btn-primary">
+                    {allOk ? t("onboarding.go_to_clients") : t("onboarding.review_clients")}
+                  </button>
+                </div>
               </div>
             )}
           </div>

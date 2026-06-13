@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
 import {
   Radio,
   Play,
@@ -87,6 +87,33 @@ function StripMetric({ label, value, tone }: { label: string; value: string; ton
     <div className="flex flex-col">
       <span className="text-[10px] uppercase tracking-wide text-text-muted">{label}</span>
       <span className={`text-base font-semibold ${valueColor} tabular-nums`}>{value}</span>
+    </div>
+  );
+}
+
+function OnboardingPrompt({
+  icon,
+  title,
+  desc,
+  action,
+}: {
+  icon: ReactNode;
+  title: string;
+  desc: string;
+  action: ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border-2 border-dashed border-accent/30 bg-accent-soft/30 p-6">
+      <div className="flex items-start gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-accent text-white">
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-base font-semibold text-text-primary">{title}</h3>
+          <p className="mt-1 text-sm text-text-secondary">{desc}</p>
+          <div className="mt-3">{action}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -214,6 +241,8 @@ export function Dashboard() {
   );
 
   const todayTokens = stats ? stats.today_input_tokens + stats.today_output_tokens : 0;
+  const hasProviders = providerCount !== null && providerCount > 0;
+  const hasConfiguredTool = tools.some((tool) => tool.config_exists);
 
   return (
     <div className="space-y-4">
@@ -256,34 +285,51 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* ── 0/1 providers 时显示新手引导卡，替代一片空白的 stats ── */}
+      {/* ── 分层新手引导：无 provider / gateway 未启动 / 尚未产生请求。 ── */}
       {providerCount === 0 && (
-        <Link
-          to="/quick-setup"
-          className="group block rounded-xl border-2 border-dashed border-accent/30 bg-accent-soft/30 p-6 transition-colors hover:border-accent/60 hover:bg-accent-soft/50"
-        >
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-accent text-white">
-              <Rocket className="h-6 w-6" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-text-primary">
-                {t("dashboard.empty_title")}
-              </h3>
-              <p className="mt-1 text-sm text-text-secondary">
-                {t("dashboard.empty_desc")}
-              </p>
-              <div className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent group-hover:gap-2 transition-all">
-                {t("dashboard.empty_cta")}
-                <ArrowRight className="h-4 w-4" />
-              </div>
-            </div>
-          </div>
-        </Link>
+        <OnboardingPrompt
+          icon={<Rocket className="h-6 w-6" />}
+          title={t("dashboard.empty_title")}
+          desc={t("dashboard.empty_desc")}
+          action={(
+            <Link to="/quick-setup" className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-all hover:gap-2">
+              {t("dashboard.empty_cta")}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          )}
+        />
+      )}
+
+      {hasProviders && !status.running && (
+        <OnboardingPrompt
+          icon={<Play className="h-6 w-6" />}
+          title={t("dashboard.gateway_empty_title")}
+          desc={t("dashboard.gateway_empty_desc")}
+          action={(
+            <button onClick={handleStart} className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-all hover:gap-2">
+              {t("dashboard.gateway_empty_cta")}
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
+        />
+      )}
+
+      {hasProviders && status.running && stats && stats.total === 0 && (
+        <OnboardingPrompt
+          icon={<Rocket className="h-6 w-6" />}
+          title={hasConfiguredTool ? t("dashboard.no_requests_ready_title") : t("dashboard.no_requests_config_title")}
+          desc={hasConfiguredTool ? t("dashboard.no_requests_ready_desc") : t("dashboard.no_requests_config_desc")}
+          action={(
+            <Link to={hasConfiguredTool ? "/logs" : "/tools"} className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-all hover:gap-2">
+              {hasConfiguredTool ? t("dashboard.no_requests_ready_cta") : t("dashboard.no_requests_config_cta")}
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          )}
+        />
       )}
 
       {/* ── 2. Today card — 5 primary metrics + cache inline footer when present ── */}
-      {providerCount !== 0 && stats && (
+      {hasProviders && stats && stats.total > 0 && (
         <div className="rounded-xl border border-border bg-card px-6 py-4" style={{ boxShadow: "var(--shadow-sm)" }}>
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">{t("stats.today")}</span>
@@ -338,7 +384,7 @@ export function Dashboard() {
 
       {/* ── 3. Trend chart + Top providers in one card. Range tabs live in the
               chart header (they only affect the chart, not today's strip). ── */}
-      {stats && (
+      {hasProviders && stats && stats.total > 0 && (
         <>
           <div className="rounded-xl border border-border bg-card p-5">
             <div className="mb-4 flex items-center justify-between gap-2">
