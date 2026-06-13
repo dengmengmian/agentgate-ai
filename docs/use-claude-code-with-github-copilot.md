@@ -1,8 +1,8 @@
 # Use Claude Code with GitHub Copilot through AgentGate
 
-中文：用 GitHub Copilot 订阅跑 Claude Code
+中文：[用 GitHub Copilot 订阅跑 Claude Code](./use-claude-code-with-github-copilot-zh.md)
 
-AgentGate can route Claude Code to Claude models available through a GitHub Copilot subscription. This is optional and intended for personal evaluation; using Copilot outside official clients may be a gray area under GitHub's terms.
+AgentGate turns Claude Code's Anthropic Messages entry into a local model entry, then routes selected requests to Claude models available through a GitHub Copilot subscription. This is optional and intended for personal evaluation; using Copilot outside official clients may be a gray area under GitHub's terms.
 
 ## When to use this
 

@@ -5,8 +5,8 @@
 <h1 align="center">AgentGate</h1>
 
 <p align="center">
-  <b>Run Codex, Claude Code & Gemini CLI on cheaper models — without breaking them.</b><br>
-  Automatic failover · cost tracking · one-click setup. One local gateway, 26 providers.
+  <b>Turn official AI agent APIs into your local model entry.</b><br>
+  Protocol conversion · native pass-through · local routing · request tracing. One desktop control point, 26 providers.
 </p>
 
 <p align="center">
@@ -17,11 +17,11 @@
 </p>
 
 <p align="center">
-  <a href="../README_ZH.md">中文</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">Download</a> · <a href="#5-minute-quick-start">5-Minute Quick Start</a> · <a href="./use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./use-claude-code-with-deepseek.md">Claude Code + DeepSeek</a> · <a href="./use-gemini-cli-with-agentgate.md">Gemini CLI</a>
+  <a href="./full-reference-zh.md">中文版</a> · <a href="../README_ZH.md">中文 README</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">Download</a> · <a href="#5-minute-quick-start">5-Minute Quick Start</a> · <a href="./use-codex-with-deepseek.md">Codex + DeepSeek</a> · <a href="./use-claude-code-with-deepseek.md">Claude Code + DeepSeek</a> · <a href="./use-gemini-cli-with-agentgate.md">Gemini CLI</a>
 </p>
 
 <p align="center">
-  <img src="demo-header-v2.gif" width="800" alt="AgentGate routes Codex, Claude Code, and Gemini CLI through a local gateway to cheaper providers with live cost tracking">
+  <img src="demo-header-v2.gif" width="800" alt="AgentGate turns official AI agent APIs into a local model entry with conversion, pass-through, routing, and tracing">
 </p>
 
 ## Download for your OS
@@ -38,9 +38,9 @@
 
 ## Why AgentGate
 
-| 🧠 Smart Routing | 🔁 Self-Healing | 💰 Cost Dashboard |
+| Official experience intact | Your local model entry | Every request visible |
 |:---|:---|:---|
-| Pick the right model per request by capability, price, or latency | Automatic failover, circuit breaker, and cooldown keep requests flowing | Per-request cost tracking by model, client, route, and time range |
+| Keep AI agent clients usable the way they expect, with one-click restore to official configs | Let official client requests enter AgentGate first, then convert or pass through to your chosen upstream | Trace route decisions, converted payloads, upstream errors, tokens, cost, latency, and failover attempts |
 
 ## 5-Minute Quick Start
 
@@ -54,9 +54,9 @@ AgentGate fills common base URLs, protocols, model defaults, and capability matr
 
 ---
 
-AgentGate is a **local model gateway** for AI coding agents. It gives Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode one local endpoint, then routes requests to 26 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, GitHub Copilot, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
+AgentGate is a **local model entry for AI agent clients**. It takes model requests that would normally go to official endpoints, brings them into a local desktop control point, then decides whether to convert protocols or pass through natively to 26 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, GitHub Copilot, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
 
-> **Run your coding agents on cheaper models — and watch the spend drop in real time.** Point Codex / Claude Code / Gemini CLI at DeepSeek, MiMo, GLM, or Kimi, and the cost dashboard shows exactly what you spend, broken down by model, client, and route.
+> **Turn official AI agent APIs into a local model entry you control.** Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode keep their familiar client flow, while AgentGate handles upstream choice, protocol differences, failover, cost, and traceability locally.
 
 ![Cost dashboard](screenshots/dashboard.png)
 
@@ -69,18 +69,18 @@ It is built for real integration problems:
 - Multiple providers and multiple API keys should fail over automatically, with request logs, token stats, and cost tracking.
 - Switching models should not mean hand-editing `~/.codex/config.toml` or `~/.claude/settings.json`.
 
-AgentGate's job is: **one local gateway + protocol conversion + native pass-through + smart routing + GUI configuration** — and **⚡ zero hand-editing**: one-click apply / restore for your coding agents, no more poking at `config.toml` / `settings.json`.
+AgentGate's job is: **make the official client entry point local and controllable** — one-click client apply / restore, protocol conversion when needed, native pass-through when possible, route profiles, failover, request logs, cost tracking, and diagnostics.
 
 ## How It Compares
 
-There are great LLM proxies out there. AgentGate's niche is **coding agents on the desktop** — it's the only one focused on keeping Codex / Claude Code / Gemini CLI happy with a GUI, not a server you operate.
+There are great LLM proxies out there. AgentGate's niche is **AI agent clients on the desktop** — it focuses on preserving client behavior while moving the model entry point into a local GUI you control, not operating a shared API server.
 
 | Tool | What it's best at | How AgentGate differs |
 |---|---|---|
-| **Plain proxy** | Swapping a base URL | Keeps Codex / ChatGPT login + plugins working, converts protocols, and routes by capability |
+| **Plain proxy** | Swapping a base URL | Keeps client-specific behavior, converts protocols when needed, supports native pass-through, and traces the full request path |
 | **claude-code-router** | Routing Claude Code (CLI) to other models | Also covers Codex Responses API, Gemini CLI, OpenCode — plus a GUI and cost dashboard |
 | **one-api / new-api** | Multi-user API reselling & billing on a server | Local-first, single-user, no account system; one-click client config built in |
-| **LiteLLM** | A Python SDK / proxy for 100+ LLMs in your own app | A desktop gateway for coding agents, not a library — zero code, GUI-driven |
+| **LiteLLM** | A Python SDK / proxy for 100+ LLMs in your own app | A desktop control point for AI agent clients, not a library — zero code, GUI-driven |
 
 > Positioning is approximate and these tools evolve fast — pick what fits your workflow. If you operate a shared API server, one-api / LiteLLM may suit you better; if you live in Codex / Claude Code, this is built for you.
 
@@ -91,7 +91,7 @@ Guides: [Codex Desktop plugins](./use-codex-desktop-with-third-party-api-and-plu
 | Goal | What AgentGate does |
 |---|---|
 | Use Codex with DeepSeek | Converts Codex's OpenAI Responses API requests to DeepSeek-compatible Chat Completions or Anthropic-compatible endpoints. |
-| Use Codex with Xiaomi MiMo | Routes Codex through a local gateway to MiMo models with model mapping, reasoning support, and capability checks. |
+| Use Codex with Xiaomi MiMo | Turns Codex's Responses entry into a local AgentGate entry, then routes to MiMo models with model mapping, reasoning support, and capability checks. |
 | Run Claude Code on a GitHub Copilot subscription | Exchanges your GitHub token for Copilot credentials automatically and tags tool continuations / compaction as agent traffic so they don't consume premium requests. See [the dedicated section](#run-claude-code--codex-on-your-github-copilot-subscription). |
 | Long sessions on small-context models | When history exceeds the model's context window, the gateway auto-summarizes the middle of the conversation (keeping system + recent turns verbatim) — a 128K-window model survives 300K+ token sessions. |
 | Use Codex Desktop plugins with third-party APIs | Keeps Codex Desktop on its official OpenAI-authenticated provider path so plugin and account features can keep working while model requests route through AgentGate. |

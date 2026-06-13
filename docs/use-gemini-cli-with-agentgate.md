@@ -1,14 +1,14 @@
 # Use Gemini CLI with AgentGate
 
-中文：让 Gemini CLI 通过 AgentGate 使用多供应商模型
+中文：[让 Gemini CLI 通过 AgentGate 使用多供应商模型](./use-gemini-cli-with-agentgate-zh.md)
 
-AgentGate gives Gemini CLI a local gateway route so you can keep one provider and routing control plane for Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode.
+AgentGate gives Gemini CLI a local model entry so its requests can be routed, traced, and managed alongside Codex, Claude Code, OpenCode, and AtomCode.
 
 ## When to use this
 
 Use this guide if you want:
 
-- Gemini CLI to share the same local gateway and provider list as your other coding agents.
+- Gemini CLI to share the same local model entry and provider list as your other AI agent clients.
 - Gemini-style requests routed through AgentGate with model mapping and cost tracking.
 - One-click client configuration instead of editing CLI config files by hand.
 - Failover from one provider to another when the primary provider rate-limits or fails.

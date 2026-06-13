@@ -1,14 +1,14 @@
 # Use Codex with Xiaomi MiMo through AgentGate
 
-中文：让 Codex 使用小米 MiMo
+中文：[让 Codex 使用小米 MiMo](./use-codex-with-mimo-zh.md)
 
-AgentGate lets Codex use Xiaomi MiMo through a local AI gateway. Codex sends OpenAI Responses API requests to AgentGate, and AgentGate routes them to MiMo models with model mapping, reasoning support, capability checks, and provider-specific handling.
+AgentGate turns Codex's official Responses API entry into a local model entry you control. Codex keeps sending Responses API requests, while AgentGate routes them to Xiaomi MiMo with protocol conversion or native pass-through, model mapping, reasoning support, capability checks, and provider-specific handling.
 
 ## When to use this
 
 Use this guide if you want:
 
-- Codex to call Xiaomi MiMo models without manually editing Codex config files.
+- Codex to call Xiaomi MiMo models while keeping a one-click path back to the official config.
 - Codex `web_search_preview` requests translated to MiMo `web_search` when the selected MiMo model supports it.
 - MiMo reasoning content preserved across multi-turn coding conversations.
 - Automatic handling for MiMo Open API keys and Token Plan keys.
@@ -36,7 +36,7 @@ AgentGate keeps the official Codex configuration restorable, so you can switch b
 
 ## Chinese Notes / 中文说明
 
-如果你搜索的是“Codex 使用小米 MiMo”“Codex 接入 MiMo”“mimo2codex 替代方案”，AgentGate 的定位是一个更通用的本地 AI 网关：它不只连接 MiMo，也能在 MiMo、DeepSeek、OpenAI、Kimi、GLM、通义千问等 Provider 之间切换。
+如果你搜索的是“Codex 使用小米 MiMo”“Codex 接入 MiMo”“mimo2codex 替代方案”，AgentGate 的定位不是单个 MiMo 代理，而是把 Codex 的官方模型入口变成本地可控入口：它可以连接 MiMo，也能在 MiMo、DeepSeek、OpenAI、Kimi、GLM、通义千问等 Provider 之间切换。
 
 常见路径是：
 

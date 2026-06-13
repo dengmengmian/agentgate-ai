@@ -1,14 +1,14 @@
 # Use Codex Desktop with third-party APIs and plugins
 
-中文：让 Codex 桌面端使用第三方 API，并保留插件能力
+中文：[让 Codex Desktop 使用第三方 API 并保留插件能力](./use-codex-desktop-with-third-party-api-and-plugins-zh.md)
 
-AgentGate can route Codex Desktop model requests to third-party providers such as DeepSeek and Xiaomi MiMo while keeping Codex Desktop on its official OpenAI-authenticated provider path. This is useful when you want lower-cost or region-friendly third-party models without giving up Codex Desktop plugin and account features.
+AgentGate turns Codex Desktop's official OpenAI-authenticated model entry into a local AgentGate entry. Codex Desktop keeps the provider path its plugins and account features expect, while model requests are handled locally and routed to upstream providers such as DeepSeek, Xiaomi MiMo, OpenAI, Kimi, GLM, DashScope, and more.
 
 ## Why this matters
 
 Many proxy setups make Codex behave like a generic OpenAI-compatible client. That can be enough for plain chat, but it may break the parts of Codex Desktop that expect the official OpenAI provider shape and signed-in account state.
 
-AgentGate uses a different pattern:
+AgentGate uses a different pattern: keep the official-looking client entry, move the actual model entry to localhost.
 
 ```text
 Codex Desktop
@@ -25,10 +25,10 @@ Codex Desktop still sees an OpenAI-style provider entry, while AgentGate receive
 |---|---|
 | Codex Desktop sign-in | Keeps the official `auth.json` account tokens instead of replacing them with a local API key. |
 | Plugin and account features | Keeps Codex Desktop on the OpenAI-authenticated provider path that plugin and account features expect. |
-| Third-party model routing | Sends model requests through AgentGate to DeepSeek, MiMo, OpenAI, Kimi, GLM, DashScope, or another configured provider. |
+| Local model entry | Sends model requests through AgentGate first, then converts or passes through to DeepSeek, MiMo, OpenAI, Kimi, GLM, DashScope, or another configured provider. |
 | One-click restore | Saves the original Codex config so you can switch back to official behavior from the AgentGate UI. |
 
-Plugin availability still depends on Codex Desktop, your signed-in account, and the upstream feature itself. AgentGate's role is to avoid breaking that path while routing the model request.
+Plugin availability still depends on Codex Desktop, your signed-in account, and the upstream feature itself. AgentGate's role is to avoid breaking that official path while making the model request locally controllable and traceable.
 
 ## Quick Setup
 

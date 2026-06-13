@@ -1,14 +1,14 @@
 # Use Codex with DeepSeek through AgentGate
 
-中文：让 Codex 使用 DeepSeek
+中文：[让 Codex 使用 DeepSeek](./use-codex-with-deepseek-zh.md)
 
-AgentGate lets Codex use DeepSeek through one local gateway. Codex sends OpenAI Responses API requests to AgentGate, and AgentGate routes them to DeepSeek with protocol conversion, model mapping, failover, request logs, and cost tracking.
+AgentGate turns Codex's official Responses API entry into a local model entry you control. Codex keeps sending Responses API requests, while AgentGate routes them to DeepSeek with protocol conversion or native pass-through, model mapping, failover, request logs, and cost tracking.
 
 ## When to use this
 
 Use this guide if you want:
 
-- Codex to call DeepSeek models without hand-editing `~/.codex/config.toml`.
+- Codex to call DeepSeek models while keeping a one-click path back to the official config.
 - OpenAI Responses API requests from Codex converted to DeepSeek-compatible Chat Completions or Anthropic-compatible endpoints.
 - One-click switching between official Codex config and AgentGate config.
 - A local gateway that can later switch Codex from DeepSeek to MiMo, OpenAI, Kimi, GLM, DashScope, or another provider.
@@ -34,7 +34,7 @@ AgentGate keeps the official Codex configuration restorable, so you can switch b
 
 ## Chinese Notes / 中文说明
 
-如果你搜索的是“Codex 使用 DeepSeek”“Codex 接入 DeepSeek”“DeepSeek 作为 Codex 后端”，AgentGate 的作用是把 Codex 的 OpenAI Responses API 请求统一接到本地网关，再转发到 DeepSeek。
+如果你搜索的是“Codex 使用 DeepSeek”“Codex 接入 DeepSeek”“DeepSeek 作为 Codex 后端”，AgentGate 的作用是把 Codex 原本发往官方的 Responses API 入口变成本地模型入口，再由本地决定转换或直连到 DeepSeek。
 
 常见路径是：
 

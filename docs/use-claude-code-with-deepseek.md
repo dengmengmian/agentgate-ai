@@ -1,14 +1,14 @@
 # Use Claude Code with DeepSeek through AgentGate
 
-中文：让 Claude Code 使用 DeepSeek
+中文：[让 Claude Code 使用 DeepSeek](./use-claude-code-with-deepseek-zh.md)
 
-AgentGate lets Claude Code use DeepSeek through a local gateway. Claude Code sends Anthropic Messages API requests to AgentGate, and AgentGate routes them to DeepSeek with endpoint handling, model mapping, failover, request logs, and cost tracking.
+AgentGate turns Claude Code's Anthropic Messages entry into a local model entry you control. Claude Code keeps sending Messages API requests, while AgentGate routes them to DeepSeek with native pass-through or conversion, endpoint handling, model mapping, failover, request logs, and cost tracking.
 
 ## When to use this
 
 Use this guide if you want:
 
-- Claude Code to call DeepSeek models without hand-editing `~/.claude/settings.json`.
+- Claude Code to call DeepSeek models while keeping a one-click path back to the official config.
 - A local alternative to single-client routers such as claude-code-router.
 - One-click switching between the official Claude Code config and AgentGate.
 - A route profile that can later switch Claude Code between DeepSeek, MiMo, Anthropic, GitHub Copilot, Kimi, or another provider.
@@ -33,7 +33,7 @@ Use this guide if you want:
 
 ## Notes for claude-code-router users
 
-AgentGate is not a drop-in clone of claude-code-router. It is a desktop gateway that also supports Codex, Gemini CLI, OpenCode, provider failover, cost dashboards, diagnostics, and one-click client config restore. If you only need a small Claude Code router, claude-code-router may be enough. If you want one local control plane for multiple coding agents, use AgentGate.
+AgentGate is not a drop-in clone of claude-code-router. It is a desktop control point that also supports Codex, Gemini CLI, OpenCode, provider failover, cost dashboards, diagnostics, request tracing, and one-click client config restore. If you only need a small Claude Code router, claude-code-router may be enough. If you want one local model entry for multiple AI agent clients, use AgentGate.
 
 ## Troubleshooting
 

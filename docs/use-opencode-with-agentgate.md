@@ -1,8 +1,8 @@
 # Use OpenCode with AgentGate
 
-中文：让 OpenCode 通过 AgentGate 切换多供应商模型
+中文：[让 OpenCode 通过 AgentGate 切换多供应商模型](./use-opencode-with-agentgate-zh.md)
 
-AgentGate lets OpenCode use a local gateway endpoint while AgentGate handles provider selection, model mapping, failover, diagnostics, and cost tracking.
+AgentGate turns OpenCode's model endpoint into a local AgentGate entry while AgentGate handles provider selection, model mapping, failover, diagnostics, request tracing, and cost tracking.
 
 ## When to use this
 
