@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ScrollText, RefreshCcw, ChevronLeft, ChevronRight, LayoutList, Layers, Download } from "lucide-react";
 import { RequestLogTable, sourceLabel } from "@/components/logs/RequestLogTable";
@@ -74,7 +74,13 @@ export function Logs() {
     setPage(1);
   }, [debouncedKeyword, statusFilter, providerFilter, modelFilter, routeProfileFilter, errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter]);
 
+  // 请求序号守卫：筛选/翻页快速变化或手动刷新交错时，会同时有多个
+  // loadLogs 在飞；只让最后一次发起的请求写入结果，丢弃先发后到的旧响应，
+  // 避免列表被过期数据覆盖。loadLogs 被多处调用（筛选 effect / 刷新按钮 /
+  // 清空 / 同步），所以用序号守卫而非只能绑 effect 生命周期的 cancelled 标记。
+  const reqSeqRef = useRef(0);
   const loadLogs = useCallback(async () => {
+    const seq = ++reqSeqRef.current;
     setLoading(true);
     try {
       const filter = {
@@ -94,12 +100,14 @@ export function Logs() {
         api.listRequestLogs(filter),
         api.countRequestLogs(filter),
       ]);
+      if (seq !== reqSeqRef.current) return; // 已有更新的请求发出，丢弃本次旧结果
       setLogs(data);
       setTotal(count);
     } catch (err) {
+      if (seq !== reqSeqRef.current) return;
       toast("error", (err as api.AppError).message);
     } finally {
-      setLoading(false);
+      if (seq === reqSeqRef.current) setLoading(false);
     }
   }, [debouncedKeyword, statusFilter, providerFilter, modelFilter, routeProfileFilter, errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter, page]);
 
@@ -178,8 +186,15 @@ export function Logs() {
   const handleSyncGemini = () =>
     runSync("gemini", "Gemini", api.syncGeminiSessions, t("logs.sync_gemini_missing"));
 
+  // 翻页后把列表滚回顶部——长列表翻到下一页却停在原滚动位置很难用。
+  const topRef = useRef<HTMLDivElement>(null);
+  const goToPage = (target: number) => {
+    setPage(target);
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
-    <div className="space-y-4">
+    <div ref={topRef} className="space-y-4">
       <div className="space-y-3">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <LogSummaryItem label={t("logs.summary_matched")} value={total.toLocaleString()} hint={t("logs.requests")} />
@@ -419,7 +434,7 @@ export function Logs() {
               </span>
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  onClick={() => goToPage(Math.max(1, page - 1))}
                   disabled={page <= 1 || loading}
                   className="flex items-center gap-1 rounded-md bg-card-secondary px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-40 disabled:hover:bg-card-secondary disabled:hover:text-text-secondary"
                 >
@@ -427,7 +442,7 @@ export function Logs() {
                   {t("logs.page_prev")}
                 </button>
                 <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  onClick={() => goToPage(Math.min(totalPages, page + 1))}
                   disabled={page >= totalPages || loading}
                   className="flex items-center gap-1 rounded-md bg-card-secondary px-2.5 py-1 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-40 disabled:hover:bg-card-secondary disabled:hover:text-text-secondary"
                 >

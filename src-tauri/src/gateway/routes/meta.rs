@@ -15,7 +15,7 @@ pub async fn health() -> Json<Value> {
         "status": "ok",
         "app": "AgentGate",
         "gateway": "running",
-        "version": "0.1.0"
+        "version": env!("CARGO_PKG_VERSION")
     }))
 }
 
@@ -139,4 +139,21 @@ pub async fn list_gemini_models(
         }
     }
     Ok(Json(json!({"models": models})))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn health_reports_real_package_version() {
+        // /health 的 version 字段曾硬编码 "0.1.0",与真实发版号脱节。
+        // 锁住:必须取 Cargo 包版本。
+        let resp = health().await;
+        assert_eq!(
+            resp.0["version"],
+            json!(env!("CARGO_PKG_VERSION")),
+            "health 应返回真实包版本,而非硬编码"
+        );
+    }
 }
