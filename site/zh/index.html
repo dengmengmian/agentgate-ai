@@ -1,23 +1,23 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AgentGate — Make your AI agent's official API local and yours</title>
+    <title>AgentGate — 让 AI Agent 的官方接口变成你的本地模型入口</title>
     <meta
       name="description"
-      content="AgentGate intercepts model requests from Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode. Locally converts protocols or passes through to 26 upstream providers. Keeps original client experience intact, with config rollback, cost tracking, and request tracing."
+      content="AgentGate 接管 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 等客户端的模型请求，本地决定转换或直连到 26 家上游 Provider。保留原有工具体验，附带配置回滚、成本统计和请求追踪。"
     />
     <meta
       name="keywords"
-      content="AI agent gateway, Codex DeepSeek, Claude Code DeepSeek, Claude Code Copilot, local LLM proxy, Codex MiMo, Gemini CLI proxy, OpenAI Responses API, Anthropic Messages API, agentgate"
+      content="AI Agent 本地网关, Codex DeepSeek, Claude Code DeepSeek, Claude Code Copilot, 本地 LLM 代理, Codex MiMo, Gemini CLI, OpenAI Responses API, Anthropic Messages API, agentgate, 编程 agent 网关"
     />
     <meta name="author" content="dengmengmian" />
 
     <!-- Canonical + hreflang -->
     <link
       rel="canonical"
-      href="https://dengmengmian.github.io/agentgate-ai/"
+      href="https://dengmengmian.github.io/agentgate-ai/zh/"
     />
     <link
       rel="alternate"
@@ -38,19 +38,19 @@
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="AgentGate" />
-    <meta property="og:locale" content="en_US" />
-    <meta property="og:locale:alternate" content="zh_CN" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
     <meta
       property="og:url"
-      content="https://dengmengmian.github.io/agentgate-ai/"
+      content="https://dengmengmian.github.io/agentgate-ai/zh/"
     />
     <meta
       property="og:title"
-      content="AgentGate — Make your AI agent's official API local and yours"
+      content="AgentGate — 让 AI Agent 的官方接口变成你的本地模型入口"
     />
     <meta
       property="og:description"
-      content="Local model gateway for Codex, Claude Code, Gemini CLI, OpenCode, AtomCode. 26 providers, protocol conversion, native pass-through, request tracing — all local."
+      content="给 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 用的本地模型网关。26 个 Provider，协议转换、原生直连、请求追踪 —— 全在你本机。"
     />
     <meta
       property="og:image"
@@ -63,18 +63,18 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="AgentGate — Make your AI agent's official API local and yours"
+      content="AgentGate — 让 AI Agent 的官方接口变成你的本地模型入口"
     />
     <meta
       name="twitter:description"
-      content="Local model gateway for Codex, Claude Code, Gemini CLI, OpenCode, AtomCode. 26 providers, protocol conversion, native pass-through, request tracing — all local."
+      content="给 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 用的本地模型网关。26 个 Provider，协议转换、原生直连、请求追踪 —— 全在你本机。"
     />
     <meta
       name="twitter:image"
       content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif"
     />
 
-    <link rel="icon" type="image/svg+xml" href="./assets/logo.svg" />
+    <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
 
     <!-- JSON-LD: SoftwareApplication -->
     <script type="application/ld+json">
@@ -82,7 +82,7 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "AgentGate",
-        "description": "Local model gateway for AI coding agents — Codex, Claude Code, Gemini CLI, OpenCode, AtomCode. Protocol conversion, native pass-through, multi-provider routing.",
+        "description": "给 AI 编程 agent 用的本地模型网关 —— Codex、Claude Code、Gemini CLI、OpenCode、AtomCode。协议转换、原生直连、多 Provider 路由。",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS, Windows, Linux",
         "offers": {
@@ -90,7 +90,7 @@
           "price": "0",
           "priceCurrency": "USD"
         },
-        "url": "https://dengmengmian.github.io/agentgate-ai/",
+        "url": "https://dengmengmian.github.io/agentgate-ai/zh/",
         "downloadUrl": "https://github.com/dengmengmian/agentgate-ai/releases",
         "softwareVersion": "1.4.1",
         "license": "https://github.com/dengmengmian/agentgate-ai/blob/main/LICENSE",
@@ -108,7 +108,7 @@
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="./assets/tailwind.css" />
+    <link rel="stylesheet" href="../assets/tailwind.css" />
   </head>
   <body class="bg-bg text-ink">
     <!-- ───────── top nav ───────── -->
@@ -123,14 +123,14 @@
         </a>
         <nav class="flex items-center gap-5 text-ink-soft">
           <a
-            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/full-reference.md"
+            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/full-reference-zh.md"
             class="hover:text-ink"
-            >docs</a
+            >文档</a
           >
           <a
             href="https://github.com/dengmengmian/agentgate-ai/releases"
             class="hover:text-ink"
-            >download <span class="text-faint">↗</span></a
+            >下载 <span class="text-faint">↗</span></a
           >
           <a
             href="https://github.com/dengmengmian/agentgate-ai"
@@ -138,9 +138,8 @@
             >github <span class="text-faint">↗</span></a
           >
           <span class="text-faint">·</span>
-          <a href="./zh/index.html" class="hover:text-ink"
-            ><span class="text-amber">EN</span>
-            <span class="text-faint">/</span> 中</a
+          <a href="../index.html" class="hover:text-ink"
+            >EN <span class="text-faint">/</span> <span class="text-amber">中</span></a
           >
         </nav>
       </div>
@@ -157,39 +156,35 @@
         </div>
         <div class="mt-2 flex items-center gap-2 text-sm">
           <span class="pulse-dot text-amber">●</span>
-          <span class="text-ink-soft">running on</span>
+          <span class="text-ink-soft">运行中</span>
           <span class="text-cyan">127.0.0.1:9090</span>
           <span class="text-faint">·</span>
           <span class="text-ink-soft">v1.4.1</span>
           <span class="text-faint">·</span>
-          <span class="text-ink-soft">26 providers</span>
+          <span class="text-ink-soft zh">26 个 provider</span>
         </div>
 
         <!-- hero title -->
-        <h1 class="h-display mt-16 text-ink">
-          Make your AI agent's official API<br />
-          <span class="text-ink-soft">local</span> — and yours<span
+        <h1 class="h-display zh mt-16 text-ink">
+          让 AI Agent 的官方接口，<br />
+          <span class="text-ink-soft">变成</span> 你的本地模型入口<span
             class="cursor"
-          ></span>.
+          ></span>。
         </h1>
 
         <p class="comment-zh zh mt-6 max-w-2xl">
-          让 AI Agent 的官方接口，变成你的本地模型入口。
+          // Make your AI agent's official API local — and yours.
         </p>
 
-        <p class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">
-          AgentGate intercepts model requests from Codex, Claude Code,
-          Gemini CLI and other clients — locally deciding whether to
-          convert protocols or pass through to upstream providers. Keeps
-          original client experience intact, with config rollback, cost
-          tracking, and request tracing.
+        <p class="zh mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">
+          AgentGate 接管 Codex、Claude Code、Gemini CLI 等客户端的模型请求,本地决定转换或直连上游 Provider。保留原有工具体验,附带配置回滚、成本统计和请求追踪。
         </p>
 
         <!-- clients → providers diagram -->
         <div class="mt-12 max-w-3xl space-y-2 text-sm leading-relaxed">
           <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span class="text-faint">$</span>
-            <span class="text-ink-soft">clients</span>
+            <span class="text-ink-soft zh">客户端</span>
             <span class="text-amber">→</span>
             <span class="text-ink">Codex</span>
             <span class="text-faint">·</span>
@@ -203,7 +198,7 @@
           </div>
           <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span class="text-faint">$</span>
-            <span class="text-ink-soft">upstream</span>
+            <span class="text-ink-soft zh">上游</span>
             <span class="text-amber">→</span>
             <span class="text-ink">OpenAI</span>
             <span class="text-faint">·</span>
@@ -216,7 +211,7 @@
             <span class="text-ink">GLM</span>
             <span class="text-faint">·</span>
             <span class="text-ink">Copilot</span>
-            <span class="text-muted">+ 20 more</span>
+            <span class="text-muted zh">再 + 20 家</span>
           </div>
         </div>
 
@@ -227,12 +222,12 @@
             class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg"
           >
             <span>▸</span>
-            <span>download</span>
+            <span class="zh">下载</span>
           </a>
           <a
             href="#what-it-does"
-            class="hover-prompt text-ink-soft hover:text-ink"
-            >what it does</a
+            class="hover-prompt zh text-ink-soft hover:text-ink"
+            >它做什么</a
           >
           <a
             href="https://github.com/dengmengmian/agentgate-ai"
@@ -243,7 +238,6 @@
 
         <!-- demo frame -->
         <div class="mt-20 frame-glow rounded-lg">
-          <!-- terminal title bar -->
           <div
             class="flex items-center gap-2 border-b border-border px-4 py-2.5"
           >
@@ -254,8 +248,8 @@
           </div>
           <div class="p-4">
             <img
-              src="./assets/demo-header.gif"
-              alt="agentgate demo"
+              src="../assets/demo-header.gif"
+              alt="agentgate 演示"
               class="w-full rounded"
             />
           </div>
@@ -271,69 +265,61 @@
       <div class="mx-auto max-w-4xl px-6 py-24">
         <div class="reveal">
           <div class="prompt text-sm text-ink-soft">man agentgate</div>
-          <h2 class="h-section mt-4">What it does.</h2>
-          <p class="comment-zh zh mt-2">// 它到底做了什么。</p>
+          <h2 class="h-section zh mt-4">它到底做了什么。</h2>
         </div>
 
         <div class="mt-16 space-y-8">
           <!-- card 1 -->
           <article class="reveal frame rounded p-6 md:p-8">
             <div class="text-xs uppercase tracking-wider text-amber">
-              <span class="text-faint">#</span> original experience intact
+              <span class="text-faint">#</span>
+              <span class="zh">官方体验不变</span>
             </div>
-            <p class="mt-4 text-base text-ink">
-              Codex / Claude Code / OpenCode / Gemini CLI / AtomCode keep
-              their original behavior. Codex Desktop plugins, Claude Code
-              settings, Copilot quota — none get broken. One-click restore
-              to official config.
+            <p class="zh mt-4 text-base text-ink">
+              保留 Codex / Claude Code / OpenCode / Gemini CLI / AtomCode 等客户端的原有使用方式。Codex Desktop 的插件、Claude Code 的设置、Copilot 的额度都不会因此乱,支持一键恢复官方配置。
             </p>
-            <p class="comment-zh zh mt-3">
-              Codex 的插件、Claude Code 的设置、Copilot 的额度都不会乱。一键恢复官方。
+            <p class="comment-zh mt-3">
+              // Original client experience intact. One-click restore.
             </p>
           </article>
 
           <!-- card 2 -->
           <article class="reveal frame rounded p-6 md:p-8">
             <div class="text-xs uppercase tracking-wider text-amber">
-              <span class="text-faint">#</span> your model entry
+              <span class="text-faint">#</span>
+              <span class="zh">模型入口归你管</span>
             </div>
-            <p class="mt-4 text-base text-ink">
-              The official API enters AgentGate. You decide protocol
-              conversion, passthrough, provider, and model — 26 providers,
-              multi-key rotation, automatic failover. All locally.
+            <p class="zh mt-4 text-base text-ink">
+              官方接口进 AgentGate,本地决定转换协议、直连上游、选择 Provider 和模型。26 家 provider,多 key 轮询,故障自动切换 —— 全程跑在你自己的机器上。
             </p>
-            <p class="comment-zh zh mt-3">
-              官方接口进 AgentGate,本地决定转换 / 直连 / 选 provider / 选模型。26 家、多 key 轮询、故障自动切换。
+            <p class="comment-zh mt-3">
+              // Official API enters AgentGate. You decide — locally.
             </p>
           </article>
 
           <!-- card 3 -->
           <article class="reveal frame rounded p-6 md:p-8">
             <div class="text-xs uppercase tracking-wider text-amber">
-              <span class="text-faint">#</span> every request observable
+              <span class="text-faint">#</span>
+              <span class="zh">请求链路看得见</span>
             </div>
-            <p class="mt-4 text-base text-ink">
-              Routing decisions, protocol conversion, errors, token counts,
-              cost, failover — all auditable in the local dashboard. Which
-              request went where, cost how much, why it failed over — all
-              on record.
+            <p class="zh mt-4 text-base text-ink">
+              每次请求的路由、转换、错误、Token、成本和故障转移都在本地面板可追踪。哪条请求花了多少、跑到哪、为什么转移,都有据可查。
             </p>
-            <p class="comment-zh zh mt-3">
-              路由、转换、错误、token、成本、故障转移 —— 都在本地面板可追踪。
+            <p class="comment-zh mt-3">
+              // Routing, conversion, errors, tokens, cost, failover — all auditable.
             </p>
           </article>
         </div>
 
         <!-- positioning blurb -->
         <div class="reveal mt-16 border-l-2 border-amber/40 pl-4 text-sm">
-          <p class="text-ink-soft">
-            AgentGate is not a hosted API reseller. It is a local-first
-            desktop workbench for people who use coding agents and want
-            provider flexibility — without breaking client-specific behavior.
+          <p class="zh text-ink-soft">
+            AgentGate 不是托管 API 分发平台,而是给编程 agent 用户准备的本地桌面工作台。
+            要 provider 自由,又不愿客户端特定能力被破坏。
           </p>
-          <p class="comment-zh zh mt-2">
-            不是托管 API
-            分发平台，是给编程 agent 用户的本地桌面工作台。要 provider 自由，又不愿客户端特定能力被破坏。
+          <p class="comment-zh mt-2">
+            // Not a hosted API reseller — a local-first desktop workbench.
           </p>
         </div>
       </div>
@@ -344,15 +330,15 @@
       <div class="mx-auto max-w-4xl px-6 py-24">
         <div class="reveal">
           <div class="prompt text-sm text-ink-soft">agentgate --download</div>
-          <h2 class="h-section mt-4">Download for your OS.</h2>
+          <h2 class="h-section zh mt-4">为你的系统下载。</h2>
           <p class="comment-zh zh mt-2">
-            // 选你的系统。免费、开源，跑在你自己的机器上。
+            // 免费、开源,跑在你自己的机器上。
           </p>
           <p class="mt-3 text-xs text-muted">
-            <span class="text-faint"># latest </span>
+            <span class="text-faint zh"># 最新版本 </span>
             <span data-version class="text-cyan">v1.4.1</span>
             <span class="text-faint">·</span>
-            <span data-released class="text-ink-soft">recently</span>
+            <span data-released class="text-ink-soft zh">最近</span>
           </p>
         </div>
 
@@ -363,7 +349,7 @@
                 <td class="px-5 py-4">
                   <span class="text-faint">▸</span>
                   <span class="ml-2 text-ink">macOS</span>
-                  <span class="ml-1 text-muted">Apple Silicon</span>
+                  <span class="ml-1 text-muted zh">Apple 芯片</span>
                 </td>
                 <td class="px-5 py-4 text-right">
                   <a
@@ -377,7 +363,7 @@
                 <td class="px-5 py-4">
                   <span class="text-faint">▸</span>
                   <span class="ml-2 text-ink">macOS</span>
-                  <span class="ml-1 text-muted">Intel</span>
+                  <span class="ml-1 text-muted zh">Intel 芯片</span>
                 </td>
                 <td class="px-5 py-4 text-right">
                   <a
@@ -419,7 +405,7 @@
                 <td class="px-5 py-4">
                   <span class="text-faint">▸</span>
                   <span class="ml-2 text-ink">Linux</span>
-                  <span class="ml-1 text-muted">other distros</span>
+                  <span class="ml-1 text-muted zh">其他发行版</span>
                 </td>
                 <td class="px-5 py-4 text-right">
                   <a
@@ -434,8 +420,10 @@
         </div>
 
         <p class="reveal mt-6 text-sm text-muted">
-          <span class="text-faint"># </span>headless CLI
-          (<code class="text-ink-soft">agentgate-serve</code>) 与历史版本：
+          <span class="text-faint"># </span
+          ><span class="zh">无界面 CLI</span>
+          (<code class="text-ink-soft">agentgate-serve</code>)
+          <span class="zh">与历史版本：</span>
           <a
             class="text-cyan hover:text-amber"
             href="https://github.com/dengmengmian/agentgate-ai/releases"
@@ -450,51 +438,51 @@
       <div class="mx-auto max-w-4xl px-6 py-24">
         <div class="reveal">
           <div class="prompt text-sm text-ink-soft">agentgate --help</div>
-          <h2 class="h-section mt-4">Get started.</h2>
+          <h2 class="h-section zh mt-4">开始使用。</h2>
         </div>
 
         <div class="reveal mt-12 space-y-3 text-sm">
           <a
             class="hover-prompt block py-1 text-ink-soft hover:text-ink"
-            href="https://github.com/dengmengmian/agentgate-ai#5-minute-quick-start"
+            href="https://github.com/dengmengmian/agentgate-ai/blob/main/README_ZH.md#5-%E5%88%86%E9%92%9F%E8%B7%91%E9%80%9A"
           >
-            5-minute quick start
-            <span class="text-faint">— 下载 → 配 key → 启动 → apply</span>
+            <span class="zh">5 分钟跑通</span>
+            <span class="text-faint zh">— 下载 → 配 key → 启动 → apply</span>
           </a>
           <a
             class="hover-prompt block py-1 text-ink-soft hover:text-ink"
-            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/full-reference.md"
+            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/full-reference-zh.md"
           >
-            full reference
-            <span class="text-faint">— 完整文档</span>
+            <span class="zh">完整参考</span>
+            <span class="text-faint zh">— 完整文档</span>
           </a>
           <a
             class="hover-prompt block py-1 text-ink-soft hover:text-ink"
-            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-codex-with-deepseek.md"
+            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-codex-with-deepseek-zh.md"
           >
-            codex + deepseek
-            <span class="text-faint">— responses → chat-completions conversion</span>
+            Codex + DeepSeek
+            <span class="text-faint zh">— responses → chat-completions 转换</span>
           </a>
           <a
             class="hover-prompt block py-1 text-ink-soft hover:text-ink"
-            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-claude-code-with-deepseek.md"
+            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-claude-code-with-deepseek-zh.md"
           >
-            claude code + deepseek
-            <span class="text-faint">— anthropic-compatible passthrough + model mapping</span>
+            Claude Code + DeepSeek
+            <span class="text-faint zh">— anthropic 兼容直通 + 模型映射</span>
           </a>
           <a
             class="hover-prompt block py-1 text-ink-soft hover:text-ink"
-            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-claude-code-with-github-copilot.md"
+            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-claude-code-with-github-copilot-zh.md"
           >
-            claude code on github copilot subscription
-            <span class="text-faint">— token exchange + x-initiator agent tagging</span>
+            Claude Code on GitHub Copilot
+            <span class="text-faint zh">— token 交换 + x-initiator agent 标记</span>
           </a>
           <a
             class="hover-prompt block py-1 text-ink-soft hover:text-ink"
-            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-gemini-cli-with-agentgate.md"
+            href="https://github.com/dengmengmian/agentgate-ai/blob/main/docs/use-gemini-cli-with-agentgate-zh.md"
           >
-            gemini cli
-            <span class="text-faint">— gemini route conversion + generateContent endpoint</span>
+            Gemini CLI
+            <span class="text-faint zh">— gemini 路由转换 + generateContent endpoint</span>
           </a>
         </div>
       </div>
@@ -531,6 +519,6 @@
       </div>
     </footer>
 
-    <script src="./js/releases.js" defer></script>
+    <script src="../js/releases.js" defer></script>
   </body>
 </html>

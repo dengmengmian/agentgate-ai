@@ -7,6 +7,7 @@
 //     dynamic rows (live version, filenames, sizes, "recommended" highlight).
 //   - localStorage cache 1h to avoid hitting GitHub's 60-req/hr unauthenticated
 //     rate limit on repeat visits.
+//   - i18n via document.documentElement.lang (en | zh).
 
 (function () {
   const REPO = "dengmengmian/agentgate-ai";
@@ -21,32 +22,54 @@
   //   AgentGate_1.4.1_amd64.deb
   //   AgentGate_1.4.1_amd64.AppImage
   const PLATFORMS = [
-    {
-      id: "mac-arm",
-      os: "macOS",
-      detail: "Apple Silicon",
-      match: /aarch64\.dmg$/i,
-    },
-    { id: "mac-x86", os: "macOS", detail: "Intel", match: /_x64\.dmg$/i },
-    {
-      id: "win",
-      os: "Windows",
-      detail: "10 / 11",
-      match: /x64-setup\.exe$/i,
-    },
-    {
-      id: "linux-deb",
-      os: "Linux",
-      detail: "Debian / Ubuntu",
-      match: /\.deb$/i,
-    },
-    {
-      id: "linux-appimage",
-      os: "Linux",
-      detail: "other distros",
-      match: /\.AppImage$/i,
-    },
+    { id: "mac-arm", match: /aarch64\.dmg$/i },
+    { id: "mac-x86", match: /_x64\.dmg$/i },
+    { id: "win", match: /x64-setup\.exe$/i },
+    { id: "linux-deb", match: /\.deb$/i },
+    { id: "linux-appimage", match: /\.AppImage$/i },
   ];
+
+  const LABELS = {
+    en: {
+      platforms: {
+        "mac-arm": { os: "macOS", detail: "Apple Silicon" },
+        "mac-x86": { os: "macOS", detail: "Intel" },
+        win: { os: "Windows", detail: "10 / 11" },
+        "linux-deb": { os: "Linux", detail: "Debian / Ubuntu" },
+        "linux-appimage": { os: "Linux", detail: "other distros" },
+      },
+      recommended: "recommended",
+      openReleases: "open releases",
+      today: "today",
+      yesterday: "yesterday",
+      daysAgo: (n) => `${n} days ago`,
+      monthsAgo: (n) => `${n} months ago`,
+      yearsAgo: (n) => `${n} years ago`,
+    },
+    zh: {
+      platforms: {
+        "mac-arm": { os: "macOS", detail: "Apple 芯片" },
+        "mac-x86": { os: "macOS", detail: "Intel 芯片" },
+        win: { os: "Windows", detail: "10 / 11" },
+        "linux-deb": { os: "Linux", detail: "Debian / Ubuntu" },
+        "linux-appimage": { os: "Linux", detail: "其他发行版" },
+      },
+      recommended: "推荐",
+      openReleases: "打开 releases",
+      today: "今天",
+      yesterday: "昨天",
+      daysAgo: (n) => `${n} 天前`,
+      monthsAgo: (n) => `${n} 个月前`,
+      yearsAgo: (n) => `${n} 年前`,
+    },
+  };
+
+  const lang = (document.documentElement.lang || "en")
+    .toLowerCase()
+    .startsWith("zh")
+    ? "zh"
+    : "en";
+  const L = LABELS[lang];
 
   // Browser UA → platform id. Best-effort, user can still pick anything.
   // mac arm vs intel: navigator.userAgentData.getHighEntropyValues({architecture})
@@ -108,11 +131,11 @@
     const diff = Date.now() - new Date(iso).getTime();
     const day = 24 * 60 * 60 * 1000;
     const days = Math.floor(diff / day);
-    if (days < 1) return "today";
-    if (days < 2) return "yesterday";
-    if (days < 30) return `${days} days ago`;
-    if (days < 365) return `${Math.floor(days / 30)} months ago`;
-    return `${Math.floor(days / 365)} years ago`;
+    if (days < 1) return L.today;
+    if (days < 2) return L.yesterday;
+    if (days < 30) return L.daysAgo(days);
+    if (days < 365) return L.monthsAgo(Math.floor(days / 30));
+    return L.yearsAgo(Math.floor(days / 365));
   }
 
   function escapeHtml(s) {
@@ -124,10 +147,11 @@
   }
 
   function renderRow(platform, asset, recommended) {
+    const labels = L.platforms[platform.id];
     const url =
       asset?.browser_download_url ||
       `https://github.com/${REPO}/releases/latest`;
-    const filename = asset?.name || "open releases";
+    const filename = asset?.name || L.openReleases;
     const size = asset?.size
       ? `<span class="ml-2 text-faint">${formatBytes(asset.size)}</span>`
       : "";
@@ -136,14 +160,14 @@
       ? '<span class="text-amber">▸</span>'
       : '<span class="text-faint">▸</span>';
     const tag = recommended
-      ? '<span class="ml-2 text-[10px] uppercase tracking-wider text-amber">recommended</span>'
+      ? `<span class="ml-2 text-[10px] uppercase tracking-wider text-amber">${L.recommended}</span>`
       : "";
     return `
       <tr class="border-b border-border-soft ${rowCls}">
         <td class="px-5 py-4">
           ${arrow}
-          <span class="ml-2 text-ink">${escapeHtml(platform.os)}</span>
-          <span class="ml-1 text-muted">${escapeHtml(platform.detail)}</span>
+          <span class="ml-2 text-ink">${escapeHtml(labels.os)}</span>
+          <span class="ml-1 text-muted">${escapeHtml(labels.detail)}</span>
           ${tag}
         </td>
         <td class="px-5 py-4 text-right">
