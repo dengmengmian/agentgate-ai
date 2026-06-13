@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Run Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode through one local model gateway.</b><br>
-  Protocol compatibility · one-click client setup · cost-aware multi-provider routing.
+  Agent-native compatibility · one-click client setup · cost-aware multi-provider routing.
 </p>
 
 <p align="center">

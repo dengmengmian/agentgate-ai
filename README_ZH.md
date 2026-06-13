@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>让 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 通过一个本地模型网关运行。</b><br>
-  Agent 协议兼容 · 客户端一键配置 · 带成本可见性的多 Provider 路由。
+  Agent 原生兼容 · 客户端一键配置 · 带成本可见性的多 Provider 路由。
 </p>
 
 <p align="center">
