@@ -1,29 +1,189 @@
 @import "tailwindcss";
 
 @theme {
-  --color-brand: #2563eb;
-  --color-brand-dark: #1d4ed8;
-  --color-ink: #0f172a;
-  --color-ink-soft: #334155;
-  --color-muted: #64748b;
-  --color-surface: #ffffff;
-  --color-surface-soft: #f8fafc;
-  --color-border: #e2e8f0;
+  /* 接近纯黑但留 1-2 度温度,纯 #000 在 OLED 上死寂、CLI 也不该是死寂 */
+  --color-bg: #0a0a0a;
+  --color-bg-soft: #111114;
+  --color-ink: #ededed;
+  --color-ink-soft: #a1a1aa;
+  --color-muted: #71717a;
+  --color-faint: #52525b;
+  /* 琥珀 = prompt 符号 / CTA,青 = 链接 / 高亮值 */
+  --color-amber: #f59e0b;
+  --color-amber-dim: #b45309;
+  --color-cyan: #22d3ee;
+  --color-border: #27272a;
+  --color-border-soft: #1c1c1f;
 
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
-    "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB",
-    "Microsoft YaHei", sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
-    "Liberation Mono", monospace;
+    "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 html {
   scroll-behavior: smooth;
+  background: var(--color-bg);
 }
 
 body {
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.6;
   color: var(--color-ink);
-  background: var(--color-surface);
+  background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* selection 走 amber,扣 CLI 主题 */
+::selection {
+  background: var(--color-amber);
+  color: var(--color-bg);
+}
+
+/* ──────── motion ──────── */
+
+/* 光标闪烁 */
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.cursor::after {
+  content: "▊";
+  color: var(--color-amber);
+  margin-left: 2px;
+  animation: blink 1s steps(2) infinite;
+  font-weight: 400;
+}
+
+/* prompt 灯点呼吸 */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.92); }
+}
+
+.pulse-dot {
+  animation: pulse-soft 2.2s ease-in-out infinite;
+}
+
+/* scroll 进场:浏览器支持 animation-timeline 就用,不支持就跳过(不阻断阅读) */
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: reveal-up linear both;
+    animation-timeline: view();
+    animation-range: entry 5% cover 25%;
+  }
+}
+
+/* hover 上推 */
+.hover-prompt {
+  position: relative;
+  padding-left: 1.5rem;
+  transition: color 0.18s ease;
+}
+
+.hover-prompt::before {
+  content: "▸";
+  position: absolute;
+  left: 0.25rem;
+  color: var(--color-faint);
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+
+.hover-prompt:hover {
+  color: var(--color-amber);
+}
+
+.hover-prompt:hover::before {
+  color: var(--color-amber);
+  transform: translateX(3px);
+}
+
+/* ──────── 排版小工具 ──────── */
+
+/* $ prompt 前缀 */
+.prompt::before {
+  content: "$ ";
+  color: var(--color-amber);
+  font-weight: 500;
+  user-select: none;
+}
+
+/* # comment 前缀(英文区段标题用) */
+.comment-en::before {
+  content: "# ";
+  color: var(--color-faint);
+  user-select: none;
+}
+
+/* // 注释前缀(中文翻译用) */
+.comment-zh {
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+}
+
+.comment-zh::before {
+  content: "// ";
+  color: var(--color-faint);
+  user-select: none;
+}
+
+/* ASCII frame:用 outline 模拟 box drawing 的精确感 */
+.frame {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-soft);
+  position: relative;
+}
+
+.frame-glow {
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-soft);
+  box-shadow:
+    0 0 0 1px var(--color-border-soft),
+    0 20px 60px -20px rgba(245, 158, 11, 0.08),
+    0 0 80px -30px rgba(34, 211, 238, 0.06);
+}
+
+/* Hero 大字 */
+.h-display {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-size: clamp(2.25rem, 5.5vw, 4.25rem);
+}
+
+.h-section {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-size: clamp(1.5rem, 3vw, 2rem);
+}
+
+/* monospace 下中文渲染过密,微调 */
+:lang(zh), .zh {
+  letter-spacing: 0.02em;
+}
+
+/* 网格背景:微妙的 grain 感,不抢戏 */
+.grid-bg {
+  background-image:
+    linear-gradient(var(--color-border-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-border-soft) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+  mask-image: radial-gradient(ellipse at center top, black 0%, transparent 70%);
 }
