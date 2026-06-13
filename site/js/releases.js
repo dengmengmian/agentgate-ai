@@ -183,9 +183,15 @@
     const tbody = document.querySelector("[data-downloads]");
     if (!tbody) return;
 
-    const version = document.querySelector("[data-version]");
+    // querySelectorAll: nav / hero / 下载区都有 [data-version],
+    // 一次拉到 latest release 后所有显示位置同步更新,下次发版不用手改。
+    const versions = document.querySelectorAll("[data-version]");
     const released = document.querySelector("[data-released]");
-    if (version && release?.tag_name) version.textContent = release.tag_name;
+    if (release?.tag_name) {
+      versions.forEach((el) => {
+        el.textContent = release.tag_name;
+      });
+    }
     if (released && release?.published_at) {
       released.textContent = formatRelativeTime(release.published_at);
     }
