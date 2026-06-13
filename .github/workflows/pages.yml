@@ -6,6 +6,10 @@ on:
     paths:
       - 'site/**'
       - '.github/workflows/pages.yml'
+      - 'package.json'
+  # 发版后自动重新部署一次,把新版本号写进 JSON-LD softwareVersion。
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -37,6 +41,16 @@ jobs:
       - name: Install
         working-directory: site
         run: pnpm install --frozen-lockfile
+
+      - name: Sync version into HTML
+        # 从根 package.json 读 version,sed 替换 site HTML 里的
+        # JSON-LD softwareVersion(给搜索引擎读静态值,等不到 JS 跑完)。
+        # 其他显示位置(nav / hero / 下载区)由 releases.js 在浏览器里
+        # 拉 GitHub Releases API 动态覆盖,这里只管 SSR-visible 那条。
+        run: |
+          VERSION=$(jq -r .version package.json)
+          echo "Syncing site version → $VERSION"
+          sed -i "s/\"softwareVersion\": \"[^\"]*\"/\"softwareVersion\": \"$VERSION\"/g" site/index.html site/zh/index.html
 
       - name: Build Tailwind
         working-directory: site
