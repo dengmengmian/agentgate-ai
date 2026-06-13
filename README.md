@@ -5,8 +5,8 @@
 <h1 align="center">AgentGate</h1>
 
 <p align="center">
-  <b>Run Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode through one local model gateway.</b><br>
-  Agent-native compatibility · one-click client setup · cost-aware multi-provider routing.
+  <b>Turn official AI agent APIs into your local model entry.</b><br>
+  AgentGate connects Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode to local routing, protocol conversion, native pass-through, cost tracking, and request tracing.
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo-header-v2.gif" width="800" alt="AgentGate routes coding agents through a local gateway to cheaper providers with live cost tracking">
+  <img src="docs/demo-header-v2.gif" width="800" alt="AgentGate intercepts requests from Claude Code, Codex, and Gemini CLI at a local control point — converting, passing through, routing, or failing over to 26 providers, with every request traced live">
 </p>
 
 ## Download
@@ -38,11 +38,11 @@ Headless CLI (`agentgate-serve`) tarballs and older versions are on the [Release
 
 ## Why AgentGate
 
-| Agent-native compatibility | One-click client setup | Cost-aware routing |
+| Official experience intact | Your local model entry | Every request visible |
 |:---|:---|:---|
-| Bridges Codex Responses, Claude Messages, Gemini, and Chat Completions so coding agents can talk to more providers. | Applies and restores Codex / Claude Code / OpenCode / Gemini CLI / AtomCode configs without hand-editing local files. | Routes across 26 providers with failover, capability checks, latency/price strategies, and per-request cost tracking. |
+| Keeps Codex / Claude Code / Gemini CLI / OpenCode / AtomCode usable the way you already use them, with one-click restore to official configs. | Official client requests enter AgentGate first, then route through protocol conversion or native pass-through to the upstream provider you choose. | Route decisions, converted payloads, upstream errors, tokens, cost, latency, and failover attempts are traced locally. |
 
-AgentGate is not a hosted API reseller. It is a local-first desktop workbench for people who use coding agents and want provider flexibility without breaking client-specific behavior.
+AgentGate is not a hosted API reseller or a generic proxy. It is a local control point for AI agent clients whose model requests are normally tied to official endpoints.
 
 ## 5-Minute Quick Start
 
@@ -58,11 +58,48 @@ Provider presets fill common base URLs, protocols, model defaults, and capabilit
 
 | Goal | What AgentGate does |
 |---|---|
-| Use Codex with DeepSeek or MiMo | Converts Codex Responses API traffic to compatible upstream formats and handles model mapping. |
+| Use Codex with DeepSeek or MiMo | Lets Codex keep sending official Responses API traffic, then converts or passes it through to the selected upstream. |
 | Keep Codex Desktop plugins working | Preserves the official OpenAI-authenticated provider path while routing model requests through AgentGate. |
 | Use Claude Code with DeepSeek / MiMo / Copilot | Supports Anthropic-compatible pass-through, model-name mapping, and optional GitHub Copilot provider setup. |
 | Avoid provider outages or quota stalls | Tries failover providers on configured status codes, keywords, timeouts, and cooldown state. |
-| Track spend by model and client | Stores request logs, token counts, latency, route decisions, and estimated cost. |
+| Understand every request | Stores raw and converted payloads, route decisions, upstream errors, token counts, latency, and estimated cost. |
+
+<details>
+<summary>Supported providers</summary>
+
+<!-- PROVIDER_CATALOG_TABLE:START -->
+| Provider | Type | Native Protocols | Provider-Specific Handling |
+|---|---|---|---|
+| Xiaomi MiMo | `mimo` | Chat + Anthropic | Multi-turn `reasoning_content` round-trip, region-aware `tp-*` host auto-routing, temperature strip in thinking mode, tool_choice non-auto strip, omni web_search strip, web_search builtin gated by matrix, Web Search Plugin auto-degrade / retry |
+| DeepSeek | `deepseek` | Chat + Anthropic | Image stripping with explicit notice, DeepSeek V4 thinking history reasoning backfill, schema cleaning, message reordering |
+| Anthropic (Claude) | `anthropic` | Anthropic | `tool_use`/`tool_result`, `input_schema`, thinking budget, native cache_control |
+| GitHub Copilot | `copilot` | Chat + Anthropic | GitHub token → Copilot bearer exchange, `x-initiator` billing classification, Claude model dash→dot normalization |
+| OpenAI | `openai` | Chat + Responses | None (Responses passthrough or Chat conversion) |
+| Google Gemini | `google_gemini` | Chat | None |
+| Kimi / Moonshot | `kimi` | Chat | `web_search` → `builtin_function`/`$web_search`, thinking control |
+| MiniMax | `minimax` | Chat | Strip reasoning_effort / response_format, `<think>` extraction |
+| GLM (Zhipu) | `glm` | Chat | Generic |
+| DashScope (Qwen) | `dashscope` | Chat | Generic |
+| SiliconFlow | `siliconflow` | Chat | Generic |
+| Volcengine (Doubao) | `volcengine` | Chat | Generic |
+| Baichuan | `baichuan` | Chat | Generic |
+| StepFun | `stepfun` | Chat | Generic |
+| SenseNova | `sensenova` | Chat | Drops null strict / response_format / non-function tools, merges system messages |
+| Yi (01.AI) | `yi` | Chat | Generic |
+| ModelScope | `modelscope` | Chat | Generic |
+| xAI (Grok) | `xai` | Chat | Generic |
+| Mistral | `mistral` | Chat | Generic |
+| Groq | `groq` | Chat | Generic |
+| Together | `together` | Chat | Generic |
+| Fireworks | `fireworks` | Chat | Generic |
+| Cerebras | `cerebras` | Chat | Generic |
+| Perplexity | `perplexity` | Chat | Generic |
+| Cohere | `cohere` | Chat | Generic |
+| OpenRouter | `openrouter` | Chat | None |
+| Custom | `custom_openai_compatible` | Chat | None (set Base URL yourself) |
+<!-- PROVIDER_CATALOG_TABLE:END -->
+
+</details>
 
 ## Guides
 
