@@ -103,6 +103,13 @@ tower_governor = "0.4"
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(mobile)"] }
 
+# release 二进制优化：thin LTO + 单 codegen unit + strip 符号。
+# 桌面 GUI 体积敏感（用户要下安装包）、网关热路径也吃 inlining。
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
 [dev-dependencies]
 # 离线 fixture 测试用：本地起 mock 上游，断言 AgentGate 转换后的请求体。
 # 不依赖真实 provider key、不依赖网络。

@@ -580,39 +580,63 @@ fn log_to_db(
     status_code: i64,
     latency_ms: i64,
 ) {
-    if let Some(conn) = lock_db(db) {
-        let enriched = with_route_decision(&conn, route, provider, model, raw_request, trace_json);
-        let _ = crate::storage::request_logs::insert(
-            &conn,
-            request_id,
-            client_type,
-            provider,
-            model,
-            route,
-            status_code,
-            latency_ms,
-            Some(raw_request),
-            None,
-            if raw_response.is_empty() {
-                None
-            } else {
-                Some(raw_response)
-            },
-            None,
-            None,
-            None,
-            error_message,
-            Some(&enriched),
-            None,
-            None,
-            None,
-            None,
-            None,
-            Some("gateway"),
-            None,
-            Some(request_id),
-        );
-    }
+    // 异步 fire-and-forget：把 SQLite INSERT 挪出响应路径，
+    // 不让客户端等几毫秒的盘 IO。rusqlite 是同步 API,用 spawn_blocking
+    // 走专门的 blocking thread pool,不卡 tokio async worker。
+    // DbPool 内部是 Arc,clone 廉价。
+    let db = db.clone();
+    let client_type = client_type.to_string();
+    let route = route.to_string();
+    let request_id = request_id.to_string();
+    let provider = provider.to_string();
+    let model = model.to_string();
+    let raw_request = raw_request.to_string();
+    let raw_response = raw_response.to_string();
+    let error_message = error_message.map(|s| s.to_string());
+    let trace_json = trace_json.to_string();
+
+    tokio::task::spawn_blocking(move || {
+        if let Some(conn) = lock_db(&db) {
+            let enriched = with_route_decision(
+                &conn,
+                &route,
+                &provider,
+                &model,
+                &raw_request,
+                &trace_json,
+            );
+            let _ = crate::storage::request_logs::insert(
+                &conn,
+                &request_id,
+                &client_type,
+                &provider,
+                &model,
+                &route,
+                status_code,
+                latency_ms,
+                Some(&raw_request),
+                None,
+                if raw_response.is_empty() {
+                    None
+                } else {
+                    Some(raw_response.as_str())
+                },
+                None,
+                None,
+                None,
+                error_message.as_deref(),
+                Some(&enriched),
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some("gateway"),
+                None,
+                Some(&request_id),
+            );
+        }
+    });
 }
 
 /// Anthropic Messages API pass-through — forward directly to provider's Anthropic endpoint.
