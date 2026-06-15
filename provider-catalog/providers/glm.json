@@ -10,11 +10,12 @@
     "baseUrl": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
     "anthropicBaseUrl": "https://open.bigmodel.cn/api/anthropic"
   },
-  "defaultModel": "glm-4-plus",
-  "supportedModels": ["glm-4-plus"],
+  "defaultModel": "glm-5",
+  "supportedModels": ["glm-5", "glm-5.1", "glm-4-plus"],
   "models": [
-    { "id": "glm-4-plus", "pricing": { "inputPerMillion": 0.7, "outputPerMillion": 0.7 } },
-    { "id": "glm-5", "pricing": { "inputPerMillion": 1, "outputPerMillion": 3.2 } }
+    { "id": "glm-5", "pricing": { "inputPerMillion": 0.55, "outputPerMillion": 2.25 } },
+    { "id": "glm-5.1", "pricing": { "inputPerMillion": 0.85, "outputPerMillion": 3.4 } },
+    { "id": "glm-4-plus", "pricing": { "inputPerMillion": 0.7, "outputPerMillion": 0.7 } }
   ],
   "docs": {
     "handlingEn": "Generic",

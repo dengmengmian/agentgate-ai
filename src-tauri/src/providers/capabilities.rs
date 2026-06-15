@@ -76,9 +76,9 @@ fn seed_kimi(mid: &str) -> Vec<String> {
     // (AgentGate already translates Codex's web_search_preview → builtin_function
     // in tool_calls.rs), so we mark web_search universally for Kimi models.
     match base {
-        // kimi-for-coding accepts image input (confirmed by users). Coding-tuned
-        // model, supports function calling + web_search builtin.
-        "kimi-for-coding" => vec![
+        // kimi-for-coding + kimi-k2.7-code accept image input. Coding-tuned
+        // models, support function calling + web_search builtin.
+        "kimi-for-coding" | "kimi-k2.7-code" => vec![
             CAP_TEXT.into(),
             CAP_VISION.into(),
             CAP_TOOLS.into(),
@@ -91,10 +91,9 @@ fn seed_kimi(mid: &str) -> Vec<String> {
             CAP_TOOLS.into(),
             CAP_WEB_SEARCH.into(),
         ],
-        // Kimi K-series + standard Moonshot chat models. Recent K2 supports
-        // vision; conservative default keeps web_search + tools, leaves vision
-        // off for the user to opt into per model.
-        "kimi-k2" => vec![
+        // Kimi K-series + standard Moonshot chat models. K2 / K2.6 support
+        // vision natively; web_search builtin available on all.
+        "kimi-k2" | "kimi-k2.6" => vec![
             CAP_TEXT.into(),
             CAP_VISION.into(),
             CAP_TOOLS.into(),

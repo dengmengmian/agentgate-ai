@@ -9,9 +9,11 @@
   "endpoints": {
     "baseUrl": "https://api.moonshot.cn"
   },
-  "defaultModel": "kimi-k2",
-  "supportedModels": ["kimi-k2", "kimi-for-coding"],
+  "defaultModel": "kimi-k2.6",
+  "supportedModels": ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2", "kimi-for-coding"],
   "models": [
+    { "id": "kimi-k2.6", "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 } },
+    { "id": "kimi-k2.7-code", "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 } },
     { "id": "kimi-k2", "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 } },
     { "id": "kimi-for-coding", "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 } }
   ],

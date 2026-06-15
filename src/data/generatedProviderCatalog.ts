@@ -550,12 +550,28 @@ export const GENERATED_PROVIDER_CATALOG = {
     "endpoints": {
       "baseUrl": "https://api.moonshot.cn"
     },
-    "defaultModel": "kimi-k2",
+    "defaultModel": "kimi-k2.6",
     "supportedModels": [
+      "kimi-k2.6",
+      "kimi-k2.7-code",
       "kimi-k2",
       "kimi-for-coding"
     ],
     "models": [
+      {
+        "id": "kimi-k2.6",
+        "pricing": {
+          "inputPerMillion": 1,
+          "outputPerMillion": 4
+        }
+      },
+      {
+        "id": "kimi-k2.7-code",
+        "pricing": {
+          "inputPerMillion": 1,
+          "outputPerMillion": 4
+        }
+      },
       {
         "id": "kimi-k2",
         "pricing": {
@@ -637,23 +653,32 @@ export const GENERATED_PROVIDER_CATALOG = {
       "baseUrl": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
       "anthropicBaseUrl": "https://open.bigmodel.cn/api/anthropic"
     },
-    "defaultModel": "glm-4-plus",
+    "defaultModel": "glm-5",
     "supportedModels": [
+      "glm-5",
+      "glm-5.1",
       "glm-4-plus"
     ],
     "models": [
+      {
+        "id": "glm-5",
+        "pricing": {
+          "inputPerMillion": 0.55,
+          "outputPerMillion": 2.25
+        }
+      },
+      {
+        "id": "glm-5.1",
+        "pricing": {
+          "inputPerMillion": 0.85,
+          "outputPerMillion": 3.4
+        }
+      },
       {
         "id": "glm-4-plus",
         "pricing": {
           "inputPerMillion": 0.7,
           "outputPerMillion": 0.7
-        }
-      },
-      {
-        "id": "glm-5",
-        "pricing": {
-          "inputPerMillion": 1,
-          "outputPerMillion": 3.2
         }
       }
     ],
@@ -1304,7 +1329,7 @@ export const GENERATED_PROVIDER_PRESETS = {
     "protocols": [
       "openai_chat_completions"
     ],
-    "defaultModel": "kimi-k2",
+    "defaultModel": "kimi-k2.6",
     "extraHeaders": "{\"User-Agent\":\"KimiCLI/1.40.0\"}"
   },
   "minimax": {
@@ -1319,7 +1344,7 @@ export const GENERATED_PROVIDER_PRESETS = {
     "protocols": [
       "openai_chat_completions"
     ],
-    "defaultModel": "glm-4-plus",
+    "defaultModel": "glm-5",
     "anthropicBaseUrl": "https://open.bigmodel.cn/api/anthropic"
   },
   "dashscope": {
