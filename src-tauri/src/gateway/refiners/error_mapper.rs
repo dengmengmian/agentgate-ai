@@ -70,7 +70,7 @@ pub fn apply(
     if status == 400 && detect_context_overflow(&mapped_message, upstream_code.as_deref()) {
         mapped_code = "context_length_exceeded".to_string();
         mapped_message = format!(
-            "{} — 建议：清理对话历史或换用更长上下文模型。",
+            "{} — 建议：Codex / Claude Code 中执行 /compact 清理历史，或换更长上下文模型。",
             mapped_message.trim_end_matches(['。', '.', ' '])
         );
     } else if status == 400 && detect_malformed_history_json(&mapped_message) {
@@ -390,6 +390,11 @@ mod tests {
         let m = apply(&p, &body, 400, "openai_responses").unwrap();
         assert_eq!(m.action.mapped_code, "context_length_exceeded");
         assert!(m.action.mapped_message.contains("建议"));
+        assert!(
+            m.action.mapped_message.contains("/compact"),
+            "应明确提示 /compact 命令: {}",
+            m.action.mapped_message
+        );
     }
 
     #[test]
