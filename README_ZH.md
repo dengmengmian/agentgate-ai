@@ -5,8 +5,8 @@
 <h1 align="center">AgentGate</h1>
 
 <p align="center">
-  <b>让 AI Agent 的官方接口，变成你的本地模型入口。</b><br>
-  AgentGate 让 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 接入本地路由、协议转换、原生直连、成本统计和请求追踪。
+  <b>把 AI Agent 的模型选择权拿回来。</b><br>
+  AgentGate 把 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 的模型请求接到本地，再处理协议转换、原生直连、Provider 路由、失败转移、成本统计和请求追踪。
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@
 
 ## 为什么用 AgentGate
 
-| 官方体验不变 | 模型入口归你管 | 请求链路看得见 |
+| 官方体验不变 | 模型路由归你管 | 请求链路看得见 |
 |:---|:---|:---|
 | 保留 Codex / Claude Code / Gemini CLI / OpenCode / AtomCode 原有使用方式，并支持一键恢复官方配置。 | 官方客户端请求先进入 AgentGate，再由本地决定协议转换、原生直连、Provider 和模型。 | 每次请求的路由、转换、上游错误、Token、成本、延迟和失败转移都在本地可追踪。 |
 

@@ -7,8 +7,8 @@
 English: [Main Reference](./full-reference.md)
 
 <p align="center">
-  <b>把官方 AI agent API 变成你本地可控的模型入口。</b><br>
-  协议转换 · 原生 pass-through · 本地路由 · 请求追踪。一个桌面控制点，26 个 Provider。
+  <b>把 AI Agent 的模型选择权拿回来。</b><br>
+  官方客户端请求先进入本地控制点：协议转换、原生直连、Provider 路由、失败转移、成本统计和请求追踪。
 </p>
 
 <p align="center">
@@ -23,7 +23,7 @@ English: [Main Reference](./full-reference.md)
 </p>
 
 <p align="center">
-  <img src="demo-header-v2.gif" width="800" alt="AgentGate 把官方 AI agent API 变成本地模型入口：转换、pass-through、路由、追踪">
+  <img src="demo-header-v2.gif" width="800" alt="AgentGate 把 AI Agent 模型请求接到本地控制点：转换、直连、路由、追踪">
 </p>
 
 ## 按系统下载
@@ -40,7 +40,7 @@ English: [Main Reference](./full-reference.md)
 
 ## 为什么用 AgentGate
 
-| 不破坏官方体验 | 本地模型入口归你 | 每一条请求都看得到 |
+| 不破坏官方体验 | 模型路由归你 | 每一条请求都看得到 |
 |:---|:---|:---|
 | AI agent 客户端继续按它习惯的方式工作，一键还原到官方配置 | 让官方客户端请求先进 AgentGate，再决定转换协议或 pass-through 到你选的上游 | 路由决策、转换后的 payload、上游错误、token、成本、延迟、故障转移 尝试一条都不漏 |
 
@@ -56,9 +56,9 @@ AgentGate 会从 Provider 预设里自动填好常见的 base URL、协议、默
 
 ---
 
-AgentGate 是一个 **给 AI agent 客户端用的本地模型入口**。它把原本要发给官方 endpoint 的模型请求接进本地的桌面控制点，再决定是做协议转换，还是原生 pass-through 到 26 个 Provider 里的某一个——包括小米 MiMo、DeepSeek、OpenAI、Anthropic、GitHub Copilot、Kimi、GLM、DashScope、SiliconFlow、Volcengine 等等。
+AgentGate 是一个 **给 AI Agent 模型请求用的本地控制点**。它把原本要直接发给官方 endpoint 的模型请求先接进你的桌面，再决定是做协议转换，还是原生直连到 26 个 Provider 里的某一个——包括小米 MiMo、DeepSeek、OpenAI、Anthropic、GitHub Copilot、Kimi、GLM、DashScope、SiliconFlow、Volcengine 等等。
 
-> **把官方 AI agent API 变成你本地可控的模型入口。** Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 继续按它们熟悉的方式跑，AgentGate 在本地处理上游选择、协议差异、故障转移、成本和可追溯性。
+> **把 AI Agent 的模型选择权拿回来。** Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 继续按它们熟悉的方式跑，AgentGate 在本地处理上游选择、协议差异、故障转移、成本和可追溯性。
 
 ![成本看板](screenshots/dashboard.png)
 

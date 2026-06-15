@@ -5,8 +5,8 @@
 <h1 align="center">AgentGate</h1>
 
 <p align="center">
-  <b>Turn official AI agent APIs into your local model entry.</b><br>
-  Protocol conversion · native pass-through · local routing · request tracing. One desktop control point, 26 providers.
+  <b>Take back model choice for your AI agents.</b><br>
+  Official client requests enter a local control point first: protocol conversion, native pass-through, provider routing, failover, cost tracking, and request tracing.
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="demo-header-v2.gif" width="800" alt="AgentGate turns official AI agent APIs into a local model entry with conversion, pass-through, routing, and tracing">
+  <img src="demo-header-v2.gif" width="800" alt="AgentGate brings AI agent requests into a local control point for conversion, pass-through, routing, and tracing">
 </p>
 
 ## Download for your OS
@@ -38,7 +38,7 @@
 
 ## Why AgentGate
 
-| Official experience intact | Your local model entry | Every request visible |
+| Official experience intact | Model routing is yours | Every request visible |
 |:---|:---|:---|
 | Keep AI agent clients usable the way they expect, with one-click restore to official configs | Let official client requests enter AgentGate first, then convert or pass through to your chosen upstream | Trace route decisions, converted payloads, upstream errors, tokens, cost, latency, and failover attempts |
 
@@ -54,9 +54,9 @@ AgentGate fills common base URLs, protocols, model defaults, and capability matr
 
 ---
 
-AgentGate is a **local model entry for AI agent clients**. It takes model requests that would normally go to official endpoints, brings them into a local desktop control point, then decides whether to convert protocols or pass through natively to 26 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, GitHub Copilot, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
+AgentGate is a **local control point for AI agent model requests**. It takes requests that would normally go straight to official endpoints, brings them into your desktop first, then decides whether to convert protocols or pass through natively to 26 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, GitHub Copilot, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
 
-> **Turn official AI agent APIs into a local model entry you control.** Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode keep their familiar client flow, while AgentGate handles upstream choice, protocol differences, failover, cost, and traceability locally.
+> **Take back model choice for your AI agents.** Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode keep their familiar client flow, while AgentGate handles upstream choice, protocol differences, failover, cost, and traceability locally.
 
 ![Cost dashboard](screenshots/dashboard.png)
 

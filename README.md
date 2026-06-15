@@ -5,8 +5,8 @@
 <h1 align="center">AgentGate</h1>
 
 <p align="center">
-  <b>Turn official AI agent APIs into your local model entry.</b><br>
-  AgentGate connects Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode to local routing, protocol conversion, native pass-through, cost tracking, and request tracing.
+  <b>Take back model choice for your AI agents.</b><br>
+  AgentGate brings Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode requests into a local control point, then handles protocol conversion, native pass-through, provider routing, failover, cost tracking, and request tracing.
 </p>
 
 <p align="center">
@@ -38,7 +38,7 @@ Headless CLI (`agentgate-serve`) tarballs and older versions are on the [Release
 
 ## Why AgentGate
 
-| Official experience intact | Your local model entry | Every request visible |
+| Official experience intact | Model routing is yours | Every request visible |
 |:---|:---|:---|
 | Keeps Codex / Claude Code / Gemini CLI / OpenCode / AtomCode usable the way you already use them, with one-click restore to official configs. | Official client requests enter AgentGate first, then route through protocol conversion or native pass-through to the upstream provider you choose. | Route decisions, converted payloads, upstream errors, tokens, cost, latency, and failover attempts are traced locally. |
 
