@@ -1,5 +1,17 @@
 # Changelog / 更新日志
 
+## [1.4.3] - 2026-06-15
+
+### 新增
+
+- **Claude Code 桌宠状态提醒** —— 桌宠右键菜单新增"接收 CC 提醒",可向 Claude Code `settings.json` 注入/移除 hooks；通过本地文件信箱接收 `UserPromptSubmit` / `PreToolUse` / `Notification` / `Stop` 状态事件,同步到桌宠气泡。
+- **Claude Code 系统通知** —— 等待授权(`permission_prompt`)和本轮完成(`idle_prompt` / `Stop`)时触发系统通知；工作中事件不发系统通知,避免刷屏。macOS dev 模式使用 `osascript display notification` 作为可观测路径,避免 Tauri notification 插件 dev 模式假成功。
+
+### 改进
+
+- **桌宠气泡优先级** —— CC 等待/完成气泡不会被普通桌宠气泡立即顶掉；高频 working 事件不弹气泡。
+- **社区入口** —— README 顶部增加 GitHub Discussions / 社区讨论入口。
+
 ## [1.4.2] - 2026-06-13
 
 ### 新增

@@ -329,6 +329,18 @@ pub fn show_pet_context_menu(
     .build(&app_handle)
     .map_err(|e| AppError::internal(format!("menu: {e}")))?;
 
+    let cc_hook_item = CheckMenuItemBuilder::with_id(
+        "pet_cc_hook",
+        if zh {
+            "接收 CC 提醒"
+        } else {
+            "Receive CC alerts"
+        },
+    )
+    .checked(crate::tools::claude_code::cc_hook_enabled())
+    .build(&app_handle)
+    .map_err(|e| AppError::internal(format!("menu: {e}")))?;
+
     let gateway_status_label = if gateway_running {
         if zh {
             format!("网关运行中 · :{gateway_port}")
@@ -455,6 +467,7 @@ pub fn show_pet_context_menu(
         .item(&switch_submenu)
         .separator()
         .item(&click_through_item)
+        .item(&cc_hook_item)
         .item(&open_settings_item)
         .item(&reset_memory_item)
         .separator()

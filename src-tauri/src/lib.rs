@@ -427,6 +427,13 @@ pub fn run() {
                     };
                     let _ = PetClickThroughChanged(new_value).emit(app);
                 }
+                "pet_cc_hook" => {
+                    // 读当前态取反,写 CC Notification hook。完全不碰 env。
+                    let new_value = !crate::tools::claude_code::cc_hook_enabled();
+                    if let Err(e) = crate::tools::claude_code::set_cc_hook(new_value) {
+                        eprintln!("[cc-notify] set_cc_hook({new_value}) failed: {e:?}");
+                    }
+                }
                 "pet_open_settings" => {
                     let _ = commands::pet_open_settings(app.clone());
                 }
@@ -483,10 +490,14 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             // 注册 tauri-specta 事件 registry。Event::emit 全依赖这一步,
             // 漏掉会运行时 panic "EventRegistry not found in Tauri state"。
             specta_builder.mount_events(app);
+
+            // CC Notification hook 的本地接收端,收到后同步桌宠并按状态发系统通知。
+            crate::app::cc_notify::spawn(app.handle().clone());
 
             let app_data_dir = app
                 .path()

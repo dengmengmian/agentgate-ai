@@ -37,7 +37,7 @@ const PET_COMPONENTS: Record<PetType, React.ComponentType<{ state: PetState }>> 
   ox: memo(OxPet), soldier: memo(SuperSoldierPet), coder: memo(CoderPet),
 };
 
-interface BubbleData { text: string; type: BubbleType; key: number }
+interface BubbleData { text: string; type: BubbleType; key: number; isCc?: boolean }
 
 const compactNumber = (n: number) => {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -80,9 +80,13 @@ export function PetApp() {
 
   // ── Helpers ──
 
-  const showBubble = useCallback((text: string, type: BubbleType) => {
-    bubbleKeyRef.current += 1;
-    setBubble({ text, type, key: bubbleKeyRef.current });
+  const showBubble = useCallback((text: string, type: BubbleType, isCc = false) => {
+    setBubble((prev) => {
+      // CC 提醒优先:正在显示的 CC 气泡不被普通气泡顶掉(它会自己到点消失)。
+      if (!isCc && prev?.isCc) return prev;
+      bubbleKeyRef.current += 1;
+      return { text, type, key: bubbleKeyRef.current, isCc };
+    });
   }, []);
 
   const dismissBubble = useCallback(() => setBubble(null), []);
@@ -121,7 +125,10 @@ export function PetApp() {
   useEffect(() => {
     const unlisten = events.petBubble.listen((e) => {
       const text = locale === "zh" && e.payload.text_zh ? e.payload.text_zh : e.payload.text;
-      showBubble(text, e.payload.type as "info" | "success" | "error" | "chat");
+      // CC 提醒用 type="cc" 作来源标记:映射成 info 样式显示,并标记 isCc 走优先级保护。
+      if (e.payload.type === "cc-working") { return; } // working 太频繁,不弹气泡(留给动画)
+      const isCc = e.payload.type.startsWith("cc");
+      showBubble(text, isCc ? "info" : (e.payload.type as "info" | "success" | "error" | "chat"), isCc);
     });
     return () => { unlisten.then((fn) => fn()); };
   }, [locale, showBubble]);

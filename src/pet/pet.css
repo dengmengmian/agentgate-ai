@@ -204,3 +204,12 @@ html, body, #root {
   50% { opacity: 1; transform: scale(1.2); }
 }
 
+
+/* ── CC 状态徽章(宠物头顶冒图标,增强可读性 + 传播力)── */
+.cc-badge { position: absolute; top: -8px; right: -4px; font-size: 16px; line-height: 1; pointer-events: none; z-index: 2; }
+.cc-badge-working { animation: cc-badge-spin 1.2s linear infinite; }
+@keyframes cc-badge-spin { to { transform: rotate(360deg); } }
+.cc-badge-waiting { animation: cc-badge-pop 0.45s ease-in-out infinite; }
+@keyframes cc-badge-pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.45); } }
+.cc-badge-done { animation: cc-badge-rise 0.6s ease-out; }
+@keyframes cc-badge-rise { 0% { transform: translateY(5px) scale(0.4); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }

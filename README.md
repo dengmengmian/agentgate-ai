@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="./README_ZH.md">中文</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">Download</a> · <a href="#5-minute-quick-start">5-Minute Quick Start</a> · <a href="./docs/full-reference.md">Full Reference</a>
+  <a href="./README_ZH.md">中文</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">Download</a> · <a href="#5-minute-quick-start">5-Minute Quick Start</a> · <a href="./docs/full-reference.md">Full Reference</a> · <a href="https://github.com/dengmengmian/agentgate-ai/discussions">💬 Discussions</a>
 </p>
 
 <p align="center">
@@ -28,11 +28,11 @@
 
 | Your machine | Download |
 |---|---|
-| macOS Apple Silicon | [AgentGate_1.4.2_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.2/AgentGate_1.4.2_aarch64.dmg) |
-| macOS Intel | [AgentGate_1.4.2_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.2/AgentGate_1.4.2_x64.dmg) |
-| Windows 10 / 11 | [AgentGate_1.4.2_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.2/AgentGate_1.4.2_x64-setup.exe) |
-| Debian / Ubuntu | [AgentGate_1.4.2_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.2/AgentGate_1.4.2_amd64.deb) |
-| Other Linux distros | [AgentGate_1.4.2_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.2/AgentGate_1.4.2_amd64.AppImage) |
+| macOS Apple Silicon | [AgentGate_1.4.3_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.3/AgentGate_1.4.3_aarch64.dmg) |
+| macOS Intel | [AgentGate_1.4.3_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.3/AgentGate_1.4.3_x64.dmg) |
+| Windows 10 / 11 | [AgentGate_1.4.3_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.3/AgentGate_1.4.3_x64-setup.exe) |
+| Debian / Ubuntu | [AgentGate_1.4.3_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.3/AgentGate_1.4.3_amd64.deb) |
+| Other Linux distros | [AgentGate_1.4.3_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.3/AgentGate_1.4.3_amd64.AppImage) |
 
 Headless CLI (`agentgate-serve`) tarballs and older versions are on the [Releases](https://github.com/dengmengmian/agentgate-ai/releases) page.
 

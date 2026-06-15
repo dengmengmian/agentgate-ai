@@ -1,6 +1,6 @@
 [package]
 name = "agentgate"
-version = "1.4.2"
+version = "1.4.3"
 description = "Local gateway for AI coding agents"
 authors = ["dengmengmian"]
 edition = "2021"
@@ -21,6 +21,7 @@ desktop = [
     "dep:tauri-plugin-updater",
     "dep:tauri-plugin-process",
     "dep:tauri-plugin-clipboard-manager",
+    "dep:tauri-plugin-notification",
 ]
 
 [lib]
@@ -84,6 +85,7 @@ open = "5"
 rand = "0.9"
 tauri-plugin-updater = { version = "2.10.1", optional = true }
 tauri-plugin-process = { version = "2", optional = true }
+tauri-plugin-notification = { version = "2", optional = true }
 # Used only by Quick Setup to peek at the clipboard for a known-shaped API
 # key. Read is wrapped in try/catch on the frontend so missing capability /
 # permission / plugin failure is silent — never blocks the form.

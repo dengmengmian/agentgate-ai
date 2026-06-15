@@ -109,6 +109,143 @@ pub struct ApplyConfigResult {
 }
 
 /// Claude Code settings.json path
+// ===== CC 实时状态提醒(信箱文件方式,接收端见 app::cc_notify)=====
+
+/// CC 状态信箱文件:~/.claude/agentgate-cc-notify.json(与 settings.json 同目录)。
+pub fn cc_notify_file() -> PathBuf {
+    settings_path().with_file_name("agentgate-cc-notify.json")
+}
+
+/// 信箱临时文件:hook 先写它再原子 mv 成正式文件,避免接收端读到半截。
+pub fn cc_notify_tmp_file() -> PathBuf {
+    settings_path().with_file_name(".agentgate-cc-notify.tmp")
+}
+
+/// 把 CC 状态 hook 合并/移除到 settings 文档。多个状态事件写同一信箱,
+/// 后端按 hook_event_name 区分 working/waiting/done。完全不碰 env。
+fn apply_cc_hook_in_doc(settings: &mut serde_json::Value, enabled: bool) {
+    let target = cc_notify_file();
+    let tmp = cc_notify_tmp_file();
+    let command = format!(
+        "cat > {} && mv {} {}",
+        tmp.display(),
+        tmp.display(),
+        target.display()
+    );
+    let marker = "agentgate-cc-notify";
+    let with_matcher = ["Notification", "PreToolUse"];
+    let no_matcher = ["UserPromptSubmit", "Stop"];
+
+    fn has_marker(entry: &serde_json::Value, marker: &str) -> bool {
+        entry
+            .get("hooks")
+            .and_then(|h| h.as_array())
+            .map(|inner| {
+                inner.iter().any(|c: &serde_json::Value| {
+                    c.get("command")
+                        .and_then(|cmd| cmd.as_str())
+                        .map(|x| x.contains(marker))
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false)
+    }
+
+    if enabled {
+        let hooks = match settings
+            .as_object_mut()
+            .map(|o| o.entry("hooks").or_insert_with(|| serde_json::json!({})))
+            .and_then(|h| h.as_object_mut())
+        {
+            Some(h) => h,
+            None => return,
+        };
+        for ev in with_matcher.iter().chain(no_matcher.iter()) {
+            let m = with_matcher.contains(ev);
+            let arr = match hooks
+                .entry(*ev)
+                .or_insert_with(|| serde_json::json!([]))
+                .as_array_mut()
+            {
+                Some(a) => a,
+                None => continue,
+            };
+            if arr.iter().any(|e| has_marker(e, marker)) {
+                continue;
+            }
+            let entry = if m {
+                serde_json::json!({ "matcher": "", "hooks": [{ "type": "command", "command": command.clone() }] })
+            } else {
+                serde_json::json!({ "hooks": [{ "type": "command", "command": command.clone() }] })
+            };
+            arr.push(entry);
+        }
+    } else if let Some(hooks) = settings.get_mut("hooks").and_then(|h| h.as_object_mut()) {
+        for ev in with_matcher.iter().chain(no_matcher.iter()) {
+            if let Some(arr) = hooks.get_mut(*ev).and_then(|n| n.as_array_mut()) {
+                arr.retain(|e| !has_marker(e, marker));
+            }
+        }
+    }
+}
+
+/// 开/关 CC 状态提醒:把 hook 写入/移除 settings.json(完全不碰 env)。
+pub fn set_cc_hook(enabled: bool) -> Result<(), String> {
+    let path = settings_path();
+    let mut settings: serde_json::Value = if path.exists() {
+        let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&content).map_err(|e| format!("settings.json 解析失败: {e}"))?
+    } else {
+        serde_json::json!({})
+    };
+    apply_cc_hook_in_doc(&mut settings, enabled);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let serialized = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    std::fs::write(&path, serialized).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 菜单勾选态:settings.json 里任一 CC 事件存在我们的 hook 即为开。
+pub fn cc_hook_enabled() -> bool {
+    let content = match std::fs::read_to_string(settings_path()) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let v: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(x) => x,
+        Err(_) => return false,
+    };
+    let marker = "agentgate-cc-notify";
+    let events = ["Notification", "PreToolUse", "UserPromptSubmit", "Stop"];
+    let hooks = match v.get("hooks") {
+        Some(h) => h,
+        None => return false,
+    };
+    events.iter().any(|ev| {
+        hooks
+            .get(*ev)
+            .and_then(|n| n.as_array())
+            .map(|arr| {
+                arr.iter().any(|e: &serde_json::Value| {
+                    e.get("hooks")
+                        .and_then(|h| h.as_array())
+                        .map(|inner| {
+                            inner.iter().any(|c: &serde_json::Value| {
+                                c.get("command")
+                                    .and_then(|cmd| cmd.as_str())
+                                    .map(|x| x.contains(marker))
+                                    .unwrap_or(false)
+                            })
+                        })
+                        .unwrap_or(false)
+                })
+            })
+            .unwrap_or(false)
+    })
+}
+
 pub fn settings_path() -> PathBuf {
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))

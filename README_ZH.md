@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">English</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">下载安装</a> · <a href="#5-分钟跑通">5 分钟跑通</a> · <a href="./docs/full-reference.md">完整参考</a>
+  <a href="./README.md">English</a> · <a href="https://github.com/dengmengmian/agentgate-ai/releases">下载安装</a> · <a href="#5-分钟跑通">5 分钟跑通</a> · <a href="./docs/full-reference.md">完整参考</a> · <a href="https://github.com/dengmengmian/agentgate-ai/discussions">💬 社区讨论</a>
 </p>
 
 <p align="center">
@@ -28,11 +28,11 @@
 
 | 你的机器 | 下载 |
 |---|---|
-| macOS Apple 芯片 | [AgentGate_1.4.2_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.2/AgentGate_1.4.2_aarch64.dmg) |
-| macOS Intel 芯片 | [AgentGate_1.4.2_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.2/AgentGate_1.4.2_x64.dmg) |
-| Windows 10 / 11 | [AgentGate_1.4.2_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.2/AgentGate_1.4.2_x64-setup.exe) |
-| Debian / Ubuntu | [AgentGate_1.4.2_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.2/AgentGate_1.4.2_amd64.deb) |
-| 其他 Linux 发行版 | [AgentGate_1.4.2_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.2/AgentGate_1.4.2_amd64.AppImage) |
+| macOS Apple 芯片 | [AgentGate_1.4.3_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.3/AgentGate_1.4.3_aarch64.dmg) |
+| macOS Intel 芯片 | [AgentGate_1.4.3_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.3/AgentGate_1.4.3_x64.dmg) |
+| Windows 10 / 11 | [AgentGate_1.4.3_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.3/AgentGate_1.4.3_x64-setup.exe) |
+| Debian / Ubuntu | [AgentGate_1.4.3_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.3/AgentGate_1.4.3_amd64.deb) |
+| 其他 Linux 发行版 | [AgentGate_1.4.3_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.3/AgentGate_1.4.3_amd64.AppImage) |
 
 无界面 CLI（`agentgate-serve`）压缩包和历史版本在 [Releases](https://github.com/dengmengmian/agentgate-ai/releases) 页面。
 
