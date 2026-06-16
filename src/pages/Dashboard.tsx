@@ -18,7 +18,11 @@ import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
 import { formatLatency } from "@/lib/utils";
 import * as api from "@/lib/api";
-import { useProviders, useRouteProfiles, useGatewayStatus } from "@/store/global";
+import {
+  useProviders,
+  useRouteProfiles,
+  useGatewayStatus,
+} from "@/store/global";
 import type { ToolConfigView } from "@/types/tool";
 import type { RequestLogListItem, CostBreakdown } from "@/types/request-log";
 import type { RequestStats } from "@/types/stats";
@@ -55,22 +59,41 @@ function CostList({ title, rows }: { title: string; rows: CostBreakdown[] }) {
   const max = rows.reduce((m, r) => Math.max(m, r.cost), 0) || 1;
   return (
     <div>
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-secondary">{title}</div>
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-secondary">
+        {title}
+      </div>
       {rows.length === 0 ? (
         <p className="text-[11px] text-text-muted">—</p>
       ) : (
         <div className="space-y-1.5">
           {rows.map((r) => (
             <div key={r.key} className="flex items-center gap-2 text-[11px]">
-              <span className="w-28 shrink-0 truncate font-mono text-text-primary" title={r.key}>{r.key}</span>
+              <span
+                className="w-28 shrink-0 truncate font-mono text-text-primary"
+                title={r.key}
+              >
+                {r.key}
+              </span>
               <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-card-secondary">
-                <div className="absolute inset-y-0 left-0 rounded-full bg-accent/60" style={{ width: `${(r.cost / max) * 100}%` }} />
+                <div
+                  className="absolute inset-y-0 left-0 rounded-full bg-accent/60"
+                  style={{ width: `${(r.cost / max) * 100}%` }}
+                />
               </div>
-              <span className="shrink-0 tabular-nums text-text-muted">{r.request_count}</span>
+              <span className="shrink-0 tabular-nums text-text-muted">
+                {r.request_count}
+              </span>
               {r.has_price ? (
-                <span className="w-16 shrink-0 text-right font-mono tabular-nums text-text-primary">{formatCost(r.cost)}</span>
+                <span className="w-16 shrink-0 text-right font-mono tabular-nums text-text-primary">
+                  {formatCost(r.cost)}
+                </span>
               ) : (
-                <span className="w-16 shrink-0 text-right text-[10px] text-text-muted/60" title={t("stats.no_price_tip")}>{t("stats.no_price")}</span>
+                <span
+                  className="w-16 shrink-0 text-right text-[10px] text-text-muted/60"
+                  title={t("stats.no_price_tip")}
+                >
+                  {t("stats.no_price")}
+                </span>
               )}
             </div>
           ))}
@@ -81,12 +104,29 @@ function CostList({ title, rows }: { title: string; rows: CostBreakdown[] }) {
 }
 
 // Single metric in a horizontal strip: label above, value below, no card chrome.
-function StripMetric({ label, value, tone }: { label: string; value: string; tone?: "default" | "error" | "accent" }) {
-  const valueColor = tone === "error" ? "text-error" : tone === "accent" ? "text-accent" : "text-text-primary";
+function StripMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "error" | "accent";
+}) {
+  const valueColor =
+    tone === "error"
+      ? "text-error"
+      : tone === "accent"
+        ? "text-accent"
+        : "text-text-primary";
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wide text-text-muted">{label}</span>
-      <span className={`text-base font-semibold ${valueColor} tabular-nums`}>{value}</span>
+      <span className="text-[10px] uppercase tracking-wide text-text-muted">
+        {label}
+      </span>
+      <span className={`text-base font-semibold ${valueColor} tabular-nums`}>
+        {value}
+      </span>
     </div>
   );
 }
@@ -163,84 +203,115 @@ export function Dashboard() {
   const [rangeDays, setRangeDays] = useState<RangeDays>(7);
 
   const load = useCallback(async () => {
-      try {
-        // providers / route profiles / gateway status 走全局 store——刷新到
-        // store,其它页面切回来不会再重发 invoke。status 的 fetch 与 Topbar
-        // 轮询并发时自动合并成一次 invoke。
-        const [tl, l, st, cm, cc, rs] = await Promise.all([
-          api.listTools(),
-          api.listRequestLogs({ limit: 5 }),
-          api.getRequestStatsRange(rangeDays),
-          api.aggregateCostByModel(rangeDays, 8),
-          api.aggregateCostByClient(rangeDays, 8),
-          api.aggregateRouteProfileStats(rangeDays).catch(() => []),
-          useGatewayStatus.getState().fetch(),
-          useProviders.getState().refetch(),
-          useRouteProfiles.getState().refetch().catch(() => {}),
-        ]);
-        const ps = useProviders.getState().items;
-        const rp = useRouteProfiles.getState().items;
-        // 按策略成本：route_profile stats(含 cost/请求数) + profile 名字，转成
-        // 和按模型/客户端一致的 CostBreakdown 形态复用 CostList。
-        const nameMap = Object.fromEntries(rp.map((p) => [p.id, p.name]));
-        const byStrategy: CostBreakdown[] = rs
-          .map((x) => ({
-            key: nameMap[x.route_profile_id] ?? x.route_profile_id,
-            provider: null,
-            request_count: x.request_count,
-            input_tokens: 0,
-            output_tokens: 0,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-            cost: x.cost,
-            has_price: true,
-          }))
-          .filter((x) => x.request_count > 0)
-          .sort((a, b) => b.cost - a.cost);
-        // 首次请求 celebration：lifetime total 从 0 翻到 ≥1 时 toast 一次。
-        // 用 localStorage 标记"已庆祝过"——避免清日志后再次触发。
-        const lifetimeTotal = st.total;
-        if (
-          lifetimeTotal >= 1
-          && localStorage.getItem("agentgate_first_req_seen") !== "1"
-        ) {
-          localStorage.setItem("agentgate_first_req_seen", "1");
-          toast("success", t("dashboard.first_request_seen"));
-        }
-
-        // Incremental update：只在数据实际变化时 setState，避免每 5 秒整页
-        // re-render 让数字闪烁、按钮跳动。浅比对 JSON 字符串虽然不最高效，
-        // 但对这点 payload 来说是常数时间，且写法最直接。
-        setTools(prev => shallowEqual(prev, tl) ? prev : tl);
-        setProviderCount(prev => prev === ps.length ? prev : ps.length);
-        setRecentLogs(prev => shallowEqual(prev, l) ? prev : l);
-        setStats(prev => shallowEqual(prev, st) ? prev : st);
-        setCostByModel(prev => shallowEqual(prev, cm) ? prev : cm);
-        setCostByClient(prev => shallowEqual(prev, cc) ? prev : cc);
-        setCostByStrategy(prev => shallowEqual(prev, byStrategy) ? prev : byStrategy);
-      } catch (err) {
-        toast("error", (err as api.AppError).message);
+    try {
+      // providers / route profiles / gateway status 走全局 store——刷新到
+      // store,其它页面切回来不会再重发 invoke。status 的 fetch 与 Topbar
+      // 轮询并发时自动合并成一次 invoke。
+      const [tl, l, st, cm, cc, rs] = await Promise.all([
+        api.listTools(),
+        api.listRequestLogs({ limit: 5 }),
+        api.getRequestStatsRange(rangeDays),
+        api.aggregateCostByModel(rangeDays, 8),
+        api.aggregateCostByClient(rangeDays, 8),
+        api.aggregateRouteProfileStats(rangeDays).catch(() => []),
+        useGatewayStatus.getState().fetch(),
+        useProviders.getState().refetch(),
+        useRouteProfiles
+          .getState()
+          .refetch()
+          .catch(() => {}),
+      ]);
+      const ps = useProviders.getState().items;
+      const rp = useRouteProfiles.getState().items;
+      // 按策略成本：route_profile stats(含 cost/请求数) + profile 名字，转成
+      // 和按模型/客户端一致的 CostBreakdown 形态复用 CostList。
+      const nameMap = Object.fromEntries(rp.map((p) => [p.id, p.name]));
+      const byStrategy: CostBreakdown[] = rs
+        .map((x) => ({
+          key: nameMap[x.route_profile_id] ?? x.route_profile_id,
+          provider: null,
+          request_count: x.request_count,
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_read_tokens: 0,
+          cache_write_tokens: 0,
+          cost: x.cost,
+          has_price: true,
+        }))
+        .filter((x) => x.request_count > 0)
+        .sort((a, b) => b.cost - a.cost);
+      // 首次请求 celebration：lifetime total 从 0 翻到 ≥1 时 toast 一次。
+      // 用 localStorage 标记"已庆祝过"——避免清日志后再次触发。
+      const lifetimeTotal = st.total;
+      if (
+        lifetimeTotal >= 1 &&
+        localStorage.getItem("agentgate_first_req_seen") !== "1"
+      ) {
+        localStorage.setItem("agentgate_first_req_seen", "1");
+        toast("success", t("dashboard.first_request_seen"));
       }
+
+      // Incremental update：只在数据实际变化时 setState，避免每 5 秒整页
+      // re-render 让数字闪烁、按钮跳动。浅比对 JSON 字符串虽然不最高效，
+      // 但对这点 payload 来说是常数时间，且写法最直接。
+      setTools((prev) => (shallowEqual(prev, tl) ? prev : tl));
+      setProviderCount((prev) => (prev === ps.length ? prev : ps.length));
+      setRecentLogs((prev) => (shallowEqual(prev, l) ? prev : l));
+      setStats((prev) => (shallowEqual(prev, st) ? prev : st));
+      setCostByModel((prev) => (shallowEqual(prev, cm) ? prev : cm));
+      setCostByClient((prev) => (shallowEqual(prev, cc) ? prev : cc));
+      setCostByStrategy((prev) =>
+        shallowEqual(prev, byStrategy) ? prev : byStrategy
+      );
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   }, [rangeDays, t]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
   usePolling(load, 5000);
 
   // 命令返回最新状态，直接写入 store——Topbar 徽章同步更新，无需等下个轮询。
   const setStatus = useGatewayStatus.getState().setValue;
-  const handleStart = async () => { try { setStatus(await api.startGateway()); toast("success", t("gateway.started")); } catch (err) { toast("error", (err as api.AppError).message); } };
-  const handleStop = async () => { try { setStatus(await api.stopGateway()); toast("success", t("gateway.stopped")); } catch (err) { toast("error", (err as api.AppError).message); } };
-  const handleRestart = async () => { try { setStatus(await api.restartGateway()); toast("success", t("gateway.restarted")); } catch (err) { toast("error", (err as api.AppError).message); } };
+  const handleStart = async () => {
+    try {
+      setStatus(await api.startGateway());
+      toast("success", t("gateway.started"));
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
+  const handleStop = async () => {
+    try {
+      setStatus(await api.stopGateway());
+      toast("success", t("gateway.stopped"));
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
+  const handleRestart = async () => {
+    try {
+      setStatus(await api.restartGateway());
+      toast("success", t("gateway.restarted"));
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
 
-  if (!status) return (
-    <div className="space-y-4">
-      <div className="skeleton h-12 w-full" />
-      <div className="skeleton h-16 w-full" />
-      <div className="skeleton h-40 w-full" />
-    </div>
-  );
+  if (!status)
+    return (
+      <div className="space-y-4">
+        <div className="skeleton h-12 w-full" />
+        <div className="skeleton h-16 w-full" />
+        <div className="skeleton h-40 w-full" />
+      </div>
+    );
 
-  const todayTokens = stats ? stats.today_input_tokens + stats.today_output_tokens : 0;
+  const todayTokens = stats
+    ? stats.today_input_tokens + stats.today_output_tokens
+    : 0;
   const hasProviders = providerCount !== null && providerCount > 0;
   const hasConfiguredTool = tools.some((tool) => tool.config_exists);
 
@@ -249,14 +320,19 @@ export function Dashboard() {
       {/* ── 1. Gateway strip — active provider, protocol chain, controls.
               host:port + running badge live in the global Topbar; we don't
               repeat them here. ── */}
-      <div className="rounded-xl border border-border bg-card px-5 py-3" style={{ boxShadow: "var(--shadow-sm)" }}>
+      <div
+        className="rounded-xl border border-border bg-card px-5 py-3"
+        style={{ boxShadow: "var(--shadow-sm)" }}
+      >
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft">
               <Radio className="h-4 w-4 text-accent" />
             </div>
             <div className="flex min-w-0 items-baseline gap-3">
-              <span className="text-sm font-semibold text-text-primary">{t("dashboard.gateway")}</span>
+              <span className="text-sm font-semibold text-text-primary">
+                {t("dashboard.gateway")}
+              </span>
               <span className="truncate text-xs text-text-secondary">
                 {status.active_provider ?? t("common.none")}
               </span>
@@ -269,16 +345,28 @@ export function Dashboard() {
           <div className="flex shrink-0 items-center gap-2">
             {status.running ? (
               <>
-                <button onClick={handleStop} className="flex items-center gap-1 rounded-md bg-error-soft px-2.5 py-1 text-[11px] font-medium text-error transition-colors hover:bg-error/20">
-                  <Square className="h-3 w-3" />{t("dashboard.stop")}
+                <button
+                  onClick={handleStop}
+                  className="flex items-center gap-1 rounded-md bg-error-soft px-2.5 py-1 text-[11px] font-medium text-error transition-colors hover:bg-error/20"
+                >
+                  <Square className="h-3 w-3" />
+                  {t("dashboard.stop")}
                 </button>
-                <button onClick={handleRestart} className="flex items-center gap-1 rounded-md bg-warning-soft px-2.5 py-1 text-[11px] font-medium text-warning transition-colors hover:bg-warning/20">
-                  <RotateCcw className="h-3 w-3" />{t("dashboard.restart")}
+                <button
+                  onClick={handleRestart}
+                  className="flex items-center gap-1 rounded-md bg-warning-soft px-2.5 py-1 text-[11px] font-medium text-warning transition-colors hover:bg-warning/20"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  {t("dashboard.restart")}
                 </button>
               </>
             ) : (
-              <button onClick={handleStart} className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-accent/90">
-                <Play className="h-3 w-3" />{t("dashboard.start")}
+              <button
+                onClick={handleStart}
+                className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[11px] font-medium text-white transition-colors hover:bg-accent/90"
+              >
+                <Play className="h-3 w-3" />
+                {t("dashboard.start")}
               </button>
             )}
           </div>
@@ -291,12 +379,15 @@ export function Dashboard() {
           icon={<Rocket className="h-6 w-6" />}
           title={t("dashboard.empty_title")}
           desc={t("dashboard.empty_desc")}
-          action={(
-            <Link to="/quick-setup" className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-all hover:gap-2">
+          action={
+            <Link
+              to="/quick-setup"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-all hover:gap-2"
+            >
               {t("dashboard.empty_cta")}
               <ArrowRight className="h-4 w-4" />
             </Link>
-          )}
+          }
         />
       )}
 
@@ -305,69 +396,124 @@ export function Dashboard() {
           icon={<Play className="h-6 w-6" />}
           title={t("dashboard.gateway_empty_title")}
           desc={t("dashboard.gateway_empty_desc")}
-          action={(
-            <button onClick={handleStart} className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-all hover:gap-2">
+          action={
+            <button
+              onClick={handleStart}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-all hover:gap-2"
+            >
               {t("dashboard.gateway_empty_cta")}
               <ArrowRight className="h-4 w-4" />
             </button>
-          )}
+          }
         />
       )}
 
       {hasProviders && status.running && stats && stats.total === 0 && (
         <OnboardingPrompt
           icon={<Rocket className="h-6 w-6" />}
-          title={hasConfiguredTool ? t("dashboard.no_requests_ready_title") : t("dashboard.no_requests_config_title")}
-          desc={hasConfiguredTool ? t("dashboard.no_requests_ready_desc") : t("dashboard.no_requests_config_desc")}
-          action={(
-            <Link to={hasConfiguredTool ? "/logs" : "/tools"} className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-all hover:gap-2">
-              {hasConfiguredTool ? t("dashboard.no_requests_ready_cta") : t("dashboard.no_requests_config_cta")}
+          title={
+            hasConfiguredTool
+              ? t("dashboard.no_requests_ready_title")
+              : t("dashboard.no_requests_config_title")
+          }
+          desc={
+            hasConfiguredTool
+              ? t("dashboard.no_requests_ready_desc")
+              : t("dashboard.no_requests_config_desc")
+          }
+          action={
+            <Link
+              to={hasConfiguredTool ? "/logs" : "/tools"}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-accent transition-all hover:gap-2"
+            >
+              {hasConfiguredTool
+                ? t("dashboard.no_requests_ready_cta")
+                : t("dashboard.no_requests_config_cta")}
               <ArrowRight className="h-4 w-4" />
             </Link>
-          )}
+          }
         />
       )}
 
       {/* ── 2. Today card — 5 primary metrics + cache inline footer when present ── */}
       {hasProviders && stats && stats.total > 0 && (
-        <div className="rounded-xl border border-border bg-card px-6 py-4" style={{ boxShadow: "var(--shadow-sm)" }}>
+        <div
+          className="rounded-xl border border-border bg-card px-6 py-4"
+          style={{ boxShadow: "var(--shadow-sm)" }}
+        >
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">{t("stats.today")}</span>
-            <span className="text-[11px] text-text-muted">{t("stats.realtime") || "实时刷新"}</span>
+            <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+              {t("stats.today")}
+            </span>
+            <span className="text-[11px] text-text-muted">
+              {t("stats.realtime") || "实时刷新"}
+            </span>
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-            <StripMetric label={t("stats.requests")} value={String(stats.today_total)} />
+            <StripMetric
+              label={t("stats.requests")}
+              value={String(stats.today_total)}
+            />
             <StripMetric
               label={t("stats.errors_label")}
               value={String(stats.today_errors)}
               tone={stats.today_errors > 0 ? "error" : "default"}
             />
-            <StripMetric label={t("stats.tokens_today") || "Tokens"} value={formatTokens(todayTokens)} />
-            <StripMetric label={t("stats.cost_today") || "今日费用"} value={formatCost(stats.today_cost)} />
-            <StripMetric label={t("stats.avg_latency")} value={formatLatency(stats.avg_latency_ms)} />
+            <StripMetric
+              label={t("stats.tokens_today") || "Tokens"}
+              value={formatTokens(todayTokens)}
+            />
+            <StripMetric
+              label={t("stats.cost_today") || "今日费用"}
+              value={formatCost(stats.today_cost)}
+            />
+            <StripMetric
+              label={t("stats.avg_latency")}
+              value={formatLatency(stats.avg_latency_ms)}
+            />
           </div>
           {stats.today_codex_compact > 0 && (
             <div className="mt-3 flex items-center gap-2 border-t border-border pt-3 text-[11px] text-text-muted">
-              <span className="font-medium text-text-secondary">{t("stats.codex_compact") || "Codex 压缩"}</span>
-              <span>
-                {t("stats.codex_compact_today") || "今日触发"} <span className="font-mono text-text-primary">{stats.today_codex_compact}</span> {t("stats.codex_compact_times") || "次"}
+              <span className="font-medium text-text-secondary">
+                {t("stats.codex_compact") || "Codex 压缩"}
               </span>
-              <span className="ml-auto text-text-muted/70">{t("stats.codex_compact_hint") || "本地代替 OpenAI 远程压缩"}</span>
+              <span>
+                {t("stats.codex_compact_today") || "今日触发"}{" "}
+                <span className="font-mono text-text-primary">
+                  {stats.today_codex_compact}
+                </span>{" "}
+                {t("stats.codex_compact_times") || "次"}
+              </span>
+              <span className="ml-auto text-text-muted/70">
+                {t("stats.codex_compact_hint") || "本地代替 OpenAI 远程压缩"}
+              </span>
             </div>
           )}
-          {(stats.today_cache_read_tokens > 0 || stats.today_cache_write_tokens > 0) && (
+          {(stats.today_cache_read_tokens > 0 ||
+            stats.today_cache_write_tokens > 0) && (
             <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-border pt-3 text-[11px] text-text-muted">
-              <span className="font-medium text-text-secondary">{t("stats.cache")}</span>
+              <span className="font-medium text-text-secondary">
+                {t("stats.cache")}
+              </span>
               <span>
-                {t("stats.cache_write")} <span className="font-mono text-text-primary">{formatTokens(stats.today_cache_write_tokens)}</span>
+                {t("stats.cache_write")}{" "}
+                <span className="font-mono text-text-primary">
+                  {formatTokens(stats.today_cache_write_tokens)}
+                </span>
               </span>
               <span className="text-text-muted/40">·</span>
               <span>
-                {t("stats.cache_hit")} <span className="font-mono text-text-primary">{formatTokens(stats.today_cache_read_tokens)}</span>
+                {t("stats.cache_hit")}{" "}
+                <span className="font-mono text-text-primary">
+                  {formatTokens(stats.today_cache_read_tokens)}
+                </span>
               </span>
               <span className="text-text-muted/40">·</span>
               <span>
-                {t("stats.input_total")} <span className="font-mono text-text-primary">{formatTokens(stats.today_input_tokens)}</span>
+                {t("stats.input_total")}{" "}
+                <span className="font-mono text-text-primary">
+                  {formatTokens(stats.today_input_tokens)}
+                </span>
               </span>
               <span className="ml-auto flex items-center gap-1.5">
                 {t("stats.hit_rate")}
@@ -391,12 +537,23 @@ export function Dashboard() {
               <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
                 <BarChart3 className="h-4 w-4 text-text-muted" />
                 {t("stats.daily_chart")}
-                <span className="text-text-muted">· {rangeDays === 1 ? t("stats.range_today") : `${rangeDays} ${t("stats.days_suffix")}`}</span>
+                <span className="text-text-muted">
+                  ·{" "}
+                  {rangeDays === 1
+                    ? t("stats.range_today")
+                    : `${rangeDays} ${t("stats.days_suffix")}`}
+                </span>
               </h3>
               <div className="flex items-center gap-3">
                 <div className="hidden items-center gap-3 text-[10px] text-text-muted sm:flex">
-                  <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-sm bg-accent/70" /><span>{t("stats.success_rate_label") || "成功"}</span></div>
-                  <div className="flex items-center gap-1"><div className="h-2 w-2 rounded-sm bg-error/60" /><span>{t("stats.errors_label")}</span></div>
+                  <div className="flex items-center gap-1">
+                    <div className="h-2 w-2 rounded-sm bg-accent/70" />
+                    <span>{t("stats.success_rate_label") || "成功"}</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <div className="h-2 w-2 rounded-sm bg-error/60" />
+                    <span>{t("stats.errors_label")}</span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-0.5 rounded-md bg-card-secondary p-0.5">
                   {RANGE_OPTIONS.map((opt) => (
@@ -420,7 +577,9 @@ export function Dashboard() {
               const maxReq = Math.max(...stats.daily.map((x) => x.total), 1);
               // Pick a clean tick value at the top (round up to nearest "nice" number).
               const niceMax = (() => {
-                const orders = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000];
+                const orders = [
+                  1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000,
+                ];
                 return orders.find((o) => o >= maxReq) ?? maxReq;
               })();
               const Y_AXIS_W = 36; // px reserved for y-axis tick labels
@@ -431,23 +590,39 @@ export function Dashboard() {
                     className="pointer-events-none absolute left-0 top-0 flex flex-col justify-between text-right text-[10px] font-mono text-text-muted"
                     style={{ height: BAR_H, width: Y_AXIS_W - 6 }}
                   >
-                    <span className="-translate-y-1/2">{niceMax.toLocaleString()}</span>
-                    <span className="-translate-y-1/2">{Math.round(niceMax / 2).toLocaleString()}</span>
+                    <span className="-translate-y-1/2">
+                      {niceMax.toLocaleString()}
+                    </span>
+                    <span className="-translate-y-1/2">
+                      {Math.round(niceMax / 2).toLocaleString()}
+                    </span>
                     <span className="-translate-y-1/2">0</span>
                   </div>
                   {/* Horizontal grid lines */}
-                  <div className="pointer-events-none absolute inset-y-0 right-0" style={{ left: Y_AXIS_W, height: BAR_H }}>
+                  <div
+                    className="pointer-events-none absolute inset-y-0 right-0"
+                    style={{ left: Y_AXIS_W, height: BAR_H }}
+                  >
                     <div className="h-px w-full bg-border/40" />
                     <div className="absolute top-1/2 h-px w-full bg-border/30" />
                     <div className="absolute bottom-0 h-px w-full bg-border/40" />
                   </div>
                   {/* Density tuning: gap shrinks + bar caps shrink as bar
                       count grows so 30-day view doesn't overflow. */}
-                  <div className={`relative flex items-end justify-between px-1 ${stats.daily.length > 20 ? "gap-1" : stats.daily.length > 10 ? "gap-2" : "gap-3"}`} style={{ height: BAR_H }}>
+                  <div
+                    className={`relative flex items-end justify-between px-1 ${stats.daily.length > 20 ? "gap-1" : stats.daily.length > 10 ? "gap-2" : "gap-3"}`}
+                    style={{ height: BAR_H }}
+                  >
                     {stats.daily.map((d) => {
                       const successCount = Math.max(d.total - d.errors, 0);
-                      const totalH = d.total > 0 ? Math.max((d.total / niceMax) * BAR_H, 2) : 0;
-                      const errH = d.errors > 0 && totalH > 0 ? Math.max((d.errors / d.total) * totalH, 2) : 0;
+                      const totalH =
+                        d.total > 0
+                          ? Math.max((d.total / niceMax) * BAR_H, 2)
+                          : 0;
+                      const errH =
+                        d.errors > 0 && totalH > 0
+                          ? Math.max((d.errors / d.total) * totalH, 2)
+                          : 0;
                       const tooltip = `${d.date}\n${t("stats.tooltip_requests")}: ${d.total} (${t("stats.success_rate_label")} ${successCount} / ${t("stats.tooltip_errors")} ${d.errors})\nTokens: in ${formatTokens(d.input_tokens)} · out ${formatTokens(d.output_tokens)}`;
                       return (
                         <div
@@ -459,16 +634,34 @@ export function Dashboard() {
                           {/* Bar */}
                           <div
                             className="flex w-full flex-col items-center justify-end overflow-hidden rounded-md transition-opacity group-hover:opacity-80"
-                            style={{ maxWidth: stats.daily.length > 20 ? 18 : stats.daily.length > 10 ? 24 : 32 }}
+                            style={{
+                              maxWidth:
+                                stats.daily.length > 20
+                                  ? 18
+                                  : stats.daily.length > 10
+                                    ? 24
+                                    : 32,
+                            }}
                           >
                             {totalH > 0 ? (
                               <>
-                                {errH > 0 && <div className="w-full bg-error/65" style={{ height: errH }} />}
-                                <div className="w-full bg-accent/70" style={{ height: totalH - errH }} />
+                                {errH > 0 && (
+                                  <div
+                                    className="w-full bg-error/65"
+                                    style={{ height: errH }}
+                                  />
+                                )}
+                                <div
+                                  className="w-full bg-accent/70"
+                                  style={{ height: totalH - errH }}
+                                />
                               </>
                             ) : (
                               // Empty day — show a faint baseline so the column is visible.
-                              <div className="w-full bg-border/40" style={{ height: 2 }} />
+                              <div
+                                className="w-full bg-border/40"
+                                style={{ height: 2 }}
+                              />
                             )}
                           </div>
                           {/* Hover total badge */}
@@ -477,7 +670,9 @@ export function Dashboard() {
                               className="pointer-events-none absolute opacity-0 transition-opacity group-hover:opacity-100"
                               style={{ bottom: totalH + 4 }}
                             >
-                              <span className="rounded bg-text-primary px-1.5 py-0.5 font-mono text-[10px] text-card whitespace-nowrap">{d.total}</span>
+                              <span className="rounded bg-text-primary px-1.5 py-0.5 font-mono text-[10px] text-card whitespace-nowrap">
+                                {d.total}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -486,7 +681,9 @@ export function Dashboard() {
                   </div>
                   {/* X-axis labels: date + counts row, aligned with bars (already
                       indented by parent padding-left). */}
-                  <div className={`mt-2 flex items-start justify-between px-1 ${stats.daily.length > 20 ? "gap-1" : stats.daily.length > 10 ? "gap-2" : "gap-3"}`}>
+                  <div
+                    className={`mt-2 flex items-start justify-between px-1 ${stats.daily.length > 20 ? "gap-1" : stats.daily.length > 10 ? "gap-2" : "gap-3"}`}
+                  >
                     {stats.daily.map((d, i) => {
                       const tokTotal = d.input_tokens + d.output_tokens;
                       const n = stats.daily.length;
@@ -494,8 +691,13 @@ export function Dashboard() {
                       const showDate = i % stride === 0 || i === n - 1;
                       const showTokens = n <= 14;
                       return (
-                        <div key={d.date} className="flex flex-1 flex-col items-center gap-0.5">
-                          <span className="text-[10px] text-text-muted">{showDate ? d.date.slice(5) : ""}</span>
+                        <div
+                          key={d.date}
+                          className="flex flex-1 flex-col items-center gap-0.5"
+                        >
+                          <span className="text-[10px] text-text-muted">
+                            {showDate ? d.date.slice(5) : ""}
+                          </span>
                           <span className="font-mono text-[11px] font-medium text-text-primary tabular-nums">
                             {d.total > 0 ? d.total.toLocaleString() : "—"}
                           </span>
@@ -513,16 +715,22 @@ export function Dashboard() {
             })()}
             {/* Top providers — inline strip under the chart in the same card. */}
             {(() => {
-              const visible = stats.providers.filter((p) => p.name !== "unknown");
+              const visible = stats.providers.filter(
+                (p) => p.name !== "unknown"
+              );
               if (visible.length === 0) return null;
               return (
                 <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-3 text-[11px]">
-                  <span className="font-medium text-text-secondary">{t("stats.top_providers")}</span>
+                  <span className="font-medium text-text-secondary">
+                    {t("stats.top_providers")}
+                  </span>
                   {visible.slice(0, 6).map((p, i) => (
                     <div key={p.name} className="flex items-center gap-1">
                       {i > 0 && <span className="text-text-muted/40">·</span>}
                       <span className="text-text-primary">{p.name}</span>
-                      <span className="font-mono text-text-muted">{p.count.toLocaleString()}</span>
+                      <span className="font-mono text-text-muted">
+                        {p.count.toLocaleString()}
+                      </span>
                     </div>
                   ))}
                 </div>
@@ -534,16 +742,24 @@ export function Dashboard() {
 
       {/* ── 3.5 成本分解：钱花在哪个模型 / 哪个客户端。仅有数据时显示。 ── */}
       {(costByModel.length > 0 || costByClient.length > 0) && (
-        <div className="rounded-xl border border-border bg-card p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
+        <div
+          className="rounded-xl border border-border bg-card p-5"
+          style={{ boxShadow: "var(--shadow-sm)" }}
+        >
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
             <Coins className="h-4 w-4 text-text-muted" />
             {t("stats.cost_breakdown")}
           </h3>
-          <div className={`grid gap-6 sm:grid-cols-2${costByStrategy.length > 0 ? " lg:grid-cols-3" : ""}`}>
+          <div
+            className={`grid gap-6 sm:grid-cols-2${costByStrategy.length > 0 ? " lg:grid-cols-3" : ""}`}
+          >
             <CostList title={t("stats.cost_by_model")} rows={costByModel} />
             <CostList title={t("stats.cost_by_client")} rows={costByClient} />
             {costByStrategy.length > 0 && (
-              <CostList title={t("stats.cost_by_strategy")} rows={costByStrategy} />
+              <CostList
+                title={t("stats.cost_by_strategy")}
+                rows={costByStrategy}
+              />
             )}
           </div>
         </div>

@@ -24,7 +24,8 @@ const SOURCES = [
 ];
 
 const skillKey = (s: Skill) => `${s.source}:${s.id}`;
-const sourceLabel = (source: string) => SOURCES.find((s) => s.id === source)?.label ?? source;
+const sourceLabel = (source: string) =>
+  SOURCES.find((s) => s.id === source)?.label ?? source;
 
 /// 本地 Skills 管理页。来源 ~/.claude/skills 与 ~/.codex/skills：启用/禁用靠重命名
 /// manifest，导入支持本地 .zip（不碰网络），备份走 JSON 导出/导入。
@@ -58,19 +59,26 @@ export function Skills() {
       claude: skills.filter((s) => s.source === "claude").length,
       codex: skills.filter((s) => s.source === "codex").length,
     }),
-    [skills],
+    [skills]
   );
 
   const visibleSkills = useMemo(
-    () => (filter === "all" ? skills : skills.filter((s) => s.source === filter)),
-    [filter, skills],
+    () =>
+      filter === "all" ? skills : skills.filter((s) => s.source === filter),
+    [filter, skills]
   );
 
   const handleToggle = async (skill: Skill) => {
     setBusyKey(skillKey(skill));
     try {
-      const next = await api.setSkillEnabled(skill.source, skill.id, !skill.enabled);
-      setSkills((items) => items.map((s) => (skillKey(s) === skillKey(skill) ? next : s)));
+      const next = await api.setSkillEnabled(
+        skill.source,
+        skill.id,
+        !skill.enabled
+      );
+      setSkills((items) =>
+        items.map((s) => (skillKey(s) === skillKey(skill) ? next : s))
+      );
       toast("success", t("skills.toggled"));
     } catch (err) {
       toast("error", (err as api.AppError).message);
@@ -80,11 +88,16 @@ export function Skills() {
   };
 
   const handleDelete = async (skill: Skill) => {
-    if (!window.confirm(t("skills.delete_confirm").replace("{name}", skill.name))) return;
+    if (
+      !window.confirm(t("skills.delete_confirm").replace("{name}", skill.name))
+    )
+      return;
     setBusyKey(skillKey(skill));
     try {
       await api.deleteSkill(skill.source, skill.id);
-      setSkills((items) => items.filter((s) => skillKey(s) !== skillKey(skill)));
+      setSkills((items) =>
+        items.filter((s) => skillKey(s) !== skillKey(skill))
+      );
       toast("success", t("skills.deleted"));
     } catch (err) {
       toast("error", (err as api.AppError).message);
@@ -101,7 +114,9 @@ export function Skills() {
       const skill = await api.importSkillFromZip(importSource, bytes);
       toast("success", t("skills.imported_zip"));
       setSkills((items) =>
-        [...items.filter((s) => skillKey(s) !== skillKey(skill)), skill].sort(byName),
+        [...items.filter((s) => skillKey(s) !== skillKey(skill)), skill].sort(
+          byName
+        )
       );
     } catch (err) {
       toast("error", (err as api.AppError).message);
@@ -118,7 +133,13 @@ export function Skills() {
       setExportText(JSON.stringify(data, null, 2));
       setTransferMode("export");
       if ((data.skipped_files?.length ?? 0) > 0) {
-        toast("warning", t("skills.skipped_note").replace("{count}", String(data.skipped_files?.length ?? 0)));
+        toast(
+          "warning",
+          t("skills.skipped_note").replace(
+            "{count}",
+            String(data.skipped_files?.length ?? 0)
+          )
+        );
       } else {
         toast("success", t("skills.exported"));
       }
@@ -140,7 +161,13 @@ export function Skills() {
       if (imported.length === 0) {
         toast("warning", t("skills.import_backup_none"));
       } else {
-        toast("success", t("skills.imported_backup").replace("{count}", String(imported.length)));
+        toast(
+          "success",
+          t("skills.imported_backup").replace(
+            "{count}",
+            String(imported.length)
+          )
+        );
       }
       load();
     } catch (err) {
@@ -167,7 +194,9 @@ export function Skills() {
             <BookOpen className="h-4 w-4" />
             {t("skills.title")}
           </h2>
-          <p className="mt-0.5 text-xs text-text-muted">{t("skills.subtitle")}</p>
+          <p className="mt-0.5 text-xs text-text-muted">
+            {t("skills.subtitle")}
+          </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {/* 导入 zip 的目标客户端 */}
@@ -198,7 +227,11 @@ export function Skills() {
             disabled={transferring}
             className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-card-secondary disabled:opacity-60"
           >
-            {transferring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+            {transferring ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Upload className="h-3.5 w-3.5" />
+            )}
             {t("skills.import_zip")}
           </button>
           <button
@@ -210,7 +243,9 @@ export function Skills() {
             {t("skills.export")}
           </button>
           <button
-            onClick={() => setTransferMode((mode) => (mode === "import" ? null : "import"))}
+            onClick={() =>
+              setTransferMode((mode) => (mode === "import" ? null : "import"))
+            }
             className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-card-secondary"
           >
             <Upload className="h-3.5 w-3.5" />
@@ -222,9 +257,24 @@ export function Skills() {
       {/* 来源筛选 */}
       {skills.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          <FilterButton active={filter === "all"} label={t("nav.skills")} count={counts.all} onClick={() => setFilter("all")} />
-          <FilterButton active={filter === "claude"} label="Claude Code" count={counts.claude} onClick={() => setFilter("claude")} />
-          <FilterButton active={filter === "codex"} label="Codex" count={counts.codex} onClick={() => setFilter("codex")} />
+          <FilterButton
+            active={filter === "all"}
+            label={t("nav.skills")}
+            count={counts.all}
+            onClick={() => setFilter("all")}
+          />
+          <FilterButton
+            active={filter === "claude"}
+            label="Claude Code"
+            count={counts.claude}
+            onClick={() => setFilter("claude")}
+          />
+          <FilterButton
+            active={filter === "codex"}
+            label="Codex"
+            count={counts.codex}
+            onClick={() => setFilter("codex")}
+          />
         </div>
       )}
 
@@ -232,7 +282,9 @@ export function Skills() {
         <section className="rounded-lg border border-border bg-card p-4">
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="text-xs font-medium text-text-primary">
-              {transferMode === "export" ? t("skills.export") : t("skills.import_backup")}
+              {transferMode === "export"
+                ? t("skills.export")
+                : t("skills.import_backup")}
             </div>
             <div className="flex items-center gap-2">
               {transferMode === "export" ? (
@@ -252,7 +304,11 @@ export function Skills() {
                   disabled={transferring}
                   className="flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-60"
                 >
-                  {transferring ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  {transferring ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="h-3.5 w-3.5" />
+                  )}
                   {t("skills.import_backup")}
                 </button>
               )}
@@ -267,38 +323,59 @@ export function Skills() {
           <textarea
             value={transferMode === "export" ? exportText : importText}
             onChange={(e) =>
-              transferMode === "export" ? setExportText(e.target.value) : setImportText(e.target.value)
+              transferMode === "export"
+                ? setExportText(e.target.value)
+                : setImportText(e.target.value)
             }
             rows={6}
             className="w-full resize-none rounded-md border border-border bg-card-secondary px-2.5 py-2 font-mono text-xs text-text-primary outline-none focus:border-accent"
-            placeholder={transferMode === "export" ? "" : t("skills.paste_backup")}
+            placeholder={
+              transferMode === "export" ? "" : t("skills.paste_backup")
+            }
           />
         </section>
       )}
 
       {skills.length === 0 ? (
-        <EmptyState icon={BookOpen} title={t("skills.title")} description={t("skills.empty")} />
+        <EmptyState
+          icon={BookOpen}
+          title={t("skills.title")}
+          description={t("skills.empty")}
+        />
       ) : (
         <div className="overflow-hidden rounded-lg border border-border bg-card divide-y divide-border">
           {visibleSkills.map((skill) => (
-            <div key={skillKey(skill)} className="flex items-center gap-3 px-4 py-3">
+            <div
+              key={skillKey(skill)}
+              className="flex items-center gap-3 px-4 py-3"
+            >
               <span
                 className={`inline-flex w-fit shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] ${
-                  skill.enabled ? "bg-success/10 text-success" : "bg-card-secondary text-text-muted"
+                  skill.enabled
+                    ? "bg-success/10 text-success"
+                    : "bg-card-secondary text-text-muted"
                 }`}
               >
-                {skill.enabled ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                {skill.enabled ? (
+                  <CheckCircle2 className="h-3 w-3" />
+                ) : (
+                  <XCircle className="h-3 w-3" />
+                )}
                 {skill.enabled ? t("skills.enabled") : t("skills.disabled")}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <span className="truncate text-xs font-semibold text-text-primary">{skill.name}</span>
+                  <span className="truncate text-xs font-semibold text-text-primary">
+                    {skill.name}
+                  </span>
                   <span className="shrink-0 rounded bg-card-secondary px-1.5 py-0.5 text-[10px] text-text-secondary">
                     {sourceLabel(skill.source)}
                   </span>
                 </div>
                 {skill.description && (
-                  <p className="mt-0.5 truncate text-[11px] text-text-muted">{skill.description}</p>
+                  <p className="mt-0.5 truncate text-[11px] text-text-muted">
+                    {skill.description}
+                  </p>
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -347,11 +424,15 @@ function FilterButton({
     <button
       onClick={onClick}
       className={`rounded-md px-2.5 py-1.5 text-xs ${
-        active ? "bg-accent text-white" : "text-text-secondary hover:bg-card-secondary"
+        active
+          ? "bg-accent text-white"
+          : "text-text-secondary hover:bg-card-secondary"
       }`}
     >
       {label}
-      <span className={active ? "ml-1 text-white/80" : "ml-1 text-text-muted"}>{count}</span>
+      <span className={active ? "ml-1 text-white/80" : "ml-1 text-text-muted"}>
+        {count}
+      </span>
     </button>
   );
 }

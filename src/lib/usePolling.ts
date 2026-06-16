@@ -14,7 +14,9 @@ import { useEffect } from "react";
 export function usePolling(cb: () => void, intervalMs = 10_000) {
   useEffect(() => {
     let mounted = true;
-    const refresh = () => { if (mounted && !document.hidden) cb(); };
+    const refresh = () => {
+      if (mounted && !document.hidden) cb();
+    };
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     const timer = setInterval(refresh, intervalMs);

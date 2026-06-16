@@ -47,7 +47,9 @@ describe("global store", () => {
     it("concurrent fetch coalesces into single invoke", async () => {
       let resolve!: (v: any) => void;
       vi.mocked(api.listProviders).mockReturnValue(
-        new Promise((r) => { resolve = r; })
+        new Promise((r) => {
+          resolve = r;
+        })
       );
       const p1 = useProviders.getState().fetch();
       const p2 = useProviders.getState().fetch();
@@ -89,7 +91,9 @@ describe("global store", () => {
     it("concurrent fetch coalesces", async () => {
       let resolve!: (v: any) => void;
       vi.mocked(api.getGatewaySettings).mockReturnValue(
-        new Promise((r) => { resolve = r; })
+        new Promise((r) => {
+          resolve = r;
+        })
       );
       const p1 = useGatewaySettings.getState().fetch();
       const p2 = useGatewaySettings.getState().fetch();
@@ -106,10 +110,12 @@ describe("global store", () => {
       ] as any);
       await usePricing.getState().fetch();
       expect(usePricing.getState().items).toHaveLength(1);
-      usePricing.getState().setItems([
-        { id: "a", provider: "openai", model_pattern: "gpt-4" } as any,
-        { id: "b", provider: "anthropic", model_pattern: "claude" } as any,
-      ]);
+      usePricing
+        .getState()
+        .setItems([
+          { id: "a", provider: "openai", model_pattern: "gpt-4" } as any,
+          { id: "b", provider: "anthropic", model_pattern: "claude" } as any,
+        ]);
       expect(usePricing.getState().items).toHaveLength(2);
     });
   });
@@ -126,7 +132,9 @@ describe("global store", () => {
     });
 
     it("error message captured", async () => {
-      vi.mocked(api.listRouteProfiles).mockRejectedValue({ message: "rpc err" });
+      vi.mocked(api.listRouteProfiles).mockRejectedValue({
+        message: "rpc err",
+      });
       await useRouteProfiles.getState().fetch();
       const s = useRouteProfiles.getState();
       expect(s.error).toBe("rpc err");
@@ -149,7 +157,9 @@ describe("global store", () => {
     it("concurrent fetch coalesces into single invoke", async () => {
       let resolve!: (v: any) => void;
       vi.mocked(api.getGatewayStatus).mockReturnValue(
-        new Promise((r) => { resolve = r; })
+        new Promise((r) => {
+          resolve = r;
+        })
       );
       const p1 = useGatewayStatus.getState().fetch();
       const p2 = useGatewayStatus.getState().fetch();

@@ -154,13 +154,14 @@ export const getProvider = (id: string) => unwrap(bindings.getProvider(id));
 export const getProviderKeys = (id: string) =>
   unwrap(bindings.getProviderKeys(id));
 export const createProvider = (
-  input: import("@/types/provider").CreateProviderInput,
+  input: import("@/types/provider").CreateProviderInput
 ) => unwrap(bindings.createProvider(input as never));
 export const updateProvider = (
   id: string,
-  input: import("@/types/provider").UpdateProviderInput,
+  input: import("@/types/provider").UpdateProviderInput
 ) => unwrap(bindings.updateProvider(id, input as never));
-export const deleteProvider = (id: string) => unwrap(bindings.deleteProvider(id));
+export const deleteProvider = (id: string) =>
+  unwrap(bindings.deleteProvider(id));
 export const setActiveProvider = (id: string) =>
   unwrap(bindings.setActiveProvider(id));
 export const fetchProviderModels = (id: string) =>
@@ -168,14 +169,15 @@ export const fetchProviderModels = (id: string) =>
 export const testProvider = (id: string) => unwrap(bindings.testProvider(id));
 export const providerSpeedtest = (id: string) =>
   unwrap(bindings.providerSpeedtest(id));
-export const providerSpeedtestAll = () => unwrap(bindings.providerSpeedtestAll());
+export const providerSpeedtestAll = () =>
+  unwrap(bindings.providerSpeedtestAll());
 export const detectProviderVision = (id: string) =>
   unwrap(bindings.detectProviderVision(id));
 export const detectProviderCache = (id: string) =>
   unwrap(bindings.detectProviderCache(id));
 export const seedModelCapabilities = (
   providerType: string,
-  modelIds: string[],
+  modelIds: string[]
 ) => unwrap(bindings.seedModelCapabilities(providerType, modelIds));
 /// Fill missing rows in the provider's model_capabilities matrix from the seed
 /// function (provider_type + model id pattern). Preserves manually-edited rows.
@@ -188,7 +190,7 @@ export const autofillProviderCapabilities = (id: string) =>
 export const getGatewayStatus = () => unwrap(bindings.getGatewayStatus());
 export const getGatewaySettings = () => unwrap(bindings.getGatewaySettings());
 export const updateGatewaySettings = (
-  input: import("@/types/gateway").UpdateGatewaySettingsInput,
+  input: import("@/types/gateway").UpdateGatewaySettingsInput
 ) => unwrap(bindings.updateGatewaySettings(input as never));
 export const startGateway = () => unwrap(bindings.startGateway());
 export const stopGateway = () => unwrap(bindings.stopGateway());
@@ -197,7 +199,7 @@ export const restartGateway = () => unwrap(bindings.restartGateway());
 // ── Logs ───────────────────────────────────────────────────────
 
 export const listRequestLogs = (
-  filter: import("@/types/request-log").RequestLogFilter,
+  filter: import("@/types/request-log").RequestLogFilter
 ) => unwrap(bindings.listRequestLogs(filter as never));
 export const listLogModels = () => unwrap(bindings.listLogModels());
 export const getSessionConversation = (sessionId: string) =>
@@ -205,16 +207,18 @@ export const getSessionConversation = (sessionId: string) =>
 export const deleteSession = (sessionId: string) =>
   unwrap(bindings.deleteSession(sessionId));
 export const countRequestLogs = (
-  filter: import("@/types/request-log").RequestLogFilter,
+  filter: import("@/types/request-log").RequestLogFilter
 ) => unwrap(bindings.countRequestLogs(filter as never));
 export const getRequestLogDetail = (id: string) =>
   unwrap(bindings.getRequestLogDetail(id));
 export const clearRequestLogs = () => unwrap(bindings.clearRequestLogs());
 export const aggregateRequestLogsBySession = (
   filter: import("@/types/request-log").RequestLogFilter,
-  limit?: number,
+  limit?: number
 ) =>
-  unwrap(bindings.aggregateRequestLogsBySession(filter as never, limit ?? null));
+  unwrap(
+    bindings.aggregateRequestLogsBySession(filter as never, limit ?? null)
+  );
 export const aggregateCostByModel = (days?: number, limit?: number) =>
   unwrap(bindings.aggregateCostByModel(days ?? null, limit ?? null));
 export const aggregateCostByClient = (days?: number, limit?: number) =>
@@ -222,10 +226,10 @@ export const aggregateCostByClient = (days?: number, limit?: number) =>
 export const aggregateProviderDetailStats = (
   provider: string,
   days?: number,
-  limit?: number,
+  limit?: number
 ) =>
   unwrap(
-    bindings.aggregateProviderDetailStats(provider, days ?? null, limit ?? null),
+    bindings.aggregateProviderDetailStats(provider, days ?? null, limit ?? null)
   );
 export const aggregateRouteProfileStats = (days?: number) =>
   unwrap(bindings.aggregateRouteProfileStats(days ?? null));
@@ -279,12 +283,15 @@ export const applyClaudeCodeConfig = (): Promise<ApplyConfigResult> =>
   unwrap(bindings.applyClaudeCodeConfig());
 export const toggleClaudeCodeProvider = (): Promise<ToggleResult> =>
   unwrap(bindings.toggleClaudeCodeProvider());
-export const openClaudeCodeConfig = () => unwrap(bindings.openClaudeCodeConfig());
-export const generateClaudeCodeEnv = () => unwrap(bindings.generateClaudeCodeEnv());
+export const openClaudeCodeConfig = () =>
+  unwrap(bindings.openClaudeCodeConfig());
+export const generateClaudeCodeEnv = () =>
+  unwrap(bindings.generateClaudeCodeEnv());
 
 // ── OpenCode Config ───────────────────────────────────────────
 
-export const detectOpenCodeConfig = () => unwrap(bindings.detectOpencodeConfig());
+export const detectOpenCodeConfig = () =>
+  unwrap(bindings.detectOpencodeConfig());
 export const applyOpenCodeConfig = (): Promise<ApplyConfigResult> =>
   unwrap(bindings.applyOpencodeConfig());
 export const generateOpenCodeConfig = () =>
@@ -296,14 +303,16 @@ export const openOpenCodeConfig = () => unwrap(bindings.openOpencodeConfig());
 export const detectGeminiConfig = () => unwrap(bindings.detectGeminiConfig());
 export const applyGeminiConfig = (): Promise<ApplyConfigResult> =>
   unwrap(bindings.applyGeminiConfig());
-export const generateGeminiConfig = () => unwrap(bindings.generateGeminiConfig());
+export const generateGeminiConfig = () =>
+  unwrap(bindings.generateGeminiConfig());
 export const toggleGeminiProvider = (): Promise<ToggleResult> =>
   unwrap(bindings.toggleGeminiProvider());
 export const openGeminiConfig = () => unwrap(bindings.openGeminiConfig());
 
 // ── AtomCode ──────────────────────────────────────────────────
 
-export const detectAtomCodeConfig = () => unwrap(bindings.detectAtomcodeConfig());
+export const detectAtomCodeConfig = () =>
+  unwrap(bindings.detectAtomcodeConfig());
 export const applyAtomCodeConfig = (): Promise<ApplyConfigResult> =>
   unwrap(bindings.applyAtomcodeConfig());
 export const generateAtomCodeConfig = () =>
@@ -335,13 +344,12 @@ export const clientsWithApplyHistory = () =>
 
 export const listMcpServers = () => unwrap(bindings.listMcpServers());
 export const upsertMcpServer = (
-  input: import("./bindings").UpsertMcpServerInput,
+  input: import("./bindings").UpsertMcpServerInput
 ) => unwrap(bindings.upsertMcpServer(input as never));
 export const deleteMcpServer = (client: string, name: string) =>
   unwrap(bindings.deleteMcpServer(client, name));
-export const syncMcpServer = (
-  input: import("./bindings").SyncMcpServerInput,
-) => unwrap(bindings.syncMcpServer(input as never));
+export const syncMcpServer = (input: import("./bindings").SyncMcpServerInput) =>
+  unwrap(bindings.syncMcpServer(input as never));
 export const exportMcpServers = (includeSecrets: boolean) =>
   unwrap(bindings.exportMcpServers(includeSecrets));
 export const importMcpServers = (payload: string, targetClients: string[]) =>
@@ -367,12 +375,12 @@ export const readGlobalInstructions = (scope: InstructionsScope) =>
   unwrap(bindings.readGlobalInstructions(scope));
 export const writeGlobalInstructions = (
   scope: InstructionsScope,
-  content: string,
+  content: string
 ) => unwrap(bindings.writeGlobalInstructions(scope, content));
 export const applyInstructionsTemplate = (
   scope: InstructionsScope,
   templateId: string,
-  mode: InstructionsApplyMode,
+  mode: InstructionsApplyMode
 ) => unwrap(bindings.applyInstructionsTemplate(scope, templateId, mode));
 export const exportInstructions = () => unwrap(bindings.exportInstructions());
 export const importInstructions = (payload: string) =>
@@ -397,11 +405,11 @@ export const listRouteProfiles = () => unwrap(bindings.listRouteProfiles());
 export const getRouteProfile = (id: string) =>
   unwrap(bindings.getRouteProfile(id));
 export const createRouteProfile = (
-  input: import("@/types/route-profile").CreateRouteProfileInput,
+  input: import("@/types/route-profile").CreateRouteProfileInput
 ) => unwrap(bindings.createRouteProfile(input as never));
 export const updateRouteProfile = (
   id: string,
-  input: import("@/types/route-profile").UpdateRouteProfileInput,
+  input: import("@/types/route-profile").UpdateRouteProfileInput
 ) => unwrap(bindings.updateRouteProfile(id, input as never));
 export const deleteRouteProfile = (id: string) =>
   unwrap(bindings.deleteRouteProfile(id));
@@ -411,35 +419,35 @@ export const setRouteProfileMode = (id: string, mode: string) =>
   unwrap(bindings.setRouteProfileMode(id, mode));
 export const setRouteActiveProvider = (
   routeProfileId: string,
-  providerId: string,
+  providerId: string
 ) => unwrap(bindings.setRouteActiveProvider(routeProfileId, providerId));
 export const addProviderToRoute = (
   routeProfileId: string,
   providerId: string,
-  input: import("@/types/route-profile").AddProviderToRouteInput,
+  input: import("@/types/route-profile").AddProviderToRouteInput
 ) =>
   unwrap(
-    bindings.addProviderToRoute(routeProfileId, providerId, input as never),
+    bindings.addProviderToRoute(routeProfileId, providerId, input as never)
   );
 export const removeProviderFromRoute = (
   routeProfileId: string,
-  providerId: string,
+  providerId: string
 ) => unwrap(bindings.removeProviderFromRoute(routeProfileId, providerId));
 export const reorderRouteProviders = (
   routeProfileId: string,
-  providerIds: string[],
+  providerIds: string[]
 ) => unwrap(bindings.reorderRouteProviders(routeProfileId, providerIds));
 export const updateRouteProviderConditions = (
   routeProfileId: string,
   providerId: string,
-  routingConditions: string | null,
+  routingConditions: string | null
 ) =>
   unwrap(
     bindings.updateRouteProviderConditions(
       routeProfileId,
       providerId,
-      routingConditions,
-    ),
+      routingConditions
+    )
   );
 export const listProviderRuntimeStatus = () =>
   unwrap(bindings.listProviderRuntimeStatus());
@@ -466,10 +474,15 @@ export const upsertModelPricing = (
   provider: string,
   model_pattern: string,
   input_price: number,
-  output_price: number,
+  output_price: number
 ) =>
   unwrap(
-    bindings.upsertModelPricing(provider, model_pattern, input_price, output_price),
+    bindings.upsertModelPricing(
+      provider,
+      model_pattern,
+      input_price,
+      output_price
+    )
   );
 export const deleteModelPricing = (id: string) =>
   unwrap(bindings.deleteModelPricing(id));
@@ -501,7 +514,7 @@ export const runFullSelfTest = () =>
   unwrap(bindings.runFullSelfTest()) as Promise<NarrowFullSelfTestReport>;
 export const exportDiagnosticBundle = (
   includeLogs?: boolean,
-  maxLogs?: number,
+  maxLogs?: number
 ) =>
   unwrap(bindings.exportDiagnosticBundle(includeLogs ?? null, maxLogs ?? null));
 export const openAppDataDir = () => unwrap(bindings.openAppDataDir());
@@ -518,7 +531,9 @@ export interface ConnectionTestResult {
 }
 
 export const testToolConnection = (): Promise<ConnectionTestResult> =>
-  unwrap(bindings.testToolConnection()) as unknown as Promise<ConnectionTestResult>;
+  unwrap(
+    bindings.testToolConnection()
+  ) as unknown as Promise<ConnectionTestResult>;
 
 // ── Pet ───────────────────────────────────────────────────────
 
@@ -526,17 +541,23 @@ export const testToolConnection = (): Promise<ConnectionTestResult> =>
 // 边界 cast 一次保留前端窄类型 + DB 字符串运行时灵活的折中。
 import type { PetSettings as PetSettingsWide } from "./bindings";
 
-type PetSettingsNarrow = Omit<PetSettingsWide, "pet_type"> & { pet_type: PetType };
+type PetSettingsNarrow = Omit<PetSettingsWide, "pet_type"> & {
+  pet_type: PetType;
+};
 
 export const getPetSettings = async (): Promise<PetSettingsNarrow> =>
   (await unwrap(bindings.getPetSettings())) as PetSettingsNarrow;
 
 export const updatePetSettings = async (
-  input: import("@/types/pet").UpdatePetSettingsInput,
+  input: import("@/types/pet").UpdatePetSettingsInput
 ): Promise<PetSettingsNarrow> =>
-  (await unwrap(bindings.updatePetSettings(input as never))) as PetSettingsNarrow;
+  (await unwrap(
+    bindings.updatePetSettings(input as never)
+  )) as PetSettingsNarrow;
 
-export const setPetVisible = async (visible: boolean): Promise<PetSettingsNarrow> =>
+export const setPetVisible = async (
+  visible: boolean
+): Promise<PetSettingsNarrow> =>
   (await unwrap(bindings.setPetVisible(visible))) as PetSettingsNarrow;
 
 export const getPetGatewayState = (): Promise<PetGatewayInfo> =>

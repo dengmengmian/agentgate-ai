@@ -27,7 +27,10 @@ export function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-[130] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onCancel} />
+      <div
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onCancel}
+      />
       <div
         className="animate-scale-in relative z-10 w-full max-w-md rounded-xl border border-border bg-card p-6"
         style={{ boxShadow: "var(--shadow-lg)" }}
@@ -40,7 +43,9 @@ export function ConfirmDialog({
           )}
           <div>
             <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
-            <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">{message}</p>
+            <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+              {message}
+            </p>
           </div>
         </div>
         <div className="flex justify-end gap-2">

@@ -1,7 +1,22 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 import { events } from "@/lib/bindings";
-import { Shield, FolderOpen, RefreshCcw, Download, Plus, Trash2, Settings2, Database, Info, PawPrint, ChevronDown, ChevronRight, Share2, Upload } from "lucide-react";
+import {
+  Shield,
+  FolderOpen,
+  RefreshCcw,
+  Download,
+  Plus,
+  Trash2,
+  Settings2,
+  Database,
+  Info,
+  PawPrint,
+  ChevronDown,
+  ChevronRight,
+  Share2,
+  Upload,
+} from "lucide-react";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { getVersion } from "@tauri-apps/api/app";
@@ -42,7 +57,13 @@ const TABS: { id: Tab; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: "about", icon: Info },
 ];
 
-const VALID_TABS: readonly Tab[] = ["general", "security", "data", "pet", "about"];
+const VALID_TABS: readonly Tab[] = [
+  "general",
+  "security",
+  "data",
+  "pet",
+  "about",
+];
 
 export function Settings() {
   const { t, locale, setLocale } = useI18n();
@@ -58,21 +79,35 @@ export function Settings() {
     const q = searchParams.get("tab") as Tab | null;
     if (q && VALID_TABS.includes(q)) setTabState(q);
   }, [searchParams]);
-  const setTab = useCallback((next: Tab) => {
-    setTabState(next);
-    if (searchParams.get("tab")) {
-      const sp = new URLSearchParams(searchParams);
-      sp.delete("tab");
-      setSearchParams(sp, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
-  const [theme, setThemeState] = useState(() => localStorage.getItem("agentgate_theme") || "light");
+  const setTab = useCallback(
+    (next: Tab) => {
+      setTabState(next);
+      if (searchParams.get("tab")) {
+        const sp = new URLSearchParams(searchParams);
+        sp.delete("tab");
+        setSearchParams(sp, { replace: true });
+      }
+    },
+    [searchParams, setSearchParams]
+  );
+  const [theme, setThemeState] = useState(
+    () => localStorage.getItem("agentgate_theme") || "light"
+  );
   // gateway settings / pricing 走全局 store——跨页只读,Gateway 页改 host:port
   // 后 store.refetch() 同步给这里。
-  const settings = useGatewaySettings(s => s.value) as GatewaySettingsType | null;
-  const pricing = usePricing(s => s.items);
-  const setPricing = (next: ModelPricing[] | ((prev: ModelPricing[]) => ModelPricing[])) => {
-    const value = typeof next === "function" ? (next as (prev: ModelPricing[]) => ModelPricing[])(usePricing.getState().items) : next;
+  const settings = useGatewaySettings(
+    (s) => s.value
+  ) as GatewaySettingsType | null;
+  const pricing = usePricing((s) => s.items);
+  const setPricing = (
+    next: ModelPricing[] | ((prev: ModelPricing[]) => ModelPricing[])
+  ) => {
+    const value =
+      typeof next === "function"
+        ? (next as (prev: ModelPricing[]) => ModelPricing[])(
+            usePricing.getState().items
+          )
+        : next;
     usePricing.getState().setItems(value);
   };
   const [auth, setAuth] = useState<GatewayAuthSettings | null>(null);
@@ -80,15 +115,28 @@ export function Settings() {
   const [petSettings, setPetSettings] = useState<PetSettingsType | null>(null);
   const [petClickThrough, setPetClickThroughState] = useState(false);
   useEffect(() => {
-    api.getPetClickThrough().then(setPetClickThroughState).catch(() => {});
-    const un = events.petClickThroughChanged.listen((e) => setPetClickThroughState(e.payload));
-    return () => { un.then((fn) => fn()); };
+    api
+      .getPetClickThrough()
+      .then(setPetClickThroughState)
+      .catch(() => {});
+    const un = events.petClickThroughChanged.listen((e) =>
+      setPetClickThroughState(e.payload)
+    );
+    return () => {
+      un.then((fn) => fn());
+    };
   }, []);
   const handlePetClickThroughChange = useCallback((v: boolean) => {
-    api.setPetClickThrough(v).catch((err) => toast("error", (err as api.AppError).message));
+    api
+      .setPetClickThrough(v)
+      .catch((err) => toast("error", (err as api.AppError).message));
   }, []);
   const [appVersion, setAppVersion] = useState("");
-  useEffect(() => { getVersion().then(setAppVersion).catch(() => {}); }, []);
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -107,14 +155,18 @@ export function Settings() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const handleUpdateRetention = async (days: number) => {
     try {
       await api.updateGatewaySettings({ log_retention_days: days });
       toast("success", t("settings.updated"));
       load();
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleUpdateAutoStart = async (val: boolean) => {
@@ -122,7 +174,9 @@ export function Settings() {
       await api.updateGatewaySettings({ auto_start: val });
       toast("success", t("settings.updated"));
       load();
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   // 全局网关开关更新（多个独立开关共用一个 handler，通过 key 区分）
@@ -132,13 +186,15 @@ export function Settings() {
       | "thinking_rectifier_global"
       | "error_mapper_global"
       | "health_probe_enabled",
-    val: boolean,
+    val: boolean
   ) => {
     try {
       await api.updateGatewaySettings({ [key]: val });
       toast("success", t("settings.updated"));
       load();
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleCopyToken = async () => {
@@ -146,7 +202,9 @@ export function Settings() {
       const token = await api.getLocalAccessToken();
       await navigator.clipboard.writeText(token);
       toast("success", t("settings.token_copied"));
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleRegenToken = async () => {
@@ -155,7 +213,9 @@ export function Settings() {
       setAuth(a);
       toast("success", t("settings.regen_done"));
       setConfirmRegen(false);
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handlePetTypeChange = async (type: PetType) => {
@@ -163,7 +223,9 @@ export function Settings() {
       const updated = await api.updatePetSettings({ pet_type: type });
       setPetSettings(updated);
       toast("success", t("settings.updated"));
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handlePetVisibleChange = async (visible: boolean) => {
@@ -171,7 +233,9 @@ export function Settings() {
       const updated = await api.setPetVisible(visible);
       setPetSettings(updated);
       toast("success", t("settings.updated"));
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const setTheme = (t: string) => {
@@ -180,16 +244,19 @@ export function Settings() {
     localStorage.setItem("agentgate_theme", t);
   };
 
-  if (!settings) return (
-    <div className="flex gap-6">
-      <div className="w-44 shrink-0 space-y-2">
-        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="skeleton h-9 rounded-lg" />)}
+  if (!settings)
+    return (
+      <div className="flex gap-6">
+        <div className="w-44 shrink-0 space-y-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="skeleton h-9 rounded-lg" />
+          ))}
+        </div>
+        <div className="flex-1 space-y-4">
+          <div className="skeleton h-48 rounded-xl" />
+        </div>
       </div>
-      <div className="flex-1 space-y-4">
-        <div className="skeleton h-48 rounded-xl" />
-      </div>
-    </div>
-  );
+    );
 
   return (
     <div className="flex gap-6 min-h-0">
@@ -261,12 +328,18 @@ export function Settings() {
           />
         )}
 
-        {tab === "about" && (
-          <AboutTab appVersion={appVersion} t={t} />
-        )}
+        {tab === "about" && <AboutTab appVersion={appVersion} t={t} />}
       </div>
 
-      <ConfirmDialog open={confirmRegen} title={t("settings.regen_title")} message={t("settings.regen_msg")} confirmLabel={t("settings.regenerate_token")} variant="danger" onConfirm={handleRegenToken} onCancel={() => setConfirmRegen(false)} />
+      <ConfirmDialog
+        open={confirmRegen}
+        title={t("settings.regen_title")}
+        message={t("settings.regen_msg")}
+        confirmLabel={t("settings.regenerate_token")}
+        variant="danger"
+        onConfirm={handleRegenToken}
+        onCancel={() => setConfirmRegen(false)}
+      />
     </div>
   );
 }
@@ -289,7 +362,9 @@ const PET_PREVIEWS: Record<PetType, React.ComponentType<{ state: "idle" }>> = {
 function encodeShareCode(json: string): string {
   const bytes = new TextEncoder().encode(json);
   let bin = "";
-  bytes.forEach((b) => { bin += String.fromCharCode(b); });
+  bytes.forEach((b) => {
+    bin += String.fromCharCode(b);
+  });
   return btoa(bin);
 }
 function decodeShareCode(code: string): string {
@@ -305,7 +380,9 @@ function decodeShareCode(code: string): string {
 export function ConfigBackupSection() {
   const { t } = useI18n();
   const [includeSecrets, setIncludeSecrets] = useState(false);
-  const [pendingImportJson, setPendingImportJson] = useState<string | null>(null);
+  const [pendingImportJson, setPendingImportJson] = useState<string | null>(
+    null
+  );
   const [importing, setImporting] = useState(false);
   const [shareCodeInput, setShareCodeInput] = useState("");
 
@@ -320,7 +397,12 @@ export function ConfigBackupSection() {
       a.download = `agentgate-config-${ts}${includeSecrets ? "-with-secrets" : ""}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      toast("success", includeSecrets ? t("settings.exported_with_secrets") : t("settings.exported_no_secrets"));
+      toast(
+        "success",
+        includeSecrets
+          ? t("settings.exported_with_secrets")
+          : t("settings.exported_no_secrets")
+      );
     } catch (err) {
       toast("error", (err as api.AppError).message);
     }
@@ -368,7 +450,9 @@ export function ConfigBackupSection() {
       toast(
         "success",
         `${t("settings.imported_prefix")} ${summary.providers_imported} ${t("settings.imported_providers")}、${summary.route_profiles_imported} ${t("settings.imported_route_profiles")}${
-          summary.secrets_applied ? t("settings.imported_with_secrets") : t("settings.imported_no_secrets")
+          summary.secrets_applied
+            ? t("settings.imported_with_secrets")
+            : t("settings.imported_no_secrets")
         }`
       );
       setPendingImportJson(null);
@@ -384,10 +468,14 @@ export function ConfigBackupSection() {
 
   return (
     <section className="rounded-xl border border-border bg-card p-5">
-      <h3 className="mb-1 text-sm font-semibold text-text-primary">{t("settings.config_backup")}</h3>
+      <h3 className="mb-1 text-sm font-semibold text-text-primary">
+        {t("settings.config_backup")}
+      </h3>
       <p className="mb-4 text-xs text-text-muted">
         {t("settings.config_backup_desc_1")}
-        <span className="text-warning">{t("settings.config_backup_replace")}</span>
+        <span className="text-warning">
+          {t("settings.config_backup_replace")}
+        </span>
         {t("settings.config_backup_desc_2")}
       </p>
 
@@ -403,11 +491,17 @@ export function ConfigBackupSection() {
         </label>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={handleExport} className="btn-primary inline-flex items-center gap-1.5 text-xs">
+          <button
+            onClick={handleExport}
+            className="btn-primary inline-flex items-center gap-1.5 text-xs"
+          >
             <Download className="h-3.5 w-3.5" />
             {t("settings.export_config")}
           </button>
-          <button onClick={handleCopyShareCode} className="btn-secondary inline-flex items-center gap-1.5 text-xs">
+          <button
+            onClick={handleCopyShareCode}
+            className="btn-secondary inline-flex items-center gap-1.5 text-xs"
+          >
             <Share2 className="h-3.5 w-3.5" />
             {t("settings.copy_share_code")}
           </button>
@@ -429,7 +523,9 @@ export function ConfigBackupSection() {
 
         {/* 分享码导入：对方「复制分享码」后,把那串文本粘到这里导入 */}
         <div className="space-y-2 border-t border-border pt-3">
-          <p className="text-xs text-text-muted">{t("settings.import_share_code_hint")}</p>
+          <p className="text-xs text-text-muted">
+            {t("settings.import_share_code_hint")}
+          </p>
           <div className="flex items-start gap-2">
             <textarea
               value={shareCodeInput}
@@ -455,7 +551,9 @@ export function ConfigBackupSection() {
         variant="danger"
         title={t("settings.import_confirm_title")}
         message={t("settings.import_confirm_msg")}
-        confirmLabel={importing ? t("settings.importing") : t("settings.import_confirm")}
+        confirmLabel={
+          importing ? t("settings.importing") : t("settings.import_confirm")
+        }
         onConfirm={handleConfirmImport}
         onCancel={() => setPendingImportJson(null)}
       />
@@ -490,18 +588,38 @@ export function CollapsibleSection({
         <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <Icon className="h-4 w-4 text-accent" />
           {title}
-          {badge && <span className="rounded-full bg-card-secondary px-1.5 py-0.5 text-[10px] font-normal text-text-muted">{badge}</span>}
+          {badge && (
+            <span className="rounded-full bg-card-secondary px-1.5 py-0.5 text-[10px] font-normal text-text-muted">
+              {badge}
+            </span>
+          )}
         </div>
-        {open ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
+        {open ? (
+          <ChevronDown className="h-4 w-4 text-text-muted" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-text-muted" />
+        )}
       </button>
-      {hint && open && <p className="mt-3 text-[11px] text-text-muted">{hint}</p>}
+      {hint && open && (
+        <p className="mt-3 text-[11px] text-text-muted">{hint}</p>
+      )}
       {open && <div className="mt-4">{children}</div>}
     </section>
   );
 }
 
-export function PetTypeCard({ type, selected, name, desc, onClick }: {
-  type: PetType; selected: boolean; name: string; desc: string; onClick: () => void;
+export function PetTypeCard({
+  type,
+  selected,
+  name,
+  desc,
+  onClick,
+}: {
+  type: PetType;
+  selected: boolean;
+  name: string;
+  desc: string;
+  onClick: () => void;
 }) {
   const Preview = PET_PREVIEWS[type];
   return (
@@ -519,8 +637,14 @@ export function PetTypeCard({ type, selected, name, desc, onClick }: {
         </div>
       </div>
       <div className="text-center">
-        <p className={`text-xs font-medium ${selected ? "text-accent" : "text-text-primary"}`}>{name}</p>
-        <p className="mt-0.5 text-[10px] text-text-muted leading-tight">{desc}</p>
+        <p
+          className={`text-xs font-medium ${selected ? "text-accent" : "text-text-primary"}`}
+        >
+          {name}
+        </p>
+        <p className="mt-0.5 text-[10px] text-text-muted leading-tight">
+          {desc}
+        </p>
       </div>
       {selected && (
         <span className="text-[10px] text-accent font-medium">● Active</span>
@@ -531,15 +655,25 @@ export function PetTypeCard({ type, selected, name, desc, onClick }: {
 
 // ── Shared Components ──
 
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (val: boolean) => void }) {
+function ToggleSwitch({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (val: boolean) => void;
+}) {
   return (
     <label className="relative inline-flex cursor-pointer items-center">
-      <input type="checkbox" className="peer sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input
+        type="checkbox"
+        className="peer sr-only"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
       <div className="h-5 w-9 rounded-full bg-border transition-colors after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-text-muted after:transition-all peer-checked:bg-accent peer-checked:after:translate-x-full peer-checked:after:bg-white" />
     </label>
   );
 }
-
 
 export function CheckUpdateButton({ t }: { t: (key: string) => string }) {
   const [checking, setChecking] = useState(false);
@@ -570,7 +704,10 @@ export function CheckUpdateButton({ t }: { t: (key: string) => string }) {
     setInstalling(true);
     try {
       const update = await check();
-      if (!update) { setInstalling(false); return; }
+      if (!update) {
+        setInstalling(false);
+        return;
+      }
       await update.downloadAndInstall();
       // Auto-relaunch into the freshly installed version.
       toast("success", t("update.relaunching"));
@@ -585,12 +722,22 @@ export function CheckUpdateButton({ t }: { t: (key: string) => string }) {
   return (
     <div className="flex items-center gap-2">
       {status === "available" ? (
-        <button onClick={handleInstall} disabled={installing} className="btn-primary">
+        <button
+          onClick={handleInstall}
+          disabled={installing}
+          className="btn-primary"
+        >
           <Download className="h-3 w-3" />
-          {installing ? t("update.installing") : `${t("update.now")} v${newVersion}`}
+          {installing
+            ? t("update.installing")
+            : `${t("update.now")} v${newVersion}`}
         </button>
       ) : (
-        <button onClick={handleCheck} disabled={checking} className="btn-secondary">
+        <button
+          onClick={handleCheck}
+          disabled={checking}
+          className="btn-secondary"
+        >
           <RefreshCcw className={`h-3 w-3 ${checking ? "animate-spin" : ""}`} />
           {checking ? t("update.checking") : t("update.check")}
         </button>
@@ -602,7 +749,15 @@ export function CheckUpdateButton({ t }: { t: (key: string) => string }) {
   );
 }
 
-export function PricingRow({ item, onUpdate, onDelete }: { item: ModelPricing; onUpdate: (inputPrice: number, outputPrice: number) => void; onDelete: () => void }) {
+export function PricingRow({
+  item,
+  onUpdate,
+  onDelete,
+}: {
+  item: ModelPricing;
+  onUpdate: (inputPrice: number, outputPrice: number) => void;
+  onDelete: () => void;
+}) {
   const { t } = useI18n();
   const [editInput, setEditInput] = useState(String(item.input_price));
   const [editOutput, setEditOutput] = useState(String(item.output_price));
@@ -611,7 +766,11 @@ export function PricingRow({ item, onUpdate, onDelete }: { item: ModelPricing; o
   const save = () => {
     const inp = parseFloat(editInput);
     const outp = parseFloat(editOutput);
-    if (!isNaN(inp) && !isNaN(outp) && (inp !== item.input_price || outp !== item.output_price)) {
+    if (
+      !isNaN(inp) &&
+      !isNaN(outp) &&
+      (inp !== item.input_price || outp !== item.output_price)
+    ) {
       onUpdate(inp, outp);
     }
     setEditing(false);
@@ -620,36 +779,81 @@ export function PricingRow({ item, onUpdate, onDelete }: { item: ModelPricing; o
   return (
     <tr className="border-b border-border/50 last:border-0">
       <td className="px-3 py-1.5 text-text-primary">{item.provider}</td>
-      <td className="px-3 py-1.5 font-mono text-text-secondary">{item.model_pattern}</td>
+      <td className="px-3 py-1.5 font-mono text-text-secondary">
+        {item.model_pattern}
+      </td>
       <td className="px-3 py-1.5 text-right">
         {editing ? (
-          <input type="number" step="0.01" value={editInput} onChange={(e) => setEditInput(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} className="w-20 rounded border border-accent/50 bg-bg px-1.5 py-0.5 text-right text-xs text-text-primary outline-none" autoFocus />
+          <input
+            type="number"
+            step="0.01"
+            value={editInput}
+            onChange={(e) => setEditInput(e.target.value)}
+            onBlur={save}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            className="w-20 rounded border border-accent/50 bg-bg px-1.5 py-0.5 text-right text-xs text-text-primary outline-none"
+            autoFocus
+          />
         ) : (
-          <span className="cursor-pointer text-text-primary hover:text-accent" onClick={() => setEditing(true)}>{item.input_price.toFixed(2)}</span>
+          <span
+            className="cursor-pointer text-text-primary hover:text-accent"
+            onClick={() => setEditing(true)}
+          >
+            {item.input_price.toFixed(2)}
+          </span>
         )}
       </td>
       <td className="px-3 py-1.5 text-right">
         {editing ? (
-          <input type="number" step="0.01" value={editOutput} onChange={(e) => setEditOutput(e.target.value)} onBlur={save} onKeyDown={(e) => e.key === "Enter" && save()} className="w-20 rounded border border-accent/50 bg-bg px-1.5 py-0.5 text-right text-xs text-text-primary outline-none" />
+          <input
+            type="number"
+            step="0.01"
+            value={editOutput}
+            onChange={(e) => setEditOutput(e.target.value)}
+            onBlur={save}
+            onKeyDown={(e) => e.key === "Enter" && save()}
+            className="w-20 rounded border border-accent/50 bg-bg px-1.5 py-0.5 text-right text-xs text-text-primary outline-none"
+          />
         ) : (
-          <span className="cursor-pointer text-text-primary hover:text-accent" onClick={() => setEditing(true)}>{item.output_price.toFixed(2)}</span>
+          <span
+            className="cursor-pointer text-text-primary hover:text-accent"
+            onClick={() => setEditing(true)}
+          >
+            {item.output_price.toFixed(2)}
+          </span>
         )}
       </td>
       <td className="px-3 py-1.5 text-center">
-        <span className={`rounded px-1.5 py-0.5 text-[10px] ${item.is_custom ? "bg-accent-soft text-accent" : "bg-card-secondary text-text-muted"}`}>
+        <span
+          className={`rounded px-1.5 py-0.5 text-[10px] ${item.is_custom ? "bg-accent-soft text-accent" : "bg-card-secondary text-text-muted"}`}
+        >
           {item.is_custom ? t("settings.custom") : t("settings.builtin")}
         </span>
       </td>
       <td className="px-3 py-1.5 text-center">
         {item.is_custom && (
-          <button onClick={onDelete} className="text-text-muted hover:text-error"><Trash2 className="h-3 w-3" /></button>
+          <button
+            onClick={onDelete}
+            className="text-text-muted hover:text-error"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
         )}
       </td>
     </tr>
   );
 }
 
-export function PricingAddForm({ onAdd }: { onAdd: (provider: string, model: string, inputPrice: number, outputPrice: number) => void }) {
+export function PricingAddForm({
+  onAdd,
+}: {
+  onAdd: (
+    provider: string,
+    model: string,
+    inputPrice: number,
+    outputPrice: number
+  ) => void;
+}) {
   const { t } = useI18n();
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
@@ -671,22 +875,55 @@ export function PricingAddForm({ onAdd }: { onAdd: (provider: string, model: str
   return (
     <div className="mt-3 flex items-end gap-2">
       <div className="flex-1">
-        <label className="mb-1 block text-[10px] text-text-muted">Provider</label>
-        <input value={provider} onChange={(e) => setProvider(e.target.value)} placeholder="deepseek" className="form-input w-full" />
+        <label className="mb-1 block text-[10px] text-text-muted">
+          Provider
+        </label>
+        <input
+          value={provider}
+          onChange={(e) => setProvider(e.target.value)}
+          placeholder="deepseek"
+          className="form-input w-full"
+        />
       </div>
       <div className="flex-1">
         <label className="mb-1 block text-[10px] text-text-muted">Model</label>
-        <input value={model} onChange={(e) => setModel(e.target.value)} placeholder="model-name or *" className="form-input w-full" />
+        <input
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          placeholder="model-name or *"
+          className="form-input w-full"
+        />
       </div>
       <div className="w-24">
-        <label className="mb-1 block text-[10px] text-text-muted">Input $/1M</label>
-        <input type="number" step="0.01" value={inputPrice} onChange={(e) => setInputPrice(e.target.value)} placeholder="0.00" className="form-input w-full" />
+        <label className="mb-1 block text-[10px] text-text-muted">
+          Input $/1M
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          value={inputPrice}
+          onChange={(e) => setInputPrice(e.target.value)}
+          placeholder="0.00"
+          className="form-input w-full"
+        />
       </div>
       <div className="w-24">
-        <label className="mb-1 block text-[10px] text-text-muted">Output $/1M</label>
-        <input type="number" step="0.01" value={outputPrice} onChange={(e) => setOutputPrice(e.target.value)} placeholder="0.00" className="form-input w-full" />
+        <label className="mb-1 block text-[10px] text-text-muted">
+          Output $/1M
+        </label>
+        <input
+          type="number"
+          step="0.01"
+          value={outputPrice}
+          onChange={(e) => setOutputPrice(e.target.value)}
+          placeholder="0.00"
+          className="form-input w-full"
+        />
       </div>
-      <button onClick={handleSubmit} className="btn-primary mb-0.5"><Plus className="h-3 w-3" />{t("routes.add")}</button>
+      <button onClick={handleSubmit} className="btn-primary mb-0.5">
+        <Plus className="h-3 w-3" />
+        {t("routes.add")}
+      </button>
     </div>
   );
 }
@@ -697,7 +934,7 @@ export function PricingAddForm({ onAdd }: { onAdd: (provider: string, model: str
 // the active theme.
 
 interface ThemeSwatch {
-  id: string;              // localStorage value + data-theme attribute
+  id: string; // localStorage value + data-theme attribute
   labelEn: string;
   labelZh: string;
   bg: string;
@@ -708,17 +945,95 @@ interface ThemeSwatch {
 }
 
 const THEME_SWATCHES: ThemeSwatch[] = [
-  { id: "dark",    labelEn: "Warm Amber",    labelZh: "暖琥珀", bg: "#121110", card: "#1C1A18", accent: "#E89850", textPrimary: "#EDE8E2", border: "#38342F" },
-  { id: "slate",   labelEn: "Slate Steel",   labelZh: "钢蓝",   bg: "#0F141B", card: "#1A2230", accent: "#38BDF8", textPrimary: "#E1E7EF", border: "#3A4454" },
-  { id: "forest",  labelEn: "Forest Pine",   labelZh: "松林",   bg: "#0F1612", card: "#16201A", accent: "#84B062", textPrimary: "#E2E8E0", border: "#34453B" },
-  { id: "violet",  labelEn: "Midnight Violet", labelZh: "紫夜", bg: "#14101C", card: "#1E1828", accent: "#A78BFA", textPrimary: "#ECE6F2", border: "#443854" },
-  { id: "light",   labelEn: "Daylight",      labelZh: "晴日",   bg: "#F4F5F7", card: "#FFFFFF", accent: "#C07830", textPrimary: "#1A1C20", border: "#D5D8DC" },
-  { id: "linen",   labelEn: "Linen Cream",   labelZh: "米麻",   bg: "#FAF6EE", card: "#FFFFFF", accent: "#B66821", textPrimary: "#2C2620", border: "#D9CFB8" },
-  { id: "mist",    labelEn: "Mist Blue",     labelZh: "雾蓝",   bg: "#F4F7FB", card: "#FFFFFF", accent: "#2563EB", textPrimary: "#1B2735", border: "#CFD8E3" },
-  { id: "sakura",  labelEn: "Sakura",        labelZh: "樱粉",   bg: "#FBF4F4", card: "#FFFFFF", accent: "#C44569", textPrimary: "#2C1F22", border: "#E0CCCC" },
+  {
+    id: "dark",
+    labelEn: "Warm Amber",
+    labelZh: "暖琥珀",
+    bg: "#121110",
+    card: "#1C1A18",
+    accent: "#E89850",
+    textPrimary: "#EDE8E2",
+    border: "#38342F",
+  },
+  {
+    id: "slate",
+    labelEn: "Slate Steel",
+    labelZh: "钢蓝",
+    bg: "#0F141B",
+    card: "#1A2230",
+    accent: "#38BDF8",
+    textPrimary: "#E1E7EF",
+    border: "#3A4454",
+  },
+  {
+    id: "forest",
+    labelEn: "Forest Pine",
+    labelZh: "松林",
+    bg: "#0F1612",
+    card: "#16201A",
+    accent: "#84B062",
+    textPrimary: "#E2E8E0",
+    border: "#34453B",
+  },
+  {
+    id: "violet",
+    labelEn: "Midnight Violet",
+    labelZh: "紫夜",
+    bg: "#14101C",
+    card: "#1E1828",
+    accent: "#A78BFA",
+    textPrimary: "#ECE6F2",
+    border: "#443854",
+  },
+  {
+    id: "light",
+    labelEn: "Daylight",
+    labelZh: "晴日",
+    bg: "#F4F5F7",
+    card: "#FFFFFF",
+    accent: "#C07830",
+    textPrimary: "#1A1C20",
+    border: "#D5D8DC",
+  },
+  {
+    id: "linen",
+    labelEn: "Linen Cream",
+    labelZh: "米麻",
+    bg: "#FAF6EE",
+    card: "#FFFFFF",
+    accent: "#B66821",
+    textPrimary: "#2C2620",
+    border: "#D9CFB8",
+  },
+  {
+    id: "mist",
+    labelEn: "Mist Blue",
+    labelZh: "雾蓝",
+    bg: "#F4F7FB",
+    card: "#FFFFFF",
+    accent: "#2563EB",
+    textPrimary: "#1B2735",
+    border: "#CFD8E3",
+  },
+  {
+    id: "sakura",
+    labelEn: "Sakura",
+    labelZh: "樱粉",
+    bg: "#FBF4F4",
+    card: "#FFFFFF",
+    accent: "#C44569",
+    textPrimary: "#2C1F22",
+    border: "#E0CCCC",
+  },
 ];
 
-function ThemePicker({ value, onChange }: { value: string; onChange: (id: string) => void }) {
+function ThemePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+}) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {THEME_SWATCHES.map((s) => {
@@ -729,7 +1044,9 @@ function ThemePicker({ value, onChange }: { value: string; onChange: (id: string
             type="button"
             onClick={() => onChange(s.id)}
             className={`group flex flex-col gap-2 rounded-lg border p-2.5 text-left transition-all ${
-              selected ? "border-accent ring-2 ring-accent/40" : "border-border hover:border-text-muted"
+              selected
+                ? "border-accent ring-2 ring-accent/40"
+                : "border-border hover:border-text-muted"
             }`}
             style={{ backgroundColor: s.bg }}
             aria-pressed={selected}
@@ -739,17 +1056,32 @@ function ThemePicker({ value, onChange }: { value: string; onChange: (id: string
               className="flex items-center gap-2 rounded-md border px-2 py-2"
               style={{ backgroundColor: s.card, borderColor: s.border }}
             >
-              <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: s.accent }} />
+              <span
+                className="h-3 w-3 shrink-0 rounded-full"
+                style={{ backgroundColor: s.accent }}
+              />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
-                <span className="h-1 w-3/4 rounded-full" style={{ backgroundColor: s.textPrimary, opacity: 0.85 }} />
-                <span className="h-1 w-1/2 rounded-full" style={{ backgroundColor: s.textPrimary, opacity: 0.45 }} />
+                <span
+                  className="h-1 w-3/4 rounded-full"
+                  style={{ backgroundColor: s.textPrimary, opacity: 0.85 }}
+                />
+                <span
+                  className="h-1 w-1/2 rounded-full"
+                  style={{ backgroundColor: s.textPrimary, opacity: 0.45 }}
+                />
               </div>
             </div>
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-xs font-medium" style={{ color: s.textPrimary }}>
+              <span
+                className="text-xs font-medium"
+                style={{ color: s.textPrimary }}
+              >
                 {s.labelZh}
               </span>
-              <span className="text-[10px]" style={{ color: s.textPrimary, opacity: 0.6 }}>
+              <span
+                className="text-[10px]"
+                style={{ color: s.textPrimary, opacity: 0.6 }}
+              >
                 {s.labelEn}
               </span>
             </div>

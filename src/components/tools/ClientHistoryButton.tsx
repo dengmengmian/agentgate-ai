@@ -15,7 +15,11 @@ interface Props {
 /// 客户端配置历史按钮 + 抽屉。每次 apply/disable/toggle 写入前，后端会先
 /// snapshot 一次盘上配置；点击「回滚」就把那个时点的文件原文写回去。
 /// 仅本地操作，不影响 AgentGate 内部 state（active provider 等）。
-export function ClientHistoryButton({ clientId, clientName, onRollbackDone }: Props) {
+export function ClientHistoryButton({
+  clientId,
+  clientName,
+  onRollbackDone,
+}: Props) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
 
@@ -46,9 +50,11 @@ function ClientHistoryDrawer({
   const { t, locale } = useI18n();
   const [entries, setEntries] = useState<api.ClientApplyHistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [rollbackTarget, setRollbackTarget] = useState<api.ClientApplyHistoryEntry | null>(null);
+  const [rollbackTarget, setRollbackTarget] =
+    useState<api.ClientApplyHistoryEntry | null>(null);
   const [rollingBack, setRollingBack] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<api.ClientApplyHistoryEntry | null>(null);
+  const [deleteTarget, setDeleteTarget] =
+    useState<api.ClientApplyHistoryEntry | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
@@ -122,7 +128,10 @@ function ClientHistoryDrawer({
   return (
     <>
       <div className="fixed inset-0 z-[110]">
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+          onClick={onClose}
+        />
         <div
           className="animate-slide-in-right fixed right-0 top-0 flex h-full w-full max-w-md flex-col border-l border-border bg-card"
           style={{ boxShadow: "var(--shadow-lg)" }}
@@ -132,7 +141,9 @@ function ClientHistoryDrawer({
               <h3 className="text-sm font-semibold text-text-primary">
                 {t("tools.history.title").replace("{name}", clientName)}
               </h3>
-              <p className="mt-0.5 text-[11px] text-text-muted">{t("tools.history.subtitle")}</p>
+              <p className="mt-0.5 text-[11px] text-text-muted">
+                {t("tools.history.subtitle")}
+              </p>
             </div>
             <button
               onClick={onClose}
@@ -149,8 +160,12 @@ function ClientHistoryDrawer({
               </div>
             ) : entries.length === 0 ? (
               <div className="rounded-md border border-border bg-card-secondary p-4 text-center">
-                <p className="text-xs text-text-secondary">{t("tools.history.empty")}</p>
-                <p className="mt-1 text-[11px] text-text-muted">{t("tools.history.empty_hint")}</p>
+                <p className="text-xs text-text-secondary">
+                  {t("tools.history.empty")}
+                </p>
+                <p className="mt-1 text-[11px] text-text-muted">
+                  {t("tools.history.empty_hint")}
+                </p>
               </div>
             ) : (
               <ol className="space-y-2">

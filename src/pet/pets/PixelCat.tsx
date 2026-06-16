@@ -7,11 +7,18 @@ interface Props {
 export function PixelCat({ state }: Props) {
   const bodyColor = "#1E2128";
   const outlineColor = "#D4A574";
-  const eyeColor = state === "error" ? "#F85149" : state === "sleep" ? "#6B7280" : "#FFD700";
+  const eyeColor =
+    state === "error" ? "#F85149" : state === "sleep" ? "#6B7280" : "#FFD700";
   const cheekColor = state === "active" ? "#FF9999" : "transparent";
 
   return (
-    <svg width="100" height="120" viewBox="0 0 80 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      width="100"
+      height="120"
+      viewBox="0 0 80 96"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       {/* Pixel grid — each "pixel" is 4x4 */}
 
       {/* Left ear */}

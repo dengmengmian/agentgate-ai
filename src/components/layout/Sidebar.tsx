@@ -43,21 +43,30 @@ export function Sidebar() {
   const [version, setVersion] = useState("");
   const [showQuickSetup, setShowQuickSetup] = useState(false);
   // 折叠状态：用 localStorage 持久化——用户折叠后下次打开仍是折叠的。
-  const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem("agentgate_sidebar_collapsed") === "1");
+  const [collapsed, setCollapsed] = useState<boolean>(
+    () => localStorage.getItem("agentgate_sidebar_collapsed") === "1"
+  );
   const toggleCollapse = () => {
     const next = !collapsed;
     setCollapsed(next);
     localStorage.setItem("agentgate_sidebar_collapsed", next ? "1" : "0");
   };
-  useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
+  useEffect(() => {
+    getVersion()
+      .then(setVersion)
+      .catch(() => {});
+  }, []);
 
   // Show quick setup only if: no providers AND not manually hidden
-  const providers = useProviders(s => s.items);
-  const providersLoading = useProviders(s => s.loading);
+  const providers = useProviders((s) => s.items);
+  const providersLoading = useProviders((s) => s.loading);
   useEffect(() => {
     // store 在别处可能也触发 fetch（如 Providers 页），这里只在没数据时拉。
     if (providers.length === 0 && !providersLoading) {
-      useProviders.getState().fetch().catch(() => {});
+      useProviders
+        .getState()
+        .fetch()
+        .catch(() => {});
     }
   }, [providers.length, providersLoading]);
   useEffect(() => {
@@ -75,22 +84,73 @@ export function Sidebar() {
   }, [providers, providersLoading]);
 
   return (
-    <aside className={cn(
-      "flex shrink-0 flex-col border-r border-border bg-sidebar transition-[width] duration-150",
-      collapsed ? "w-14" : "w-52"
-    )}>
+    <aside
+      className={cn(
+        "flex shrink-0 flex-col border-r border-border bg-sidebar transition-[width] duration-150",
+        collapsed ? "w-14" : "w-52"
+      )}
+    >
       {/* Logo + collapse toggle */}
-      <div className={cn(
-        "flex h-14 items-center border-b border-border",
-        collapsed ? "justify-center px-2" : "justify-between px-5"
-      )}>
+      <div
+        className={cn(
+          "flex h-14 items-center border-b border-border",
+          collapsed ? "justify-center px-2" : "justify-between px-5"
+        )}
+      >
         <div className="flex items-center gap-2.5 min-w-0">
-          <svg className="h-10 w-10 shrink-0" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="256" cy="256" r="180" stroke="currentColor" strokeWidth="16" opacity="0.2" className="text-accent" />
-            <ellipse cx="256" cy="256" rx="180" ry="100" stroke="currentColor" strokeWidth="16" opacity="0.35" className="text-accent" transform="rotate(-25 256 256)" />
-            <ellipse cx="256" cy="256" rx="180" ry="100" stroke="currentColor" strokeWidth="16" opacity="0.35" className="text-accent" transform="rotate(25 256 256)" />
-            <circle cx="256" cy="256" r="56" stroke="currentColor" strokeWidth="16" fill="none" className="text-accent" />
-            <circle cx="256" cy="256" r="30" fill="currentColor" className="text-accent" />
+          <svg
+            className="h-10 w-10 shrink-0"
+            viewBox="0 0 512 512"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <circle
+              cx="256"
+              cy="256"
+              r="180"
+              stroke="currentColor"
+              strokeWidth="16"
+              opacity="0.2"
+              className="text-accent"
+            />
+            <ellipse
+              cx="256"
+              cy="256"
+              rx="180"
+              ry="100"
+              stroke="currentColor"
+              strokeWidth="16"
+              opacity="0.35"
+              className="text-accent"
+              transform="rotate(-25 256 256)"
+            />
+            <ellipse
+              cx="256"
+              cy="256"
+              rx="180"
+              ry="100"
+              stroke="currentColor"
+              strokeWidth="16"
+              opacity="0.35"
+              className="text-accent"
+              transform="rotate(25 256 256)"
+            />
+            <circle
+              cx="256"
+              cy="256"
+              r="56"
+              stroke="currentColor"
+              strokeWidth="16"
+              fill="none"
+              className="text-accent"
+            />
+            <circle
+              cx="256"
+              cy="256"
+              r="30"
+              fill="currentColor"
+              className="text-accent"
+            />
           </svg>
           {!collapsed && (
             <span className="text-sm font-semibold tracking-tight text-text-primary truncate">
@@ -123,7 +183,12 @@ export function Sidebar() {
       )}
 
       {/* Navigation */}
-      <nav className={cn("flex flex-1 flex-col gap-0.5 pt-3", collapsed ? "px-2" : "px-3")}>
+      <nav
+        className={cn(
+          "flex flex-1 flex-col gap-0.5 pt-3",
+          collapsed ? "px-2" : "px-3"
+        )}
+      >
         {showQuickSetup && (
           <NavLink
             to="/quick-setup"
@@ -181,7 +246,9 @@ export function Sidebar() {
       {/* Footer */}
       {!collapsed && (
         <div className="border-t border-border px-5 py-3">
-          <p className="text-[11px] text-text-muted">{version ? `v${version}` : ""}</p>
+          <p className="text-[11px] text-text-muted">
+            {version ? `v${version}` : ""}
+          </p>
         </div>
       )}
     </aside>

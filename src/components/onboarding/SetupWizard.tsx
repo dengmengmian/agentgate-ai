@@ -1,11 +1,23 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Zap, CheckCircle, XCircle, Loader2, ArrowRight, Key, Monitor, Rocket } from "lucide-react";
+import {
+  Zap,
+  CheckCircle,
+  XCircle,
+  Loader2,
+  ArrowRight,
+  Key,
+  Monitor,
+  Rocket,
+} from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { detectProvider } from "@/lib/keyDetection";
 import { fetchDetectAndPersistProviderModels } from "@/lib/providerAutoSetup";
-import { PROVIDER_PRESETS, resolveProviderPresetForKey } from "@/data/providerPresets";
+import {
+  PROVIDER_PRESETS,
+  resolveProviderPresetForKey,
+} from "@/data/providerPresets";
 import { PROVIDER_TYPES } from "@/types/provider";
 
 interface Props {
@@ -32,11 +44,16 @@ export function SetupWizard({ onComplete }: Props) {
   const navigate = useNavigate();
   const [step, setStep] = useState<Step>("key");
   const [apiKey, setApiKey] = useState("");
-  const [detectedProvider, setDetectedProvider] = useState<{ type: string; name: string } | null>(null);
+  const [detectedProvider, setDetectedProvider] = useState<{
+    type: string;
+    name: string;
+  } | null>(null);
   const [tools, setTools] = useState<ToolDetection[]>([]);
   const [setupLog, setSetupLog] = useState<SetupLogEntry[]>([]);
 
-  const quickProviderTypes = PROVIDER_TYPES.filter((tp) => PROVIDER_PRESETS[tp.value]);
+  const quickProviderTypes = PROVIDER_TYPES.filter(
+    (tp) => PROVIDER_PRESETS[tp.value]
+  );
 
   const selectProvider = (type: string) => {
     const label = PROVIDER_TYPES.find((tp) => tp.value === type)?.label ?? type;
@@ -47,7 +64,9 @@ export function SetupWizard({ onComplete }: Props) {
   const handleKeyChange = (key: string) => {
     setApiKey(key);
     const result = detectProvider(key);
-    setDetectedProvider(result ? { type: result.type, name: result.label } : null);
+    setDetectedProvider(
+      result ? { type: result.type, name: result.label } : null
+    );
   };
 
   // Step 2: detect installed tools
@@ -57,28 +76,88 @@ export function SetupWizard({ onComplete }: Props) {
 
     try {
       const codex = await api.detectCodexConfig();
-      results.push({ id: "codex", name: "Codex", detected: codex.exists, checked: true });
-    } catch { results.push({ id: "codex", name: "Codex", detected: false, checked: false }); }
+      results.push({
+        id: "codex",
+        name: "Codex",
+        detected: codex.exists,
+        checked: true,
+      });
+    } catch {
+      results.push({
+        id: "codex",
+        name: "Codex",
+        detected: false,
+        checked: false,
+      });
+    }
 
     try {
       const claude = await api.detectClaudeCodeEnv();
-      results.push({ id: "claude_code", name: "Claude Code", detected: claude.settings_exists, checked: true });
-    } catch { results.push({ id: "claude_code", name: "Claude Code", detected: false, checked: false }); }
+      results.push({
+        id: "claude_code",
+        name: "Claude Code",
+        detected: claude.settings_exists,
+        checked: true,
+      });
+    } catch {
+      results.push({
+        id: "claude_code",
+        name: "Claude Code",
+        detected: false,
+        checked: false,
+      });
+    }
 
     try {
       const oc = await api.detectOpenCodeConfig();
-      results.push({ id: "opencode", name: "OpenCode", detected: oc.exists, checked: oc.exists });
-    } catch { results.push({ id: "opencode", name: "OpenCode", detected: false, checked: false }); }
+      results.push({
+        id: "opencode",
+        name: "OpenCode",
+        detected: oc.exists,
+        checked: oc.exists,
+      });
+    } catch {
+      results.push({
+        id: "opencode",
+        name: "OpenCode",
+        detected: false,
+        checked: false,
+      });
+    }
 
     try {
       const gem = await api.detectGeminiConfig();
-      results.push({ id: "gemini", name: "Gemini CLI", detected: gem.exists, checked: gem.exists });
-    } catch { results.push({ id: "gemini", name: "Gemini CLI", detected: false, checked: false }); }
+      results.push({
+        id: "gemini",
+        name: "Gemini CLI",
+        detected: gem.exists,
+        checked: gem.exists,
+      });
+    } catch {
+      results.push({
+        id: "gemini",
+        name: "Gemini CLI",
+        detected: false,
+        checked: false,
+      });
+    }
 
     try {
       const atom = await api.detectAtomCodeConfig();
-      results.push({ id: "atomcode", name: "AtomCode", detected: atom.exists, checked: atom.exists });
-    } catch { results.push({ id: "atomcode", name: "AtomCode", detected: false, checked: false }); }
+      results.push({
+        id: "atomcode",
+        name: "AtomCode",
+        detected: atom.exists,
+        checked: atom.exists,
+      });
+    } catch {
+      results.push({
+        id: "atomcode",
+        name: "AtomCode",
+        detected: false,
+        checked: false,
+      });
+    }
 
     setTools(results);
   };
@@ -87,8 +166,12 @@ export function SetupWizard({ onComplete }: Props) {
   const handleSetup = async () => {
     setStep("setup");
     const log: typeof setupLog = [];
-    const addLog = (label: string, status: "pending" | "running" | "ok" | "error", detail?: string) => {
-      const idx = log.findIndex(l => l.label === label);
+    const addLog = (
+      label: string,
+      status: "pending" | "running" | "ok" | "error",
+      detail?: string
+    ) => {
+      const idx = log.findIndex((l) => l.label === label);
       if (idx >= 0) {
         log[idx] = { ...log[idx], status, detail };
       } else {
@@ -98,7 +181,10 @@ export function SetupWizard({ onComplete }: Props) {
     };
 
     // 1. Create provider
-    const preset = resolveProviderPresetForKey(detectedProvider!.type, apiKey.trim());
+    const preset = resolveProviderPresetForKey(
+      detectedProvider!.type,
+      apiKey.trim()
+    );
     if (!preset) return;
     addLog(t("onboarding.creating_provider"), "running");
     try {
@@ -122,11 +208,20 @@ export function SetupWizard({ onComplete }: Props) {
 
       addLog(t("onboarding.detecting_capabilities"), "running");
       try {
-        const { models } = await fetchDetectAndPersistProviderModels(provider.id, detectedProvider!.type);
-        const detail = models.length ? `${models.length} ${t("providers.toast_models_and_caps")}` : t("providers.test.autofill_none");
+        const { models } = await fetchDetectAndPersistProviderModels(
+          provider.id,
+          detectedProvider!.type
+        );
+        const detail = models.length
+          ? `${models.length} ${t("providers.toast_models_and_caps")}`
+          : t("providers.test.autofill_none");
         addLog(t("onboarding.detecting_capabilities"), "ok", detail);
       } catch (err) {
-        addLog(t("onboarding.detecting_capabilities"), "error", err instanceof Error ? err.message : String(err));
+        addLog(
+          t("onboarding.detecting_capabilities"),
+          "error",
+          err instanceof Error ? err.message : String(err)
+        );
       }
     } catch {
       addLog(t("onboarding.creating_provider"), "error");
@@ -145,19 +240,29 @@ export function SetupWizard({ onComplete }: Props) {
     }
 
     // Small delay for gateway to be ready
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
 
     // 3. Apply tool configs
-    const checkedTools = tools.filter(t => t.checked);
+    const checkedTools = tools.filter((t) => t.checked);
     for (const tool of checkedTools) {
       addLog(`${t("onboarding.configuring")} ${tool.name}`, "running");
       try {
         switch (tool.id) {
-          case "codex": await api.applyCodexConfig(); break;
-          case "claude_code": await api.applyClaudeCodeConfig(); break;
-          case "opencode": await api.applyOpenCodeConfig(); break;
-          case "gemini": await api.applyGeminiConfig(); break;
-          case "atomcode": await api.applyAtomCodeConfig(); break;
+          case "codex":
+            await api.applyCodexConfig();
+            break;
+          case "claude_code":
+            await api.applyClaudeCodeConfig();
+            break;
+          case "opencode":
+            await api.applyOpenCodeConfig();
+            break;
+          case "gemini":
+            await api.applyGeminiConfig();
+            break;
+          case "atomcode":
+            await api.applyAtomCodeConfig();
+            break;
         }
         addLog(`${t("onboarding.configuring")} ${tool.name}`, "ok");
       } catch {
@@ -169,17 +274,27 @@ export function SetupWizard({ onComplete }: Props) {
     addLog(t("onboarding.testing"), "running");
     try {
       const test = await api.testToolConnection();
-      const detail = test.provider_ok ? undefined : (test.error ?? "Gateway or provider test failed");
-      addLog(t("onboarding.testing"), test.provider_ok ? "ok" : "error", detail);
+      const detail = test.provider_ok
+        ? undefined
+        : (test.error ?? "Gateway or provider test failed");
+      addLog(
+        t("onboarding.testing"),
+        test.provider_ok ? "ok" : "error",
+        detail
+      );
     } catch (err) {
-      addLog(t("onboarding.testing"), "error", err instanceof Error ? err.message : String(err));
+      addLog(
+        t("onboarding.testing"),
+        "error",
+        err instanceof Error ? err.message : String(err)
+      );
     }
 
     setStep("done");
   };
 
-  const allOk = setupLog.length > 0 && setupLog.every(l => l.status === "ok");
-  const hasErrors = setupLog.some(l => l.status === "error");
+  const allOk = setupLog.length > 0 && setupLog.every((l) => l.status === "ok");
+  const hasErrors = setupLog.some((l) => l.status === "error");
   const goToClients = () => {
     onComplete();
     navigate("/tools");
@@ -192,8 +307,10 @@ export function SetupWizard({ onComplete }: Props) {
   return (
     <div className="fixed inset-0 z-[95] flex items-center justify-center">
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" />
-      <div className="animate-scale-in relative z-10 w-full max-w-md rounded-xl border border-border bg-card p-8" style={{ boxShadow: "var(--shadow-lg)" }}>
-
+      <div
+        className="animate-scale-in relative z-10 w-full max-w-md rounded-xl border border-border bg-card p-8"
+        style={{ boxShadow: "var(--shadow-lg)" }}
+      >
         {/* Step 1: API Key */}
         {step === "key" && (
           <div className="space-y-5">
@@ -202,8 +319,12 @@ export function SetupWizard({ onComplete }: Props) {
                 <Key className="h-5 w-5 text-accent" />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-text-primary">{t("onboarding.welcome")}</h2>
-                <p className="text-xs text-text-muted">{t("onboarding.welcome_desc")}</p>
+                <h2 className="text-base font-semibold text-text-primary">
+                  {t("onboarding.welcome")}
+                </h2>
+                <p className="text-xs text-text-muted">
+                  {t("onboarding.welcome_desc")}
+                </p>
               </div>
             </div>
 
@@ -232,17 +353,26 @@ export function SetupWizard({ onComplete }: Props) {
                   onChange={(e) => selectProvider(e.target.value)}
                   className="form-input text-sm"
                 >
-                  <option value="">{t("onboarding.provider_select_placeholder")}</option>
+                  <option value="">
+                    {t("onboarding.provider_select_placeholder")}
+                  </option>
                   {quickProviderTypes.map((tp) => (
-                    <option key={tp.value} value={tp.value}>{tp.label}</option>
+                    <option key={tp.value} value={tp.value}>
+                      {tp.label}
+                    </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-text-muted">{t("onboarding.provider_hint")}</p>
+                <p className="text-[11px] text-text-muted">
+                  {t("onboarding.provider_hint")}
+                </p>
               </div>
             )}
 
             <div className="flex justify-between items-center">
-              <button onClick={onComplete} className="text-xs text-text-muted hover:text-text-primary">
+              <button
+                onClick={onComplete}
+                className="text-xs text-text-muted hover:text-text-primary"
+              >
                 {t("onboarding.skip")}
               </button>
               <button
@@ -264,8 +394,12 @@ export function SetupWizard({ onComplete }: Props) {
                 <Monitor className="h-5 w-5 text-accent" />
               </div>
               <div>
-                <h2 className="text-base font-semibold text-text-primary">{t("onboarding.select_tools")}</h2>
-                <p className="text-xs text-text-muted">{t("onboarding.select_tools_desc")}</p>
+                <h2 className="text-base font-semibold text-text-primary">
+                  {t("onboarding.select_tools")}
+                </h2>
+                <p className="text-xs text-text-muted">
+                  {t("onboarding.select_tools_desc")}
+                </p>
               </div>
             </div>
 
@@ -274,28 +408,47 @@ export function SetupWizard({ onComplete }: Props) {
                 <label
                   key={tool.id}
                   className={`flex items-center gap-3 rounded-lg border px-4 py-3 cursor-pointer transition-colors ${
-                    tool.checked ? "border-accent bg-accent-soft" : "border-border hover:border-text-muted"
+                    tool.checked
+                      ? "border-accent bg-accent-soft"
+                      : "border-border hover:border-text-muted"
                   }`}
                 >
                   <input
                     type="checkbox"
                     checked={tool.checked}
-                    onChange={(e) => setTools(tools.map(t => t.id === tool.id ? { ...t, checked: e.target.checked } : t))}
+                    onChange={(e) =>
+                      setTools(
+                        tools.map((t) =>
+                          t.id === tool.id
+                            ? { ...t, checked: e.target.checked }
+                            : t
+                        )
+                      )
+                    }
                     className="sr-only"
                   />
-                  <div className={`h-4 w-4 rounded border flex items-center justify-center ${tool.checked ? "bg-accent border-accent" : "border-border"}`}>
-                    {tool.checked && <CheckCircle className="h-3 w-3 text-white" />}
+                  <div
+                    className={`h-4 w-4 rounded border flex items-center justify-center ${tool.checked ? "bg-accent border-accent" : "border-border"}`}
+                  >
+                    {tool.checked && (
+                      <CheckCircle className="h-3 w-3 text-white" />
+                    )}
                   </div>
                   <span className="text-sm text-text-primary">{tool.name}</span>
                   {tool.detected && (
-                    <span className="ml-auto text-[10px] text-success">{t("tools.config_found")}</span>
+                    <span className="ml-auto text-[10px] text-success">
+                      {t("tools.config_found")}
+                    </span>
                   )}
                 </label>
               ))}
             </div>
 
             <div className="flex justify-between items-center">
-              <button onClick={() => setStep("key")} className="text-xs text-text-muted hover:text-text-primary">
+              <button
+                onClick={() => setStep("key")}
+                className="text-xs text-text-muted hover:text-text-primary"
+              >
                 ← {t("onboarding.back")}
               </button>
               <button onClick={handleSetup} className="btn-primary">
@@ -314,7 +467,11 @@ export function SetupWizard({ onComplete }: Props) {
               </div>
               <div>
                 <h2 className="text-base font-semibold text-text-primary">
-                  {step === "done" ? (allOk ? t("onboarding.complete") : t("onboarding.partial")) : t("onboarding.setting_up")}
+                  {step === "done"
+                    ? allOk
+                      ? t("onboarding.complete")
+                      : t("onboarding.partial")
+                    : t("onboarding.setting_up")}
                 </h2>
               </div>
             </div>
@@ -334,7 +491,9 @@ export function SetupWizard({ onComplete }: Props) {
                   <div className="min-w-0">
                     <div className="text-text-primary">{entry.label}</div>
                     {entry.detail && (
-                      <div className="mt-1 max-w-full break-words text-[11px] text-error">{entry.detail}</div>
+                      <div className="mt-1 max-w-full break-words text-[11px] text-error">
+                        {entry.detail}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -345,19 +504,30 @@ export function SetupWizard({ onComplete }: Props) {
               <div className="space-y-4">
                 {allOk ? (
                   <div className="rounded-lg border border-success/30 bg-success-soft p-3">
-                    <p className="text-xs font-medium text-success">{t("onboarding.next_step_title")}</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">{t("onboarding.next_step_desc")}</p>
+                    <p className="text-xs font-medium text-success">
+                      {t("onboarding.next_step_title")}
+                    </p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                      {t("onboarding.next_step_desc")}
+                    </p>
                   </div>
                 ) : (
                   <div className="rounded-lg border border-warning/30 bg-warning-soft p-3">
-                    <p className="text-xs font-medium text-warning">{t("onboarding.recovery_title")}</p>
-                    <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">{t("onboarding.recovery_desc")}</p>
+                    <p className="text-xs font-medium text-warning">
+                      {t("onboarding.recovery_title")}
+                    </p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+                      {t("onboarding.recovery_desc")}
+                    </p>
                   </div>
                 )}
                 <div className="flex flex-wrap justify-end gap-2">
                   {hasErrors && (
                     <>
-                      <button onClick={() => setStep("key")} className="btn-secondary">
+                      <button
+                        onClick={() => setStep("key")}
+                        className="btn-secondary"
+                      >
                         {t("onboarding.edit_key")}
                       </button>
                       <button onClick={handleSetup} className="btn-secondary">
@@ -369,7 +539,9 @@ export function SetupWizard({ onComplete }: Props) {
                     {t("onboarding.back_to_overview")}
                   </button>
                   <button onClick={goToClients} className="btn-primary">
-                    {allOk ? t("onboarding.go_to_clients") : t("onboarding.review_clients")}
+                    {allOk
+                      ? t("onboarding.go_to_clients")
+                      : t("onboarding.review_clients")}
                   </button>
                 </div>
               </div>

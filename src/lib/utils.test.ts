@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { cn, formatTimestamp, formatDate, formatLatency, formatOptionalLatency, formatUptime } from "./utils";
+import {
+  cn,
+  formatTimestamp,
+  formatDate,
+  formatLatency,
+  formatOptionalLatency,
+  formatUptime,
+} from "./utils";
 
 describe("cn", () => {
   it("merges class names", () => {

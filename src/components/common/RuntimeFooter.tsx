@@ -9,7 +9,14 @@
 // blocks. Polls every 5 s.
 
 import { useCallback, useEffect, useState } from "react";
-import { Activity, Clock, TrendingUp, Database, DollarSign, CheckCircle2 } from "lucide-react";
+import {
+  Activity,
+  Clock,
+  TrendingUp,
+  Database,
+  DollarSign,
+  CheckCircle2,
+} from "lucide-react";
 import * as api from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
@@ -54,13 +61,22 @@ function Metric({ icon, label, value, tone = "default" }: MetricProps) {
     muted: "text-text-muted",
   };
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5" style={{ boxShadow: "var(--shadow-sm)" }}>
+    <div
+      className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5"
+      style={{ boxShadow: "var(--shadow-sm)" }}
+    >
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent">
         {icon}
       </div>
       <div className="flex min-w-0 flex-col">
-        <span className="text-[10px] uppercase tracking-wide text-text-muted">{label}</span>
-        <span className={`font-mono text-base font-semibold tabular-nums ${tones[tone]}`}>{value}</span>
+        <span className="text-[10px] uppercase tracking-wide text-text-muted">
+          {label}
+        </span>
+        <span
+          className={`font-mono text-base font-semibold tabular-nums ${tones[tone]}`}
+        >
+          {value}
+        </span>
       </div>
     </div>
   );
@@ -79,30 +95,57 @@ export function RuntimeFooter() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
   usePolling(load, 5000);
 
   if (!kpis) return null;
 
-  const rateStr = kpis.total_requests > 0 ? `${kpis.success_rate_lifetime.toFixed(0)}%` : "—";
+  const rateStr =
+    kpis.total_requests > 0 ? `${kpis.success_rate_lifetime.toFixed(0)}%` : "—";
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      <Metric icon={<Activity className="h-3.5 w-3.5" />} label={t("stats.active_connections")} value={String(kpis.active_requests)} />
+      <Metric
+        icon={<Activity className="h-3.5 w-3.5" />}
+        label={t("stats.active_connections")}
+        value={String(kpis.active_requests)}
+      />
       <Metric
         icon={<Clock className="h-3.5 w-3.5" />}
         label={t("stats.uptime")}
-        value={kpis.gateway_running ? formatUptime(kpis.uptime_seconds) : t("stats.stopped")}
+        value={
+          kpis.gateway_running
+            ? formatUptime(kpis.uptime_seconds)
+            : t("stats.stopped")
+        }
         tone={kpis.gateway_running ? "default" : "muted"}
       />
-      <Metric icon={<TrendingUp className="h-3.5 w-3.5" />} label={t("stats.total_requests")} value={kpis.total_requests.toLocaleString()} />
-      <Metric icon={<Database className="h-3.5 w-3.5" />} label={t("stats.total_tokens")} value={formatTokens(kpis.total_tokens)} />
-      <Metric icon={<DollarSign className="h-3.5 w-3.5" />} label={t("stats.total_cost")} value={formatCost(kpis.total_cost)} />
+      <Metric
+        icon={<TrendingUp className="h-3.5 w-3.5" />}
+        label={t("stats.total_requests")}
+        value={kpis.total_requests.toLocaleString()}
+      />
+      <Metric
+        icon={<Database className="h-3.5 w-3.5" />}
+        label={t("stats.total_tokens")}
+        value={formatTokens(kpis.total_tokens)}
+      />
+      <Metric
+        icon={<DollarSign className="h-3.5 w-3.5" />}
+        label={t("stats.total_cost")}
+        value={formatCost(kpis.total_cost)}
+      />
       <Metric
         icon={<CheckCircle2 className="h-3.5 w-3.5" />}
         label={t("stats.success_rate_lifetime")}
         value={rateStr}
-        tone={kpis.total_requests > 0 && kpis.success_rate_lifetime < 90 ? "default" : "accent"}
+        tone={
+          kpis.total_requests > 0 && kpis.success_rate_lifetime < 90
+            ? "default"
+            : "accent"
+        }
       />
     </div>
   );

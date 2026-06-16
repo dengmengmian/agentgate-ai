@@ -1,7 +1,21 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
-import { getCurrentWindow, LogicalPosition, LogicalSize } from "@tauri-apps/api/window";
+import {
+  getCurrentWindow,
+  LogicalPosition,
+  LogicalSize,
+} from "@tauri-apps/api/window";
 import { events } from "@/lib/bindings";
-import { getPetSettings, updatePetSettings, getPetGatewayState, getPetGatewayStateLite, getPetMemory, savePetMemory, petChat, getPetClickThrough, showPetContextMenu } from "@/lib/api";
+import {
+  getPetSettings,
+  updatePetSettings,
+  getPetGatewayState,
+  getPetGatewayStateLite,
+  getPetMemory,
+  savePetMemory,
+  petChat,
+  getPetClickThrough,
+  showPetContextMenu,
+} from "@/lib/api";
 import type { PetType, PetState } from "@/types/pet";
 import { RobotPet } from "./pets/RobotPet";
 import { PixelCat } from "./pets/PixelCat";
@@ -31,13 +45,27 @@ const BUBBLE_EXPAND = 60;
 
 // memo 一次拿 9 个版本——bubble / chatMode / clickThrough 等无关 state 变化时,
 // 只要 state prop(idle/active/sleep/error/poke)没变就跳过 SVG reconcile。
-const PET_COMPONENTS: Record<PetType, React.ComponentType<{ state: PetState }>> = {
-  robot: memo(RobotPet), "pixel-cat": memo(PixelCat), slime: memo(SlimePet),
-  fox: memo(FoxPet), octopus: memo(OctopusPet), ghost: memo(GhostPet),
-  ox: memo(OxPet), soldier: memo(SuperSoldierPet), coder: memo(CoderPet),
+const PET_COMPONENTS: Record<
+  PetType,
+  React.ComponentType<{ state: PetState }>
+> = {
+  robot: memo(RobotPet),
+  "pixel-cat": memo(PixelCat),
+  slime: memo(SlimePet),
+  fox: memo(FoxPet),
+  octopus: memo(OctopusPet),
+  ghost: memo(GhostPet),
+  ox: memo(OxPet),
+  soldier: memo(SuperSoldierPet),
+  coder: memo(CoderPet),
 };
 
-interface BubbleData { text: string; type: BubbleType; key: number; isCc?: boolean }
+interface BubbleData {
+  text: string;
+  type: BubbleType;
+  key: number;
+  isCc?: boolean;
+}
 
 const compactNumber = (n: number) => {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -47,7 +75,9 @@ const compactNumber = (n: number) => {
 
 export function PetApp() {
   const [petType, setPetType] = useState<PetType>("robot");
-  const [gatewayState, setGatewayState] = useState<"running" | "stopped" | "active">("stopped");
+  const [gatewayState, setGatewayState] = useState<
+    "running" | "stopped" | "active"
+  >("stopped");
   const [isSleeping, setIsSleeping] = useState(false);
   const [isError, setIsError] = useState(false);
   const [bubble, setBubble] = useState<BubbleData | null>(null);
@@ -57,7 +87,9 @@ export function PetApp() {
   const [isPoked, setIsPoked] = useState(false);
   const [clickThrough, setClickThroughLocal] = useState<boolean>(false);
   const petTypeRef = useRef<PetType>("robot");
-  const dragRef = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
+  const dragRef = useRef<{ x: number; y: number; dragging: boolean } | null>(
+    null
+  );
   const pokeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   // 当前窗口"展开偏移量"。onMoved 写 DB 时反向加回去,
   // 保证持久化的位置永远是 idle(未扩展)窗口的左上角。
@@ -76,61 +108,95 @@ export function PetApp() {
   const petStateRef = useRef<PetState>("idle");
   const chatModeRef = useRef(false);
 
-  const locale = navigator.language.startsWith("zh") ? "zh" as const : "en" as const;
+  const locale = navigator.language.startsWith("zh")
+    ? ("zh" as const)
+    : ("en" as const);
 
   // ── Helpers ──
 
-  const showBubble = useCallback((text: string, type: BubbleType, isCc = false) => {
-    setBubble((prev) => {
-      // CC 提醒优先:正在显示的 CC 气泡不被普通气泡顶掉(它会自己到点消失)。
-      if (!isCc && prev?.isCc) return prev;
-      bubbleKeyRef.current += 1;
-      return { text, type, key: bubbleKeyRef.current, isCc };
-    });
-  }, []);
+  const showBubble = useCallback(
+    (text: string, type: BubbleType, isCc = false) => {
+      setBubble((prev) => {
+        // CC 提醒优先:正在显示的 CC 气泡不被普通气泡顶掉(它会自己到点消失)。
+        if (!isCc && prev?.isCc) return prev;
+        bubbleKeyRef.current += 1;
+        return { text, type, key: bubbleKeyRef.current, isCc };
+      });
+    },
+    []
+  );
 
   const dismissBubble = useCallback(() => setBubble(null), []);
 
   // ── Init: load settings + memory + startup greeting ──
 
-  useEffect(() => { petTypeRef.current = petType; }, [petType]);
+  useEffect(() => {
+    petTypeRef.current = petType;
+  }, [petType]);
 
   useEffect(() => {
-    getPetSettings().then((s) => setPetType(s.pet_type as PetType)).catch(() => {});
+    getPetSettings()
+      .then((s) => setPetType(s.pet_type as PetType))
+      .catch(() => {});
 
-    getPetMemory().then((raw) => {
-      try { memoryRef.current = JSON.parse(raw); } catch { memoryRef.current = {}; }
-      // Startup greeting (delayed so window renders first)
-      setTimeout(() => {
-        const name = memoryRef.current.name;
-        if (name) {
-          showBubble(
-            locale === "zh" ? `${name}，${getGreeting("stopped", "zh")}` : `Hey ${name}! ${getGreeting("stopped", "en")}`,
-            "chat"
-          );
-        } else {
-          showBubble(getGreeting("stopped", locale), "chat");
+    getPetMemory()
+      .then((raw) => {
+        try {
+          memoryRef.current = JSON.parse(raw);
+        } catch {
+          memoryRef.current = {};
         }
-      }, 1500);
-    }).catch(() => {});
+        // Startup greeting (delayed so window renders first)
+        setTimeout(() => {
+          const name = memoryRef.current.name;
+          if (name) {
+            showBubble(
+              locale === "zh"
+                ? `${name}，${getGreeting("stopped", "zh")}`
+                : `Hey ${name}! ${getGreeting("stopped", "en")}`,
+              "chat"
+            );
+          } else {
+            showBubble(getGreeting("stopped", locale), "chat");
+          }
+        }, 1500);
+      })
+      .catch(() => {});
   }, [locale, showBubble]);
 
   // ── Event listeners ──
 
   useEffect(() => {
-    const unlisten = events.petSettingsChanged.listen((e) => setPetType(e.payload.pet_type as PetType));
-    return () => { unlisten.then((fn) => fn()); };
+    const unlisten = events.petSettingsChanged.listen((e) =>
+      setPetType(e.payload.pet_type as PetType)
+    );
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
 
   useEffect(() => {
     const unlisten = events.petBubble.listen((e) => {
-      const text = locale === "zh" && e.payload.text_zh ? e.payload.text_zh : e.payload.text;
+      const text =
+        locale === "zh" && e.payload.text_zh
+          ? e.payload.text_zh
+          : e.payload.text;
       // CC 提醒用 type="cc" 作来源标记:映射成 info 样式显示,并标记 isCc 走优先级保护。
-      if (e.payload.type === "cc-working") { return; } // working 太频繁,不弹气泡(留给动画)
+      if (e.payload.type === "cc-working") {
+        return;
+      } // working 太频繁,不弹气泡(留给动画)
       const isCc = e.payload.type.startsWith("cc");
-      showBubble(text, isCc ? "info" : (e.payload.type as "info" | "success" | "error" | "chat"), isCc);
+      showBubble(
+        text,
+        isCc
+          ? "info"
+          : (e.payload.type as "info" | "success" | "error" | "chat"),
+        isCc
+      );
     });
-    return () => { unlisten.then((fn) => fn()); };
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, [locale, showBubble]);
 
   // ── Poll gateway state + errors (10s, lite) ──
@@ -138,34 +204,48 @@ export function PetApp() {
   useEffect(() => {
     const poll = () => {
       if (document.hidden) return;
-      getPetGatewayStateLite().then((info) => {
-        setGatewayState((prev) => {
-          if (prev !== info.state) {
-            setIsSleeping(false);
-            lastActivityRef.current = Date.now();
-            if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
-            sleepTimerRef.current = setTimeout(() => setIsSleeping(true), SLEEP_TIMEOUT);
-          }
-          return info.state;
-        });
-        gatewayStateRef.current = info.state;
+      getPetGatewayStateLite()
+        .then((info) => {
+          setGatewayState((prev) => {
+            if (prev !== info.state) {
+              setIsSleeping(false);
+              lastActivityRef.current = Date.now();
+              if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+              sleepTimerRef.current = setTimeout(
+                () => setIsSleeping(true),
+                SLEEP_TIMEOUT
+              );
+            }
+            return info.state;
+          });
+          gatewayStateRef.current = info.state;
 
-        if (info.last_error && info.last_error.timestamp !== lastErrorTsRef.current) {
-          const age = Date.now() - new Date(info.last_error.timestamp).getTime();
-          if (age < ERROR_COOLDOWN) {
-            lastErrorTsRef.current = info.last_error.timestamp;
-            const p = info.last_error.provider || "";
-            const m = info.last_error.message.length > 40 ? info.last_error.message.slice(0, 40) + "..." : info.last_error.message;
-            showBubble(p ? `${p}: ${m}` : m, "error");
-            setIsError(true);
-            setTimeout(() => setIsError(false), 3000);
+          if (
+            info.last_error &&
+            info.last_error.timestamp !== lastErrorTsRef.current
+          ) {
+            const age =
+              Date.now() - new Date(info.last_error.timestamp).getTime();
+            if (age < ERROR_COOLDOWN) {
+              lastErrorTsRef.current = info.last_error.timestamp;
+              const p = info.last_error.provider || "";
+              const m =
+                info.last_error.message.length > 40
+                  ? info.last_error.message.slice(0, 40) + "..."
+                  : info.last_error.message;
+              showBubble(p ? `${p}: ${m}` : m, "error");
+              setIsError(true);
+              setTimeout(() => setIsError(false), 3000);
+            }
           }
-        }
-      }).catch(() => {});
+        })
+        .catch(() => {});
     };
     poll();
     const id = setInterval(poll, POLL_INTERVAL);
-    const onVisible = () => { if (!document.hidden) poll(); };
+    const onVisible = () => {
+      if (!document.hidden) poll();
+    };
     document.addEventListener("visibilitychange", onVisible);
     const unEvent = events.petGatewayStateChanged.listen(() => poll());
     return () => {
@@ -182,24 +262,34 @@ export function PetApp() {
       if (document.hidden) return;
       if (gatewayStateRef.current === "stopped") return;
       if (Date.now() - lastStatsRef.current < STATS_INTERVAL) return;
-      getPetGatewayState().then((info) => {
-        if (!info.today || info.today.requests <= 0) return;
-        lastStatsRef.current = Date.now();
-        const tokens = (info.today.input_tokens ?? 0) + (info.today.output_tokens ?? 0);
-        const cost = info.today.cost > 0 ? ` | $${info.today.cost.toFixed(2)}` : "";
-        const errorText = (info.today.errors ?? 0) > 0
-          ? locale === "zh" ? ` | ${info.today.errors} 错误` : ` | ${info.today.errors} err`
-          : "";
-        const tokenText = tokens > 0
-          ? locale === "zh" ? ` | ${compactNumber(tokens)} tokens` : ` | ${compactNumber(tokens)} tok`
-          : "";
-        showBubble(
-          locale === "zh"
-            ? `今日: ${info.today.requests} 请求${tokenText}${cost}${errorText}`
-            : `Today: ${info.today.requests} req${tokenText}${cost}${errorText}`,
-          "info"
-        );
-      }).catch(() => {});
+      getPetGatewayState()
+        .then((info) => {
+          if (!info.today || info.today.requests <= 0) return;
+          lastStatsRef.current = Date.now();
+          const tokens =
+            (info.today.input_tokens ?? 0) + (info.today.output_tokens ?? 0);
+          const cost =
+            info.today.cost > 0 ? ` | $${info.today.cost.toFixed(2)}` : "";
+          const errorText =
+            (info.today.errors ?? 0) > 0
+              ? locale === "zh"
+                ? ` | ${info.today.errors} 错误`
+                : ` | ${info.today.errors} err`
+              : "";
+          const tokenText =
+            tokens > 0
+              ? locale === "zh"
+                ? ` | ${compactNumber(tokens)} tokens`
+                : ` | ${compactNumber(tokens)} tok`
+              : "";
+          showBubble(
+            locale === "zh"
+              ? `今日: ${info.today.requests} 请求${tokenText}${cost}${errorText}`
+              : `Today: ${info.today.requests} req${tokenText}${cost}${errorText}`,
+            "info"
+          );
+        })
+        .catch(() => {});
     };
     const id = setInterval(tick, STATS_INTERVAL);
     return () => clearInterval(id);
@@ -211,17 +301,30 @@ export function PetApp() {
     setIsSleeping(false);
     lastActivityRef.current = Date.now();
     if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
-    sleepTimerRef.current = setTimeout(() => setIsSleeping(true), SLEEP_TIMEOUT);
+    sleepTimerRef.current = setTimeout(
+      () => setIsSleeping(true),
+      SLEEP_TIMEOUT
+    );
   }, []);
 
   useEffect(() => {
     resetSleepTimer();
-    return () => { if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current); };
+    return () => {
+      if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
+    };
   }, [resetSleepTimer]);
 
   // ── State ──
 
-  const petState: PetState = isPoked ? "poke" : isError ? "error" : gatewayState === "active" ? "active" : isSleeping ? "sleep" : "idle";
+  const petState: PetState = isPoked
+    ? "poke"
+    : isError
+      ? "error"
+      : gatewayState === "active"
+        ? "active"
+        : isSleeping
+          ? "sleep"
+          : "idle";
 
   // ── Poke ──
 
@@ -235,10 +338,13 @@ export function PetApp() {
 
   // ── Drag (threshold) + click → poke ──
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button !== 0 || chatMode) return;
-    dragRef.current = { x: e.clientX, y: e.clientY, dragging: false };
-  }, [chatMode]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.button !== 0 || chatMode) return;
+      dragRef.current = { x: e.clientX, y: e.clientY, dragging: false };
+    },
+    [chatMode]
+  );
 
   // 合并:drag 检测 + eye-follow,一个 mousemove handler。
   // eye-follow 只在 idle && !chatMode 时算,用 rAF 节流到 60fps,
@@ -254,7 +360,10 @@ export function PetApp() {
       // drag detection
       const s = dragRef.current;
       if (s && !s.dragging) {
-        if (Math.abs(e.clientX - s.x) > DRAG_THRESHOLD || Math.abs(e.clientY - s.y) > DRAG_THRESHOLD) {
+        if (
+          Math.abs(e.clientX - s.x) > DRAG_THRESHOLD ||
+          Math.abs(e.clientY - s.y) > DRAG_THRESHOLD
+        ) {
           s.dragging = true;
           getCurrentWindow().startDragging();
         }
@@ -294,8 +403,12 @@ export function PetApp() {
   }, [triggerPoke]);
 
   // 同步 ref(供合并的 mousemove handler 用 — 不依赖 React state closure)
-  useEffect(() => { petStateRef.current = petState; }, [petState]);
-  useEffect(() => { chatModeRef.current = chatMode; }, [chatMode]);
+  useEffect(() => {
+    petStateRef.current = petState;
+  }, [petState]);
+  useEffect(() => {
+    chatModeRef.current = chatMode;
+  }, [chatMode]);
 
   // 非 idle / 聊天时清掉 inline transform,让 CSS class 动画接管
   useEffect(() => {
@@ -308,7 +421,10 @@ export function PetApp() {
 
   const handleDoubleClick = useCallback(() => {
     if (chatMode) return;
-    if (pokeTimerRef.current) { clearTimeout(pokeTimerRef.current); setIsPoked(false); }
+    if (pokeTimerRef.current) {
+      clearTimeout(pokeTimerRef.current);
+      setIsPoked(false);
+    }
     dragRef.current = null;
     resetSleepTimer();
     setChatMode(true);
@@ -329,9 +445,14 @@ export function PetApp() {
     const un = events.petMemoryReset.listen(() => {
       memoryRef.current = {};
       chatHistoryRef.current = [];
-      showBubble(locale === "zh" ? "记忆已清空 ✨" : "Memory cleared ✨", "info");
+      showBubble(
+        locale === "zh" ? "记忆已清空 ✨" : "Memory cleared ✨",
+        "info"
+      );
     });
-    return () => { un.then((fn) => fn()); };
+    return () => {
+      un.then((fn) => fn());
+    };
   }, [locale, showBubble]);
 
   // ── Click-through (鼠标穿透到下方应用) ──
@@ -339,16 +460,25 @@ export function PetApp() {
   // 真值在 Rust AppState,Pet 启动时拉一遍 + 监听 changed 事件。
   // 右键菜单 / Settings / tray 三处都改 Rust,这里只是镜像 + 应用窗口设置。
   const applyClickThrough = useCallback(async (on: boolean) => {
-    try { await getCurrentWindow().setIgnoreCursorEvents(on); } catch { /* ignore */ }
+    try {
+      await getCurrentWindow().setIgnoreCursorEvents(on);
+    } catch {
+      /* ignore */
+    }
     setClickThroughLocal(on);
   }, []);
 
   useEffect(() => {
-    getPetClickThrough().then(applyClickThrough).catch(() => {});
-    const un = events.petClickThroughChanged.listen((e) => applyClickThrough(e.payload));
-    return () => { un.then((fn) => fn()); };
+    getPetClickThrough()
+      .then(applyClickThrough)
+      .catch(() => {});
+    const un = events.petClickThroughChanged.listen((e) =>
+      applyClickThrough(e.payload)
+    );
+    return () => {
+      un.then((fn) => fn());
+    };
   }, [applyClickThrough]);
-
 
   // ── Chat submit with AI fallback ──
 
@@ -363,8 +493,12 @@ export function PetApp() {
 
     // Memory extraction (do before sending so AI also gets it)
     const namePatterns = [
-      /my name is\s+(\S+)/i, /i'?m\s+(\S+)/i, /call me\s+(\S+)/i,
-      /我叫(.{1,10})/, /我是(.{1,10})/, /叫我(.{1,10})/,
+      /my name is\s+(\S+)/i,
+      /i'?m\s+(\S+)/i,
+      /call me\s+(\S+)/i,
+      /我叫(.{1,10})/,
+      /我是(.{1,10})/,
+      /叫我(.{1,10})/,
     ];
     for (const pat of namePatterns) {
       const m = msg.match(pat);
@@ -376,7 +510,9 @@ export function PetApp() {
     }
 
     // Build messages
-    const memStr = Object.entries(memoryRef.current).map(([k, v]) => `${k}: ${v}`).join("; ");
+    const memStr = Object.entries(memoryRef.current)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join("; ");
     const sysContent = buildSystemPrompt(petTypeRef.current, locale, memStr);
 
     chatHistoryRef.current.push({ role: "user", content: msg });
@@ -403,11 +539,19 @@ export function PetApp() {
       if (e?.code === "GATEWAY_NOT_RUNNING") {
         msg = locale === "zh" ? "先启动网关哦" : "Start the gateway first";
       } else if (e?.code === "ACTIVE_PROVIDER_NOT_FOUND") {
-        msg = locale === "zh" ? "先选个可用供应商" : "Pick an active provider first";
+        msg =
+          locale === "zh"
+            ? "先选个可用供应商"
+            : "Pick an active provider first";
       } else if (e?.code === "PROVIDER_API_KEY_MISSING") {
-        msg = locale === "zh" ? "供应商缺 API Key" : "Provider API key is missing";
-      } else if (e?.code === "GATEWAY_AUTH_INVALID" || e?.code === "GATEWAY_AUTH_MISSING") {
-        msg = locale === "zh" ? "网关 token 不对" : "Gateway token needs attention";
+        msg =
+          locale === "zh" ? "供应商缺 API Key" : "Provider API key is missing";
+      } else if (
+        e?.code === "GATEWAY_AUTH_INVALID" ||
+        e?.code === "GATEWAY_AUTH_MISSING"
+      ) {
+        msg =
+          locale === "zh" ? "网关 token 不对" : "Gateway token needs attention";
       } else {
         const short = (e?.message || "request failed").slice(0, 60);
         msg = locale === "zh" ? `调不通: ${short}` : `Call failed: ${short}`;
@@ -450,7 +594,9 @@ export function PetApp() {
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         if (!pending) return;
-        updatePetSettings({ pos_x: pending.x, pos_y: pending.y }).catch(() => {});
+        updatePetSettings({ pos_x: pending.x, pos_y: pending.y }).catch(
+          () => {}
+        );
         pending = null;
       }, 300);
     });
@@ -481,7 +627,9 @@ export function PetApp() {
         expansionRef.current = target; // 先更新,再 setPosition 触发 onMoved 时反向加回正确
         await win.setSize(new LogicalSize(w, h + delta));
         await win.setPosition(new LogicalPosition(x, y - delta));
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     })();
   }, [hasBubble]);
 
@@ -506,17 +654,30 @@ export function PetApp() {
         }}
       >
         {bubble && (
-          <Bubble key={bubble.key} text={bubble.text} type={bubble.type} onDone={dismissBubble} />
+          <Bubble
+            key={bubble.key}
+            text={bubble.text}
+            type={bubble.type}
+            onDone={dismissBubble}
+          />
         )}
 
         {chatLoading && (
           <div className="bubble bubble-in">
-            <div className="bubble-content" style={{ borderColor: "var(--color-accent, #E89850)" }}>
+            <div
+              className="bubble-content"
+              style={{ borderColor: "var(--color-accent, #E89850)" }}
+            >
               <div className="chat-loading">
-                <span /><span /><span />
+                <span />
+                <span />
+                <span />
               </div>
             </div>
-            <div className="bubble-arrow" style={{ borderTopColor: "var(--color-accent, #E89850)" }} />
+            <div
+              className="bubble-arrow"
+              style={{ borderTopColor: "var(--color-accent, #E89850)" }}
+            />
           </div>
         )}
 
@@ -529,19 +690,23 @@ export function PetApp() {
               ref={inputRef}
               className="chat-input"
               value={chatInput}
-              onChange={(e) => { setChatInput(e.target.value); chatInputRef.current = e.target.value; }}
+              onChange={(e) => {
+                setChatInput(e.target.value);
+                chatInputRef.current = e.target.value;
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleChatSubmit();
                 e.stopPropagation();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              onBlur={() => { if (!chatLoading) setChatMode(false); }}
+              onBlur={() => {
+                if (!chatLoading) setChatMode(false);
+              }}
               placeholder={locale === "zh" ? "跟我聊天..." : "Chat with me..."}
               disabled={chatLoading}
             />
           </div>
         )}
-
       </div>
     </div>
   );

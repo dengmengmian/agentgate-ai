@@ -16,7 +16,11 @@ interface StatusBadgeProps {
   className?: string;
 }
 
-export function StatusBadge({ variant, children, className }: StatusBadgeProps) {
+export function StatusBadge({
+  variant,
+  children,
+  className,
+}: StatusBadgeProps) {
   return (
     <span
       className={cn(

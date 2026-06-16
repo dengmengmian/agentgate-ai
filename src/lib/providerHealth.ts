@@ -35,7 +35,9 @@ const AUTH_MARKERS = [
   "permission_denied",
 ];
 
-export function classifyProviderErrorStatus(error: Pick<RecentError, "status_code" | "message">): ProviderErrorStatus {
+export function classifyProviderErrorStatus(
+  error: Pick<RecentError, "status_code" | "message">
+): ProviderErrorStatus {
   const message = error.message.toLowerCase();
 
   if (BALANCE_MARKERS.some((marker) => message.includes(marker))) {
@@ -44,7 +46,11 @@ export function classifyProviderErrorStatus(error: Pick<RecentError, "status_cod
   if (QUOTA_MARKERS.some((marker) => message.includes(marker))) {
     return "quota_exhausted";
   }
-  if (error.status_code === 401 || error.status_code === 403 || AUTH_MARKERS.some((marker) => message.includes(marker))) {
+  if (
+    error.status_code === 401 ||
+    error.status_code === 403 ||
+    AUTH_MARKERS.some((marker) => message.includes(marker))
+  ) {
     return "auth_failed";
   }
   if (error.status_code === 429) {
@@ -54,9 +60,13 @@ export function classifyProviderErrorStatus(error: Pick<RecentError, "status_cod
   return "other_error";
 }
 
-export function summarizeProviderErrorStatuses(errors: RecentError[]): ProviderErrorStatus[] {
+export function summarizeProviderErrorStatuses(
+  errors: RecentError[]
+): ProviderErrorStatus[] {
   const statuses = errors.map(classifyProviderErrorStatus);
-  return Array.from(new Set(statuses)).filter((status) => status !== "other_error");
+  return Array.from(new Set(statuses)).filter(
+    (status) => status !== "other_error"
+  );
 }
 
 export interface ProviderCooldownSummary {
@@ -66,8 +76,14 @@ export interface ProviderCooldownSummary {
 }
 
 export function getProviderCooldownSummary(
-  runtime: Pick<ProviderRuntimeStatus, "cooldown_until" | "last_error" | "last_error_code"> | null | undefined,
-  nowMs = Date.now(),
+  runtime:
+    | Pick<
+        ProviderRuntimeStatus,
+        "cooldown_until" | "last_error" | "last_error_code"
+      >
+    | null
+    | undefined,
+  nowMs = Date.now()
 ): ProviderCooldownSummary | null {
   if (!runtime?.cooldown_until) return null;
 
@@ -88,7 +104,13 @@ export type ProviderSignalVariant = "success" | "error" | "warning" | "muted";
 
 export interface ProviderSignalSummary {
   runtime: {
-    status: "available" | "cooldown" | "quota_exhausted" | "unavailable" | "degraded" | "unknown";
+    status:
+      | "available"
+      | "cooldown"
+      | "quota_exhausted"
+      | "unavailable"
+      | "degraded"
+      | "unknown";
     variant: ProviderSignalVariant;
   };
   probe: {
@@ -124,7 +146,7 @@ interface TrafficSignalInput {
 export function getProviderSignalSummary(
   runtime: RuntimeSignalInput | null | undefined,
   traffic: TrafficSignalInput | null | undefined,
-  nowMs = Date.now(),
+  nowMs = Date.now()
 ): ProviderSignalSummary {
   const cooldown = getProviderCooldownSummary(runtime, nowMs);
   const runtimeSignal: ProviderSignalSummary["runtime"] = !runtime
@@ -139,11 +161,22 @@ export function getProviderSignalSummary(
             ? { status: "degraded", variant: "warning" }
             : { status: "available", variant: "success" };
 
-  const probeSignal: ProviderSignalSummary["probe"] = runtime?.last_probe_ok == null
-    ? { status: "unknown", variant: "muted", latencyMs: null, error: null }
-    : runtime.last_probe_ok
-      ? { status: "ok", variant: "success", latencyMs: runtime.last_probe_latency_ms, error: null }
-      : { status: "failed", variant: "error", latencyMs: runtime.last_probe_latency_ms, error: runtime.last_probe_error };
+  const probeSignal: ProviderSignalSummary["probe"] =
+    runtime?.last_probe_ok == null
+      ? { status: "unknown", variant: "muted", latencyMs: null, error: null }
+      : runtime.last_probe_ok
+        ? {
+            status: "ok",
+            variant: "success",
+            latencyMs: runtime.last_probe_latency_ms,
+            error: null,
+          }
+        : {
+            status: "failed",
+            variant: "error",
+            latencyMs: runtime.last_probe_latency_ms,
+            error: runtime.last_probe_error,
+          };
 
   const trafficSignal: ProviderSignalSummary["traffic"] = !traffic
     ? { status: "unknown", variant: "muted" }

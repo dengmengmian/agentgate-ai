@@ -13,8 +13,12 @@ describe("detectProviderType", () => {
   });
 
   it("recognizes GitHub Copilot by gho_/ghu_ prefix", () => {
-    expect(detectProviderType("gho_16C7e42F292c6912E7710c838347Ae178")).toBe("copilot");
-    expect(detectProviderType("ghu_16C7e42F292c6912E7710c838347Ae178")).toBe("copilot");
+    expect(detectProviderType("gho_16C7e42F292c6912E7710c838347Ae178")).toBe(
+      "copilot"
+    );
+    expect(detectProviderType("ghu_16C7e42F292c6912E7710c838347Ae178")).toBe(
+      "copilot"
+    );
   });
 
   it("recognizes OpenRouter by sk-or- prefix", () => {
@@ -43,22 +47,26 @@ describe("detectProviderType", () => {
 
   it("recognizes DeepSeek by exact sk- + 32 hex shape", () => {
     // Real DeepSeek key shape.
-    expect(detectProviderType("sk-abcdef0123456789abcdef0123456789")).toBe("deepseek");
-    expect(detectProviderType("sk-0123456789abcdef0123456789abcdef")).toBe("deepseek");
+    expect(detectProviderType("sk-abcdef0123456789abcdef0123456789")).toBe(
+      "deepseek"
+    );
+    expect(detectProviderType("sk-0123456789abcdef0123456789abcdef")).toBe(
+      "deepseek"
+    );
   });
 
   it("does NOT mistake long OpenAI keys for DeepSeek", () => {
     // OpenAI legacy key: 48 mixed-case chars after sk-. Should NOT match
     // DeepSeek's 32-hex anchor.
     expect(
-      detectProviderType("sk-A1B2C3D4E5F6abcdef0123456789ABCDEFabcdef01234567"),
+      detectProviderType("sk-A1B2C3D4E5F6abcdef0123456789ABCDEFabcdef01234567")
     ).not.toBe("deepseek");
   });
 
   it("recognizes Kimi-style 48-char base64 keys", () => {
     // Moonshot/Kimi pattern: 48 alphanumerics.
     expect(
-      detectProviderType("sk-AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789"),
+      detectProviderType("sk-AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789")
     ).toBe("kimi");
   });
 
@@ -71,7 +79,9 @@ describe("detectProviderType", () => {
   it("falls back to OpenAI for unrecognized sk- shapes", () => {
     // Some random sk- key that doesn't match the DeepSeek hex shape nor
     // any explicit prefix → OpenAI is the safest default.
-    expect(detectProviderType("sk-randomBlobThatDoesntMatchAnything")).toBe("openai");
+    expect(detectProviderType("sk-randomBlobThatDoesntMatchAnything")).toBe(
+      "openai"
+    );
   });
 
   it("returns null for non-sk keys without known prefix", () => {
@@ -82,14 +92,17 @@ describe("detectProviderType", () => {
   it("trims surrounding whitespace before matching", () => {
     expect(detectProviderType("  sk-ant-abc  ")).toBe("anthropic");
     expect(
-      detectProviderType("\n sk-abcdef0123456789abcdef0123456789 \n"),
+      detectProviderType("\n sk-abcdef0123456789abcdef0123456789 \n")
     ).toBe("deepseek");
   });
 });
 
 describe("detectProvider", () => {
   it("returns label alongside type", () => {
-    expect(detectProvider("sk-ant-abc")).toEqual({ type: "anthropic", label: "Anthropic" });
+    expect(detectProvider("sk-ant-abc")).toEqual({
+      type: "anthropic",
+      label: "Anthropic",
+    });
     expect(detectProvider("sk-abcdef0123456789abcdef0123456789")).toEqual({
       type: "deepseek",
       label: "DeepSeek",

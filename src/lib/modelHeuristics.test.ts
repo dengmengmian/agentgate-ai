@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { normalizeModelsForProvider, pickModelsForProvider } from "./modelHeuristics";
+import {
+  normalizeModelsForProvider,
+  pickModelsForProvider,
+} from "./modelHeuristics";
 
 describe("DeepSeek model heuristics", () => {
   it("keeps only v4 models for deepseek", () => {
@@ -9,7 +12,7 @@ describe("DeepSeek model heuristics", () => {
         "deepseek-v4-flash",
         "deepseek-reasoner",
         "deepseek-v4-pro",
-      ]),
+      ])
     ).toEqual(["deepseek-v4-flash", "deepseek-v4-pro"]);
   });
 
@@ -20,7 +23,7 @@ describe("DeepSeek model heuristics", () => {
         "deepseek-v4-flash",
         "deepseek-reasoner",
         "deepseek-v4-pro",
-      ]),
+      ])
     ).toEqual({ default: "deepseek-v4-flash", reasoning: "deepseek-v4-pro" });
   });
 });

@@ -11,7 +11,11 @@ interface CopyButtonProps {
   showLabel?: boolean;
 }
 
-export function CopyButton({ text, className, showLabel = true }: CopyButtonProps) {
+export function CopyButton({
+  text,
+  className,
+  showLabel = true,
+}: CopyButtonProps) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
 

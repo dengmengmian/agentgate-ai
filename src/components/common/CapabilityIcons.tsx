@@ -31,46 +31,91 @@ interface IconSpec {
 }
 
 const ICONS: IconSpec[] = [
-  { cap: "vision", Icon: Eye, labelKey: "providers.cap.vision", noLabelKey: "providers.cap.vision_no" },
-  { cap: "audio_in", Icon: Mic, labelKey: "providers.cap.audio_in", noLabelKey: "providers.cap.audio_in_no" },
-  { cap: "tts", Icon: Speaker, labelKey: "providers.cap.tts", noLabelKey: "providers.cap.tts_no" },
-  { cap: "video_in", Icon: Video, labelKey: "providers.cap.video_in", noLabelKey: "providers.cap.video_in_no" },
-  { cap: "reasoning", Icon: Brain, labelKey: "providers.cap.reasoning", noLabelKey: "providers.cap.reasoning_no" },
-  { cap: "web_search", Icon: Globe, labelKey: "providers.cap.web_search", noLabelKey: "providers.cap.web_search_no" },
+  {
+    cap: "vision",
+    Icon: Eye,
+    labelKey: "providers.cap.vision",
+    noLabelKey: "providers.cap.vision_no",
+  },
+  {
+    cap: "audio_in",
+    Icon: Mic,
+    labelKey: "providers.cap.audio_in",
+    noLabelKey: "providers.cap.audio_in_no",
+  },
+  {
+    cap: "tts",
+    Icon: Speaker,
+    labelKey: "providers.cap.tts",
+    noLabelKey: "providers.cap.tts_no",
+  },
+  {
+    cap: "video_in",
+    Icon: Video,
+    labelKey: "providers.cap.video_in",
+    noLabelKey: "providers.cap.video_in_no",
+  },
+  {
+    cap: "reasoning",
+    Icon: Brain,
+    labelKey: "providers.cap.reasoning",
+    noLabelKey: "providers.cap.reasoning_no",
+  },
+  {
+    cap: "web_search",
+    Icon: Globe,
+    labelKey: "providers.cap.web_search",
+    noLabelKey: "providers.cap.web_search_no",
+  },
 ];
 
 function parseMatrix(json: string | null): Record<string, string[]> | null {
   if (!json) return null;
   try {
     const parsed = JSON.parse(json);
-    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, string[]>) : null;
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, string[]>)
+      : null;
   } catch {
     return null;
   }
 }
 
-function anyModelHas(matrix: Record<string, string[]>, capability: string): boolean {
-  return Object.values(matrix).some((caps) => Array.isArray(caps) && caps.includes(capability));
+function anyModelHas(
+  matrix: Record<string, string[]>,
+  capability: string
+): boolean {
+  return Object.values(matrix).some(
+    (caps) => Array.isArray(caps) && caps.includes(capability)
+  );
 }
 
-export function CapabilityIcons({ modelCapabilities, legacyVision, compact = true, size = "sm" }: CapabilityIconsProps) {
+export function CapabilityIcons({
+  modelCapabilities,
+  legacyVision,
+  compact = true,
+  size = "sm",
+}: CapabilityIconsProps) {
   const { t } = useI18n();
   const matrix = parseMatrix(modelCapabilities);
   const cls = ICON_SIZE[size];
 
   // Build the per-capability state. If matrix unset, only vision can be derived
   // from the legacy boolean; other caps stay "unknown" (hidden).
-  const states: { spec: IconSpec; state: "yes" | "no" | "unknown" }[] = ICONS.map((spec) => {
-    if (matrix) {
-      return { spec, state: anyModelHas(matrix, spec.cap) ? "yes" : "no" };
-    }
-    if (spec.cap === "vision" && typeof legacyVision === "boolean") {
-      return { spec, state: legacyVision ? "yes" : "no" };
-    }
-    return { spec, state: "unknown" };
-  });
+  const states: { spec: IconSpec; state: "yes" | "no" | "unknown" }[] =
+    ICONS.map((spec) => {
+      if (matrix) {
+        return { spec, state: anyModelHas(matrix, spec.cap) ? "yes" : "no" };
+      }
+      if (spec.cap === "vision" && typeof legacyVision === "boolean") {
+        return { spec, state: legacyVision ? "yes" : "no" };
+      }
+      return { spec, state: "unknown" };
+    });
 
-  const visible = states.filter(({ state }) => state !== "unknown" && (!compact || state === "yes"));
+  const visible = states.filter(
+    ({ state }) => state !== "unknown" && (!compact || state === "yes")
+  );
   if (visible.length === 0) return null;
 
   return (

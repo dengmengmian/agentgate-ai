@@ -163,14 +163,22 @@ describe("API client", () => {
   });
 
   it("aggregateProviderDetailStats passes provider window", async () => {
-    vi.mocked(invoke).mockResolvedValue({ provider: "P", latency_points: [], model_stats: [] });
+    vi.mocked(invoke).mockResolvedValue({
+      provider: "P",
+      latency_points: [],
+      model_stats: [],
+    });
     const result = await aggregateProviderDetailStats("P", 7, 40);
     expect(invoke).toHaveBeenCalledWith("aggregate_provider_detail_stats", {
       provider: "P",
       days: 7,
       limit: 40,
     });
-    expect(result).toEqual({ provider: "P", latency_points: [], model_stats: [] });
+    expect(result).toEqual({
+      provider: "P",
+      latency_points: [],
+      model_stats: [],
+    });
   });
 
   it("clearRequestLogs invokes correct command", async () => {

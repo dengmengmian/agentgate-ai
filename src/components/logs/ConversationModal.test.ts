@@ -8,10 +8,14 @@ describe("getConversationMessageKind", () => {
   });
 
   it("detects tool results", () => {
-    expect(getConversationMessageKind("[Tool result] total 536")).toBe("tool_result");
+    expect(getConversationMessageKind("[Tool result] total 536")).toBe(
+      "tool_result"
+    );
   });
 
   it("keeps normal messages as chat", () => {
-    expect(getConversationMessageKind("我先了解一下项目结构和状态。")).toBe("chat");
+    expect(getConversationMessageKind("我先了解一下项目结构和状态。")).toBe(
+      "chat"
+    );
   });
 });

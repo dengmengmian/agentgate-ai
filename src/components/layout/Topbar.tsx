@@ -5,7 +5,8 @@ import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
 import { useGatewayStatus } from "@/store/global";
 
-const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+const IS_MAC =
+  typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
 
 export function Topbar({ onOpenCmdK }: { onOpenCmdK?: () => void }) {
   const { t } = useI18n();
@@ -34,11 +35,16 @@ export function Topbar({ onOpenCmdK }: { onOpenCmdK?: () => void }) {
     useGatewayStatus.getState().fetch();
   }, []);
 
-  useEffect(() => { refresh(); }, [location.pathname, refresh]);
+  useEffect(() => {
+    refresh();
+  }, [location.pathname, refresh]);
   usePolling(refresh, 3000);
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-sidebar px-6" style={{ boxShadow: "var(--shadow-sm)" }}>
+    <header
+      className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-sidebar px-6"
+      style={{ boxShadow: "var(--shadow-sm)" }}
+    >
       <h1 className="text-sm font-semibold text-text-primary">{t(titleKey)}</h1>
 
       <div className="flex items-center gap-2">
@@ -55,14 +61,20 @@ export function Topbar({ onOpenCmdK }: { onOpenCmdK?: () => void }) {
           </button>
         )}
         {status && (
-          <div className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
-            status.running
-              ? "border-success/20 bg-success-soft text-success"
-              : "border-border bg-card-secondary text-text-muted"
-          }`}>
-            <span className={`h-1.5 w-1.5 rounded-full ${
-              status.running ? "bg-success animate-pulse-dot" : "bg-text-muted"
-            }`} />
+          <div
+            className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${
+              status.running
+                ? "border-success/20 bg-success-soft text-success"
+                : "border-border bg-card-secondary text-text-muted"
+            }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                status.running
+                  ? "bg-success animate-pulse-dot"
+                  : "bg-text-muted"
+              }`}
+            />
             <span className="font-medium">
               {status.running ? t("topbar.running") : t("topbar.stopped")}
             </span>

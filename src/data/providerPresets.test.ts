@@ -12,24 +12,30 @@ describe("MiMo provider endpoints", () => {
   it("uses token-plan hosts for tp keys", () => {
     const preset = resolveProviderPresetForKey("mimo", "tp-xxxxx");
     expect(preset?.baseUrl).toBe("https://token-plan-cn.xiaomimimo.com/v1");
-    expect(preset?.anthropicBaseUrl).toBe("https://token-plan-cn.xiaomimimo.com/anthropic");
+    expect(preset?.anthropicBaseUrl).toBe(
+      "https://token-plan-cn.xiaomimimo.com/anthropic"
+    );
     expect(preset?.protocols).toContain("anthropic_messages");
   });
 
   it("uses regular hosts for MiMo sk keys", () => {
     const endpoints = getMimoEndpointsForKey("sk-xxxxx");
     expect(endpoints?.baseUrl).toBe("https://api.xiaomimimo.com/v1");
-    expect(endpoints?.anthropicBaseUrl).toBe("https://api.xiaomimimo.com/anthropic");
+    expect(endpoints?.anthropicBaseUrl).toBe(
+      "https://api.xiaomimimo.com/anthropic"
+    );
   });
 
   it("preserves the token-plan region when the user pasted a subscription URL", () => {
     const endpoints = resolveKnownProviderEndpoints(
       "mimo",
       "tp-xxxxx",
-      "https://token-plan-sgp.xiaomimimo.com/v1",
+      "https://token-plan-sgp.xiaomimimo.com/v1"
     );
     expect(endpoints?.baseUrl).toBe("https://token-plan-sgp.xiaomimimo.com/v1");
-    expect(endpoints?.anthropicBaseUrl).toBe("https://token-plan-sgp.xiaomimimo.com/anthropic");
+    expect(endpoints?.anthropicBaseUrl).toBe(
+      "https://token-plan-sgp.xiaomimimo.com/anthropic"
+    );
   });
 
   it("derives the token-plan region from the Anthropic URL too", () => {
@@ -37,10 +43,12 @@ describe("MiMo provider endpoints", () => {
       "mimo",
       "tp-xxxxx",
       "https://token-plan-cn.xiaomimimo.com/v1",
-      "https://token-plan-ams.xiaomimimo.com/anthropic",
+      "https://token-plan-ams.xiaomimimo.com/anthropic"
     );
     expect(endpoints?.baseUrl).toBe("https://token-plan-ams.xiaomimimo.com/v1");
-    expect(endpoints?.anthropicBaseUrl).toBe("https://token-plan-ams.xiaomimimo.com/anthropic");
+    expect(endpoints?.anthropicBaseUrl).toBe(
+      "https://token-plan-ams.xiaomimimo.com/anthropic"
+    );
   });
 
   it("uses the first key in a JSON key list", () => {
@@ -62,7 +70,9 @@ describe("MiMo provider endpoints", () => {
 
   it("exposes all catalog providers as quick setup presets", () => {
     expect(Object.keys(PROVIDER_PRESETS)).toHaveLength(27);
-    expect(PROVIDER_PRESETS.openai.responsesBaseUrl).toBe("https://api.openai.com");
+    expect(PROVIDER_PRESETS.openai.responsesBaseUrl).toBe(
+      "https://api.openai.com"
+    );
     expect(PROVIDER_PRESETS.kimi.extraHeaders).toContain("KimiCLI");
   });
 

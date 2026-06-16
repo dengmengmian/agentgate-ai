@@ -9,26 +9,52 @@ import { UpdateChecker } from "@/components/common/UpdateChecker";
 // react-markdown 等重依赖只被 Logs / Instructions 引用，跟着页面一起拆出主包。
 import { Dashboard } from "@/pages/Dashboard";
 
-const Tools = lazy(() => import("@/pages/Tools").then((m) => ({ default: m.Tools })));
-const Providers = lazy(() => import("@/pages/Providers").then((m) => ({ default: m.Providers })));
-const ProviderDetail = lazy(() => import("@/pages/ProviderDetail").then((m) => ({ default: m.ProviderDetail })));
-const RoutesPage = lazy(() => import("@/pages/Routes").then((m) => ({ default: m.Routes })));
-const Gateway = lazy(() => import("@/pages/Gateway").then((m) => ({ default: m.Gateway })));
-const Logs = lazy(() => import("@/pages/Logs").then((m) => ({ default: m.Logs })));
-const Diagnostics = lazy(() => import("@/pages/Diagnostics").then((m) => ({ default: m.Diagnostics })));
-const Settings = lazy(() => import("@/pages/Settings").then((m) => ({ default: m.Settings })));
-const QuickSetup = lazy(() => import("@/pages/QuickSetup").then((m) => ({ default: m.QuickSetup })));
-const Instructions = lazy(() => import("@/pages/Instructions").then((m) => ({ default: m.Instructions })));
+const Tools = lazy(() =>
+  import("@/pages/Tools").then((m) => ({ default: m.Tools }))
+);
+const Providers = lazy(() =>
+  import("@/pages/Providers").then((m) => ({ default: m.Providers }))
+);
+const ProviderDetail = lazy(() =>
+  import("@/pages/ProviderDetail").then((m) => ({ default: m.ProviderDetail }))
+);
+const RoutesPage = lazy(() =>
+  import("@/pages/Routes").then((m) => ({ default: m.Routes }))
+);
+const Gateway = lazy(() =>
+  import("@/pages/Gateway").then((m) => ({ default: m.Gateway }))
+);
+const Logs = lazy(() =>
+  import("@/pages/Logs").then((m) => ({ default: m.Logs }))
+);
+const Diagnostics = lazy(() =>
+  import("@/pages/Diagnostics").then((m) => ({ default: m.Diagnostics }))
+);
+const Settings = lazy(() =>
+  import("@/pages/Settings").then((m) => ({ default: m.Settings }))
+);
+const QuickSetup = lazy(() =>
+  import("@/pages/QuickSetup").then((m) => ({ default: m.QuickSetup }))
+);
+const Instructions = lazy(() =>
+  import("@/pages/Instructions").then((m) => ({ default: m.Instructions }))
+);
 const Mcp = lazy(() => import("@/pages/Mcp").then((m) => ({ default: m.Mcp })));
-const Skills = lazy(() => import("@/pages/Skills").then((m) => ({ default: m.Skills })));
+const Skills = lazy(() =>
+  import("@/pages/Skills").then((m) => ({ default: m.Skills }))
+);
 
 /// 宠物右键菜单会发页面导航事件,这里统一跳过去。
 function PetEventBridge() {
   const navigate = useNavigate();
   useEffect(() => {
-    const unSettings = events.petOpenSettings.listen(() => navigate("/settings?tab=pet"));
+    const unSettings = events.petOpenSettings.listen(() =>
+      navigate("/settings?tab=pet")
+    );
     const unGateway = events.petOpenGateway.listen(() => navigate("/gateway"));
-    const unLogs = events.petOpenLogs.listen(() => navigate("/logs?source=gateway"));
+    const unLogs = events.petOpenLogs.listen(() =>
+      navigate("/logs?source=gateway")
+    );
     return () => {
       unSettings.then((fn) => fn());
       unGateway.then((fn) => fn());

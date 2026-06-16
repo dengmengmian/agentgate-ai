@@ -46,16 +46,29 @@ export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
         <div className="flex items-center justify-between border-b border-border px-6 py-4">
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-accent" />
-            <h2 className="text-sm font-semibold text-text-primary">{t("providers.speedtest_title")}</h2>
+            <h2 className="text-sm font-semibold text-text-primary">
+              {t("providers.speedtest_title")}
+            </h2>
           </div>
-          <button onClick={onClose} className="rounded-md p-1.5 text-text-muted hover:bg-card-secondary hover:text-text-primary">
+          <button
+            onClick={onClose}
+            className="rounded-md p-1.5 text-text-muted hover:bg-card-secondary hover:text-text-primary"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <div className="p-6 space-y-4">
           <p className="text-xs text-text-muted leading-relaxed">
-            {t("providers.speedtest_desc_1")} <code className="rounded bg-card-secondary px-1 py-0.5">max_tokens=1</code> {t("providers.speedtest_desc_2")}<span className="text-warning">{t("providers.speedtest_desc_cost")}</span>{t("providers.speedtest_desc_3")}
+            {t("providers.speedtest_desc_1")}{" "}
+            <code className="rounded bg-card-secondary px-1 py-0.5">
+              max_tokens=1
+            </code>{" "}
+            {t("providers.speedtest_desc_2")}
+            <span className="text-warning">
+              {t("providers.speedtest_desc_cost")}
+            </span>
+            {t("providers.speedtest_desc_3")}
           </p>
 
           <button
@@ -63,12 +76,22 @@ export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
             disabled={running}
             className="flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
           >
-            {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-            {running ? t("providers.speedtest_running") : reports ? t("providers.speedtest_rerun") : t("providers.speedtest_run")}
+            {running ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Zap className="h-3.5 w-3.5" />
+            )}
+            {running
+              ? t("providers.speedtest_running")
+              : reports
+                ? t("providers.speedtest_rerun")
+                : t("providers.speedtest_run")}
           </button>
 
           {reports && reports.length === 0 && (
-            <p className="text-xs text-text-muted">{t("providers.speedtest_no_enabled")}</p>
+            <p className="text-xs text-text-muted">
+              {t("providers.speedtest_no_enabled")}
+            </p>
           )}
 
           {reports && reports.length > 0 && (
@@ -76,19 +99,37 @@ export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border bg-card-secondary">
-                    <th className="px-3 py-2 text-left font-medium text-text-muted">Provider</th>
-                    <th className="px-3 py-2 text-right font-medium text-text-muted">Connect</th>
-                    <th className="px-3 py-2 text-right font-medium text-text-muted">TTFB</th>
-                    <th className="px-3 py-2 text-right font-medium text-text-muted">Total</th>
-                    <th className="px-3 py-2 text-center font-medium text-text-muted">{t("providers.speedtest_col_status")}</th>
+                    <th className="px-3 py-2 text-left font-medium text-text-muted">
+                      Provider
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-text-muted">
+                      Connect
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-text-muted">
+                      TTFB
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium text-text-muted">
+                      Total
+                    </th>
+                    <th className="px-3 py-2 text-center font-medium text-text-muted">
+                      {t("providers.speedtest_col_status")}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {reports.map((r) => (
-                    <tr key={r.provider_id} className="border-b border-border/40 last:border-b-0">
+                    <tr
+                      key={r.provider_id}
+                      className="border-b border-border/40 last:border-b-0"
+                    >
                       <td className="px-3 py-2 text-text-primary">
                         <div className="font-medium">{r.provider_name}</div>
-                        <div className="font-mono text-[10px] text-text-muted truncate max-w-xs" title={r.endpoint}>{r.endpoint}</div>
+                        <div
+                          className="font-mono text-[10px] text-text-muted truncate max-w-xs"
+                          title={r.endpoint}
+                        >
+                          {r.endpoint}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-right font-mono text-text-secondary">
                         {r.connect_ms !== null ? `${r.connect_ms}ms` : "—"}
@@ -101,13 +142,21 @@ export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
                       </td>
                       <td className="px-3 py-2 text-center">
                         {r.success ? (
-                          <span title={`HTTP ${r.status_code ?? ""}`} className="inline-flex items-center gap-1 text-success">
+                          <span
+                            title={`HTTP ${r.status_code ?? ""}`}
+                            className="inline-flex items-center gap-1 text-success"
+                          >
                             <Check className="h-3 w-3" />
                           </span>
                         ) : (
-                          <span title={r.error ?? ""} className="inline-flex items-center gap-1 text-error cursor-help">
+                          <span
+                            title={r.error ?? ""}
+                            className="inline-flex items-center gap-1 text-error cursor-help"
+                          >
                             <AlertCircle className="h-3 w-3" />
-                            <span className="text-[10px]">{r.status_code ?? "ERR"}</span>
+                            <span className="text-[10px]">
+                              {r.status_code ?? "ERR"}
+                            </span>
                           </span>
                         )}
                       </td>
@@ -131,6 +180,7 @@ export function SpeedtestDialog({ open, onClose }: SpeedtestDialogProps) {
 /// Color-code latency bucket: green < 500ms, amber 500-1500ms, red > 1500ms.
 function LatencyCell({ ms, ok }: { ms: number; ok: boolean }) {
   if (!ok) return <span className="text-text-muted">{ms}ms</span>;
-  const cls = ms < 500 ? "text-success" : ms < 1500 ? "text-warning" : "text-error";
+  const cls =
+    ms < 500 ? "text-success" : ms < 1500 ? "text-warning" : "text-error";
   return <span className={cls}>{ms}ms</span>;
 }

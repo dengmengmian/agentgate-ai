@@ -1,5 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import { Radio, Play, Square, RotateCcw, Settings, Save, AlertTriangle } from "lucide-react";
+import {
+  Radio,
+  Play,
+  Square,
+  RotateCcw,
+  Settings,
+  Save,
+  AlertTriangle,
+} from "lucide-react";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
@@ -12,7 +20,7 @@ export function Gateway() {
   const [status, setStatus] = useState<GatewayStatus | null>(null);
   // settings 走全局 store——Settings 页 / 其它 page 也读这份;mutation 后
   // 这页 handleSave 内显式 refetch 同步给 store。
-  const settings = useGatewaySettings(s => s.value);
+  const settings = useGatewaySettings((s) => s.value);
 
   // Editable fields
   const [host, setHost] = useState("");
@@ -121,7 +129,10 @@ export function Gateway() {
       {/* ── 1. Status strip — endpoint, active provider, started_at, controls.
               Topbar already shows running/stopped + host:port. Status badge
               + decorative big icon dropped. ── */}
-      <div className="rounded-xl border border-border bg-card px-5 py-4" style={{ boxShadow: "var(--shadow-sm)" }}>
+      <div
+        className="rounded-xl border border-border bg-card px-5 py-4"
+        style={{ boxShadow: "var(--shadow-sm)" }}
+      >
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
             <span className="flex items-center gap-2 text-text-primary">
@@ -139,15 +150,23 @@ export function Gateway() {
             </a>
             <span className="text-text-muted/40">·</span>
             <span className="text-text-secondary">
-              <span className="text-text-muted">{t("gateway.active_provider")} </span>
-              <span className="text-text-primary">{status.active_provider ?? t("common.none")}</span>
+              <span className="text-text-muted">
+                {t("gateway.active_provider")}{" "}
+              </span>
+              <span className="text-text-primary">
+                {status.active_provider ?? t("common.none")}
+              </span>
             </span>
             {startedAt && (
               <>
                 <span className="text-text-muted/40">·</span>
                 <span className="text-text-secondary">
-                  <span className="text-text-muted">{t("gateway.started_at")} </span>
-                  <span className="font-mono text-text-primary">{startedAt}</span>
+                  <span className="text-text-muted">
+                    {t("gateway.started_at")}{" "}
+                  </span>
+                  <span className="font-mono text-text-primary">
+                    {startedAt}
+                  </span>
                 </span>
               </>
             )}
@@ -182,57 +201,89 @@ export function Gateway() {
           </div>
         </div>
         {dirty && (
-          <p className="mt-2 text-[11px] text-warning">{t("gateway.settings_changed")}</p>
+          <p className="mt-2 text-[11px] text-warning">
+            {t("gateway.settings_changed")}
+          </p>
         )}
       </div>
 
       {/* 已保存的设置 != 运行中的设置时显示重启 banner——避免用户改了 port
           但 gateway 还在用旧 port 听，请求莫名连不上。一键重启把保存的设置
           应用到运行实例。 */}
-      {status.running && settings && (
-        settings.host !== status.host
-        || settings.port !== status.port
-        || settings.input_protocol !== status.input_protocol
-        || settings.output_protocol !== status.output_protocol
-      ) && (
-        <div className="rounded-xl border border-warning/30 bg-warning-soft px-4 py-3" style={{ boxShadow: "var(--shadow-sm)" }}>
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-start gap-2.5">
-              <AlertTriangle className="h-4 w-4 shrink-0 text-warning mt-0.5" />
-              <div>
-                <p className="text-xs font-medium text-text-primary">{t("gateway.restart_required_title")}</p>
-                <p className="mt-0.5 text-[11px] text-text-secondary">
-                  {t("gateway.restart_required_desc")}
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono">
-                  {settings.host !== status.host && (
-                    <span>host: <span className="text-text-muted line-through">{status.host}</span> → <span className="text-warning">{settings.host}</span></span>
-                  )}
-                  {settings.port !== status.port && (
-                    <span>port: <span className="text-text-muted line-through">{status.port}</span> → <span className="text-warning">{settings.port}</span></span>
-                  )}
-                  {settings.input_protocol !== status.input_protocol && (
-                    <span>input: <span className="text-warning">{settings.input_protocol}</span></span>
-                  )}
-                  {settings.output_protocol !== status.output_protocol && (
-                    <span>output: <span className="text-warning">{settings.output_protocol}</span></span>
-                  )}
+      {status.running &&
+        settings &&
+        (settings.host !== status.host ||
+          settings.port !== status.port ||
+          settings.input_protocol !== status.input_protocol ||
+          settings.output_protocol !== status.output_protocol) && (
+          <div
+            className="rounded-xl border border-warning/30 bg-warning-soft px-4 py-3"
+            style={{ boxShadow: "var(--shadow-sm)" }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-warning mt-0.5" />
+                <div>
+                  <p className="text-xs font-medium text-text-primary">
+                    {t("gateway.restart_required_title")}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-text-secondary">
+                    {t("gateway.restart_required_desc")}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-mono">
+                    {settings.host !== status.host && (
+                      <span>
+                        host:{" "}
+                        <span className="text-text-muted line-through">
+                          {status.host}
+                        </span>{" "}
+                        → <span className="text-warning">{settings.host}</span>
+                      </span>
+                    )}
+                    {settings.port !== status.port && (
+                      <span>
+                        port:{" "}
+                        <span className="text-text-muted line-through">
+                          {status.port}
+                        </span>{" "}
+                        → <span className="text-warning">{settings.port}</span>
+                      </span>
+                    )}
+                    {settings.input_protocol !== status.input_protocol && (
+                      <span>
+                        input:{" "}
+                        <span className="text-warning">
+                          {settings.input_protocol}
+                        </span>
+                      </span>
+                    )}
+                    {settings.output_protocol !== status.output_protocol && (
+                      <span>
+                        output:{" "}
+                        <span className="text-warning">
+                          {settings.output_protocol}
+                        </span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+              <button
+                onClick={handleRestart}
+                className="shrink-0 flex items-center gap-1.5 rounded-md bg-warning px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-warning/90"
+              >
+                <RotateCcw className="h-3 w-3" />
+                {t("gateway.restart_now")}
+              </button>
             </div>
-            <button
-              onClick={handleRestart}
-              className="shrink-0 flex items-center gap-1.5 rounded-md bg-warning px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-warning/90"
-            >
-              <RotateCcw className="h-3 w-3" />
-              {t("gateway.restart_now")}
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
       {/* ── 2. Configuration — the editable settings ── */}
-      <div className="rounded-xl border border-border bg-card p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
+      <div
+        className="rounded-xl border border-border bg-card p-5"
+        style={{ boxShadow: "var(--shadow-sm)" }}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
             <Settings className="h-4 w-4 text-text-muted" />
@@ -252,7 +303,10 @@ export function Gateway() {
           <SettingsField label={t("gateway.listen_address")}>
             <input
               value={host}
-              onChange={(e) => { setHost(e.target.value); markDirty(); }}
+              onChange={(e) => {
+                setHost(e.target.value);
+                markDirty();
+              }}
               className="form-input"
             />
           </SettingsField>
@@ -260,7 +314,10 @@ export function Gateway() {
             <input
               type="number"
               value={port}
-              onChange={(e) => { setPort(e.target.value); markDirty(); }}
+              onChange={(e) => {
+                setPort(e.target.value);
+                markDirty();
+              }}
               className="form-input"
             />
           </SettingsField>
@@ -268,7 +325,10 @@ export function Gateway() {
             <input
               type="number"
               value={logRetention}
-              onChange={(e) => { setLogRetention(e.target.value); markDirty(); }}
+              onChange={(e) => {
+                setLogRetention(e.target.value);
+                markDirty();
+              }}
               min={1}
               className="form-input"
             />
@@ -276,22 +336,32 @@ export function Gateway() {
           <SettingsField label={t("gateway.input_protocol")}>
             <select
               value={inputProtocol}
-              onChange={(e) => { setInputProtocol(e.target.value); markDirty(); }}
+              onChange={(e) => {
+                setInputProtocol(e.target.value);
+                markDirty();
+              }}
               className="form-input"
             >
               {PROTOCOLS.map((p) => (
-                <option key={p.value} value={p.value}>{p.label}</option>
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
               ))}
             </select>
           </SettingsField>
           <SettingsField label={t("gateway.output_protocol")}>
             <select
               value={outputProtocol}
-              onChange={(e) => { setOutputProtocol(e.target.value); markDirty(); }}
+              onChange={(e) => {
+                setOutputProtocol(e.target.value);
+                markDirty();
+              }}
               className="form-input"
             >
               {PROTOCOLS.map((p) => (
-                <option key={p.value} value={p.value}>{p.label}</option>
+                <option key={p.value} value={p.value}>
+                  {p.label}
+                </option>
               ))}
             </select>
           </SettingsField>
@@ -300,7 +370,10 @@ export function Gateway() {
               <input
                 type="checkbox"
                 checked={autoStart}
-                onChange={(e) => { setAutoStart(e.target.checked); markDirty(); }}
+                onChange={(e) => {
+                  setAutoStart(e.target.checked);
+                  markDirty();
+                }}
                 className="accent-accent"
               />
               <span className="text-xs text-text-secondary">
@@ -312,7 +385,10 @@ export function Gateway() {
       </div>
 
       {/* ── 3. Route reference — what the gateway exposes ── */}
-      <div className="rounded-xl border border-border bg-card p-5" style={{ boxShadow: "var(--shadow-sm)" }}>
+      <div
+        className="rounded-xl border border-border bg-card p-5"
+        style={{ boxShadow: "var(--shadow-sm)" }}
+      >
         <h3 className="mb-3 text-sm font-semibold text-text-primary">
           {t("gateway.route_modes")}
         </h3>
@@ -326,19 +402,25 @@ export function Gateway() {
                 <span className="w-10 shrink-0 rounded bg-bg px-1.5 py-0.5 text-center font-mono text-[10px] text-text-muted">
                   {r.method}
                 </span>
-                <span className="truncate font-mono text-text-primary">{r.path}</span>
+                <span className="truncate font-mono text-text-primary">
+                  {r.path}
+                </span>
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {r.detail && (
-                  <span className="hidden text-[10px] text-text-muted lg:inline">{r.detail}</span>
+                  <span className="hidden text-[10px] text-text-muted lg:inline">
+                    {r.detail}
+                  </span>
                 )}
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
-                  r.mode === "pass-through"
-                    ? "bg-accent-soft text-accent"
-                    : r.mode === "transform"
-                      ? "bg-warning-soft text-warning"
-                      : "bg-hover text-text-muted"
-                }`}>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                    r.mode === "pass-through"
+                      ? "bg-accent-soft text-accent"
+                      : r.mode === "transform"
+                        ? "bg-warning-soft text-warning"
+                        : "bg-hover text-text-muted"
+                  }`}
+                >
                   {r.mode}
                 </span>
               </div>
@@ -350,18 +432,54 @@ export function Gateway() {
   );
 }
 
-const ROUTE_REFERENCE: { method: string; path: string; mode: string; detail?: string }[] = [
+const ROUTE_REFERENCE: {
+  method: string;
+  path: string;
+  mode: string;
+  detail?: string;
+}[] = [
   { method: "GET", path: "/health", mode: "internal" },
   { method: "GET", path: "/v1/models", mode: "internal" },
-  { method: "POST", path: "/v1/responses", mode: "transform", detail: "Responses → Chat Completions" },
+  {
+    method: "POST",
+    path: "/v1/responses",
+    mode: "transform",
+    detail: "Responses → Chat Completions",
+  },
   { method: "POST", path: "/responses", mode: "transform", detail: "alias" },
-  { method: "POST", path: "/v1/chat/completions", mode: "pass-through", detail: "Chat Completions → Chat Completions" },
-  { method: "POST", path: "/chat/completions", mode: "pass-through", detail: "alias" },
-  { method: "POST", path: "/v1/messages", mode: "transform", detail: "Anthropic Messages → Chat Completions" },
-  { method: "POST", path: "/v1beta/models/{model}:generateContent", mode: "transform", detail: "Gemini → Chat Completions" },
+  {
+    method: "POST",
+    path: "/v1/chat/completions",
+    mode: "pass-through",
+    detail: "Chat Completions → Chat Completions",
+  },
+  {
+    method: "POST",
+    path: "/chat/completions",
+    mode: "pass-through",
+    detail: "alias",
+  },
+  {
+    method: "POST",
+    path: "/v1/messages",
+    mode: "transform",
+    detail: "Anthropic Messages → Chat Completions",
+  },
+  {
+    method: "POST",
+    path: "/v1beta/models/{model}:generateContent",
+    mode: "transform",
+    detail: "Gemini → Chat Completions",
+  },
 ];
 
-function SettingsField({ label, children }: { label: string; children: React.ReactNode }) {
+function SettingsField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
       <label className="mb-1 block text-xs font-medium text-text-secondary">

@@ -5,7 +5,16 @@ import type {
   UpdatePetSettingsInput as WideUpdate,
 } from "@/lib/bindings";
 
-export type PetType = "robot" | "pixel-cat" | "slime" | "fox" | "octopus" | "ghost" | "ox" | "soldier" | "coder";
+export type PetType =
+  | "robot"
+  | "pixel-cat"
+  | "slime"
+  | "fox"
+  | "octopus"
+  | "ghost"
+  | "ox"
+  | "soldier"
+  | "coder";
 export type PetState = "idle" | "active" | "error" | "sleep" | "poke";
 
 export type PetSettings = Omit<Wide, "pet_type"> & { pet_type: PetType };

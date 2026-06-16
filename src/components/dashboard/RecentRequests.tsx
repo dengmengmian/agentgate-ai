@@ -22,11 +22,25 @@ export function RecentRequests({ requests, tools }: RecentRequestsProps) {
         </h3>
         {tools && tools.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-            <span className="text-text-muted">{t("dashboard.tool_status")}</span>
+            <span className="text-text-muted">
+              {t("dashboard.tool_status")}
+            </span>
             {tools.map((tool) => (
-              <span key={tool.id} className="flex items-center gap-1" title={tool.config_path}>
-                <span className={`inline-block h-1.5 w-1.5 rounded-full ${tool.config_exists ? "bg-success" : "bg-text-muted/30"}`} />
-                <span className={tool.config_exists ? "text-text-primary" : "text-text-muted"}>{tool.name}</span>
+              <span
+                key={tool.id}
+                className="flex items-center gap-1"
+                title={tool.config_path}
+              >
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${tool.config_exists ? "bg-success" : "bg-text-muted/30"}`}
+                />
+                <span
+                  className={
+                    tool.config_exists ? "text-text-primary" : "text-text-muted"
+                  }
+                >
+                  {tool.name}
+                </span>
               </span>
             ))}
           </div>
@@ -41,7 +55,9 @@ export function RecentRequests({ requests, tools }: RecentRequestsProps) {
               <th className="px-5 py-2.5 font-medium">{t("logs.provider")}</th>
               <th className="px-5 py-2.5 font-medium">{t("logs.model")}</th>
               <th className="px-5 py-2.5 font-medium">{t("logs.status")}</th>
-              <th className="px-5 py-2.5 font-medium text-right">{t("logs.latency")}</th>
+              <th className="px-5 py-2.5 font-medium text-right">
+                {t("logs.latency")}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -72,7 +88,9 @@ export function RecentRequests({ requests, tools }: RecentRequestsProps) {
                     </StatusBadge>
                   </td>
                   <td className="px-5 py-2.5 text-right font-mono text-text-secondary">
-                    {req.latency_ms !== null ? formatLatency(req.latency_ms) : "—"}
+                    {req.latency_ms !== null
+                      ? formatLatency(req.latency_ms)
+                      : "—"}
                   </td>
                 </tr>
               );

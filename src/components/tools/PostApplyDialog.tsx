@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { CheckCircle2, AlertTriangle, X, RefreshCw, Loader2 } from "lucide-react";
+import {
+  CheckCircle2,
+  AlertTriangle,
+  X,
+  RefreshCw,
+  Loader2,
+} from "lucide-react";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { toast } from "@/components/common/Toast";
 import { useI18n } from "@/lib/i18n";
@@ -25,7 +31,14 @@ interface Props {
 /// users learn that an existing client session needs a restart before the
 /// new config matters, with a copy-to-clipboard kill command for advanced
 /// users. We never auto-kill — this was a deliberate UX call.
-export function PostApplyDialog({ open, clientId, clientName, configPath, processes, onClose }: Props) {
+export function PostApplyDialog({
+  open,
+  clientId,
+  clientName,
+  configPath,
+  processes,
+  onClose,
+}: Props) {
   const { t } = useI18n();
   const [restarting, setRestarting] = useState(false);
   if (!open) return null;
@@ -50,9 +63,12 @@ export function PostApplyDialog({ open, clientId, clientName, configPath, proces
         return;
       }
       if (r.relaunched) {
-        toast("success", r.was_running
-          ? t("tools.post_apply.restart_done")
-          : t("tools.post_apply.restart_launched"));
+        toast(
+          "success",
+          r.was_running
+            ? t("tools.post_apply.restart_done")
+            : t("tools.post_apply.restart_launched")
+        );
         onClose();
       } else {
         toast("error", t("tools.post_apply.restart_failed"));
@@ -69,7 +85,10 @@ export function PostApplyDialog({ open, clientId, clientName, configPath, proces
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
       <div
         className="animate-scale-in relative z-10 w-full max-w-md rounded-xl border border-border bg-card p-6"
         style={{ boxShadow: "var(--shadow-lg)" }}
@@ -90,8 +109,12 @@ export function PostApplyDialog({ open, clientId, clientName, configPath, proces
           <div className="flex items-start gap-2 rounded-md border border-success/30 bg-success-soft p-3">
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-success" />
             <div className="min-w-0 flex-1">
-              <p className="text-xs font-medium text-success">{t("tools.post_apply.written")}</p>
-              <p className="mt-0.5 break-all text-[11px] text-text-muted">{configPath}</p>
+              <p className="text-xs font-medium text-success">
+                {t("tools.post_apply.written")}
+              </p>
+              <p className="mt-0.5 break-all text-[11px] text-text-muted">
+                {configPath}
+              </p>
             </div>
           </div>
 
@@ -101,7 +124,10 @@ export function PostApplyDialog({ open, clientId, clientName, configPath, proces
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" />
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-medium text-warning">
-                    {t("tools.post_apply.running").replace("{name}", clientName)}
+                    {t("tools.post_apply.running").replace(
+                      "{name}",
+                      clientName
+                    )}
                   </p>
                   <p className="mt-0.5 text-[11px] leading-relaxed text-text-secondary">
                     {t("tools.post_apply.running_desc")}
@@ -122,7 +148,10 @@ export function PostApplyDialog({ open, clientId, clientName, configPath, proces
                       onClick={() => handleCopyKill(p.pid)}
                       className="shrink-0 rounded bg-card-secondary px-2 py-0.5 text-[10px] font-medium text-text-primary hover:bg-hover"
                     >
-                      {t("tools.post_apply.copy_kill").replace("{pid}", String(p.pid))}
+                      {t("tools.post_apply.copy_kill").replace(
+                        "{pid}",
+                        String(p.pid)
+                      )}
                     </button>
                   </div>
                 ))}
@@ -148,7 +177,10 @@ export function PostApplyDialog({ open, clientId, clientName, configPath, proces
               <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-text-muted" />
               <div className="min-w-0 flex-1">
                 <p className="text-xs text-text-secondary">
-                  {t("tools.post_apply.not_running").replace("{name}", clientName)}
+                  {t("tools.post_apply.not_running").replace(
+                    "{name}",
+                    clientName
+                  )}
                 </p>
               </div>
             </div>

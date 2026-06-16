@@ -36,12 +36,16 @@ export function ProviderDetail() {
       const [healthData, statsData, runtimeRows] = await Promise.all([
         api.getProviderHealth(providerData.name),
         api.aggregateProviderDetailStats(providerData.name, 7, 40),
-        api.listProviderRuntimeStatus().catch(() => [] as ProviderRuntimeStatus[]),
+        api
+          .listProviderRuntimeStatus()
+          .catch(() => [] as ProviderRuntimeStatus[]),
       ]);
       setProvider(providerData);
       setHealth(healthData);
       setStats(statsData);
-      setRuntime(runtimeRows.find((row) => row.provider_id === providerData.id) ?? null);
+      setRuntime(
+        runtimeRows.find((row) => row.provider_id === providerData.id) ?? null
+      );
     } catch (err) {
       setError((err as api.AppError).message);
     } finally {
@@ -54,7 +58,10 @@ export function ProviderDetail() {
   }, [load]);
 
   const maxLatency = useMemo(() => {
-    return Math.max(...(stats?.latency_points.map((point) => point.latency_ms) ?? [0]), 1);
+    return Math.max(
+      ...(stats?.latency_points.map((point) => point.latency_ms) ?? [0]),
+      1
+    );
   }, [stats]);
 
   if (loading) {
@@ -64,11 +71,16 @@ export function ProviderDetail() {
   if (error || !provider) {
     return (
       <div className="space-y-3">
-        <button onClick={() => navigate("/providers")} className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary">
+        <button
+          onClick={() => navigate("/providers")}
+          className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary"
+        >
           <ArrowLeft className="h-3.5 w-3.5" />
           {t("providers.detail.back")}
         </button>
-        <div className="rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">{error || t("providers.detail.not_found")}</div>
+        <div className="rounded-md border border-error/30 bg-error/10 p-3 text-sm text-error">
+          {error || t("providers.detail.not_found")}
+        </div>
       </div>
     );
   }
@@ -77,27 +89,59 @@ export function ProviderDetail() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <button onClick={() => navigate("/providers")} className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary">
+          <button
+            onClick={() => navigate("/providers")}
+            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary"
+          >
             <ArrowLeft className="h-3.5 w-3.5" />
             {t("providers.detail.back")}
           </button>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold text-text-primary">{provider.name}</h1>
-            {provider.is_active && <StatusBadge variant="accent">{t("providers.active")}</StatusBadge>}
-            {runtime?.quota_exhausted && <StatusBadge variant="error">{t("providers.runtime_quota")}</StatusBadge>}
+            <h1 className="text-xl font-semibold text-text-primary">
+              {provider.name}
+            </h1>
+            {provider.is_active && (
+              <StatusBadge variant="accent">
+                {t("providers.active")}
+              </StatusBadge>
+            )}
+            {runtime?.quota_exhausted && (
+              <StatusBadge variant="error">
+                {t("providers.runtime_quota")}
+              </StatusBadge>
+            )}
           </div>
-          <p className="font-mono text-xs text-text-muted">{provider.base_url}</p>
+          <p className="font-mono text-xs text-text-muted">
+            {provider.base_url}
+          </p>
         </div>
-        <button onClick={load} className="rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary">
+        <button
+          onClick={load}
+          className="rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+        >
           {t("common.refresh")}
         </button>
       </div>
 
       <div className="grid grid-cols-4 gap-3">
-        <MetricCard label={t("providers.detail.requests_24h")} value={(health?.h24_total ?? 0).toLocaleString()} />
-        <MetricCard label={t("providers.health_success")} value={`${health?.h24_success_rate ?? 0}%`} />
-        <MetricCard label={t("providers.health_avg_latency")} value={formatLatency(health?.h24_avg_latency_ms ?? 0)} />
-        <MetricCard label={t("providers.detail.cost_7d")} value={formatCost(stats?.model_stats.reduce((sum, row) => sum + row.cost, 0) ?? 0)} />
+        <MetricCard
+          label={t("providers.detail.requests_24h")}
+          value={(health?.h24_total ?? 0).toLocaleString()}
+        />
+        <MetricCard
+          label={t("providers.health_success")}
+          value={`${health?.h24_success_rate ?? 0}%`}
+        />
+        <MetricCard
+          label={t("providers.health_avg_latency")}
+          value={formatLatency(health?.h24_avg_latency_ms ?? 0)}
+        />
+        <MetricCard
+          label={t("providers.detail.cost_7d")}
+          value={formatCost(
+            stats?.model_stats.reduce((sum, row) => sum + row.cost, 0) ?? 0
+          )}
+        />
       </div>
 
       <section className="space-y-2">
@@ -116,13 +160,17 @@ export function ProviderDetail() {
                 >
                   <div
                     className={`w-full rounded-t ${point.status_code && point.status_code >= 400 ? "bg-error/70" : "bg-accent/70"}`}
-                    style={{ height: `${Math.max(8, Math.round((point.latency_ms / maxLatency) * 120))}px` }}
+                    style={{
+                      height: `${Math.max(8, Math.round((point.latency_ms / maxLatency) * 120))}px`,
+                    }}
                   />
                 </div>
               ))}
             </div>
           ) : (
-            <p className="text-xs text-text-muted">{t("providers.detail.empty_latency")}</p>
+            <p className="text-xs text-text-muted">
+              {t("providers.detail.empty_latency")}
+            </p>
           )}
         </div>
       </section>
@@ -136,25 +184,49 @@ export function ProviderDetail() {
           <table className="w-full text-left text-xs">
             <thead className="bg-card-secondary text-text-muted">
               <tr>
-                <th className="px-3 py-2 font-medium">{t("providers.detail.model")}</th>
-                <th className="px-3 py-2 font-medium">{t("providers.detail.requests")}</th>
-                <th className="px-3 py-2 font-medium">{t("providers.health_success")}</th>
-                <th className="px-3 py-2 font-medium">{t("providers.health_avg_latency")}</th>
-                <th className="px-3 py-2 font-medium">{t("providers.detail.cost")}</th>
+                <th className="px-3 py-2 font-medium">
+                  {t("providers.detail.model")}
+                </th>
+                <th className="px-3 py-2 font-medium">
+                  {t("providers.detail.requests")}
+                </th>
+                <th className="px-3 py-2 font-medium">
+                  {t("providers.health_success")}
+                </th>
+                <th className="px-3 py-2 font-medium">
+                  {t("providers.health_avg_latency")}
+                </th>
+                <th className="px-3 py-2 font-medium">
+                  {t("providers.detail.cost")}
+                </th>
               </tr>
             </thead>
             <tbody>
-              {stats && stats.model_stats.length > 0 ? stats.model_stats.map((row) => (
-                <tr key={row.model} className="border-t border-border/60">
-                  <td className="px-3 py-2 font-mono text-text-primary">{row.model}</td>
-                  <td className="px-3 py-2 text-text-secondary">{row.request_count}</td>
-                  <td className="px-3 py-2 text-text-secondary">{Math.round(row.success_rate * 100)}%</td>
-                  <td className="px-3 py-2 text-text-secondary">{formatLatency(row.avg_latency_ms)}</td>
-                  <td className="px-3 py-2 text-text-secondary">{formatCost(row.cost)}</td>
-                </tr>
-              )) : (
+              {stats && stats.model_stats.length > 0 ? (
+                stats.model_stats.map((row) => (
+                  <tr key={row.model} className="border-t border-border/60">
+                    <td className="px-3 py-2 font-mono text-text-primary">
+                      {row.model}
+                    </td>
+                    <td className="px-3 py-2 text-text-secondary">
+                      {row.request_count}
+                    </td>
+                    <td className="px-3 py-2 text-text-secondary">
+                      {Math.round(row.success_rate * 100)}%
+                    </td>
+                    <td className="px-3 py-2 text-text-secondary">
+                      {formatLatency(row.avg_latency_ms)}
+                    </td>
+                    <td className="px-3 py-2 text-text-secondary">
+                      {formatCost(row.cost)}
+                    </td>
+                  </tr>
+                ))
+              ) : (
                 <tr>
-                  <td className="px-3 py-4 text-text-muted" colSpan={5}>{t("providers.detail.empty_models")}</td>
+                  <td className="px-3 py-4 text-text-muted" colSpan={5}>
+                    {t("providers.detail.empty_models")}
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -168,16 +240,30 @@ export function ProviderDetail() {
           {t("providers.health_recent_errors")}
         </h2>
         <div className="rounded-md border border-border bg-card">
-          {health && health.recent_errors.length > 0 ? health.recent_errors.map((item) => (
-            <div key={`${item.timestamp}-${item.status_code}-${item.message}`} className="border-b border-border/60 px-3 py-2 last:border-b-0">
-              <div className="flex items-center justify-between gap-3 text-xs">
-                <span className="font-mono text-text-muted">{formatTimestamp(item.timestamp, locale)}</span>
-                <StatusBadge variant="error">{item.status_code}</StatusBadge>
+          {health && health.recent_errors.length > 0 ? (
+            health.recent_errors.map((item) => (
+              <div
+                key={`${item.timestamp}-${item.status_code}-${item.message}`}
+                className="border-b border-border/60 px-3 py-2 last:border-b-0"
+              >
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <span className="font-mono text-text-muted">
+                    {formatTimestamp(item.timestamp, locale)}
+                  </span>
+                  <StatusBadge variant="error">{item.status_code}</StatusBadge>
+                </div>
+                <p
+                  className="mt-1 truncate text-xs text-text-secondary"
+                  title={item.message}
+                >
+                  {item.message}
+                </p>
               </div>
-              <p className="mt-1 truncate text-xs text-text-secondary" title={item.message}>{item.message}</p>
-            </div>
-          )) : (
-            <p className="px-3 py-4 text-xs text-text-muted">{t("providers.detail.empty_errors")}</p>
+            ))
+          ) : (
+            <p className="px-3 py-4 text-xs text-text-muted">
+              {t("providers.detail.empty_errors")}
+            </p>
           )}
         </div>
       </section>

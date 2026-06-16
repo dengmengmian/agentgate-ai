@@ -40,7 +40,9 @@ export function Instructions() {
     tpl: api.InstructionsTemplate;
     mode: api.InstructionsApplyMode;
   } | null>(null);
-  const [backupMode, setBackupMode] = useState<"export" | "import" | null>(null);
+  const [backupMode, setBackupMode] = useState<"export" | "import" | null>(
+    null
+  );
   const [backupExport, setBackupExport] = useState("");
   const [backupImport, setBackupImport] = useState("");
   const [backupPending, setBackupPending] = useState(false);
@@ -85,9 +87,9 @@ export function Instructions() {
   const visibleTemplates = useMemo(
     () =>
       templates.filter(
-        (tpl) => tpl.scopes.includes("all") || tpl.scopes.includes(scopeTag),
+        (tpl) => tpl.scopes.includes("all") || tpl.scopes.includes(scopeTag)
       ),
-    [templates, scopeTag],
+    [templates, scopeTag]
   );
 
   // 模板按 category 分组展示，组顺序固定。
@@ -150,13 +152,17 @@ export function Instructions() {
 
   const handleApplyTemplate = async (
     tpl: api.InstructionsTemplate,
-    mode: api.InstructionsApplyMode,
+    mode: api.InstructionsApplyMode
   ) => {
     setTemplateMenuOpen(false);
     // append 不会丢数据，直接应用；overwrite 弹确认。
     if (mode === "append") {
       try {
-        const next = await api.applyInstructionsTemplate(scope, tpl.id, "append");
+        const next = await api.applyInstructionsTemplate(
+          scope,
+          tpl.id,
+          "append"
+        );
         setStatus(next);
         setDraft(next.content);
         toast("success", t("instructions.applied"));
@@ -171,7 +177,11 @@ export function Instructions() {
   const confirmOverwrite = async () => {
     if (!pending) return;
     try {
-      const next = await api.applyInstructionsTemplate(scope, pending.tpl.id, "overwrite");
+      const next = await api.applyInstructionsTemplate(
+        scope,
+        pending.tpl.id,
+        "overwrite"
+      );
       setStatus(next);
       setDraft(next.content);
       toast("success", t("instructions.applied"));
@@ -196,7 +206,9 @@ export function Instructions() {
             <FileText className="h-4 w-4" />
             {t("instructions.title")}
           </h2>
-          <p className="mt-1 text-xs text-text-muted">{t("instructions.subtitle")}</p>
+          <p className="mt-1 text-xs text-text-muted">
+            {t("instructions.subtitle")}
+          </p>
         </div>
       </div>
 
@@ -227,8 +239,10 @@ export function Instructions() {
           高度用 calc(100vh - …)：因为外层 AppShell 的 `animate-fade-in` 不是
           flex column，flex-1 / min-h-0 不生效。视口减去 header + tabs + 工具栏
           + 页面 padding 的预算大概 240px，留一点 buffer 取 260px。 */}
-      <section className="flex flex-col rounded-xl border border-border bg-card"
-        style={{ height: "calc(100vh - 260px)" }}>
+      <section
+        className="flex flex-col rounded-xl border border-border bg-card"
+        style={{ height: "calc(100vh - 260px)" }}
+      >
         {/* Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
           <div className="min-w-0 flex-1">
@@ -241,7 +255,7 @@ export function Instructions() {
                   <Check className="h-3 w-3 text-success" />
                   {t("instructions.file_status.exists").replace(
                     "{size}",
-                    String(status.size_bytes),
+                    String(status.size_bytes)
                   )}
                 </>
               ) : (
@@ -250,7 +264,11 @@ export function Instructions() {
                   {t("instructions.file_status.missing")}
                 </>
               )}
-              {dirty && <span className="text-warning">· {t("instructions.unsaved")}</span>}
+              {dirty && (
+                <span className="text-warning">
+                  · {t("instructions.unsaved")}
+                </span>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -328,13 +346,19 @@ export function Instructions() {
                                 </div>
                                 <div className="flex shrink-0 flex-col gap-1">
                                   <button
-                                    onClick={() => handleApplyTemplate(tpl, "overwrite")}
+                                    onClick={() =>
+                                      handleApplyTemplate(tpl, "overwrite")
+                                    }
                                     className="rounded border border-border bg-card-secondary px-2 py-0.5 text-[10px] font-medium text-text-primary hover:bg-hover"
                                   >
-                                    {t("instructions.templates.apply_overwrite")}
+                                    {t(
+                                      "instructions.templates.apply_overwrite"
+                                    )}
                                   </button>
                                   <button
-                                    onClick={() => handleApplyTemplate(tpl, "append")}
+                                    onClick={() =>
+                                      handleApplyTemplate(tpl, "append")
+                                    }
                                     className="rounded border border-border bg-card-secondary px-2 py-0.5 text-[10px] font-medium text-text-primary hover:bg-hover"
                                   >
                                     {t("instructions.templates.apply_append")}
@@ -407,7 +431,9 @@ export function Instructions() {
             {draft.trim() ? (
               <MarkdownContent content={draft} />
             ) : (
-              <p className="text-xs text-text-muted">{t("instructions.editor.placeholder")}</p>
+              <p className="text-xs text-text-muted">
+                {t("instructions.editor.placeholder")}
+              </p>
             )}
           </div>
         )}
@@ -449,7 +475,11 @@ export function Instructions() {
                   disabled={backupPending || !backupImport.trim()}
                   className="btn-primary"
                 >
-                  {backupPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                  {backupPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Upload className="h-3 w-3" />
+                  )}
                   {t("instructions.backup.import")}
                 </button>
               )}
@@ -464,12 +494,16 @@ export function Instructions() {
           <textarea
             value={backupMode === "export" ? backupExport : backupImport}
             onChange={(e) =>
-              backupMode === "export" ? setBackupExport(e.target.value) : setBackupImport(e.target.value)
+              backupMode === "export"
+                ? setBackupExport(e.target.value)
+                : setBackupImport(e.target.value)
             }
             rows={6}
             spellCheck={false}
             className="w-full resize-none rounded-md border border-border bg-card-secondary px-2.5 py-2 font-mono text-xs text-text-primary outline-none focus:border-accent"
-            placeholder={backupMode === "export" ? "" : t("instructions.backup.paste")}
+            placeholder={
+              backupMode === "export" ? "" : t("instructions.backup.paste")
+            }
           />
         </section>
       )}

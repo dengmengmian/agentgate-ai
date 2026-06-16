@@ -13,7 +13,13 @@ export function OctopusPet({ state }: Props) {
   const tentacleWave = state === "active" ? "0.4s" : "1.5s";
 
   return (
-    <svg width="100" height="120" viewBox="0 0 100 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+      width="100"
+      height="120"
+      viewBox="0 0 100 120"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
       {/* Head / Body (dome shape) */}
       <ellipse cx="50" cy="42" rx="30" ry="32" fill={bodyColor} />
 
@@ -29,15 +35,32 @@ export function OctopusPet({ state }: Props) {
       {/* Eyes */}
       {state === "sleep" ? (
         <>
-          <path d="M36,42 Q40,45 44,42" stroke={eyeColor} strokeWidth="2" fill="none" strokeLinecap="round" />
-          <path d="M56,42 Q60,45 64,42" stroke={eyeColor} strokeWidth="2" fill="none" strokeLinecap="round" />
+          <path
+            d="M36,42 Q40,45 44,42"
+            stroke={eyeColor}
+            strokeWidth="2"
+            fill="none"
+            strokeLinecap="round"
+          />
+          <path
+            d="M56,42 Q60,45 64,42"
+            stroke={eyeColor}
+            strokeWidth="2"
+            fill="none"
+            strokeLinecap="round"
+          />
         </>
       ) : (
         <>
           <ellipse cx="40" cy="42" rx="7" ry="8" fill="white" />
           <circle cx="41" cy="43" r="4" fill="#1E2128">
             {state === "active" && (
-              <animate attributeName="cx" values="41;39;43;41" dur="0.6s" repeatCount="indefinite" />
+              <animate
+                attributeName="cx"
+                values="41;39;43;41"
+                dur="0.6s"
+                repeatCount="indefinite"
+              />
             )}
           </circle>
           <circle cx="42.5" cy="41.5" r="1.5" fill="#fff" />
@@ -45,7 +68,12 @@ export function OctopusPet({ state }: Props) {
           <ellipse cx="60" cy="42" rx="7" ry="8" fill="white" />
           <circle cx="61" cy="43" r="4" fill="#1E2128">
             {state === "active" && (
-              <animate attributeName="cx" values="61;59;63;61" dur="0.6s" repeatCount="indefinite" />
+              <animate
+                attributeName="cx"
+                values="61;59;63;61"
+                dur="0.6s"
+                repeatCount="indefinite"
+              />
             )}
           </circle>
           <circle cx="62.5" cy="41.5" r="1.5" fill="#fff" />
@@ -56,40 +84,124 @@ export function OctopusPet({ state }: Props) {
       {state === "error" ? (
         <ellipse cx="50" cy="56" rx="4" ry="3" fill="#1E2128" />
       ) : state === "active" ? (
-        <path d="M45,54 Q50,60 55,54" stroke="#1E2128" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        <path
+          d="M45,54 Q50,60 55,54"
+          stroke="#1E2128"
+          strokeWidth="1.5"
+          fill="none"
+          strokeLinecap="round"
+        />
       ) : (
-        <path d="M46,55 Q50,58 54,55" stroke="#1E2128" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        <path
+          d="M46,55 Q50,58 54,55"
+          stroke="#1E2128"
+          strokeWidth="1.5"
+          fill="none"
+          strokeLinecap="round"
+        />
       )}
 
       {/* Tentacles */}
       {/* Left outer */}
-      <path d="M22,65 Q14,80 18,95 Q20,100 24,96" stroke={tentacleColor} strokeWidth="5" fill="none" strokeLinecap="round">
-        <animateTransform attributeName="transform" type="rotate" values="0 22 65;-8 22 65;0 22 65;8 22 65;0 22 65" dur={tentacleWave} repeatCount="indefinite" />
+      <path
+        d="M22,65 Q14,80 18,95 Q20,100 24,96"
+        stroke={tentacleColor}
+        strokeWidth="5"
+        fill="none"
+        strokeLinecap="round"
+      >
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          values="0 22 65;-8 22 65;0 22 65;8 22 65;0 22 65"
+          dur={tentacleWave}
+          repeatCount="indefinite"
+        />
       </path>
 
       {/* Left inner */}
-      <path d="M32,68 Q28,82 30,95 Q31,100 34,96" stroke={tentacleColor} strokeWidth="5" fill="none" strokeLinecap="round">
-        <animateTransform attributeName="transform" type="rotate" values="0 32 68;5 32 68;0 32 68;-5 32 68;0 32 68" dur={tentacleWave} repeatCount="indefinite" />
+      <path
+        d="M32,68 Q28,82 30,95 Q31,100 34,96"
+        stroke={tentacleColor}
+        strokeWidth="5"
+        fill="none"
+        strokeLinecap="round"
+      >
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          values="0 32 68;5 32 68;0 32 68;-5 32 68;0 32 68"
+          dur={tentacleWave}
+          repeatCount="indefinite"
+        />
       </path>
 
       {/* Center left */}
-      <path d="M42,70 Q40,85 42,98 Q43,102 45,98" stroke={tentacleColor} strokeWidth="5" fill="none" strokeLinecap="round">
-        <animateTransform attributeName="transform" type="rotate" values="0 42 70;-3 42 70;3 42 70;0 42 70" dur={tentacleWave} repeatCount="indefinite" />
+      <path
+        d="M42,70 Q40,85 42,98 Q43,102 45,98"
+        stroke={tentacleColor}
+        strokeWidth="5"
+        fill="none"
+        strokeLinecap="round"
+      >
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          values="0 42 70;-3 42 70;3 42 70;0 42 70"
+          dur={tentacleWave}
+          repeatCount="indefinite"
+        />
       </path>
 
       {/* Center right */}
-      <path d="M58,70 Q60,85 58,98 Q57,102 55,98" stroke={tentacleColor} strokeWidth="5" fill="none" strokeLinecap="round">
-        <animateTransform attributeName="transform" type="rotate" values="0 58 70;3 58 70;-3 58 70;0 58 70" dur={tentacleWave} repeatCount="indefinite" />
+      <path
+        d="M58,70 Q60,85 58,98 Q57,102 55,98"
+        stroke={tentacleColor}
+        strokeWidth="5"
+        fill="none"
+        strokeLinecap="round"
+      >
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          values="0 58 70;3 58 70;-3 58 70;0 58 70"
+          dur={tentacleWave}
+          repeatCount="indefinite"
+        />
       </path>
 
       {/* Right inner */}
-      <path d="M68,68 Q72,82 70,95 Q69,100 66,96" stroke={tentacleColor} strokeWidth="5" fill="none" strokeLinecap="round">
-        <animateTransform attributeName="transform" type="rotate" values="0 68 68;-5 68 68;0 68 68;5 68 68;0 68 68" dur={tentacleWave} repeatCount="indefinite" />
+      <path
+        d="M68,68 Q72,82 70,95 Q69,100 66,96"
+        stroke={tentacleColor}
+        strokeWidth="5"
+        fill="none"
+        strokeLinecap="round"
+      >
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          values="0 68 68;-5 68 68;0 68 68;5 68 68;0 68 68"
+          dur={tentacleWave}
+          repeatCount="indefinite"
+        />
       </path>
 
       {/* Right outer */}
-      <path d="M78,65 Q86,80 82,95 Q80,100 76,96" stroke={tentacleColor} strokeWidth="5" fill="none" strokeLinecap="round">
-        <animateTransform attributeName="transform" type="rotate" values="0 78 65;8 78 65;0 78 65;-8 78 65;0 78 65" dur={tentacleWave} repeatCount="indefinite" />
+      <path
+        d="M78,65 Q86,80 82,95 Q80,100 76,96"
+        stroke={tentacleColor}
+        strokeWidth="5"
+        fill="none"
+        strokeLinecap="round"
+      >
+        <animateTransform
+          attributeName="transform"
+          type="rotate"
+          values="0 78 65;8 78 65;0 78 65;-8 78 65;0 78 65"
+          dur={tentacleWave}
+          repeatCount="indefinite"
+        />
       </path>
 
       {/* Suction cups (small dots on two tentacles) */}

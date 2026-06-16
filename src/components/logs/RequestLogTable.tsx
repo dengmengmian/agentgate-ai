@@ -22,7 +22,9 @@ export function RequestLogTable({ requests, onSelect }: RequestLogTableProps) {
             <th className="px-5 py-3 font-medium">{t("logs.provider")}</th>
             <th className="px-5 py-3 font-medium">{t("logs.model")}</th>
             <th className="px-5 py-3 font-medium">{t("logs.status")}</th>
-            <th className="px-5 py-3 font-medium text-right">{t("logs.latency")}</th>
+            <th className="px-5 py-3 font-medium text-right">
+              {t("logs.latency")}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -87,13 +89,22 @@ function SourceBadge({ source }: { source: string | null }) {
   );
 }
 
-export function sourceLabel(source: string | null, t: (key: string) => string): string {
+export function sourceLabel(
+  source: string | null,
+  t: (key: string) => string
+): string {
   switch (source) {
-    case "gateway": return t("logs.source_gateway");
-    case "claude_session": return "Claude";
-    case "codex_session": return "Codex";
-    case "gemini_session": return "Gemini";
-    case "mixed": return t("logs.source_mixed");
-    default: return source ?? "—";
+    case "gateway":
+      return t("logs.source_gateway");
+    case "claude_session":
+      return "Claude";
+    case "codex_session":
+      return "Codex";
+    case "gemini_session":
+      return "Gemini";
+    case "mixed":
+      return t("logs.source_mixed");
+    default:
+      return source ?? "—";
   }
 }

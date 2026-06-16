@@ -11,7 +11,7 @@ export function AppShell() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setCmdkOpen(o => !o);
+        setCmdkOpen((o) => !o);
       }
     };
     window.addEventListener("keydown", onKey);

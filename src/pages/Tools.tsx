@@ -39,7 +39,13 @@ import type { GatewayStatus } from "@/types/gateway";
 /// Master-detail 布局：左侧 5 行客户端列表常驻显示状态，右侧渲染选中客户端
 /// 的完整详情。比原先的手风琴更适合「同时管理 5 个客户端」的场景——总览不
 /// 丢失、详情区不再被卡片 chrome 切碎。
-type ClientId = "codex" | "claude_code" | "opencode" | "gemini_cli" | "atomcode" | "claude_desktop";
+type ClientId =
+  | "codex"
+  | "claude_code"
+  | "opencode"
+  | "gemini_cli"
+  | "atomcode"
+  | "claude_desktop";
 
 /// 把每个客户端在「列表行」上需要的状态压成统一三态：
 /// - `active`：已接入 AgentGate
@@ -49,20 +55,30 @@ type ClientPresence = "active" | "detected" | "absent";
 
 export function Tools() {
   const { t } = useI18n();
-  const [codexStatus, setCodexStatus] = useState<CodexConfigStatus | null>(null);
+  const [codexStatus, setCodexStatus] = useState<CodexConfigStatus | null>(
+    null
+  );
   const [claudeEnv, setClaudeEnv] = useState<ClaudeCodeEnvStatus | null>(null);
   const [codexConfig, setCodexConfig] = useState("");
   const [claudeSnippet, setClaudeSnippet] = useState("");
   const [loading, setLoading] = useState(true);
-  const [testResult, setTestResult] = useState<api.ConnectionTestResult | null>(null);
+  const [testResult, setTestResult] = useState<api.ConnectionTestResult | null>(
+    null
+  );
   const [testing, setTesting] = useState(false);
-  const [openCodeStatus, setOpenCodeStatus] = useState<OpenCodeConfigStatus | null>(null);
-  const [geminiStatus, setGeminiStatus] = useState<GeminiCliConfigStatus | null>(null);
-  const [atomCodeStatus, setAtomCodeStatus] = useState<AtomCodeConfigStatus | null>(null);
-  const [claudeDesktopStatus, setClaudeDesktopStatus] = useState<ClaudeDesktopStatus | null>(null);
+  const [openCodeStatus, setOpenCodeStatus] =
+    useState<OpenCodeConfigStatus | null>(null);
+  const [geminiStatus, setGeminiStatus] =
+    useState<GeminiCliConfigStatus | null>(null);
+  const [atomCodeStatus, setAtomCodeStatus] =
+    useState<AtomCodeConfigStatus | null>(null);
+  const [claudeDesktopStatus, setClaudeDesktopStatus] =
+    useState<ClaudeDesktopStatus | null>(null);
   const [cdPreview, setCdPreview] = useState("");
   const [historyClients, setHistoryClients] = useState<string[]>([]);
-  const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(null);
+  const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus | null>(
+    null
+  );
   const [startingGateway, setStartingGateway] = useState(false);
 
   const [confirmApplyCodex, setConfirmApplyCodex] = useState(false);
@@ -84,7 +100,9 @@ export function Tools() {
   // 当前选中的客户端。默认选第一个「已应用 / 检测到」的客户端，没有则回退
   // 到 codex（catalog 的第一项）。用 sessionStorage 记住一下，刷新不丢。
   const [selectedClientId, setSelectedClientId] = useState<ClientId>(() => {
-    const saved = sessionStorage.getItem("agentgate_tools_selected") as ClientId | null;
+    const saved = sessionStorage.getItem(
+      "agentgate_tools_selected"
+    ) as ClientId | null;
     return saved ?? "codex";
   });
   useEffect(() => {
@@ -94,7 +112,7 @@ export function Tools() {
   const showPostApply = async (
     clientId: string,
     clientName: string,
-    configPath: string,
+    configPath: string
   ) => {
     let processes: api.RunningProcess[] = [];
     try {
@@ -136,7 +154,9 @@ export function Tools() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
   // window focus 时刷新——从终端切回时立刻看到 Codex 应用配置后的状态变化
   usePolling(load, 15_000);
 
@@ -148,7 +168,9 @@ export function Tools() {
       if (result.success) {
         await showPostApply("codex", "Codex", result.config_path);
       }
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleApplyClaudeDesktop = async () => {
@@ -156,26 +178,39 @@ export function Tools() {
       const result = await api.applyClaudeDesktopConfig();
       load();
       if (result.success) {
-        await showPostApply("claude_desktop", "Claude Desktop", result.profile_path);
+        await showPostApply(
+          "claude_desktop",
+          "Claude Desktop",
+          result.profile_path
+        );
       }
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handlePreviewClaudeDesktop = async () => {
     try {
       setCdPreview(await api.previewClaudeDesktopProfile());
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleToggleCodex = async () => {
     try {
       const result = await api.toggleCodexProvider();
       if (result.success) {
-        const label = result.new_provider === "agentgate" ? "AgentGate" : result.new_provider;
+        const label =
+          result.new_provider === "agentgate"
+            ? "AgentGate"
+            : result.new_provider;
         toast("success", `${t("tools.switched_to")} ${label}`);
       }
       load();
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   // `disable_codex_agentgate` is exposed via api.disableCodexAgentgate() and
@@ -191,18 +226,25 @@ export function Tools() {
       if (result.success) {
         await showPostApply("claude_code", "Claude Code", result.config_path);
       }
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleToggleClaude = async () => {
     try {
       const result = await api.toggleClaudeCodeProvider();
       if (result.success) {
-        const label = result.new_provider === "agentgate" ? "AgentGate" : t("tools.official");
+        const label =
+          result.new_provider === "agentgate"
+            ? "AgentGate"
+            : t("tools.official");
         toast("success", `${t("tools.switched_to")} ${label}`);
       }
       load();
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleApplyOpenCode = async () => {
@@ -213,14 +255,18 @@ export function Tools() {
       if (result.success) {
         await showPostApply("opencode", "OpenCode", result.config_path);
       }
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleGenerateClaudeSnippet = async () => {
     try {
       const snippet = await api.generateClaudeCodeEnv();
       setClaudeSnippet(snippet);
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleApplyGemini = async () => {
@@ -231,18 +277,25 @@ export function Tools() {
       if (result.success) {
         await showPostApply("gemini", "Gemini CLI", result.config_path);
       }
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleToggleGemini = async () => {
     try {
       const result = await api.toggleGeminiProvider();
       if (result.success) {
-        const label = result.new_provider === "agentgate" ? "AgentGate" : t("tools.official");
+        const label =
+          result.new_provider === "agentgate"
+            ? "AgentGate"
+            : t("tools.official");
         toast("success", `${t("tools.switched_to")} ${label}`);
       }
       load();
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleApplyAtomCode = async () => {
@@ -253,18 +306,25 @@ export function Tools() {
       if (result.success) {
         await showPostApply("atomcode", "AtomCode", result.config_path);
       }
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleToggleAtomCode = async () => {
     try {
       const result = await api.toggleAtomCodeProvider();
       if (result.success) {
-        const label = result.new_provider === "agentgate" ? "AgentGate" : t("tools.official");
+        const label =
+          result.new_provider === "agentgate"
+            ? "AgentGate"
+            : t("tools.official");
         toast("success", `${t("tools.switched_to")} ${label}`);
       }
       load();
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleTestConnection = async () => {
@@ -274,7 +334,12 @@ export function Tools() {
       const result = await api.testToolConnection();
       setTestResult(result);
     } catch {
-      setTestResult({ config_ok: false, gateway_ok: false, provider_ok: false, error: "Test failed" });
+      setTestResult({
+        config_ok: false,
+        gateway_ok: false,
+        provider_ok: false,
+        error: "Test failed",
+      });
     } finally {
       setTesting(false);
     }
@@ -335,22 +400,75 @@ export function Tools() {
       : atomCodeStatus?.exists
         ? "detected"
         : "absent";
-    const claudeDesktopPresence: ClientPresence = claudeDesktopStatus?.has_agentgate_profile
-      ? "active"
-      : claudeDesktopStatus?.installed
-        ? "detected"
-        : "absent";
+    const claudeDesktopPresence: ClientPresence =
+      claudeDesktopStatus?.has_agentgate_profile
+        ? "active"
+        : claudeDesktopStatus?.installed
+          ? "detected"
+          : "absent";
     return [
-      { id: "codex", name: t("tools.codex"), desc: t("tools.codex_desc"), icon: Code, presence: codexPresence, drifted: drifted("codex", codexPresence) },
-      { id: "claude_code", name: t("tools.claude_code"), desc: t("tools.claude_code_desc"), icon: Terminal, presence: claudePresence, drifted: drifted("claude_code", claudePresence) },
-      { id: "opencode", name: t("tools.opencode"), desc: t("tools.opencode_desc"), icon: Braces, presence: opencodePresence, drifted: drifted("opencode", opencodePresence) },
-      { id: "gemini_cli", name: t("tools.gemini_cli"), desc: t("tools.gemini_cli_desc"), icon: Sparkles, presence: geminiPresence, drifted: drifted("gemini_cli", geminiPresence) },
-      { id: "atomcode", name: t("tools.atomcode"), desc: t("tools.atomcode_desc"), icon: Atom, presence: atomPresence, drifted: drifted("atomcode", atomPresence) },
-      { id: "claude_desktop", name: "Claude Desktop", desc: t("tools.claude_desktop_desc"), icon: Monitor, presence: claudeDesktopPresence, drifted: drifted("claude_desktop", claudeDesktopPresence) },
+      {
+        id: "codex",
+        name: t("tools.codex"),
+        desc: t("tools.codex_desc"),
+        icon: Code,
+        presence: codexPresence,
+        drifted: drifted("codex", codexPresence),
+      },
+      {
+        id: "claude_code",
+        name: t("tools.claude_code"),
+        desc: t("tools.claude_code_desc"),
+        icon: Terminal,
+        presence: claudePresence,
+        drifted: drifted("claude_code", claudePresence),
+      },
+      {
+        id: "opencode",
+        name: t("tools.opencode"),
+        desc: t("tools.opencode_desc"),
+        icon: Braces,
+        presence: opencodePresence,
+        drifted: drifted("opencode", opencodePresence),
+      },
+      {
+        id: "gemini_cli",
+        name: t("tools.gemini_cli"),
+        desc: t("tools.gemini_cli_desc"),
+        icon: Sparkles,
+        presence: geminiPresence,
+        drifted: drifted("gemini_cli", geminiPresence),
+      },
+      {
+        id: "atomcode",
+        name: t("tools.atomcode"),
+        desc: t("tools.atomcode_desc"),
+        icon: Atom,
+        presence: atomPresence,
+        drifted: drifted("atomcode", atomPresence),
+      },
+      {
+        id: "claude_desktop",
+        name: "Claude Desktop",
+        desc: t("tools.claude_desktop_desc"),
+        icon: Monitor,
+        presence: claudeDesktopPresence,
+        drifted: drifted("claude_desktop", claudeDesktopPresence),
+      },
     ];
-  }, [codexStatus, claudeEnv, openCodeStatus, geminiStatus, atomCodeStatus, claudeDesktopStatus, historyClients, t]);
+  }, [
+    codexStatus,
+    claudeEnv,
+    openCodeStatus,
+    geminiStatus,
+    atomCodeStatus,
+    claudeDesktopStatus,
+    historyClients,
+    t,
+  ]);
 
-  if (loading) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
+  if (loading)
+    return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
 
   return (
     <div className="space-y-5">
@@ -358,35 +476,71 @@ export function Tools() {
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
-            <ConnectionStep label={t("tools.step_config")} ok={testResult?.config_ok ?? null} testing={testing} />
+            <ConnectionStep
+              label={t("tools.step_config")}
+              ok={testResult?.config_ok ?? null}
+              testing={testing}
+            />
             <div className="h-px w-6 bg-border" />
-            <ConnectionStep label={t("tools.step_gateway")} ok={testResult?.gateway_ok ?? null} testing={testing} />
+            <ConnectionStep
+              label={t("tools.step_gateway")}
+              ok={testResult?.gateway_ok ?? null}
+              testing={testing}
+            />
             <div className="h-px w-6 bg-border" />
-            <ConnectionStep label={t("tools.step_provider")} ok={testResult?.provider_ok ?? null} testing={testing} />
+            <ConnectionStep
+              label={t("tools.step_provider")}
+              ok={testResult?.provider_ok ?? null}
+              testing={testing}
+            />
           </div>
-          <button onClick={handleTestConnection} disabled={testing} className="btn-secondary">
-            {testing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
+          <button
+            onClick={handleTestConnection}
+            disabled={testing}
+            className="btn-secondary"
+          >
+            {testing ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Activity className="h-3 w-3" />
+            )}
             {t("tools.test_connection")}
           </button>
         </div>
         {gatewayStatus && (
-          <div className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${
-            gatewayStatus.running ? "border-success/30 bg-success-soft" : "border-warning/30 bg-warning/5"
-          }`}>
-            <p className={`text-xs ${gatewayStatus.running ? "text-success" : "text-warning"}`}>
+          <div
+            className={`mt-3 flex items-center justify-between rounded-md border px-3 py-2 ${
+              gatewayStatus.running
+                ? "border-success/30 bg-success-soft"
+                : "border-warning/30 bg-warning/5"
+            }`}
+          >
+            <p
+              className={`text-xs ${gatewayStatus.running ? "text-success" : "text-warning"}`}
+            >
               {gatewayStatus.running
                 ? `${t("tools.gateway_running")} http://${gatewayStatus.host}:${gatewayStatus.port}`
                 : t("tools.gateway_not_running_hint")}
             </p>
             {!gatewayStatus.running && (
-              <button onClick={handleStartGateway} disabled={startingGateway} className="btn-primary">
-                {startingGateway ? <Loader2 className="h-3 w-3 animate-spin" /> : <Activity className="h-3 w-3" />}
+              <button
+                onClick={handleStartGateway}
+                disabled={startingGateway}
+                className="btn-primary"
+              >
+                {startingGateway ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Activity className="h-3 w-3" />
+                )}
                 {t("gateway.start")}
               </button>
             )}
           </div>
         )}
-        {testResult?.error && <p className="mt-2 text-xs text-error">{testResult.error}</p>}
+        {testResult?.error && (
+          <p className="mt-2 text-xs text-error">{testResult.error}</p>
+        )}
       </div>
 
       {/* Master-detail */}
@@ -396,11 +550,16 @@ export function Tools() {
           {/* 4.1 状态总汇 + 4.2 漂移提示 */}
           <div className="flex items-center justify-between px-2.5 py-1.5 text-[10px] text-text-muted">
             <span>{t("tools.clients")}</span>
-            <span>{t("tools.connected_count")} {clientRows.filter((r) => r.presence === "active").length}/{clientRows.length}</span>
+            <span>
+              {t("tools.connected_count")}{" "}
+              {clientRows.filter((r) => r.presence === "active").length}/
+              {clientRows.length}
+            </span>
           </div>
           {clientRows.some((r) => r.drifted) && (
             <div className="mb-1 px-2.5 text-[10px] text-warning">
-              {clientRows.filter((r) => r.drifted).length} {t("tools.drift_count_hint")}
+              {clientRows.filter((r) => r.drifted).length}{" "}
+              {t("tools.drift_count_hint")}
             </div>
           )}
           <ul className="space-y-1">
@@ -422,12 +581,22 @@ export function Tools() {
                     <PresenceDot presence={row.presence} />
                     <Icon className="h-4 w-4 shrink-0" />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs font-medium">{row.name}</div>
-                      <div className={
-                        "truncate text-[10px] " +
-                        (row.drifted ? "text-warning" : selected ? "text-accent/80" : "text-text-muted")
-                      }>
-                        {row.drifted ? t("tools.drifted_label") : presenceLabel(row.presence, t)}
+                      <div className="truncate text-xs font-medium">
+                        {row.name}
+                      </div>
+                      <div
+                        className={
+                          "truncate text-[10px] " +
+                          (row.drifted
+                            ? "text-warning"
+                            : selected
+                              ? "text-accent/80"
+                              : "text-text-muted")
+                        }
+                      >
+                        {row.drifted
+                          ? t("tools.drifted_label")
+                          : presenceLabel(row.presence, t)}
                       </div>
                     </div>
                   </button>
@@ -493,33 +662,73 @@ export function Tools() {
                 name="Claude Desktop"
                 desc={t("tools.claude_desktop_detail_desc")}
                 badge={
-                  <StatusBadge variant={claudeDesktopStatus?.has_agentgate_profile ? "success" : claudeDesktopStatus?.installed ? "warning" : "muted"}>
-                    {claudeDesktopStatus?.has_agentgate_profile ? t("tools.agentgate_configured") : claudeDesktopStatus?.installed ? t("tools.not_configured") : t("tools.no_config")}
+                  <StatusBadge
+                    variant={
+                      claudeDesktopStatus?.has_agentgate_profile
+                        ? "success"
+                        : claudeDesktopStatus?.installed
+                          ? "warning"
+                          : "muted"
+                    }
+                  >
+                    {claudeDesktopStatus?.has_agentgate_profile
+                      ? t("tools.agentgate_configured")
+                      : claudeDesktopStatus?.installed
+                        ? t("tools.not_configured")
+                        : t("tools.no_config")}
                   </StatusBadge>
                 }
               />
 
               {!claudeDesktopStatus?.supported ? (
-                <p className="text-xs text-error">{t("tools.claude_desktop_unsupported")}</p>
+                <p className="text-xs text-error">
+                  {t("tools.claude_desktop_unsupported")}
+                </p>
               ) : !claudeDesktopStatus?.installed ? (
-                <p className="text-xs text-text-muted">{t("tools.claude_desktop_not_detected")}</p>
+                <p className="text-xs text-text-muted">
+                  {t("tools.claude_desktop_not_detected")}
+                </p>
               ) : (
                 <>
                   <div className="mb-4 text-xs">
-                    <span className="text-text-muted">{t("tools.claude_desktop_profile_label")}</span>
-                    <p className="break-all font-mono text-[11px] text-text-secondary">{claudeDesktopStatus.profile_path}</p>
+                    <span className="text-text-muted">
+                      {t("tools.claude_desktop_profile_label")}
+                    </span>
+                    <p className="break-all font-mono text-[11px] text-text-secondary">
+                      {claudeDesktopStatus.profile_path}
+                    </p>
                   </div>
 
                   <div className="flex flex-wrap gap-2">
-                    <button onClick={handleApplyClaudeDesktop} className="btn-primary"><Zap className="h-3 w-3" />{t("tools.apply_config")}</button>
-                    <button onClick={handlePreviewClaudeDesktop} className="btn-secondary"><Eye className="h-3 w-3" />{t("tools.preview_profile")}</button>
-                    <ClientHistoryButton clientId="claude_desktop" clientName="Claude Desktop" onRollbackDone={load} />
+                    <button
+                      onClick={handleApplyClaudeDesktop}
+                      className="btn-primary"
+                    >
+                      <Zap className="h-3 w-3" />
+                      {t("tools.apply_config")}
+                    </button>
+                    <button
+                      onClick={handlePreviewClaudeDesktop}
+                      className="btn-secondary"
+                    >
+                      <Eye className="h-3 w-3" />
+                      {t("tools.preview_profile")}
+                    </button>
+                    <ClientHistoryButton
+                      clientId="claude_desktop"
+                      clientName="Claude Desktop"
+                      onRollbackDone={load}
+                    />
                   </div>
 
                   {cdPreview && (
-                    <pre className="mt-3 max-h-60 overflow-auto rounded-md bg-card-secondary p-3 text-[11px] text-text-primary">{cdPreview}</pre>
+                    <pre className="mt-3 max-h-60 overflow-auto rounded-md bg-card-secondary p-3 text-[11px] text-text-primary">
+                      {cdPreview}
+                    </pre>
                   )}
-                  <p className="mt-3 text-[11px] text-text-muted">{t("tools.claude_desktop_restart_hint")}</p>
+                  <p className="mt-3 text-[11px] text-text-muted">
+                    {t("tools.claude_desktop_restart_hint")}
+                  </p>
                 </>
               )}
             </div>
@@ -527,11 +736,51 @@ export function Tools() {
         </section>
       </div>
 
-      <ConfirmDialog open={confirmApplyCodex} title={t("tools.apply_codex_title")} message={t("tools.apply_codex_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyCodex} onCancel={() => setConfirmApplyCodex(false)} />
-      <ConfirmDialog open={confirmApplyClaude} title={t("tools.apply_claude_title")} message={t("tools.apply_claude_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyClaude} onCancel={() => setConfirmApplyClaude(false)} />
-      <ConfirmDialog open={confirmApplyOpenCode} title={t("tools.apply_opencode_title")} message={t("tools.apply_opencode_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyOpenCode} onCancel={() => setConfirmApplyOpenCode(false)} />
-      <ConfirmDialog open={confirmApplyGemini} title={t("tools.apply_gemini_title")} message={t("tools.apply_gemini_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyGemini} onCancel={() => setConfirmApplyGemini(false)} />
-      <ConfirmDialog open={confirmApplyAtomCode} title={t("tools.apply_atomcode_title")} message={t("tools.apply_atomcode_msg")} confirmLabel={t("common.apply")} variant="default" onConfirm={handleApplyAtomCode} onCancel={() => setConfirmApplyAtomCode(false)} />
+      <ConfirmDialog
+        open={confirmApplyCodex}
+        title={t("tools.apply_codex_title")}
+        message={t("tools.apply_codex_msg")}
+        confirmLabel={t("common.apply")}
+        variant="default"
+        onConfirm={handleApplyCodex}
+        onCancel={() => setConfirmApplyCodex(false)}
+      />
+      <ConfirmDialog
+        open={confirmApplyClaude}
+        title={t("tools.apply_claude_title")}
+        message={t("tools.apply_claude_msg")}
+        confirmLabel={t("common.apply")}
+        variant="default"
+        onConfirm={handleApplyClaude}
+        onCancel={() => setConfirmApplyClaude(false)}
+      />
+      <ConfirmDialog
+        open={confirmApplyOpenCode}
+        title={t("tools.apply_opencode_title")}
+        message={t("tools.apply_opencode_msg")}
+        confirmLabel={t("common.apply")}
+        variant="default"
+        onConfirm={handleApplyOpenCode}
+        onCancel={() => setConfirmApplyOpenCode(false)}
+      />
+      <ConfirmDialog
+        open={confirmApplyGemini}
+        title={t("tools.apply_gemini_title")}
+        message={t("tools.apply_gemini_msg")}
+        confirmLabel={t("common.apply")}
+        variant="default"
+        onConfirm={handleApplyGemini}
+        onCancel={() => setConfirmApplyGemini(false)}
+      />
+      <ConfirmDialog
+        open={confirmApplyAtomCode}
+        title={t("tools.apply_atomcode_title")}
+        message={t("tools.apply_atomcode_msg")}
+        confirmLabel={t("common.apply")}
+        variant="default"
+        onConfirm={handleApplyAtomCode}
+        onCancel={() => setConfirmApplyAtomCode(false)}
+      />
 
       <PostApplyDialog
         open={postApply !== null}
@@ -548,19 +797,23 @@ export function Tools() {
 // ── Helpers ────────────────────────────────────────────────────
 
 function PresenceDot({ presence }: { presence: ClientPresence }) {
-  const cls = presence === "active"
-    ? "bg-success"
-    : presence === "detected"
-      ? "bg-warning"
-      : "bg-border";
+  const cls =
+    presence === "active"
+      ? "bg-success"
+      : presence === "detected"
+        ? "bg-warning"
+        : "bg-border";
   return <span className={`h-2 w-2 shrink-0 rounded-full ${cls}`} />;
 }
 
 function presenceLabel(p: ClientPresence, t: (k: string) => string): string {
   switch (p) {
-    case "active": return t("tools.agentgate_configured");
-    case "detected": return t("tools.not_configured");
-    case "absent": return t("tools.no_config");
+    case "active":
+      return t("tools.agentgate_configured");
+    case "detected":
+      return t("tools.not_configured");
+    case "absent":
+      return t("tools.no_config");
   }
 }
 
@@ -568,7 +821,10 @@ export type T = (k: string) => string;
 
 /// 详情区共用的页眉：图标 + 标题 + 描述 + 状态徽章。
 export function DetailHeader({
-  Icon, name, desc, badge,
+  Icon,
+  name,
+  desc,
+  badge,
 }: {
   Icon: React.ComponentType<{ className?: string }>;
   name: string;
@@ -593,7 +849,15 @@ export function DetailHeader({
 
 // ── Per-client detail components ───────────────────────────────
 
-function ConnectionStep({ label, ok, testing }: { label: string; ok: boolean | null; testing: boolean }) {
+function ConnectionStep({
+  label,
+  ok,
+  testing,
+}: {
+  label: string;
+  ok: boolean | null;
+  testing: boolean;
+}) {
   return (
     <div className="flex items-center gap-2">
       {testing ? (
@@ -605,7 +869,9 @@ function ConnectionStep({ label, ok, testing }: { label: string; ok: boolean | n
       ) : (
         <XCircle className="h-4 w-4 text-error" />
       )}
-      <span className={`text-xs ${ok === true ? "text-success" : ok === false ? "text-error" : "text-text-muted"}`}>
+      <span
+        className={`text-xs ${ok === true ? "text-success" : ok === false ? "text-error" : "text-text-muted"}`}
+      >
         {label}
       </span>
     </div>

@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle, XCircle, Loader2, X, ExternalLink, ChevronDown, ChevronRight } from "lucide-react";
+import {
+  CheckCircle,
+  XCircle,
+  Loader2,
+  X,
+  ExternalLink,
+  ChevronDown,
+  ChevronRight,
+} from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -36,9 +44,13 @@ interface Props {
 /// 全成功 1.5s 后自动关；失败保持打开让用户看清错误 + 提示语。
 export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
   const { t } = useI18n();
-  const [connectivity, setConnectivity] = useState<StepState>({ status: "pending" });
+  const [connectivity, setConnectivity] = useState<StepState>({
+    status: "pending",
+  });
   const [autofill, setAutofill] = useState<StepState>({ status: "pending" });
-  const [cacheDetect, setCacheDetect] = useState<StepState>({ status: "pending" });
+  const [cacheDetect, setCacheDetect] = useState<StepState>({
+    status: "pending",
+  });
 
   // 用 ref 持有最新回调——避免父组件（Providers）每次 polling re-render 产生新闭包，
   // 导致 useEffect 依赖变了重跑测试。useEffect 只跟 provider.id 走。
@@ -72,7 +84,11 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
         const ms = r.latency_ms ? `${r.latency_ms}ms` : "";
         setConnectivity({ status: "ok", detail: ms });
       } catch (err) {
-        if (!cancelled) setConnectivity({ status: "error", detail: (err as api.AppError).message });
+        if (!cancelled)
+          setConnectivity({
+            status: "error",
+            detail: (err as api.AppError).message,
+          });
         return;
       }
 
@@ -84,12 +100,17 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
         if (cancelled) return;
         setAutofill({
           status: "ok",
-          detail: filled > 0
-            ? t("providers.test.autofill_n").replace("{n}", String(filled))
-            : t("providers.test.autofill_none"),
+          detail:
+            filled > 0
+              ? t("providers.test.autofill_n").replace("{n}", String(filled))
+              : t("providers.test.autofill_none"),
         });
       } catch (err) {
-        if (!cancelled) setAutofill({ status: "error", detail: (err as api.AppError).message });
+        if (!cancelled)
+          setAutofill({
+            status: "error",
+            detail: (err as api.AppError).message,
+          });
       }
 
       // 3. Cache detect
@@ -97,11 +118,15 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
       // 否则直接 skip——以前后端会发两次 HTTP 给 Anthropic 端点，OpenAI 系
       // provider 收到 Anthropic 格式要么慢拒要么卡满 timeout，dialog 一直转。
       if (cancelled) return;
-      const cacheEligible = provider.provider_type === "anthropic"
-        || provider.provider_type === "claude"
-        || !!provider.anthropic_base_url;
+      const cacheEligible =
+        provider.provider_type === "anthropic" ||
+        provider.provider_type === "claude" ||
+        !!provider.anthropic_base_url;
       if (!cacheEligible) {
-        setCacheDetect({ status: "skipped", detail: t("providers.test.cache_skipped_not_anthropic") });
+        setCacheDetect({
+          status: "skipped",
+          detail: t("providers.test.cache_skipped_not_anthropic"),
+        });
       } else {
         setCacheDetect({ status: "running" });
         try {
@@ -112,7 +137,11 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
             detail: r.message,
           });
         } catch (err) {
-          if (!cancelled) setCacheDetect({ status: "error", detail: (err as api.AppError).message });
+          if (!cancelled)
+            setCacheDetect({
+              status: "error",
+              detail: (err as api.AppError).message,
+            });
         }
       }
 
@@ -127,18 +156,25 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
     // 故意只依赖 provider.id：回调走 ref，t 文案改了不需要重跑测试
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider?.id]);
 
   if (!provider) return null;
 
-  const anyError = [connectivity, autofill, cacheDetect].some(s => s.status === "error");
+  const anyError = [connectivity, autofill, cacheDetect].some(
+    (s) => s.status === "error"
+  );
 
   return (
     <div className="fixed inset-0 z-[120] flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
       <div
         className="animate-scale-in relative z-10 w-full max-w-md rounded-xl border border-border bg-card p-6"
         style={{ boxShadow: "var(--shadow-lg)" }}
@@ -159,7 +195,10 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
         </div>
 
         <div className="space-y-3">
-          <StepRow label={t("providers.test.step_connectivity")} state={connectivity} />
+          <StepRow
+            label={t("providers.test.step_connectivity")}
+            state={connectivity}
+          />
           <StepRow label={t("providers.test.step_autofill")} state={autofill} />
           <StepRow label={t("providers.test.step_cache")} state={cacheDetect} />
         </div>
@@ -168,7 +207,9 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
           <DiagnosticPanel diagnostic={connectivity.diagnostic} />
         ) : anyError ? (
           <div className="mt-4 rounded-md border border-error/30 bg-error-soft p-3">
-            <p className="text-[11px] font-medium text-error">{t("providers.test.error_hint_title")}</p>
+            <p className="text-[11px] font-medium text-error">
+              {t("providers.test.error_hint_title")}
+            </p>
             <p className="mt-1 text-[11px] text-text-secondary">
               {t("providers.test.error_hint_desc")}
             </p>
@@ -186,7 +227,9 @@ function DiagnosticPanel({ diagnostic }: { diagnostic: TestDiagnostic }) {
   return (
     <div className="mt-4 rounded-md border border-error/30 bg-error-soft p-3">
       <p className="text-xs font-medium text-error">{diagnostic.title}</p>
-      <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">{diagnostic.hint}</p>
+      <p className="mt-1 text-[11px] leading-relaxed text-text-secondary">
+        {diagnostic.hint}
+      </p>
 
       {diagnostic.action_url && (
         <button
@@ -209,8 +252,14 @@ function DiagnosticPanel({ diagnostic }: { diagnostic: TestDiagnostic }) {
             onClick={() => setShowRaw((v) => !v)}
             className="inline-flex items-center gap-0.5 text-[10px] text-text-muted hover:text-text-secondary"
           >
-            {showRaw ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            {showRaw ? t("providers.test.raw_collapse") : t("providers.test.raw_toggle")}
+            {showRaw ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+            {showRaw
+              ? t("providers.test.raw_collapse")
+              : t("providers.test.raw_toggle")}
           </button>
           {showRaw && (
             <pre className="mt-1 max-h-32 overflow-auto rounded border border-border bg-card-secondary p-2 text-[10px] text-text-muted">
@@ -227,24 +276,36 @@ function StepRow({ label, state }: { label: string; state: StepState }) {
   return (
     <div className="flex items-start gap-3">
       <div className="mt-0.5 h-4 w-4 shrink-0">
-        {state.status === "pending" && <div className="h-4 w-4 rounded-full border-2 border-border" />}
-        {state.status === "running" && <Loader2 className="h-4 w-4 animate-spin text-accent" />}
-        {state.status === "ok" && <CheckCircle className="h-4 w-4 text-success" />}
+        {state.status === "pending" && (
+          <div className="h-4 w-4 rounded-full border-2 border-border" />
+        )}
+        {state.status === "running" && (
+          <Loader2 className="h-4 w-4 animate-spin text-accent" />
+        )}
+        {state.status === "ok" && (
+          <CheckCircle className="h-4 w-4 text-success" />
+        )}
         {state.status === "error" && <XCircle className="h-4 w-4 text-error" />}
-        {state.status === "skipped" && <div className="h-4 w-4 rounded-full bg-card-secondary" />}
+        {state.status === "skipped" && (
+          <div className="h-4 w-4 rounded-full bg-card-secondary" />
+        )}
       </div>
       <div className="min-w-0 flex-1">
-        <p className={cn(
-          "text-sm",
-          state.status === "pending" ? "text-text-muted" : "text-text-primary",
-        )}>
+        <p
+          className={cn(
+            "text-sm",
+            state.status === "pending" ? "text-text-muted" : "text-text-primary"
+          )}
+        >
           {label}
         </p>
         {state.detail && (
-          <p className={cn(
-            "mt-0.5 break-words text-[11px]",
-            state.status === "error" ? "text-error" : "text-text-muted",
-          )}>
+          <p
+            className={cn(
+              "mt-0.5 break-words text-[11px]",
+              state.status === "error" ? "text-error" : "text-text-muted"
+            )}
+          >
             {state.detail}
           </p>
         )}

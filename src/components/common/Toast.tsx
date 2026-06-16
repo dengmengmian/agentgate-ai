@@ -17,9 +17,15 @@ interface ToastMessage {
 }
 
 let toastId = 0;
-let addToastFn: ((type: ToastType, message: string, action?: ToastAction) => void) | null = null;
+let addToastFn:
+  | ((type: ToastType, message: string, action?: ToastAction) => void)
+  | null = null;
 
-export function toast(type: ToastType, message: string, opts?: { action?: ToastAction }) {
+export function toast(
+  type: ToastType,
+  message: string,
+  opts?: { action?: ToastAction }
+) {
   addToastFn?.(type, message, opts?.action);
 }
 
@@ -46,17 +52,22 @@ const TOAST_DURATION = 4000;
 export function ToastContainer() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const addToast = useCallback((type: ToastType, message: string, action?: ToastAction) => {
-    const id = ++toastId;
-    setToasts((prev) => [...prev, { id, type, message, action }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, TOAST_DURATION);
-  }, []);
+  const addToast = useCallback(
+    (type: ToastType, message: string, action?: ToastAction) => {
+      const id = ++toastId;
+      setToasts((prev) => [...prev, { id, type, message, action }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, TOAST_DURATION);
+    },
+    []
+  );
 
   useEffect(() => {
     addToastFn = addToast;
-    return () => { addToastFn = null; };
+    return () => {
+      addToastFn = null;
+    };
   }, [addToast]);
 
   const dismiss = (id: number) => {
@@ -72,7 +83,13 @@ export function ToastContainer() {
   );
 }
 
-function ToastItem({ toast: t, onDismiss }: { toast: ToastMessage; onDismiss: (id: number) => void }) {
+function ToastItem({
+  toast: t,
+  onDismiss,
+}: {
+  toast: ToastMessage;
+  onDismiss: (id: number) => void;
+}) {
   const Icon = icons[t.type];
   const progressRef = useRef<HTMLDivElement>(null);
 
@@ -98,7 +115,10 @@ function ToastItem({ toast: t, onDismiss }: { toast: ToastMessage; onDismiss: (i
         <span className="text-xs text-text-primary">{t.message}</span>
         {t.action && (
           <button
-            onClick={() => { t.action?.onClick(); onDismiss(t.id); }}
+            onClick={() => {
+              t.action?.onClick();
+              onDismiss(t.id);
+            }}
             className={cn(
               "ml-1 shrink-0 rounded px-2 py-0.5 text-[11px] font-medium underline-offset-2 hover:underline",
               iconColors[t.type]

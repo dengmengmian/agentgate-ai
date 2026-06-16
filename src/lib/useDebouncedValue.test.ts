@@ -18,7 +18,7 @@ describe("useDebouncedValue", () => {
   it("变化后延迟期内保持旧值，到期才更新", () => {
     const { result, rerender } = renderHook(
       ({ v }) => useDebouncedValue(v, 300),
-      { initialProps: { v: "a" } },
+      { initialProps: { v: "a" } }
     );
     rerender({ v: "ab" });
     expect(result.current).toBe("a");
@@ -35,7 +35,7 @@ describe("useDebouncedValue", () => {
   it("连续变化只取最后一次", () => {
     const { result, rerender } = renderHook(
       ({ v }) => useDebouncedValue(v, 300),
-      { initialProps: { v: "c" } },
+      { initialProps: { v: "c" } }
     );
     rerender({ v: "cl" });
     act(() => {

@@ -23,14 +23,18 @@ import type { ProviderRuntimeStatus } from "@/types/route-profile";
 export function Providers() {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const providers = useProviders(s => s.items);
-  const [runtimeMap, setRuntimeMap] = useState<Record<string, ProviderRuntimeStatus>>({});
+  const providers = useProviders((s) => s.items);
+  const [runtimeMap, setRuntimeMap] = useState<
+    Record<string, ProviderRuntimeStatus>
+  >({});
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ProviderView | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProviderView | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
-  const [testingProvider, setTestingProvider] = useState<ProviderView | null>(null);
+  const [testingProvider, setTestingProvider] = useState<ProviderView | null>(
+    null
+  );
   const [search, setSearch] = useState("");
   const [speedtestOpen, setSpeedtestOpen] = useState(false);
 
@@ -39,10 +43,11 @@ export function Providers() {
   const filteredProviders = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return providers;
-    return providers.filter((p) =>
-      p.name.toLowerCase().includes(q) ||
-      p.provider_type.toLowerCase().includes(q) ||
-      p.default_model.toLowerCase().includes(q)
+    return providers.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.provider_type.toLowerCase().includes(q) ||
+        p.default_model.toLowerCase().includes(q)
     );
   }, [providers, search]);
 
@@ -52,9 +57,13 @@ export function Providers() {
       // runtime status 单独拉取(profile-specific 数据,不进 store),失败不影响列表。
       const [, statuses] = await Promise.all([
         useProviders.getState().refetch(),
-        api.listProviderRuntimeStatus().catch(() => [] as ProviderRuntimeStatus[]),
+        api
+          .listProviderRuntimeStatus()
+          .catch(() => [] as ProviderRuntimeStatus[]),
       ]);
-      setRuntimeMap(Object.fromEntries(statuses.map((s) => [s.provider_id, s])));
+      setRuntimeMap(
+        Object.fromEntries(statuses.map((s) => [s.provider_id, s]))
+      );
     } catch (err) {
       toast("error", (err as api.AppError).message);
     } finally {
@@ -62,19 +71,25 @@ export function Providers() {
     }
   }, []);
 
-  const handleResetRuntime = useCallback(async (providerId: string) => {
-    try {
-      await api.resetProviderRuntimeStatus(providerId);
-      toast("success", t("routes.cooldown_reset"));
-      loadProviders();
-    } catch (err) {
-      toast("error", (err as api.AppError).message);
-    }
-  }, [loadProviders, t]);
+  const handleResetRuntime = useCallback(
+    async (providerId: string) => {
+      try {
+        await api.resetProviderRuntimeStatus(providerId);
+        toast("success", t("routes.cooldown_reset"));
+        loadProviders();
+      } catch (err) {
+        toast("error", (err as api.AppError).message);
+      }
+    },
+    [loadProviders, t]
+  );
 
-  const handleDetails = useCallback((provider: ProviderView) => {
-    navigate(`/providers/${provider.id}`);
-  }, [navigate]);
+  const handleDetails = useCallback(
+    (provider: ProviderView) => {
+      navigate(`/providers/${provider.id}`);
+    },
+    [navigate]
+  );
 
   useEffect(() => {
     loadProviders();
@@ -84,7 +99,9 @@ export function Providers() {
   // 失败被 cooldown）能实时反映到这页的 badge 上。
   usePolling(loadProviders);
 
-  const handleCreate = async (input: CreateProviderInput | UpdateProviderInput) => {
+  const handleCreate = async (
+    input: CreateProviderInput | UpdateProviderInput
+  ) => {
     try {
       const created = await api.createProvider(input as CreateProviderInput);
       setFormOpen(false);
@@ -94,9 +111,16 @@ export function Providers() {
       // 添加后总 provider ≥2 时提示用户可以做失败转移——跨页提示，避免
       // 用户配完想做 failover 还得自己探索"Routing"页在哪。
       if (providers.length >= 1) {
-        toast("success", `${t("providers.created")} · ${t("providers.hint_setup_failover")}`, {
-          action: { label: t("providers.go_routing"), onClick: () => navigate("/routes") },
-        });
+        toast(
+          "success",
+          `${t("providers.created")} · ${t("providers.hint_setup_failover")}`,
+          {
+            action: {
+              label: t("providers.go_routing"),
+              onClick: () => navigate("/routes"),
+            },
+          }
+        );
       } else {
         toast("success", t("providers.created"));
       }
@@ -107,11 +131,19 @@ export function Providers() {
       const providerType = (input as CreateProviderInput).provider_type;
       (async () => {
         try {
-          const { models } = await fetchDetectAndPersistProviderModels(created.id, providerType);
+          const { models } = await fetchDetectAndPersistProviderModels(
+            created.id,
+            providerType
+          );
           if (!models.length) return;
           loadProviders();
-          toast("success", `${models.length} ${t("providers.toast_auto_setup")}`);
-        } catch { /* silent: 用户可去编辑页手动拉 */ }
+          toast(
+            "success",
+            `${models.length} ${t("providers.toast_auto_setup")}`
+          );
+        } catch {
+          /* silent: 用户可去编辑页手动拉 */
+        }
       })();
     } catch (err) {
       toast("error", (err as api.AppError).message);
@@ -123,7 +155,9 @@ export function Providers() {
     setFormOpen(true);
   };
 
-  const handleUpdate = async (input: CreateProviderInput | UpdateProviderInput) => {
+  const handleUpdate = async (
+    input: CreateProviderInput | UpdateProviderInput
+  ) => {
     if (!editTarget) return;
     try {
       await api.updateProvider(editTarget.id, input as UpdateProviderInput);
@@ -179,7 +213,10 @@ export function Providers() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-1 items-center gap-3">
           <p className="shrink-0 text-xs text-text-muted">
-            {search ? `${filteredProviders.length} / ${providers.length}` : providers.length} {t("providers.configured")}
+            {search
+              ? `${filteredProviders.length} / ${providers.length}`
+              : providers.length}{" "}
+            {t("providers.configured")}
           </p>
           {/* provider 数 >=5 时显示搜索框——少于 5 个时直接看完更快 */}
           {providers.length >= 5 && (
@@ -285,7 +322,10 @@ export function Providers() {
         onSuccess={loadProviders}
       />
 
-      <SpeedtestDialog open={speedtestOpen} onClose={() => setSpeedtestOpen(false)} />
+      <SpeedtestDialog
+        open={speedtestOpen}
+        onClose={() => setSpeedtestOpen(false)}
+      />
     </div>
   );
 }

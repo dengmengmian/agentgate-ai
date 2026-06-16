@@ -1,6 +1,8 @@
 /* ── Pet Window Global Styles ── */
 
-html, body, #root {
+html,
+body,
+#root {
   background: transparent !important;
   overflow: hidden;
   margin: 0;
@@ -48,33 +50,69 @@ html, body, #root {
 }
 
 @keyframes bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 @keyframes bounce {
-  0%, 100% { transform: translateY(0) scale(1); }
-  25% { transform: translateY(-10px) scale(1.05, 0.95); }
-  50% { transform: translateY(0) scale(0.95, 1.05); }
-  75% { transform: translateY(-5px) scale(1.02, 0.98); }
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  25% {
+    transform: translateY(-10px) scale(1.05, 0.95);
+  }
+  50% {
+    transform: translateY(0) scale(0.95, 1.05);
+  }
+  75% {
+    transform: translateY(-5px) scale(1.02, 0.98);
+  }
 }
 
 @keyframes shake {
-  0%, 100% { transform: rotate(0deg); }
-  25% { transform: rotate(-5deg); }
-  75% { transform: rotate(5deg); }
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-5deg);
+  }
+  75% {
+    transform: rotate(5deg);
+  }
 }
 
 @keyframes sleep-breathe {
-  0%, 100% { transform: scale(1); opacity: 0.8; }
-  50% { transform: scale(1.03); opacity: 1; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.03);
+    opacity: 1;
+  }
 }
 
 @keyframes poke {
-  0% { transform: scale(1); }
-  30% { transform: scale(0.85, 1.15); }
-  60% { transform: scale(1.1, 0.9); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(0.85, 1.15);
+  }
+  60% {
+    transform: scale(1.1, 0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 /* ── Zzz Animation ── */
@@ -84,15 +122,24 @@ html, body, #root {
   top: 0;
   right: 5px;
   font-size: 14px;
-  color: #7C8CFF;
+  color: #7c8cff;
   animation: zzz-float 2s ease-in-out infinite;
   pointer-events: none;
 }
 
 @keyframes zzz-float {
-  0% { opacity: 0; transform: translateY(0) scale(0.8); }
-  50% { opacity: 1; transform: translateY(-15px) scale(1); }
-  100% { opacity: 0; transform: translateY(-30px) scale(0.6); }
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-15px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.6);
+  }
 }
 
 /* ── Bubble ── */
@@ -112,10 +159,10 @@ html, body, #root {
 
 .bubble-content {
   background: #1a1d23;
-  border: 1.5px solid #6B7280;
+  border: 1.5px solid #6b7280;
   border-radius: 10px;
   padding: 6px 12px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .bubble-text {
@@ -130,7 +177,7 @@ html, body, #root {
   height: 0;
   border-left: 6px solid transparent;
   border-right: 6px solid transparent;
-  border-top: 6px solid #6B7280;
+  border-top: 6px solid #6b7280;
   margin: 0 auto;
 }
 
@@ -143,13 +190,25 @@ html, body, #root {
 }
 
 @keyframes bubble-enter {
-  0% { opacity: 0; transform: translateX(-50%) translateY(6px) scale(0.8); }
-  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.8);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
 }
 
 @keyframes bubble-leave {
-  0% { opacity: 1; transform: translateX(-50%) translateY(0); }
-  100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  0% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
 }
 
 /* ── Chat Input ── */
@@ -167,17 +226,17 @@ html, body, #root {
   width: 120px;
   padding: 5px 10px;
   border-radius: 14px;
-  border: 1.5px solid #7C8CFF;
+  border: 1.5px solid #7c8cff;
   background: #1a1d23;
   color: #e0e0e0;
   font-size: 11px;
   font-family: "Inter", sans-serif;
   outline: none;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .chat-input::placeholder {
-  color: #6B7280;
+  color: #6b7280;
 }
 
 .chat-loading {
@@ -192,24 +251,69 @@ html, body, #root {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #7C8CFF;
+  background: #7c8cff;
   animation: chat-dot 0.8s ease-in-out infinite;
 }
 
-.chat-loading span:nth-child(2) { animation-delay: 0.15s; }
-.chat-loading span:nth-child(3) { animation-delay: 0.3s; }
-
-@keyframes chat-dot {
-  0%, 100% { opacity: 0.3; transform: scale(0.8); }
-  50% { opacity: 1; transform: scale(1.2); }
+.chat-loading span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.chat-loading span:nth-child(3) {
+  animation-delay: 0.3s;
 }
 
+@keyframes chat-dot {
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
 
 /* ── CC 状态徽章(宠物头顶冒图标,增强可读性 + 传播力)── */
-.cc-badge { position: absolute; top: -8px; right: -4px; font-size: 16px; line-height: 1; pointer-events: none; z-index: 2; }
-.cc-badge-working { animation: cc-badge-spin 1.2s linear infinite; }
-@keyframes cc-badge-spin { to { transform: rotate(360deg); } }
-.cc-badge-waiting { animation: cc-badge-pop 0.45s ease-in-out infinite; }
-@keyframes cc-badge-pop { 0%,100% { transform: scale(1); } 50% { transform: scale(1.45); } }
-.cc-badge-done { animation: cc-badge-rise 0.6s ease-out; }
-@keyframes cc-badge-rise { 0% { transform: translateY(5px) scale(0.4); opacity: 0; } 100% { transform: translateY(0) scale(1); opacity: 1; } }
+.cc-badge {
+  position: absolute;
+  top: -8px;
+  right: -4px;
+  font-size: 16px;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 2;
+}
+.cc-badge-working {
+  animation: cc-badge-spin 1.2s linear infinite;
+}
+@keyframes cc-badge-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.cc-badge-waiting {
+  animation: cc-badge-pop 0.45s ease-in-out infinite;
+}
+@keyframes cc-badge-pop {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.45);
+  }
+}
+.cc-badge-done {
+  animation: cc-badge-rise 0.6s ease-out;
+}
+@keyframes cc-badge-rise {
+  0% {
+    transform: translateY(5px) scale(0.4);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}

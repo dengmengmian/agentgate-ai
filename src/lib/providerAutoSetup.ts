@@ -1,5 +1,8 @@
 import * as api from "@/lib/api";
-import { normalizeModelsForProvider, pickModelsForProvider } from "@/lib/modelHeuristics";
+import {
+  normalizeModelsForProvider,
+  pickModelsForProvider,
+} from "@/lib/modelHeuristics";
 
 export interface ProviderAutoSetupResult {
   models: string[];
@@ -8,7 +11,7 @@ export interface ProviderAutoSetupResult {
 
 export async function fetchDetectAndPersistProviderModels(
   providerId: string,
-  providerType: string,
+  providerType: string
 ): Promise<ProviderAutoSetupResult> {
   const fetchedModels = await api.fetchProviderModels(providerId);
   const models = normalizeModelsForProvider(providerType, fetchedModels);
@@ -16,7 +19,9 @@ export async function fetchDetectAndPersistProviderModels(
     return { models, capabilitiesDetected: false };
   }
 
-  const seeded = await api.seedModelCapabilities(providerType, models).catch(() => null);
+  const seeded = await api
+    .seedModelCapabilities(providerType, models)
+    .catch(() => null);
   const picked = pickModelsForProvider(providerType, models);
 
   await api.updateProvider(providerId, {

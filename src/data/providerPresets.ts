@@ -33,23 +33,31 @@ export const MIMO_TOKEN_PLAN_ENDPOINTS: ProviderEndpointUrls = {
   ...GENERATED_MIMO_ENDPOINTS.tokenPlanRegions.cn,
 };
 
-export const MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION: Record<string, ProviderEndpointUrls> =
-  Object.fromEntries(
-    Object.entries(GENERATED_MIMO_ENDPOINTS.tokenPlanRegions).map(([region, endpoints]) => [
-      region,
-      { ...endpoints },
-    ])
-  );
+export const MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION: Record<
+  string,
+  ProviderEndpointUrls
+> = Object.fromEntries(
+  Object.entries(GENERATED_MIMO_ENDPOINTS.tokenPlanRegions).map(
+    ([region, endpoints]) => [region, { ...endpoints }]
+  )
+);
 
 const KNOWN_MIMO_ENDPOINTS = new Set(
-  [MIMO_PAYG_ENDPOINTS, ...Object.values(MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION)].flatMap((urls) =>
-    [urls.baseUrl, urls.anthropicBaseUrl].filter(Boolean) as string[]
+  [
+    MIMO_PAYG_ENDPOINTS,
+    ...Object.values(MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION),
+  ].flatMap(
+    (urls) => [urls.baseUrl, urls.anthropicBaseUrl].filter(Boolean) as string[]
   )
 );
 
 export function isMimoProviderType(type: string): boolean {
   const normalized = type.trim().toLowerCase();
-  return normalized === "mimo" || normalized === "xiaomi" || normalized.includes("mimo");
+  return (
+    normalized === "mimo" ||
+    normalized === "xiaomi" ||
+    normalized.includes("mimo")
+  );
 }
 
 export function firstApiKey(raw?: string | null): string {
@@ -59,7 +67,10 @@ export function firstApiKey(raw?: string | null): string {
     try {
       const keys = JSON.parse(value) as unknown;
       if (Array.isArray(keys)) {
-        return keys.find((key) => typeof key === "string" && key.trim())?.trim() ?? "";
+        return (
+          keys.find((key) => typeof key === "string" && key.trim())?.trim() ??
+          ""
+        );
       }
     } catch {
       return value;
@@ -68,7 +79,9 @@ export function firstApiKey(raw?: string | null): string {
   return value;
 }
 
-export function getMimoEndpointsForKey(apiKey?: string | null): ProviderEndpointUrls | null {
+export function getMimoEndpointsForKey(
+  apiKey?: string | null
+): ProviderEndpointUrls | null {
   const key = firstApiKey(apiKey);
   if (key.startsWith("tp-")) return MIMO_TOKEN_PLAN_ENDPOINTS;
   if (key.startsWith("sk-")) return MIMO_PAYG_ENDPOINTS;
@@ -84,7 +97,9 @@ export function getMimoEndpointsForKeyAndUrl(
   if (key.startsWith("sk-")) return MIMO_PAYG_ENDPOINTS;
   if (!key.startsWith("tp-")) return null;
   const region = getPreferredMimoTokenPlanRegion(baseUrl, anthropicBaseUrl);
-  return MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION[region] ?? MIMO_TOKEN_PLAN_ENDPOINTS;
+  return (
+    MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION[region] ?? MIMO_TOKEN_PLAN_ENDPOINTS
+  );
 }
 
 export function isKnownMimoEndpointUrl(url?: string | null): boolean {
@@ -93,7 +108,9 @@ export function isKnownMimoEndpointUrl(url?: string | null): boolean {
 
 function getMimoTokenPlanRegion(url?: string | null): string | null {
   const value = url?.trim().replace(/\/$/, "") ?? "";
-  for (const [region, endpoints] of Object.entries(MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION)) {
+  for (const [region, endpoints] of Object.entries(
+    MIMO_TOKEN_PLAN_ENDPOINTS_BY_REGION
+  )) {
     if (value === endpoints.baseUrl || value === endpoints.anthropicBaseUrl) {
       return region;
     }
@@ -101,7 +118,10 @@ function getMimoTokenPlanRegion(url?: string | null): string | null {
   return null;
 }
 
-function getPreferredMimoTokenPlanRegion(baseUrl?: string | null, anthropicBaseUrl?: string | null): string {
+function getPreferredMimoTokenPlanRegion(
+  baseUrl?: string | null,
+  anthropicBaseUrl?: string | null
+): string {
   const baseRegion = getMimoTokenPlanRegion(baseUrl);
   const anthropicRegion = getMimoTokenPlanRegion(anthropicBaseUrl);
   if (baseRegion && (baseRegion !== "cn" || !anthropicRegion)) {
@@ -116,7 +136,9 @@ export function resolveProviderPresetForKey(
   preset: ProviderPreset | undefined = PROVIDER_PRESETS[type]
 ): ProviderPreset | undefined {
   if (!preset) return undefined;
-  const mimoEndpoints = isMimoProviderType(type) ? getMimoEndpointsForKey(apiKey) : null;
+  const mimoEndpoints = isMimoProviderType(type)
+    ? getMimoEndpointsForKey(apiKey)
+    : null;
   if (!mimoEndpoints) return preset;
   return {
     ...preset,
@@ -146,9 +168,15 @@ export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {
           baseUrl: preset.baseUrl,
           protocols: [...preset.protocols],
           defaultModel: preset.defaultModel,
-          ...(preset.reasoningModel ? { reasoningModel: preset.reasoningModel } : {}),
-          ...(preset.anthropicBaseUrl ? { anthropicBaseUrl: preset.anthropicBaseUrl } : {}),
-          ...(preset.responsesBaseUrl ? { responsesBaseUrl: preset.responsesBaseUrl } : {}),
+          ...(preset.reasoningModel
+            ? { reasoningModel: preset.reasoningModel }
+            : {}),
+          ...(preset.anthropicBaseUrl
+            ? { anthropicBaseUrl: preset.anthropicBaseUrl }
+            : {}),
+          ...(preset.responsesBaseUrl
+            ? { responsesBaseUrl: preset.responsesBaseUrl }
+            : {}),
           ...(preset.extraHeaders ? { extraHeaders: preset.extraHeaders } : {}),
         },
       ];

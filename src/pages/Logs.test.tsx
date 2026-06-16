@@ -40,13 +40,13 @@ describe("Logs", () => {
     // 由测试决定 resolve 顺序——模拟旧请求比新请求晚返回。
     const resolvers: Array<(v: any) => void> = [];
     vi.mocked(api.listRequestLogs).mockImplementation(
-      () => new Promise<any>((resolve) => resolvers.push(resolve)),
+      () => new Promise<any>((resolve) => resolvers.push(resolve))
     );
 
     const { container } = render(
       <MemoryRouter>
         <Logs />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     await waitFor(() => expect(resolvers.length).toBe(1));
@@ -73,7 +73,9 @@ describe("Logs", () => {
   });
 
   it("翻页后滚动回顶部", async () => {
-    vi.mocked(api.listRequestLogs).mockResolvedValue([logItem("a", "M")] as any);
+    vi.mocked(api.listRequestLogs).mockResolvedValue([
+      logItem("a", "M"),
+    ] as any);
     vi.mocked(api.countRequestLogs).mockResolvedValue(250); // 250/100 → 3 页，出现翻页
 
     const scrollSpy = vi.fn();
@@ -82,7 +84,7 @@ describe("Logs", () => {
     render(
       <MemoryRouter>
         <Logs />
-      </MemoryRouter>,
+      </MemoryRouter>
     );
 
     const next = await screen.findByText("logs.page_next");

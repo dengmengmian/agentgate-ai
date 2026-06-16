@@ -1,7 +1,18 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
-import { ScrollText, RefreshCcw, ChevronLeft, ChevronRight, LayoutList, Layers, Download } from "lucide-react";
-import { RequestLogTable, sourceLabel } from "@/components/logs/RequestLogTable";
+import {
+  ScrollText,
+  RefreshCcw,
+  ChevronLeft,
+  ChevronRight,
+  LayoutList,
+  Layers,
+  Download,
+} from "lucide-react";
+import {
+  RequestLogTable,
+  sourceLabel,
+} from "@/components/logs/RequestLogTable";
 import { RequestDetailDrawer } from "@/components/logs/RequestDetailDrawer";
 import { SessionGroupView } from "@/components/logs/SessionGroupView";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -16,10 +27,23 @@ import type { RequestLogListItem } from "@/types/request-log";
 import type { RequestLogDetail } from "@/types/request-log";
 
 // 客户端候选——detect_client_from_ua 用的固定列表。
-const KNOWN_CLIENTS = ["Codex", "Claude Code", "OpenCode", "Gemini CLI", "AtomCode", "Generic"];
+const KNOWN_CLIENTS = [
+  "Codex",
+  "Claude Code",
+  "OpenCode",
+  "Gemini CLI",
+  "AtomCode",
+  "Generic",
+];
 
 const PAGE_SIZE = 100;
-const VALID_SOURCE_FILTERS = new Set(["gateway", "session_log", "claude_session", "codex_session", "gemini_session"]);
+const VALID_SOURCE_FILTERS = new Set([
+  "gateway",
+  "session_log",
+  "claude_session",
+  "codex_session",
+  "gemini_session",
+]);
 
 export function Logs() {
   const { t } = useI18n();
@@ -45,8 +69,8 @@ export function Logs() {
   const [sessionIdFilter, setSessionIdFilter] = useState("");
   // 'list'（按时间逐条）/ 'session'（按会话聚合）
   const [viewMode, setViewMode] = useState<"list" | "session">("list");
-  const providerOptions = useProviders(s => s.items);
-  const routeProfileOptions = useRouteProfiles(s => s.items);
+  const providerOptions = useProviders((s) => s.items);
+  const routeProfileOptions = useRouteProfiles((s) => s.items);
   const [modelOptions, setModelOptions] = useState<string[]>([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [showSyncActions, setShowSyncActions] = useState(false);
@@ -59,9 +83,18 @@ export function Logs() {
   // 字段存的是 name 字符串（见 routes.rs log_request_success 调用）。
   // providers / route profiles 走全局 store(其它页可能已经填好,这里直接 fetch 防重入)。
   useEffect(() => {
-    useProviders.getState().fetch().catch(() => {});
-    useRouteProfiles.getState().fetch().catch(() => {});
-    api.listLogModels().then(setModelOptions).catch(() => {});
+    useProviders
+      .getState()
+      .fetch()
+      .catch(() => {});
+    useRouteProfiles
+      .getState()
+      .fetch()
+      .catch(() => {});
+    api
+      .listLogModels()
+      .then(setModelOptions)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -72,7 +105,17 @@ export function Logs() {
   // Reset to page 1 whenever filters change.
   useEffect(() => {
     setPage(1);
-  }, [debouncedKeyword, statusFilter, providerFilter, modelFilter, routeProfileFilter, errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter]);
+  }, [
+    debouncedKeyword,
+    statusFilter,
+    providerFilter,
+    modelFilter,
+    routeProfileFilter,
+    errorTypeFilter,
+    clientFilter,
+    sourceFilter,
+    sessionIdFilter,
+  ]);
 
   // 请求序号守卫：筛选/翻页快速变化或手动刷新交错时，会同时有多个
   // loadLogs 在飞；只让最后一次发起的请求写入结果，丢弃先发后到的旧响应，
@@ -109,7 +152,18 @@ export function Logs() {
     } finally {
       if (seq === reqSeqRef.current) setLoading(false);
     }
-  }, [debouncedKeyword, statusFilter, providerFilter, modelFilter, routeProfileFilter, errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter, page]);
+  }, [
+    debouncedKeyword,
+    statusFilter,
+    providerFilter,
+    modelFilter,
+    routeProfileFilter,
+    errorTypeFilter,
+    clientFilter,
+    sourceFilter,
+    sessionIdFilter,
+    page,
+  ]);
 
   useEffect(() => {
     loadLogs();
@@ -125,16 +179,26 @@ export function Logs() {
     const status = log.status_code ?? 0;
     return status >= 200 && status < 400;
   }).length;
-  const pageSuccessRate = knownStatusLogs.length > 0
-    ? `${Math.round((pageSuccessCount / knownStatusLogs.length) * 100)}%`
-    : "—";
+  const pageSuccessRate =
+    knownStatusLogs.length > 0
+      ? `${Math.round((pageSuccessCount / knownStatusLogs.length) * 100)}%`
+      : "—";
   const pageRecordedLatencies = logs
     .map((log) => log.latency_ms)
     .filter((latency): latency is number => latency !== null && latency > 0);
-  const pageAvgLatency = pageRecordedLatencies.length > 0
-    ? Math.round(pageRecordedLatencies.reduce((sum, latency) => sum + latency, 0) / pageRecordedLatencies.length)
-    : null;
-  const advancedFilterCount = [errorTypeFilter, clientFilter, sourceFilter, sessionIdFilter].filter(Boolean).length;
+  const pageAvgLatency =
+    pageRecordedLatencies.length > 0
+      ? Math.round(
+          pageRecordedLatencies.reduce((sum, latency) => sum + latency, 0) /
+            pageRecordedLatencies.length
+        )
+      : null;
+  const advancedFilterCount = [
+    errorTypeFilter,
+    clientFilter,
+    sourceFilter,
+    sessionIdFilter,
+  ].filter(Boolean).length;
 
   const handleSelect = async (item: RequestLogListItem) => {
     try {
@@ -156,12 +220,14 @@ export function Logs() {
     }
   };
 
-  const [syncing, setSyncing] = useState<null | "claude" | "codex" | "gemini">(null);
+  const [syncing, setSyncing] = useState<null | "claude" | "codex" | "gemini">(
+    null
+  );
   const runSync = async (
     kind: "claude" | "codex" | "gemini",
     label: string,
     fn: () => Promise<api.SyncResult>,
-    missingHint: string,
+    missingHint: string
   ) => {
     setSyncing(kind);
     try {
@@ -169,8 +235,13 @@ export function Logs() {
       if (r.files_scanned === 0) {
         toast("success", missingHint);
       } else {
-        toast("success", `${label} ${t("logs.sync_scanned")} ${r.files_scanned} ${t("logs.sync_files")}: ${t("logs.sync_imported")} ${r.imported}, ${t("logs.sync_skipped")} ${r.skipped}` +
-          (r.errors.length > 0 ? `, ${r.errors.length} ${t("logs.sync_errors")}` : ""));
+        toast(
+          "success",
+          `${label} ${t("logs.sync_scanned")} ${r.files_scanned} ${t("logs.sync_files")}: ${t("logs.sync_imported")} ${r.imported}, ${t("logs.sync_skipped")} ${r.skipped}` +
+            (r.errors.length > 0
+              ? `, ${r.errors.length} ${t("logs.sync_errors")}`
+              : "")
+        );
       }
       loadLogs();
     } catch (err) {
@@ -180,11 +251,26 @@ export function Logs() {
     }
   };
   const handleSyncClaude = () =>
-    runSync("claude", "Claude", api.syncClaudeSessions, t("logs.sync_claude_missing"));
+    runSync(
+      "claude",
+      "Claude",
+      api.syncClaudeSessions,
+      t("logs.sync_claude_missing")
+    );
   const handleSyncCodex = () =>
-    runSync("codex", "Codex", api.syncCodexSessions, t("logs.sync_codex_missing"));
+    runSync(
+      "codex",
+      "Codex",
+      api.syncCodexSessions,
+      t("logs.sync_codex_missing")
+    );
   const handleSyncGemini = () =>
-    runSync("gemini", "Gemini", api.syncGeminiSessions, t("logs.sync_gemini_missing"));
+    runSync(
+      "gemini",
+      "Gemini",
+      api.syncGeminiSessions,
+      t("logs.sync_gemini_missing")
+    );
 
   // 翻页后把列表滚回顶部——长列表翻到下一页却停在原滚动位置很难用。
   const topRef = useRef<HTMLDivElement>(null);
@@ -197,10 +283,26 @@ export function Logs() {
     <div ref={topRef} className="space-y-4">
       <div className="space-y-3">
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <LogSummaryItem label={t("logs.summary_matched")} value={total.toLocaleString()} hint={t("logs.requests")} />
-          <LogSummaryItem label={t("logs.summary_page_errors")} value={pageErrorCount.toLocaleString()} hint={`${knownStatusLogs.length.toLocaleString()} ${t("logs.summary_with_status")}`} />
-          <LogSummaryItem label={t("logs.summary_page_success_rate")} value={pageSuccessRate} hint={`${pageSuccessCount.toLocaleString()} ${t("logs.summary_succeeded")}`} />
-          <LogSummaryItem label={t("logs.summary_page_avg_latency")} value={formatOptionalLatency(pageAvgLatency)} hint={`${pageRecordedLatencies.length.toLocaleString()} ${t("logs.summary_recorded")}`} />
+          <LogSummaryItem
+            label={t("logs.summary_matched")}
+            value={total.toLocaleString()}
+            hint={t("logs.requests")}
+          />
+          <LogSummaryItem
+            label={t("logs.summary_page_errors")}
+            value={pageErrorCount.toLocaleString()}
+            hint={`${knownStatusLogs.length.toLocaleString()} ${t("logs.summary_with_status")}`}
+          />
+          <LogSummaryItem
+            label={t("logs.summary_page_success_rate")}
+            value={pageSuccessRate}
+            hint={`${pageSuccessCount.toLocaleString()} ${t("logs.summary_succeeded")}`}
+          />
+          <LogSummaryItem
+            label={t("logs.summary_page_avg_latency")}
+            value={formatOptionalLatency(pageAvgLatency)}
+            hint={`${pageRecordedLatencies.length.toLocaleString()} ${t("logs.summary_recorded")}`}
+          />
         </div>
 
         <div className="rounded-xl border border-border bg-card p-3">
@@ -229,7 +331,11 @@ export function Logs() {
                 title={t("logs.filter_provider")}
               >
                 <option value="">{t("logs.all_providers")}</option>
-                {providerOptions.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                {providerOptions.map((p) => (
+                  <option key={p.id} value={p.name}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
             )}
             {modelOptions.length > 0 && (
@@ -240,7 +346,11 @@ export function Logs() {
                 title={t("logs.filter_model")}
               >
                 <option value="">{t("logs.all_models")}</option>
-                {modelOptions.map((m) => <option key={m} value={m}>{m}</option>)}
+                {modelOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
               </select>
             )}
             {routeProfileOptions.length > 0 && (
@@ -252,7 +362,9 @@ export function Logs() {
               >
                 <option value="">{t("logs.all_routes")}</option>
                 {routeProfileOptions.map((profile) => (
-                  <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
                 ))}
               </select>
             )}
@@ -261,7 +373,9 @@ export function Logs() {
               onClick={() => setShowAdvancedFilters((v) => !v)}
               className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${showAdvancedFilters ? "bg-card-secondary text-text-primary" : "text-text-muted hover:bg-card-secondary hover:text-text-primary"}`}
             >
-              {showAdvancedFilters ? t("logs.filters_collapse") : `${t("logs.filters_advanced")}${advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}`}
+              {showAdvancedFilters
+                ? t("logs.filters_collapse")
+                : `${t("logs.filters_advanced")}${advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}`}
             </button>
           </div>
 
@@ -274,13 +388,27 @@ export function Logs() {
                 title={t("logs.filter_error_type")}
               >
                 <option value="">{t("logs.all_error_types")}</option>
-                <option value="auth_failed">{t("logs.error_type.auth_failed")}</option>
-                <option value="rate_limited">{t("logs.error_type.rate_limited")}</option>
-                <option value="quota_or_balance">{t("logs.error_type.quota_or_balance")}</option>
-                <option value="server_error">{t("logs.error_type.server_error")}</option>
-                <option value="network_error">{t("logs.error_type.network_error")}</option>
-                <option value="protocol_error">{t("logs.error_type.protocol_error")}</option>
-                <option value="other_error">{t("logs.error_type.other_error")}</option>
+                <option value="auth_failed">
+                  {t("logs.error_type.auth_failed")}
+                </option>
+                <option value="rate_limited">
+                  {t("logs.error_type.rate_limited")}
+                </option>
+                <option value="quota_or_balance">
+                  {t("logs.error_type.quota_or_balance")}
+                </option>
+                <option value="server_error">
+                  {t("logs.error_type.server_error")}
+                </option>
+                <option value="network_error">
+                  {t("logs.error_type.network_error")}
+                </option>
+                <option value="protocol_error">
+                  {t("logs.error_type.protocol_error")}
+                </option>
+                <option value="other_error">
+                  {t("logs.error_type.other_error")}
+                </option>
               </select>
               <select
                 value={clientFilter}
@@ -289,7 +417,11 @@ export function Logs() {
                 title={t("logs.filter_client")}
               >
                 <option value="">{t("logs.all_clients")}</option>
-                {KNOWN_CLIENTS.map(c => <option key={c} value={c}>{c}</option>)}
+                {KNOWN_CLIENTS.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
               </select>
               <select
                 value={sourceFilter}
@@ -299,10 +431,18 @@ export function Logs() {
               >
                 <option value="">{t("logs.all_sources")}</option>
                 <option value="gateway">{sourceLabel("gateway", t)}</option>
-                <option value="session_log">{t("logs.source_session_log")}</option>
-                <option value="claude_session">{sourceLabel("claude_session", t)}</option>
-                <option value="codex_session">{sourceLabel("codex_session", t)}</option>
-                <option value="gemini_session">{sourceLabel("gemini_session", t)}</option>
+                <option value="session_log">
+                  {t("logs.source_session_log")}
+                </option>
+                <option value="claude_session">
+                  {sourceLabel("claude_session", t)}
+                </option>
+                <option value="codex_session">
+                  {sourceLabel("codex_session", t)}
+                </option>
+                <option value="gemini_session">
+                  {sourceLabel("gemini_session", t)}
+                </option>
               </select>
               {sessionIdFilter && (
                 <button
@@ -343,7 +483,9 @@ export function Logs() {
             disabled={loading}
             className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
           >
-            <RefreshCcw className={`h-3 w-3 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCcw
+              className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
+            />
             {t("common.refresh")}
           </button>
           <button
@@ -370,7 +512,9 @@ export function Logs() {
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
               title={t("logs.sync_claude_hint")}
             >
-              <Download className={`h-3 w-3 ${syncing === "claude" ? "animate-pulse" : ""}`} />
+              <Download
+                className={`h-3 w-3 ${syncing === "claude" ? "animate-pulse" : ""}`}
+              />
               {t("logs.sync_claude")}
             </button>
             <button
@@ -379,7 +523,9 @@ export function Logs() {
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
               title={t("logs.sync_codex_hint")}
             >
-              <Download className={`h-3 w-3 ${syncing === "codex" ? "animate-pulse" : ""}`} />
+              <Download
+                className={`h-3 w-3 ${syncing === "codex" ? "animate-pulse" : ""}`}
+              />
               {t("logs.sync_codex")}
             </button>
             <button
@@ -388,7 +534,9 @@ export function Logs() {
               className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
               title={t("logs.sync_gemini_hint")}
             >
-              <Download className={`h-3 w-3 ${syncing === "gemini" ? "animate-pulse" : ""}`} />
+              <Download
+                className={`h-3 w-3 ${syncing === "gemini" ? "animate-pulse" : ""}`}
+              />
               {t("logs.sync_gemini")}
             </button>
           </div>
@@ -427,9 +575,12 @@ export function Logs() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between rounded-xl border border-border bg-card px-5 py-2.5">
               <span className="text-xs text-text-muted">
-                {t("logs.page_prefix")} <span className="font-mono text-text-primary">{page}</span> / {totalPages} {t("logs.page_suffix")}
+                {t("logs.page_prefix")}{" "}
+                <span className="font-mono text-text-primary">{page}</span> /{" "}
+                {totalPages} {t("logs.page_suffix")}
                 <span className="ml-3 text-text-muted/60">
-                  {t("logs.page_showing")} {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)}
+                  {t("logs.page_showing")} {(page - 1) * PAGE_SIZE + 1}–
+                  {Math.min(page * PAGE_SIZE, total)}
                 </span>
               </span>
               <div className="flex items-center gap-1">
@@ -473,12 +624,22 @@ export function Logs() {
   );
 }
 
-function LogSummaryItem({ label, value, hint }: { label: string; value: string; hint: string }) {
+function LogSummaryItem({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+}) {
   return (
     <div className="rounded-xl border border-border bg-card px-4 py-3">
       <div className="text-[11px] font-medium text-text-muted">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
-        <span className="font-mono text-lg font-semibold text-text-primary">{value}</span>
+        <span className="font-mono text-lg font-semibold text-text-primary">
+          {value}
+        </span>
         <span className="truncate text-[11px] text-text-muted">{hint}</span>
       </div>
     </div>

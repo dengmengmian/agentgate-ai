@@ -70,7 +70,10 @@ function getTimePeriod(): string {
   return "night";
 }
 
-export function getGreeting(gatewayState: GatewayState, locale: "en" | "zh"): string {
+export function getGreeting(
+  gatewayState: GatewayState,
+  locale: "en" | "zh"
+): string {
   const roll = Math.random();
   if (roll < 0.35) {
     // Time-based greeting

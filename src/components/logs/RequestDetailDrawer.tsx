@@ -72,7 +72,8 @@ export function RequestDetailDrawer({
     (request.status_code >= 400 || request.status_code < 200);
   const trace = parseTrace(request.trace_json);
   const routeDecision = trace?.route_decision ?? null;
-  const totalTokens = (request.input_tokens ?? 0) + (request.output_tokens ?? 0);
+  const totalTokens =
+    (request.input_tokens ?? 0) + (request.output_tokens ?? 0);
 
   return (
     <DetailDrawer
@@ -87,7 +88,9 @@ export function RequestDetailDrawer({
           <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/10 p-3">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
             <div className="text-[11px] leading-relaxed text-text-secondary">
-              <span className="font-medium text-text-primary">{sourceLabel(request.source, t)} {t("logs.client_log_entry")}</span>
+              <span className="font-medium text-text-primary">
+                {sourceLabel(request.source, t)} {t("logs.client_log_entry")}
+              </span>
               {t("logs.client_log_banner")}
             </div>
           </div>
@@ -97,14 +100,22 @@ export function RequestDetailDrawer({
         {request.session_id && (
           <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-card-secondary px-3 py-2">
             <div className="min-w-0">
-              <span className="text-[11px] text-text-muted">{t("logs.belongs_to_session")}</span>
-              <p className="truncate font-mono text-[11px] text-text-primary" title={request.session_id}>{request.session_id}</p>
+              <span className="text-[11px] text-text-muted">
+                {t("logs.belongs_to_session")}
+              </span>
+              <p
+                className="truncate font-mono text-[11px] text-text-primary"
+                title={request.session_id}
+              >
+                {request.session_id}
+              </p>
             </div>
             <button
               onClick={() => setConvoOpen(true)}
               className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[11px] text-text-secondary transition-colors hover:text-accent"
             >
-              <MessageSquare className="h-3.5 w-3.5" /> {t("logs.view_session_convo")}
+              <MessageSquare className="h-3.5 w-3.5" />{" "}
+              {t("logs.view_session_convo")}
             </button>
           </div>
         )}
@@ -135,19 +146,34 @@ export function RequestDetailDrawer({
         {routeDecision && <RouteDecisionCard decision={routeDecision} />}
 
         {request.raw_request && (
-          <JsonCodeBlock title={t("logs.raw_request")} content={request.raw_request} />
+          <JsonCodeBlock
+            title={t("logs.raw_request")}
+            content={request.raw_request}
+          />
         )}
         {request.converted_request && (
-          <JsonCodeBlock title={t("logs.converted_request")} content={request.converted_request} />
+          <JsonCodeBlock
+            title={t("logs.converted_request")}
+            content={request.converted_request}
+          />
         )}
         {request.raw_response && (
-          <JsonCodeBlock title={t("logs.raw_response")} content={request.raw_response} />
+          <JsonCodeBlock
+            title={t("logs.raw_response")}
+            content={request.raw_response}
+          />
         )}
         {request.converted_response && (
-          <JsonCodeBlock title={t("logs.converted_response")} content={request.converted_response} />
+          <JsonCodeBlock
+            title={t("logs.converted_response")}
+            content={request.converted_response}
+          />
         )}
         {request.tool_calls && (
-          <JsonCodeBlock title={t("logs.tool_calls")} content={request.tool_calls} />
+          <JsonCodeBlock
+            title={t("logs.tool_calls")}
+            content={request.tool_calls}
+          />
         )}
         {request.trace_json && (
           <JsonCodeBlock title={t("logs.trace")} content={request.trace_json} />
@@ -207,7 +233,9 @@ function RouteCostSummary({
     <div className="rounded-lg border border-border bg-card-secondary p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div>
-          <h4 className="text-xs font-semibold text-text-primary">{t("logs.route_and_cost")}</h4>
+          <h4 className="text-xs font-semibold text-text-primary">
+            {t("logs.route_and_cost")}
+          </h4>
           <p className="mt-1 text-[11px] text-text-muted">
             {formatTimestamp(request.timestamp)} · {request.client ?? "—"}
           </p>
@@ -218,31 +246,59 @@ function RouteCostSummary({
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-xs">
-        <Metric label={t("logs.route")} value={decision?.profile_name ?? request.route ?? "—"} />
+        <Metric
+          label={t("logs.route")}
+          value={decision?.profile_name ?? request.route ?? "—"}
+        />
         <Metric label={t("logs.provider")} value={selectedProvider} />
         <Metric label={t("logs.model")} value={selectedModel} />
-        <Metric label={t("logs.latency")} value={formatOptionalLatency(request.latency_ms)} />
-        <Metric label={t("logs.tokens_input")} value={request.input_tokens?.toLocaleString() ?? "—"} />
-        <Metric label={t("logs.tokens_output")} value={request.output_tokens?.toLocaleString() ?? "—"} />
-        <Metric label={t("logs.tokens_total")} value={totalTokens > 0 ? totalTokens.toLocaleString() : "—"} />
+        <Metric
+          label={t("logs.latency")}
+          value={formatOptionalLatency(request.latency_ms)}
+        />
+        <Metric
+          label={t("logs.tokens_input")}
+          value={request.input_tokens?.toLocaleString() ?? "—"}
+        />
+        <Metric
+          label={t("logs.tokens_output")}
+          value={request.output_tokens?.toLocaleString() ?? "—"}
+        />
+        <Metric
+          label={t("logs.tokens_total")}
+          value={totalTokens > 0 ? totalTokens.toLocaleString() : "—"}
+        />
         <Metric label={t("logs.cost")} value={formatCost(request.cost)} />
       </div>
 
       <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-        <Metric label={t("logs.cache_write")} value={request.cache_write_tokens?.toLocaleString() ?? "—"} />
-        <Metric label={t("logs.cache_read")} value={request.cache_read_tokens?.toLocaleString() ?? "—"} />
+        <Metric
+          label={t("logs.cache_write")}
+          value={request.cache_write_tokens?.toLocaleString() ?? "—"}
+        />
+        <Metric
+          label={t("logs.cache_read")}
+          value={request.cache_read_tokens?.toLocaleString() ?? "—"}
+        />
       </div>
 
-      {decision?.matched_conditions && Object.keys(decision.matched_conditions).length > 0 && (
-        <div className="mt-3 rounded-md border border-border bg-card px-3 py-2 text-xs">
-          <span className="text-text-muted">{t("logs.matched_conditions")}</span>
-          <p className="mt-1 text-text-primary">{formatConditions(decision.matched_conditions)}</p>
-        </div>
-      )}
+      {decision?.matched_conditions &&
+        Object.keys(decision.matched_conditions).length > 0 && (
+          <div className="mt-3 rounded-md border border-border bg-card px-3 py-2 text-xs">
+            <span className="text-text-muted">
+              {t("logs.matched_conditions")}
+            </span>
+            <p className="mt-1 text-text-primary">
+              {formatConditions(decision.matched_conditions)}
+            </p>
+          </div>
+        )}
 
       {fallbackChain.length > 0 && (
         <div className="mt-3 space-y-1">
-          <span className="text-[11px] text-text-muted">{t("logs.fallback_chain")}</span>
+          <span className="text-[11px] text-text-muted">
+            {t("logs.fallback_chain")}
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {fallbackChain.map((step, idx) => (
               <span
@@ -253,7 +309,11 @@ function RouteCostSummary({
                     : "border-border bg-card text-text-secondary"
                 }`}
               >
-                {step.step ?? idx + 1}. {step.role === "primary" ? t("logs.fallback_primary") : t("logs.fallback_backup")} · {step.provider_name ?? "—"}
+                {step.step ?? idx + 1}.{" "}
+                {step.role === "primary"
+                  ? t("logs.fallback_primary")
+                  : t("logs.fallback_backup")}{" "}
+                · {step.provider_name ?? "—"}
               </span>
             ))}
           </div>
@@ -265,22 +325,26 @@ function RouteCostSummary({
           <div>
             <span className="text-text-muted">{t("logs.error_final")}</span>
             <p className="mt-1 text-text-primary">
-              HTTP {request.status_code ?? "—"}{request.error_message ? ` · ${request.error_message}` : ""}
+              HTTP {request.status_code ?? "—"}
+              {request.error_message ? ` · ${request.error_message}` : ""}
             </p>
           </div>
           {mapper && (
             <p className="text-text-secondary">
-              {t("logs.error_mapper")}：{mapper.upstream_code ?? "upstream"} → {mapper.mapped_code ?? "mapped"}
+              {t("logs.error_mapper")}：{mapper.upstream_code ?? "upstream"} →{" "}
+              {mapper.mapped_code ?? "mapped"}
             </p>
           )}
           {breaker && (
             <p className="text-text-secondary">
-              {t("logs.circuit_breaker")}：{breaker.observed_state ?? "—"}{breaker.transition ? ` · ${breaker.transition}` : ""}
+              {t("logs.circuit_breaker")}：{breaker.observed_state ?? "—"}
+              {breaker.transition ? ` · ${breaker.transition}` : ""}
             </p>
           )}
           {degradation && (
             <p className="text-text-secondary">
-              {t("logs.model_degradation")}：{degradation.requested_model ?? "—"} → {degradation.picked ?? "—"}
+              {t("logs.model_degradation")}：
+              {degradation.requested_model ?? "—"} → {degradation.picked ?? "—"}
             </p>
           )}
         </div>
@@ -289,7 +353,9 @@ function RouteCostSummary({
   );
 }
 
-function formatConditions(conditions: Record<string, unknown> | null | undefined): string {
+function formatConditions(
+  conditions: Record<string, unknown> | null | undefined
+): string {
   if (!conditions || Object.keys(conditions).length === 0) return "—";
   return Object.entries(conditions)
     .map(([key, value]) => {
@@ -305,8 +371,12 @@ function RouteDecisionCard({ decision }: { decision: RouteDecisionTrace }) {
   return (
     <div className="rounded-lg border border-border bg-card-secondary p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h4 className="text-xs font-semibold text-text-primary">{t("logs.route_decision")}</h4>
-        {decision.mode && <StatusBadge variant="muted">{decision.mode}</StatusBadge>}
+        <h4 className="text-xs font-semibold text-text-primary">
+          {t("logs.route_decision")}
+        </h4>
+        {decision.mode && (
+          <StatusBadge variant="muted">{decision.mode}</StatusBadge>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-3 text-xs">
         <div>
@@ -315,29 +385,44 @@ function RouteDecisionCard({ decision }: { decision: RouteDecisionTrace }) {
         </div>
         <div>
           <span className="text-text-muted">{t("logs.selected_provider")}</span>
-          <p className="text-text-primary">{decision.selected_provider_name ?? "—"}</p>
+          <p className="text-text-primary">
+            {decision.selected_provider_name ?? "—"}
+          </p>
         </div>
         <div>
           <span className="text-text-muted">{t("logs.selected_model")}</span>
-          <p className="font-mono text-text-primary">{decision.selected_model ?? "—"}</p>
+          <p className="font-mono text-text-primary">
+            {decision.selected_model ?? "—"}
+          </p>
         </div>
         <div>
-          <span className="text-text-muted">{t("logs.matched_conditions")}</span>
-          <p className="text-text-primary">{formatConditions(decision.matched_conditions)}</p>
+          <span className="text-text-muted">
+            {t("logs.matched_conditions")}
+          </span>
+          <p className="text-text-primary">
+            {formatConditions(decision.matched_conditions)}
+          </p>
         </div>
       </div>
       {decision.candidates && decision.candidates.length > 0 && (
         <div className="mt-3 space-y-1">
-          <span className="text-[11px] text-text-muted">{t("logs.route_candidates")}</span>
+          <span className="text-[11px] text-text-muted">
+            {t("logs.route_candidates")}
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {decision.candidates.map((candidate, idx) => (
               <span
                 key={`${candidate.provider_name ?? "candidate"}-${idx}`}
                 className="rounded-md border border-border bg-card px-2 py-1 text-[11px] text-text-secondary"
               >
-                {candidate.priority ?? idx + 1}. {candidate.provider_name ?? "—"}
-                {candidate.has_conditions ? ` · ${t("routes.has_conditions")}` : ""}
-                {candidate.skip_reasons?.length ? ` · ${candidate.skip_reasons.map((r) => skipReasonLabel(r, t)).join(", ")}` : ""}
+                {candidate.priority ?? idx + 1}.{" "}
+                {candidate.provider_name ?? "—"}
+                {candidate.has_conditions
+                  ? ` · ${t("routes.has_conditions")}`
+                  : ""}
+                {candidate.skip_reasons?.length
+                  ? ` · ${candidate.skip_reasons.map((r) => skipReasonLabel(r, t)).join(", ")}`
+                  : ""}
               </span>
             ))}
           </div>
@@ -345,7 +430,9 @@ function RouteDecisionCard({ decision }: { decision: RouteDecisionTrace }) {
       )}
       {decision.fallback_chain && decision.fallback_chain.length > 0 && (
         <div className="mt-3 space-y-1">
-          <span className="text-[11px] text-text-muted">{t("logs.fallback_chain")}</span>
+          <span className="text-[11px] text-text-muted">
+            {t("logs.fallback_chain")}
+          </span>
           <div className="flex flex-wrap gap-1.5">
             {decision.fallback_chain.map((step, idx) => (
               <span
@@ -356,7 +443,11 @@ function RouteDecisionCard({ decision }: { decision: RouteDecisionTrace }) {
                     : "border-border bg-card text-text-secondary"
                 }`}
               >
-                {step.step ?? idx + 1}. {step.role === "primary" ? t("logs.fallback_primary") : t("logs.fallback_backup")} · {step.provider_name ?? "—"}
+                {step.step ?? idx + 1}.{" "}
+                {step.role === "primary"
+                  ? t("logs.fallback_primary")
+                  : t("logs.fallback_backup")}{" "}
+                · {step.provider_name ?? "—"}
               </span>
             ))}
           </div>
@@ -366,7 +457,13 @@ function RouteDecisionCard({ decision }: { decision: RouteDecisionTrace }) {
   );
 }
 
-function ErrorChainCard({ request, trace }: { request: RequestLogDetail; trace: RequestTrace | null }) {
+function ErrorChainCard({
+  request,
+  trace,
+}: {
+  request: RequestLogDetail;
+  trace: RequestTrace | null;
+}) {
   const { t } = useI18n();
   const mapper = trace?.error_mapper;
   const breaker = trace?.circuit_breaker;
@@ -374,7 +471,9 @@ function ErrorChainCard({ request, trace }: { request: RequestLogDetail; trace: 
 
   return (
     <div className="rounded-lg border border-error/20 bg-error/5 p-4">
-      <h4 className="mb-3 text-xs font-semibold text-text-primary">{t("logs.error_chain")}</h4>
+      <h4 className="mb-3 text-xs font-semibold text-text-primary">
+        {t("logs.error_chain")}
+      </h4>
       <div className="space-y-2 text-xs">
         <div className="rounded-md border border-border bg-card px-3 py-2">
           <span className="text-text-muted">{t("logs.error_final")}</span>
@@ -386,9 +485,13 @@ function ErrorChainCard({ request, trace }: { request: RequestLogDetail; trace: 
           <div className="rounded-md border border-border bg-card px-3 py-2">
             <span className="text-text-muted">{t("logs.error_mapper")}</span>
             <p className="mt-1 text-text-primary">
-              {mapper.upstream_code ?? "upstream"} → {mapper.mapped_code ?? "mapped"}
+              {mapper.upstream_code ?? "upstream"} →{" "}
+              {mapper.mapped_code ?? "mapped"}
             </p>
-            <p className="mt-1 truncate text-text-muted" title={mapper.upstream_message ?? mapper.mapped_message ?? ""}>
+            <p
+              className="mt-1 truncate text-text-muted"
+              title={mapper.upstream_message ?? mapper.mapped_message ?? ""}
+            >
               {mapper.upstream_message ?? mapper.mapped_message ?? "—"}
             </p>
           </div>
@@ -397,18 +500,23 @@ function ErrorChainCard({ request, trace }: { request: RequestLogDetail; trace: 
           <div className="rounded-md border border-border bg-card px-3 py-2">
             <span className="text-text-muted">{t("logs.circuit_breaker")}</span>
             <p className="mt-1 text-text-primary">
-              {breaker.observed_state ?? "—"}{breaker.transition ? ` · ${breaker.transition}` : ""}
+              {breaker.observed_state ?? "—"}
+              {breaker.transition ? ` · ${breaker.transition}` : ""}
             </p>
           </div>
         )}
         {degradation && (
           <div className="rounded-md border border-border bg-card px-3 py-2">
-            <span className="text-text-muted">{t("logs.model_degradation")}</span>
+            <span className="text-text-muted">
+              {t("logs.model_degradation")}
+            </span>
             <p className="mt-1 text-text-primary">
               {degradation.requested_model ?? "—"} → {degradation.picked ?? "—"}
             </p>
             {degradation.chain?.length ? (
-              <p className="mt-1 font-mono text-[11px] text-text-muted">{degradation.chain.join(" → ")}</p>
+              <p className="mt-1 font-mono text-[11px] text-text-muted">
+                {degradation.chain.join(" → ")}
+              </p>
             ) : null}
           </div>
         )}

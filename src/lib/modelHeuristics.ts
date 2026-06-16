@@ -11,7 +11,10 @@ function isDeepSeekProvider(providerType: string): boolean {
   return providerType.trim().toLowerCase() === "deepseek";
 }
 
-export function normalizeModelsForProvider(providerType: string, models: string[]): string[] {
+export function normalizeModelsForProvider(
+  providerType: string,
+  models: string[]
+): string[] {
   if (!isDeepSeekProvider(providerType)) return models;
   const available = new Set(models.map((model) => model.trim().toLowerCase()));
   return DEEPSEEK_V4_MODELS.filter((model) => available.has(model));
@@ -58,7 +61,10 @@ function compareDesc(a: string, b: string): number {
 /// - default：排除 reasoning 系，剩下按 tierRank/version 排序，取头
 /// - reasoning：匹配 REASONING 的，按同样排序取头；没有就 fallback 到 default
 /// 输入空数组返回空字符串。
-export function pickModels(models: string[]): { default: string; reasoning: string } {
+export function pickModels(models: string[]): {
+  default: string;
+  reasoning: string;
+} {
   if (models.length === 0) return { default: "", reasoning: "" };
 
   const sorted = models.slice().sort(compareDesc);
@@ -72,7 +78,7 @@ export function pickModels(models: string[]): { default: string; reasoning: stri
 
 export function pickModelsForProvider(
   providerType: string,
-  models: string[],
+  models: string[]
 ): { default: string; reasoning: string } {
   if (!isDeepSeekProvider(providerType)) return pickModels(models);
 

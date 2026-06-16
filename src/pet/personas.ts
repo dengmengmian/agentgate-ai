@@ -46,26 +46,65 @@ Keep responses SHORT (1-2 sentences, under 50 chars if possible). Be friendly, p
 If the user tells you their name or personal info, acknowledge it warmly.
 Reply in the same language the user uses. If they write Chinese, reply in Chinese. If English, reply in English.`;
 
-export function buildSystemPrompt(petType: PetType, locale: "en" | "zh", memory: string): string {
+export function buildSystemPrompt(
+  petType: PetType,
+  locale: "en" | "zh",
+  memory: string
+): string {
   const persona = PERSONAS[petType];
   const personaLine = locale === "zh" ? persona.zh : persona.en;
-  return BASE_PROMPT + "\n\n" + personaLine + (memory ? `\n\nYou remember about the user: ${memory}` : "");
+  return (
+    BASE_PROMPT +
+    "\n\n" +
+    personaLine +
+    (memory ? `\n\nYou remember about the user: ${memory}` : "")
+  );
 }
 
 /// 被戳一下时的即时反应,本地直出不走 AI——快,且不浪费 token。
 const POKE_REACTIONS: Record<PetType, { en: string[]; zh: string[] }> = {
-  robot: { en: ["Beep! 🤖", "Hey!", "[ERR] Hand detected"], zh: ["滴!", "嘿!", "[报错] 检测到手"] },
-  "pixel-cat": { en: ["Mrrp~", "*purr*", "Hmm? 🐱"], zh: ["喵~", "呼噜~", "嗯? 🐱"] },
-  slime: { en: ["Bloop! 💧", "Squish!", "Bouncy!"], zh: ["啵!", "啫啫!", "Q 弹!"] },
-  fox: { en: ["Excuse me. 🦊", "Easy now.", "Touchy."], zh: ["请注意。", "别紧张。", "嗯?"] },
-  octopus: { en: ["Eight legs! 🐙", "Bloop!", "Hi there~"], zh: ["八条腿!", "啵~", "嗨~"] },
-  ghost: { en: ["Whoo... 👻", "*phases through*", "Hi friend."], zh: ["呜...", "*穿过*", "你好。"] },
-  ox: { en: ["Ouch, working here!", "Mooo 🐂", "Boss?"], zh: ["哎,正干活呢!", "哞~", "老板?"] },
-  soldier: { en: ["Roger.", "Copy that. 🫡", "On it!"], zh: ["收到。", "执行。", "明白!"] },
-  coder: { en: ["// hello", "git pull?", "Coffee. ☕"], zh: ["// hello", "拉一下?", "续杯咖啡。"] },
+  robot: {
+    en: ["Beep! 🤖", "Hey!", "[ERR] Hand detected"],
+    zh: ["滴!", "嘿!", "[报错] 检测到手"],
+  },
+  "pixel-cat": {
+    en: ["Mrrp~", "*purr*", "Hmm? 🐱"],
+    zh: ["喵~", "呼噜~", "嗯? 🐱"],
+  },
+  slime: {
+    en: ["Bloop! 💧", "Squish!", "Bouncy!"],
+    zh: ["啵!", "啫啫!", "Q 弹!"],
+  },
+  fox: {
+    en: ["Excuse me. 🦊", "Easy now.", "Touchy."],
+    zh: ["请注意。", "别紧张。", "嗯?"],
+  },
+  octopus: {
+    en: ["Eight legs! 🐙", "Bloop!", "Hi there~"],
+    zh: ["八条腿!", "啵~", "嗨~"],
+  },
+  ghost: {
+    en: ["Whoo... 👻", "*phases through*", "Hi friend."],
+    zh: ["呜...", "*穿过*", "你好。"],
+  },
+  ox: {
+    en: ["Ouch, working here!", "Mooo 🐂", "Boss?"],
+    zh: ["哎,正干活呢!", "哞~", "老板?"],
+  },
+  soldier: {
+    en: ["Roger.", "Copy that. 🫡", "On it!"],
+    zh: ["收到。", "执行。", "明白!"],
+  },
+  coder: {
+    en: ["// hello", "git pull?", "Coffee. ☕"],
+    zh: ["// hello", "拉一下?", "续杯咖啡。"],
+  },
 };
 
-export function pickPokeReaction(petType: PetType, locale: "en" | "zh"): string {
+export function pickPokeReaction(
+  petType: PetType,
+  locale: "en" | "zh"
+): string {
   const set = POKE_REACTIONS[petType][locale];
   return set[Math.floor(Math.random() * set.length)];
 }

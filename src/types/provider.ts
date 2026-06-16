@@ -15,7 +15,10 @@ export type ProviderView = Wide;
 // 创建/更新输入：所有 `T | null` 改成 `T | null | undefined`,前端可省略字段。
 export type CreateProviderInput = {
   [K in keyof WideCreate]?: WideCreate[K] | undefined;
-} & Pick<WideCreate, "name" | "provider_type" | "base_url" | "default_model" | "protocol">;
+} & Pick<
+  WideCreate,
+  "name" | "provider_type" | "base_url" | "default_model" | "protocol"
+>;
 export type UpdateProviderInput = {
   [K in keyof WideUpdate]?: WideUpdate[K] | undefined;
 };
@@ -34,7 +37,16 @@ export const CAPABILITY_LABELS: Record<string, string> = {
   web_search: "联网搜索",
 };
 
-export const ALL_CAPABILITIES = ["text", "vision", "audio_in", "tts", "video_in", "reasoning", "tools", "web_search"] as const;
+export const ALL_CAPABILITIES = [
+  "text",
+  "vision",
+  "audio_in",
+  "tts",
+  "video_in",
+  "reasoning",
+  "tools",
+  "web_search",
+] as const;
 export type Capability = (typeof ALL_CAPABILITIES)[number];
 
 // `TestDiagnostic` 在 bindings 里已经有,但历史 import 路径在这里,re-export 一下。

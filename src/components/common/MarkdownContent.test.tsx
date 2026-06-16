@@ -7,7 +7,7 @@ describe("MarkdownContent", () => {
     render(
       <MarkdownContent
         content={"| 名称 | 状态 |\n| --- | --- |\n| Claude | 可用 |"}
-      />,
+      />
     );
 
     expect(screen.getByRole("table")).toBeInTheDocument();
