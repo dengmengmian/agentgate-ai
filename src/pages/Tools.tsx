@@ -206,6 +206,7 @@ export function Tools() {
             ? "AgentGate"
             : result.new_provider;
         toast("success", `${t("tools.switched_to")} ${label}`);
+        await showPostApply("codex", "Codex", result.config_path);
       }
       load();
     } catch (err) {
@@ -240,6 +241,7 @@ export function Tools() {
             ? "AgentGate"
             : t("tools.official");
         toast("success", `${t("tools.switched_to")} ${label}`);
+        await showPostApply("claude_code", "Claude Code", result.config_path);
       }
       load();
     } catch (err) {
@@ -291,6 +293,7 @@ export function Tools() {
             ? "AgentGate"
             : t("tools.official");
         toast("success", `${t("tools.switched_to")} ${label}`);
+        await showPostApply("gemini", "Gemini CLI", result.config_path);
       }
       load();
     } catch (err) {
@@ -320,6 +323,7 @@ export function Tools() {
             ? "AgentGate"
             : t("tools.official");
         toast("success", `${t("tools.switched_to")} ${label}`);
+        await showPostApply("atomcode", "AtomCode", result.config_path);
       }
       load();
     } catch (err) {

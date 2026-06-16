@@ -17,6 +17,7 @@ import {
   BookOpen,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
+import logo from "@/assets/logo.png";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { useProviders } from "@/store/global";
@@ -98,60 +99,12 @@ export function Sidebar() {
         )}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <svg
+          <img
+            src={logo}
+            alt=""
             className="h-10 w-10 shrink-0"
-            viewBox="0 0 512 512"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <circle
-              cx="256"
-              cy="256"
-              r="180"
-              stroke="currentColor"
-              strokeWidth="16"
-              opacity="0.2"
-              className="text-accent"
-            />
-            <ellipse
-              cx="256"
-              cy="256"
-              rx="180"
-              ry="100"
-              stroke="currentColor"
-              strokeWidth="16"
-              opacity="0.35"
-              className="text-accent"
-              transform="rotate(-25 256 256)"
-            />
-            <ellipse
-              cx="256"
-              cy="256"
-              rx="180"
-              ry="100"
-              stroke="currentColor"
-              strokeWidth="16"
-              opacity="0.35"
-              className="text-accent"
-              transform="rotate(25 256 256)"
-            />
-            <circle
-              cx="256"
-              cy="256"
-              r="56"
-              stroke="currentColor"
-              strokeWidth="16"
-              fill="none"
-              className="text-accent"
-            />
-            <circle
-              cx="256"
-              cy="256"
-              r="30"
-              fill="currentColor"
-              className="text-accent"
-            />
-          </svg>
+            aria-hidden="true"
+          />
           {!collapsed && (
             <span className="text-sm font-semibold tracking-tight text-text-primary truncate">
               AgentGate

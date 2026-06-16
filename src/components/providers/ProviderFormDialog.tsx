@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { X, Loader2, Sparkles } from "lucide-react";
+import { X, Loader2, Sparkles, Eye, EyeOff } from "lucide-react";
 import {
   PROVIDER_TYPES,
   PROTOCOLS,
@@ -61,6 +61,7 @@ export function ProviderFormDialog({
   const [providerType, setProviderType] = useState("deepseek");
   const [baseUrl, setBaseUrl] = useState("");
   const [apiKeys, setApiKeys] = useState<string[]>([""]);
+  const [visibleApiKeys, setVisibleApiKeys] = useState<boolean[]>([false]);
   const [defaultModel, setDefaultModel] = useState("");
   const [reasoningModel, setReasoningModel] = useState("");
   const [supportedModels, setSupportedModels] = useState("");
@@ -151,6 +152,7 @@ export function ProviderFormDialog({
     setProviderType(type);
     applyPreset(type);
     setApiKeys([quickKey.trim()]);
+    setVisibleApiKeys([false]);
     // Submit directly
     const preset = resolveProviderPresetForKey(type, quickKey.trim());
     if (!preset) return;
@@ -182,10 +184,18 @@ export function ProviderFormDialog({
       // 这样多 key provider 也能看到全部槽，知道改的是哪一个；保存逻辑
       // 不变（apiKeys 数组 → 单串 or JSON 数组）。
       setApiKeys([""]);
+      setVisibleApiKeys([false]);
       api
         .getProviderKeys(provider.id)
-        .then((keys) => setApiKeys(keys.length > 0 ? keys : [""]))
-        .catch(() => setApiKeys([""]));
+        .then((keys) => {
+          const nextKeys = keys.length > 0 ? keys : [""];
+          setApiKeys(nextKeys);
+          setVisibleApiKeys(nextKeys.map(() => false));
+        })
+        .catch(() => {
+          setApiKeys([""]);
+          setVisibleApiKeys([false]);
+        });
       setDefaultModel(provider.default_model);
       setReasoningModel(provider.reasoning_model ?? "");
       setSupportedModels(provider.supported_models ?? "");
@@ -232,6 +242,7 @@ export function ProviderFormDialog({
       setProviderType(defaultType);
       setBaseUrl(preset?.baseUrl ?? "");
       setApiKeys([""]);
+      setVisibleApiKeys([false]);
       setDefaultModel(preset?.defaultModel ?? "");
       setReasoningModel(preset?.reasoningModel ?? "");
       setSupportedModels("");
@@ -490,23 +501,55 @@ export function ProviderFormDialog({
             <div className="space-y-1.5">
               {apiKeys.map((key, i) => (
                 <div key={i} className="flex items-center gap-1.5">
-                  <input
-                    type="password"
-                    value={key}
-                    onChange={(e) => {
-                      const next = [...apiKeys];
-                      next[i] = e.target.value;
-                      setApiKeys(next);
-                    }}
-                    placeholder={i === 0 ? "sk-... / tp-..." : `Key ${i + 1}`}
-                    className="form-input flex-1"
-                  />
+                  <div className="relative flex-1">
+                    <input
+                      type={visibleApiKeys[i] ? "text" : "password"}
+                      value={key}
+                      onChange={(e) => {
+                        const next = [...apiKeys];
+                        next[i] = e.target.value;
+                        setApiKeys(next);
+                      }}
+                      placeholder={
+                        i === 0 ? "sk-... / tp-..." : `Key ${i + 1}`
+                      }
+                      className="form-input pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = [...visibleApiKeys];
+                        next[i] = !next[i];
+                        setVisibleApiKeys(next);
+                      }}
+                      aria-label={
+                        visibleApiKeys[i]
+                          ? t("providers.hide_key")
+                          : t("providers.show_key")
+                      }
+                      title={
+                        visibleApiKeys[i]
+                          ? t("providers.hide_key")
+                          : t("providers.show_key")
+                      }
+                      className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded text-text-muted transition-colors hover:bg-card-secondary hover:text-text-primary"
+                    >
+                      {visibleApiKeys[i] ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                   {apiKeys.length > 1 && (
                     <button
                       type="button"
-                      onClick={() =>
-                        setApiKeys(apiKeys.filter((_, j) => j !== i))
-                      }
+                      onClick={() => {
+                        setApiKeys(apiKeys.filter((_, j) => j !== i));
+                        setVisibleApiKeys(
+                          visibleApiKeys.filter((_, j) => j !== i)
+                        );
+                      }}
                       className="text-text-muted hover:text-error text-xs"
                     >
                       &times;
@@ -517,7 +560,10 @@ export function ProviderFormDialog({
             </div>
             <button
               type="button"
-              onClick={() => setApiKeys([...apiKeys, ""])}
+              onClick={() => {
+                setApiKeys([...apiKeys, ""]);
+                setVisibleApiKeys([...visibleApiKeys, false]);
+              }}
               className="mt-1.5 text-[11px] text-accent hover:text-accent/80"
             >
               + {t("providers.add_key")}

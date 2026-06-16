@@ -143,6 +143,8 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.protocol": { en: "Protocol", zh: "协议" },
   "providers.api_key": { en: "API Key", zh: "API 密钥" },
   "providers.add_key": { en: "Add Key", zh: "添加密钥" },
+  "providers.show_key": { en: "Show API Key", zh: "显示密钥" },
+  "providers.hide_key": { en: "Hide API Key", zh: "隐藏密钥" },
   "providers.auto_cache": { en: "Prompt Cache", zh: "Prompt 缓存" },
   "providers.auto_cache_hint_native": {
     en: "Inject cache_control for Anthropic prompt caching. Reduces input cost by ~90% on cache hits.",

@@ -37,19 +37,16 @@ impl CcStatus {
 
     fn bubble_text(self) -> (&'static str, &'static str) {
         match self {
-            Self::Waiting => (
-                "Claude Code needs your call 👀",
-                "在等你拍板 👀 要不要继续?",
-            ),
-            Self::Done => ("Claude Code finished this round ✅", "这轮忙完啦,来看看 ✅"),
-            Self::Working => ("Claude Code is working…", "在忙活呢…"),
+            Self::Waiting => ("Claude Code is waiting", "等你确认"),
+            Self::Done => ("Claude Code finished", "这轮已完成"),
+            Self::Working => ("Claude Code is working", "正在处理"),
         }
     }
 
     fn system_notification_body(self) -> Option<&'static str> {
         match self {
-            Self::Waiting => Some("Claude Code 在等你拍板"),
-            Self::Done => Some("Claude Code 这轮忙完了"),
+            Self::Waiting => Some("等你确认"),
+            Self::Done => Some("这轮已完成"),
             Self::Working => None,
         }
     }
@@ -137,7 +134,7 @@ fn send_system_notification(status: CcStatus, app_handle: &tauri::AppHandle) {
 
     #[cfg(target_os = "macos")]
     {
-        if send_macos_system_notification("AgentGate", body).is_ok() {
+        if send_macos_system_notification("Claude Code", body).is_ok() {
             return;
         }
     }
@@ -145,7 +142,7 @@ fn send_system_notification(status: CcStatus, app_handle: &tauri::AppHandle) {
     if let Err(e) = app_handle
         .notification()
         .builder()
-        .title("AgentGate")
+        .title("Claude Code")
         .body(body)
         .show()
     {
@@ -220,5 +217,17 @@ mod tests {
     #[test]
     fn apple_script_notification_text_is_escaped() {
         assert_eq!(apple_script_quoted("a\"b\\c\n"), "\"a\\\"b\\\\c\\n\"");
+    }
+
+    #[test]
+    fn system_notification_body_is_short_status_copy() {
+        assert_eq!(
+            cc_status_from_payload("Notification", "permission_prompt").system_notification_body(),
+            Some("等你确认")
+        );
+        assert_eq!(
+            cc_status_from_payload("Stop", "").system_notification_body(),
+            Some("这轮已完成")
+        );
     }
 }
