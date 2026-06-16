@@ -5,8 +5,8 @@
 <h1 align="center">AgentGate</h1>
 
 <p align="center">
-  <b>Take back model choice for your AI agents.</b><br>
-  Official client requests enter a local control point first: protocol conversion, native pass-through, provider routing, failover, cost tracking, and request tracing.
+  <b>Take control of AI coding requests.</b><br>
+  Official client requests enter a local gateway first: protocol conversion, native pass-through, provider routing, failover, cost tracking, and request tracing.
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="demo-header-v2.gif" width="800" alt="AgentGate brings AI agent requests into a local control point for conversion, pass-through, routing, and tracing">
+  <img src="demo-header-v2.gif" width="800" alt="AgentGate brings AI agent requests into a local gateway for conversion, pass-through, routing, and tracing">
 </p>
 
 ## Download for your OS
@@ -54,9 +54,9 @@ AgentGate fills common base URLs, protocols, model defaults, and capability matr
 
 ---
 
-AgentGate is a **local control point for AI agent model requests**. It takes requests that would normally go straight to official endpoints, brings them into your desktop first, then decides whether to convert protocols or pass through natively to 26 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, GitHub Copilot, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
+AgentGate is a **local gateway for AI agent model requests**. It takes requests that would normally go straight to official endpoints, brings them into your desktop first, then decides whether to convert protocols or pass through natively to 26 providers including Xiaomi MiMo, DeepSeek, OpenAI, Anthropic, GitHub Copilot, Kimi, GLM, DashScope, SiliconFlow, Volcengine, and more.
 
-> **Take back model choice for your AI agents.** Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode keep their familiar client flow, while AgentGate handles upstream choice, protocol differences, failover, cost, and traceability locally.
+> **Take control of AI coding requests.** Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode keep their familiar client flow, while AgentGate handles upstream choice, protocol differences, failover, cost, and traceability locally.
 
 ![Cost dashboard](screenshots/dashboard.png)
 
@@ -80,7 +80,7 @@ There are great LLM proxies out there. AgentGate's niche is **AI agent clients o
 | **Plain proxy** | Swapping a base URL | Keeps client-specific behavior, converts protocols when needed, supports native pass-through, and traces the full request path |
 | **claude-code-router** | Routing Claude Code (CLI) to other models | Also covers Codex Responses API, Gemini CLI, OpenCode — plus a GUI and cost dashboard |
 | **one-api / new-api** | Multi-user API reselling & billing on a server | Local-first, single-user, no account system; one-click client config built in |
-| **LiteLLM** | A Python SDK / proxy for 100+ LLMs in your own app | A desktop control point for AI agent clients, not a library — zero code, GUI-driven |
+| **LiteLLM** | A Python SDK / proxy for 100+ LLMs in your own app | A desktop gateway for AI agent clients, not a library — zero code, GUI-driven |
 
 > Positioning is approximate and these tools evolve fast — pick what fits your workflow. If you operate a shared API server, one-api / LiteLLM may suit you better; if you live in Codex / Claude Code, this is built for you.
 

@@ -7,8 +7,8 @@
 English: [Main Reference](./full-reference.md)
 
 <p align="center">
-  <b>把 AI Agent 的模型选择权拿回来。</b><br>
-  官方客户端请求先进入本地控制点：协议转换、原生直连、Provider 路由、失败转移、成本统计和请求追踪。
+  <b>接管 AI 编程工具的请求链路。</b><br>
+  官方客户端请求先进入本地网关：协议转换、原生直连、Provider 路由、失败转移、成本统计和请求追踪。
 </p>
 
 <p align="center">
@@ -23,7 +23,7 @@ English: [Main Reference](./full-reference.md)
 </p>
 
 <p align="center">
-  <img src="demo-header-v2.gif" width="800" alt="AgentGate 把 AI Agent 模型请求接到本地控制点：转换、直连、路由、追踪">
+  <img src="demo-header-v2.gif" width="800" alt="AgentGate 把 AI Agent 模型请求接到本地网关：转换、直连、路由、追踪">
 </p>
 
 ## 按系统下载
@@ -56,9 +56,9 @@ AgentGate 会从 Provider 预设里自动填好常见的 base URL、协议、默
 
 ---
 
-AgentGate 是一个 **给 AI Agent 模型请求用的本地控制点**。它把原本要直接发给官方 endpoint 的模型请求先接进你的桌面，再决定是做协议转换，还是原生直连到 26 个 Provider 里的某一个——包括小米 MiMo、DeepSeek、OpenAI、Anthropic、GitHub Copilot、Kimi、GLM、DashScope、SiliconFlow、Volcengine 等等。
+AgentGate 是一个 **给 AI Agent 模型请求用的本地网关**。它把原本要直接发给官方 endpoint 的模型请求先接进你的桌面，再决定是做协议转换，还是原生直连到 26 个 Provider 里的某一个——包括小米 MiMo、DeepSeek、OpenAI、Anthropic、GitHub Copilot、Kimi、GLM、DashScope、SiliconFlow、Volcengine 等等。
 
-> **把 AI Agent 的模型选择权拿回来。** Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 继续按它们熟悉的方式跑，AgentGate 在本地处理上游选择、协议差异、故障转移、成本和可追溯性。
+> **接管 AI 编程工具的请求链路。** Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 继续按它们熟悉的方式跑，AgentGate 在本地处理上游选择、协议差异、故障转移、成本和可追溯性。
 
 ![成本看板](screenshots/dashboard.png)
 
@@ -82,7 +82,7 @@ AgentGate 的事就一句话：**让官方客户端的入口在本地可控**—
 | **普通代理** | 换一个 base URL | 保留客户端专属行为，需要时转换协议，支持原生 pass-through，并能追踪完整请求链路 |
 | **claude-code-router** | 把 Claude Code（CLI）路由到其他模型 | 还覆盖 Codex 的 Responses API、Gemini CLI、OpenCode——并有 GUI 和成本看板 |
 | **one-api / new-api** | 服务端多用户 API 转售和计费 | 本地优先、单用户、没账号体系；客户端一键配置内建 |
-| **LiteLLM** | 一个 Python SDK / proxy，在自己 app 里接 100+ LLM | 一个给 AI agent 客户端用的桌面控制点，不是库——零代码、GUI 驱动 |
+| **LiteLLM** | 一个 Python SDK / proxy，在自己 app 里接 100+ LLM | 一个给 AI agent 客户端用的桌面网关，不是库——零代码、GUI 驱动 |
 
 > 这只是大致定位，工具都在快速演进——按你的工作流挑。如果你在运营一个共享 API 服务，one-api / LiteLLM 可能更合适；如果你日常住在 Codex / Claude Code 里，那这工具就是为你做的。
 

@@ -33,7 +33,7 @@ Use this guide if you want:
 
 ## Notes for claude-code-router users
 
-AgentGate is not a drop-in clone of claude-code-router. It is a desktop control point that also supports Codex, Gemini CLI, OpenCode, provider failover, cost dashboards, diagnostics, request tracing, and one-click client config restore. If you only need a small Claude Code router, claude-code-router may be enough. If you want one local model entry for multiple AI agent clients, use AgentGate.
+AgentGate is not a drop-in clone of claude-code-router. It is a desktop gateway that also supports Codex, Gemini CLI, OpenCode, provider failover, cost dashboards, diagnostics, request tracing, and one-click client config restore. If you only need a small Claude Code router, claude-code-router may be enough. If you want one local model entry for multiple AI agent clients, use AgentGate.
 
 ## Troubleshooting
 

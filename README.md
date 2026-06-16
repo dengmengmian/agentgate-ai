@@ -5,8 +5,8 @@
 <h1 align="center">AgentGate</h1>
 
 <p align="center">
-  <b>Take back model choice for your AI agents.</b><br>
-  AgentGate brings Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode requests into a local control point, then handles protocol conversion, native pass-through, provider routing, failover, cost tracking, and request tracing.
+  <b>Take control of AI coding requests.</b><br>
+  AgentGate is a local AI gateway for Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode — desktop app or headless CLI/Docker. It routes each request to the model you choose, fails over automatically when a provider breaks, traces everything locally, and bridges protocol differences across OpenAI, Anthropic, Gemini, and any OpenAI-compatible provider.
 </p>
 
 <p align="center">
@@ -21,7 +21,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo-header-v2.gif" width="800" alt="AgentGate intercepts requests from Claude Code, Codex, and Gemini CLI at a local control point — converting, passing through, routing, or failing over to 26 providers, with every request traced live">
+  <img src="docs/demo-header-v2.gif" width="800" alt="AgentGate intercepts requests from Claude Code, Codex, and Gemini CLI at a local gateway — converting, passing through, routing, or failing over to 26 providers, with every request traced live">
 </p>
 
 ## Download
@@ -42,7 +42,7 @@ Headless CLI (`agentgate-serve`) tarballs and older versions are on the [Release
 |:---|:---|:---|
 | Keeps Codex / Claude Code / Gemini CLI / OpenCode / AtomCode usable the way you already use them, with one-click restore to official configs. | Official client requests enter AgentGate first, then route through protocol conversion or native pass-through to the upstream provider you choose. | Route decisions, converted payloads, upstream errors, tokens, cost, latency, and failover attempts are traced locally. |
 
-AgentGate is not a hosted API reseller or a generic proxy. It is a local control point for AI agent clients whose model requests are normally tied to official endpoints.
+AgentGate is not a hosted API reseller or a generic proxy. It is a local gateway that sits in front of your AI coding agents — every model request enters AgentGate first, then routes, converts, fails over, or passes through under your control.
 
 ## 5-Minute Quick Start
 
