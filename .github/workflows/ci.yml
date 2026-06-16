@@ -67,6 +67,12 @@ jobs:
         working-directory: src-tauri
         run: cargo build --no-default-features --features cli --bin agentgate-serve
 
+      # lib 单元测试(1100+ 个)之前完全没进 CI,导致单测回归长期潜伏
+      # (如 pricing 红测试)。复用上面的 cli 编译缓存跑一遍。
+      - name: Run library unit tests
+        working-directory: src-tauri
+        run: cargo test --no-default-features --features cli --lib
+
       - name: Run capability + protocol fixture tests
         working-directory: src-tauri
         run: |
