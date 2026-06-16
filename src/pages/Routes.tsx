@@ -26,7 +26,12 @@ import { useI18n } from "@/lib/i18n";
 import { usePolling } from "@/lib/usePolling";
 import * as api from "@/lib/api";
 import { useProviders, useRouteProfiles } from "@/store/global";
-import type { RouteProfileView, RouteProfileDetail, RoutingConditions, RouteProfileStats } from "@/types/route-profile";
+import type {
+  RouteProfileView,
+  RouteProfileDetail,
+  RoutingConditions,
+  RouteProfileStats,
+} from "@/types/route-profile";
 
 const PROTOCOL_LABELS: Record<string, string> = {
   openai_responses: "OpenAI Responses (Codex)",
@@ -40,12 +45,16 @@ function protocolLabel(proto: string): string {
 
 export function Routes() {
   const { t } = useI18n();
-  const profiles = useRouteProfiles(s => s.items);
-  const providers = useProviders(s => s.items);
+  const profiles = useRouteProfiles((s) => s.items);
+  const providers = useProviders((s) => s.items);
   const [detail, setDetail] = useState<RouteProfileDetail | null>(null);
-  const [profileStats, setProfileStats] = useState<Record<string, RouteProfileStats>>({});
+  const [profileStats, setProfileStats] = useState<
+    Record<string, RouteProfileStats>
+  >({});
   const [loading, setLoading] = useState(true);
-  const [deleteTarget, setDeleteTarget] = useState<RouteProfileView | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<RouteProfileView | null>(
+    null
+  );
   const selectedIdRef = useRef<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
@@ -53,7 +62,13 @@ export function Routes() {
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState("");
   const [addProviderId, setAddProviderId] = useState("");
-  const [conditionsTarget, setConditionsTarget] = useState<{ profileId: string; providerId: string; providerName: string; inputProtocol: string; current: RoutingConditions } | null>(null);
+  const [conditionsTarget, setConditionsTarget] = useState<{
+    profileId: string;
+    providerId: string;
+    providerName: string;
+    inputProtocol: string;
+    current: RoutingConditions;
+  } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -65,10 +80,13 @@ export function Routes() {
         api.aggregateRouteProfileStats(7),
       ]);
       const p = useRouteProfiles.getState().items;
-      setProfileStats(Object.fromEntries(stats.map((s) => [s.route_profile_id, s])));
+      setProfileStats(
+        Object.fromEntries(stats.map((s) => [s.route_profile_id, s]))
+      );
       if (p.length > 0) {
         const currentId = selectedIdRef.current;
-        const toLoad = currentId && p.find((x) => x.id === currentId) ? currentId : p[0].id;
+        const toLoad =
+          currentId && p.find((x) => x.id === currentId) ? currentId : p[0].id;
         const d = await api.getRouteProfile(toLoad);
         selectedIdRef.current = toLoad;
         setDetail(d);
@@ -80,7 +98,9 @@ export function Routes() {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
   // 周期 + focus 刷新——让后台 cooldown 变化、新加的 provider 立即可见
   usePolling(load);
 
@@ -89,46 +109,82 @@ export function Routes() {
       const d = await api.getRouteProfile(id);
       selectedIdRef.current = id;
       setDetail(d);
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleSetDefault = async (id: string) => {
-    try { await api.setDefaultRouteProfile(id); toast("success", t("routes.default_updated")); load(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+    try {
+      await api.setDefaultRouteProfile(id);
+      toast("success", t("routes.default_updated"));
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleToggleMode = async () => {
     if (!detail) return;
     const newMode = detail.profile.mode === "manual" ? "failover" : "manual";
-    try { await api.setRouteProfileMode(detail.profile.id, newMode); toast("success", `${t("routes.mode_changed")} ${newMode}`); load(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+    try {
+      await api.setRouteProfileMode(detail.profile.id, newMode);
+      toast("success", `${t("routes.mode_changed")} ${newMode}`);
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleStrategyChange = async (strategy: string) => {
     if (!detail) return;
-    try { await api.updateRouteProfile(detail.profile.id, { selection_strategy: strategy }); load(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+    try {
+      await api.updateRouteProfile(detail.profile.id, {
+        selection_strategy: strategy,
+      });
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleSetActive = async (providerId: string) => {
     if (!detail) return;
-    try { await api.setRouteActiveProvider(detail.profile.id, providerId); toast("success", t("routes.active_updated")); load(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+    try {
+      await api.setRouteActiveProvider(detail.profile.id, providerId);
+      toast("success", t("routes.active_updated"));
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleAddProvider = async (providerId: string) => {
     if (!detail) return;
-    try { await api.addProviderToRoute(detail.profile.id, providerId, {}); toast("success", t("routes.provider_added")); load(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+    try {
+      await api.addProviderToRoute(detail.profile.id, providerId, {});
+      toast("success", t("routes.provider_added"));
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleRemoveProvider = async (providerId: string) => {
     if (!detail) return;
-    try { await api.removeProviderFromRoute(detail.profile.id, providerId); toast("success", t("routes.provider_removed")); load(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+    try {
+      await api.removeProviderFromRoute(detail.profile.id, providerId);
+      toast("success", t("routes.provider_removed"));
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
-  const handleReorder = async (providerId: string, direction: "up" | "down") => {
+  const handleReorder = async (
+    providerId: string,
+    direction: "up" | "down"
+  ) => {
     if (!detail) return;
     const ids = detail.providers.map((p) => p.provider_id);
     const idx = ids.indexOf(providerId);
@@ -136,47 +192,76 @@ export function Routes() {
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
     if (swapIdx < 0 || swapIdx >= ids.length) return;
     [ids[idx], ids[swapIdx]] = [ids[swapIdx], ids[idx]];
-    try { await api.reorderRouteProviders(detail.profile.id, ids); load(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+    try {
+      await api.reorderRouteProviders(detail.profile.id, ids);
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleResetCooldown = async (providerId: string) => {
-    try { await api.resetProviderRuntimeStatus(providerId); toast("success", t("routes.cooldown_reset")); load(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+    try {
+      await api.resetProviderRuntimeStatus(providerId);
+      toast("success", t("routes.cooldown_reset"));
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    try { await api.deleteRouteProfile(deleteTarget.id); toast("success", t("routes.deleted")); setDeleteTarget(null); selectedIdRef.current = null; setDetail(null); load(); }
-    catch (err) { toast("error", (err as api.AppError).message); }
+    try {
+      await api.deleteRouteProfile(deleteTarget.id);
+      toast("success", t("routes.deleted"));
+      setDeleteTarget(null);
+      selectedIdRef.current = null;
+      setDetail(null);
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleRename = async () => {
     if (!detail || !editName.trim()) return;
     try {
-      await api.updateRouteProfile(detail.profile.id, { name: editName.trim() });
+      await api.updateRouteProfile(detail.profile.id, {
+        name: editName.trim(),
+      });
       setEditingName(false);
       load();
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const handleCreate = async () => {
     if (!newName.trim()) return;
     try {
-      await api.createRouteProfile({ name: newName.trim(), input_protocol: newProtocol });
+      await api.createRouteProfile({
+        name: newName.trim(),
+        input_protocol: newProtocol,
+      });
       toast("success", t("routes.created"));
       setShowCreate(false);
       setNewName("");
       load();
-    } catch (err) { toast("error", (err as api.AppError).message); }
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
   };
 
   const availableProviders = detail
-    ? providers.filter((p) => !detail.providers.some((rp) => rp.provider_id === p.id))
+    ? providers.filter(
+        (p) => !detail.providers.some((rp) => rp.provider_id === p.id)
+      )
     : [];
   const currentStats = detail ? profileStats[detail.profile.id] : undefined;
 
-  if (loading) return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
+  if (loading)
+    return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
 
   return (
     <div className="space-y-6">
@@ -189,7 +274,8 @@ export function Routes() {
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
         >
-          <Plus className="h-3 w-3" />{t("routes.create_profile")}
+          <Plus className="h-3 w-3" />
+          {t("routes.create_profile")}
         </button>
       </div>
 
@@ -197,12 +283,21 @@ export function Routes() {
       {showCreate && (
         <div className="rounded-xl border border-accent/30 bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h4 className="text-xs font-semibold text-text-primary">{t("routes.create_profile")}</h4>
-            <button onClick={() => setShowCreate(false)} className="text-text-muted hover:text-text-primary"><X className="h-3.5 w-3.5" /></button>
+            <h4 className="text-xs font-semibold text-text-primary">
+              {t("routes.create_profile")}
+            </h4>
+            <button
+              onClick={() => setShowCreate(false)}
+              className="text-text-muted hover:text-text-primary"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1 block text-[11px] text-text-muted">{t("routes.profile_name")}</label>
+              <label className="mb-1 block text-[11px] text-text-muted">
+                {t("routes.profile_name")}
+              </label>
               <input
                 type="text"
                 value={newName}
@@ -212,27 +307,46 @@ export function Routes() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-[11px] text-text-muted">{t("routes.protocol")}</label>
+              <label className="mb-1 block text-[11px] text-text-muted">
+                {t("routes.protocol")}
+              </label>
               <select
                 value={newProtocol}
                 onChange={(e) => setNewProtocol(e.target.value)}
                 className="form-input w-full"
               >
                 {Object.entries(PROTOCOL_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
+                  <option key={val} value={val}>
+                    {label}
+                  </option>
                 ))}
               </select>
             </div>
           </div>
           <div className="mt-3 flex justify-end gap-2">
-            <button onClick={() => setShowCreate(false)} className="btn-secondary">{t("common.cancel")}</button>
-            <button onClick={handleCreate} disabled={!newName.trim()} className="btn-primary">{t("common.save")}</button>
+            <button
+              onClick={() => setShowCreate(false)}
+              className="btn-secondary"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={!newName.trim()}
+              className="btn-primary"
+            >
+              {t("common.save")}
+            </button>
           </div>
         </div>
       )}
 
       {profiles.length === 0 ? (
-        <EmptyState icon={Inbox} title={t("routes.no_profiles")} description={t("routes.auto_created")} />
+        <EmptyState
+          icon={Inbox}
+          title={t("routes.no_profiles")}
+          description={t("routes.auto_created")}
+        />
       ) : (
         <div className="flex gap-6">
           {/* Profile selector (left) */}
@@ -248,13 +362,20 @@ export function Routes() {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-text-primary">{p.name}</span>
-                  <StatusBadge variant={p.mode === "failover" ? "accent" : "muted"}>
-                    {p.mode === "failover" ? t("routes.mode_failover") : t("routes.mode_manual")}
+                  <span className="text-sm font-medium text-text-primary">
+                    {p.name}
+                  </span>
+                  <StatusBadge
+                    variant={p.mode === "failover" ? "accent" : "muted"}
+                  >
+                    {p.mode === "failover"
+                      ? t("routes.mode_failover")
+                      : t("routes.mode_manual")}
                   </StatusBadge>
                 </div>
                 <p className="mt-1 text-[11px] text-text-muted">
-                  {protocolLabel(p.input_protocol)} · {p.providers_count} provider{p.providers_count !== 1 ? "s" : ""}
+                  {protocolLabel(p.input_protocol)} · {p.providers_count}{" "}
+                  provider{p.providers_count !== 1 ? "s" : ""}
                 </p>
               </button>
             ))}
@@ -277,14 +398,29 @@ export function Routes() {
                           className="form-input text-sm font-semibold"
                           autoFocus
                         />
-                        <button onClick={handleRename} className="rounded p-1 text-accent hover:bg-accent-soft"><Check className="h-3.5 w-3.5" /></button>
-                        <button onClick={() => setEditingName(false)} className="rounded p-1 text-text-muted hover:bg-border"><X className="h-3.5 w-3.5" /></button>
+                        <button
+                          onClick={handleRename}
+                          className="rounded p-1 text-accent hover:bg-accent-soft"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setEditingName(false)}
+                          className="rounded p-1 text-text-muted hover:bg-border"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-text-primary">{detail.profile.name}</h3>
+                        <h3 className="text-sm font-semibold text-text-primary">
+                          {detail.profile.name}
+                        </h3>
                         <button
-                          onClick={() => { setEditName(detail.profile.name); setEditingName(true); }}
+                          onClick={() => {
+                            setEditName(detail.profile.name);
+                            setEditingName(true);
+                          }}
                           className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary"
                         >
                           <Pencil className="h-3 w-3" />
@@ -298,24 +434,31 @@ export function Routes() {
                   <div className="flex flex-wrap items-center justify-end gap-2">
                     <div className="flex rounded-md border border-border bg-card-secondary p-0.5">
                       <button
-                        onClick={() => detail.profile.mode !== "manual" && handleToggleMode()}
+                        onClick={() =>
+                          detail.profile.mode !== "manual" && handleToggleMode()
+                        }
                         className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
                           detail.profile.mode === "manual"
                             ? "bg-card text-text-primary shadow-sm"
                             : "text-text-muted hover:text-text-primary"
                         }`}
                       >
-                        <Shield className="h-3 w-3" />{t("routes.mode_manual")}
+                        <Shield className="h-3 w-3" />
+                        {t("routes.mode_manual")}
                       </button>
                       <button
-                        onClick={() => detail.profile.mode !== "failover" && handleToggleMode()}
+                        onClick={() =>
+                          detail.profile.mode !== "failover" &&
+                          handleToggleMode()
+                        }
                         className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
                           detail.profile.mode === "failover"
                             ? "bg-card text-accent shadow-sm"
                             : "text-text-muted hover:text-text-primary"
                         }`}
                       >
-                        <Zap className="h-3 w-3" />{t("routes.mode_failover")}
+                        <Zap className="h-3 w-3" />
+                        {t("routes.mode_failover")}
                       </button>
                     </div>
                     {detail.profile.mode === "failover" && (
@@ -327,20 +470,31 @@ export function Routes() {
                           className="bg-transparent text-text-primary outline-none"
                           title={t("routes.strategy_hint")}
                         >
-                          <option value="priority">{t("routes.strategy_priority")}</option>
-                          <option value="cheapest">{t("routes.strategy_cheapest")}</option>
-                          <option value="fastest">{t("routes.strategy_fastest")}</option>
+                          <option value="priority">
+                            {t("routes.strategy_priority")}
+                          </option>
+                          <option value="cheapest">
+                            {t("routes.strategy_cheapest")}
+                          </option>
+                          <option value="fastest">
+                            {t("routes.strategy_fastest")}
+                          </option>
                         </select>
                       </label>
                     )}
-                    {!detail.profile.is_default && profiles.filter(p => p.input_protocol === detail.profile.input_protocol).length > 1 && (
-                      <button
-                        onClick={() => handleSetDefault(detail.profile.id)}
-                        className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-                      >
-                        <Star className="h-3 w-3" />{t("routes.set_default")}
-                      </button>
-                    )}
+                    {!detail.profile.is_default &&
+                      profiles.filter(
+                        (p) =>
+                          p.input_protocol === detail.profile.input_protocol
+                      ).length > 1 && (
+                        <button
+                          onClick={() => handleSetDefault(detail.profile.id)}
+                          className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+                        >
+                          <Star className="h-3 w-3" />
+                          {t("routes.set_default")}
+                        </button>
+                      )}
                     <button
                       onClick={() => setDeleteTarget(detail.profile)}
                       className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-error/20 hover:text-error"
@@ -356,22 +510,44 @@ export function Routes() {
                 <SummaryTile
                   label={t("routes.overview_protocol")}
                   value={protocolLabel(detail.profile.input_protocol)}
-                  hint={detail.profile.is_default ? t("routes.default_profile") : t("routes.custom_profile")}
+                  hint={
+                    detail.profile.is_default
+                      ? t("routes.default_profile")
+                      : t("routes.custom_profile")
+                  }
                 />
                 <SummaryTile
                   label={t("routes.overview_mode")}
-                  value={detail.profile.mode === "failover" ? t("routes.mode_failover") : t("routes.mode_manual")}
-                  hint={detail.profile.mode === "failover" ? t("routes.failover_hint") : t("routes.manual_hint")}
+                  value={
+                    detail.profile.mode === "failover"
+                      ? t("routes.mode_failover")
+                      : t("routes.mode_manual")
+                  }
+                  hint={
+                    detail.profile.mode === "failover"
+                      ? t("routes.failover_hint")
+                      : t("routes.manual_hint")
+                  }
                 />
                 <SummaryTile
                   label={t("routes.overview_primary")}
-                  value={detail.profile.active_provider_name ?? t("common.none")}
+                  value={
+                    detail.profile.active_provider_name ?? t("common.none")
+                  }
                   hint={t("routes.primary_hint")}
                 />
                 <SummaryTile
                   label={t("routes.overview_fallback")}
-                  value={detail.profile.mode === "failover" ? `${Math.max(detail.providers.length - 1, 0)} ${t("routes.fallback_count")}` : t("routes.not_enabled")}
-                  hint={detail.profile.mode === "failover" ? t("routes.fallback_hint") : t("routes.no_fallback_hint")}
+                  value={
+                    detail.profile.mode === "failover"
+                      ? `${Math.max(detail.providers.length - 1, 0)} ${t("routes.fallback_count")}`
+                      : t("routes.not_enabled")
+                  }
+                  hint={
+                    detail.profile.mode === "failover"
+                      ? t("routes.fallback_hint")
+                      : t("routes.no_fallback_hint")
+                  }
                 />
               </div>
 
@@ -402,30 +578,57 @@ export function Routes() {
               {/* Conditions */}
               <div className="rounded-xl border border-border bg-card p-5">
                 <div className="mb-3">
-                  <h4 className="text-xs font-semibold text-text-primary">{t("routes.conditions_section")}</h4>
-                  <p className="mt-0.5 text-[11px] text-text-muted">{t("routes.conditions_section_hint")}</p>
+                  <h4 className="text-xs font-semibold text-text-primary">
+                    {t("routes.conditions_section")}
+                  </h4>
+                  <p className="mt-0.5 text-[11px] text-text-muted">
+                    {t("routes.conditions_section_hint")}
+                  </p>
                 </div>
                 {detail.providers.some((rp) => rp.routing_conditions) ? (
                   <div className="space-y-2">
-                    {detail.providers.filter((rp) => rp.routing_conditions).map((rp) => (
-                      <div key={rp.id} className="flex items-center justify-between rounded-md border border-border/50 bg-card-secondary px-4 py-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-text-primary">{rp.provider_name}</p>
-                          <p className="mt-0.5 text-[11px] text-text-muted">{describeRoutingConditions(rp.routing_conditions, t)}</p>
-                        </div>
-                        <button
-                          onClick={() => {
-                            let current: RoutingConditions = {};
-                            try { if (rp.routing_conditions) current = JSON.parse(rp.routing_conditions); } catch {}
-                            setConditionsTarget({ profileId: detail.profile.id, providerId: rp.provider_id, providerName: rp.provider_name, inputProtocol: detail.profile.input_protocol, current });
-                          }}
-                          className="ml-3 rounded p-1 text-text-muted hover:bg-border hover:text-accent"
-                          title={t("routes.edit_conditions")}
+                    {detail.providers
+                      .filter((rp) => rp.routing_conditions)
+                      .map((rp) => (
+                        <div
+                          key={rp.id}
+                          className="flex items-center justify-between rounded-md border border-border/50 bg-card-secondary px-4 py-3"
                         >
-                          <Filter className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-text-primary">
+                              {rp.provider_name}
+                            </p>
+                            <p className="mt-0.5 text-[11px] text-text-muted">
+                              {describeRoutingConditions(
+                                rp.routing_conditions,
+                                t
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => {
+                              let current: RoutingConditions = {};
+                              try {
+                                if (rp.routing_conditions)
+                                  current = JSON.parse(rp.routing_conditions);
+                              } catch {
+                                /* 存储的条件 JSON 非法时回退为空条件 */
+                              }
+                              setConditionsTarget({
+                                profileId: detail.profile.id,
+                                providerId: rp.provider_id,
+                                providerName: rp.provider_name,
+                                inputProtocol: detail.profile.input_protocol,
+                                current,
+                              });
+                            }}
+                            className="ml-3 rounded p-1 text-text-muted hover:bg-border hover:text-accent"
+                            title={t("routes.edit_conditions")}
+                          >
+                            <Filter className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
                   </div>
                 ) : (
                   <p className="rounded-md border border-border/50 bg-card-secondary px-4 py-3 text-[11px] text-text-muted">
@@ -438,13 +641,20 @@ export function Routes() {
               <div className="rounded-xl border border-border bg-card p-5">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
-                    <h4 className="text-xs font-semibold text-text-primary">{t("routes.fallback_section")}</h4>
+                    <h4 className="text-xs font-semibold text-text-primary">
+                      {t("routes.fallback_section")}
+                    </h4>
                     <p className="mt-0.5 text-[11px] text-text-muted">
-                      {detail.profile.mode === "failover" ? t("routes.fallback_section_hint") : t("routes.fallback_disabled_hint")}
+                      {detail.profile.mode === "failover"
+                        ? t("routes.fallback_section_hint")
+                        : t("routes.fallback_disabled_hint")}
                     </p>
                   </div>
                   {detail.profile.mode === "failover" && (
-                    <StatusBadge variant="accent">{t("routes.strategy")}: {strategyLabel(detail.profile.selection_strategy, t)}</StatusBadge>
+                    <StatusBadge variant="accent">
+                      {t("routes.strategy")}:{" "}
+                      {strategyLabel(detail.profile.selection_strategy, t)}
+                    </StatusBadge>
                   )}
                 </div>
                 {detail.profile.mode === "failover" ? (
@@ -452,10 +662,17 @@ export function Routes() {
                     <div className="flex flex-wrap items-center gap-2">
                       {detail.providers.map((rp, idx) => (
                         <div key={rp.id} className="flex items-center gap-2">
-                          <span className={`rounded-md border px-3 py-1.5 text-xs ${idx === 0 ? "border-accent/30 bg-accent/5 text-accent" : "border-border bg-card-secondary text-text-secondary"}`}>
-                            {idx === 0 ? t("routes.primary_provider") : `${t("routes.fallback_provider")} ${idx}`} · {rp.provider_name}
+                          <span
+                            className={`rounded-md border px-3 py-1.5 text-xs ${idx === 0 ? "border-accent/30 bg-accent/5 text-accent" : "border-border bg-card-secondary text-text-secondary"}`}
+                          >
+                            {idx === 0
+                              ? t("routes.primary_provider")
+                              : `${t("routes.fallback_provider")} ${idx}`}{" "}
+                            · {rp.provider_name}
                           </span>
-                          {idx < detail.providers.length - 1 && <Route className="h-3.5 w-3.5 text-text-muted" />}
+                          {idx < detail.providers.length - 1 && (
+                            <Route className="h-3.5 w-3.5 text-text-muted" />
+                          )}
                         </div>
                       ))}
                     </div>
@@ -475,48 +692,93 @@ export function Routes() {
               <div className="rounded-xl border border-border bg-card p-5">
                 <div className="mb-3 flex items-center justify-between">
                   <div>
-                    <h4 className="text-xs font-semibold text-text-primary">{t("routes.provider_order")}</h4>
-                    <p className="mt-0.5 text-[11px] text-text-muted">{t("routes.provider_order_hint")}</p>
+                    <h4 className="text-xs font-semibold text-text-primary">
+                      {t("routes.provider_order")}
+                    </h4>
+                    <p className="mt-0.5 text-[11px] text-text-muted">
+                      {t("routes.provider_order_hint")}
+                    </p>
                   </div>
                   {detail.profile.active_provider_name && (
                     <span className="text-[11px] text-text-muted">
-                      {t("routes.active")}: <span className="text-text-primary">{detail.profile.active_provider_name}</span>
+                      {t("routes.active")}:{" "}
+                      <span className="text-text-primary">
+                        {detail.profile.active_provider_name}
+                      </span>
                     </span>
                   )}
                 </div>
                 <div className="space-y-2">
                   {detail.providers.map((rp, idx) => {
-                    const isActive = rp.provider_id === detail.profile.active_provider_id;
-                    const isCooldown = rp.cooldown_until && new Date(rp.cooldown_until) > new Date();
+                    const isActive =
+                      rp.provider_id === detail.profile.active_provider_id;
+                    const isCooldown =
+                      rp.cooldown_until &&
+                      new Date(rp.cooldown_until) > new Date();
                     return (
                       <div
                         key={rp.id}
                         className={`flex items-center justify-between rounded-md border px-4 py-3 ${
-                          isActive ? "border-accent/30 bg-accent/5" : "border-border/50 bg-card-secondary"
+                          isActive
+                            ? "border-accent/30 bg-accent/5"
+                            : "border-border/50 bg-card-secondary"
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <span className="w-5 text-center text-xs font-mono text-text-muted">{rp.priority}</span>
+                          <span className="w-5 text-center text-xs font-mono text-text-muted">
+                            {rp.priority}
+                          </span>
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-text-primary">{rp.provider_name}</span>
-                              {isActive && <StatusBadge variant="accent">{t("routes.active")}</StatusBadge>}
-                              {isCooldown && <StatusBadge variant="warning">{t("routes.cooldown")}</StatusBadge>}
+                              <span className="text-sm font-medium text-text-primary">
+                                {rp.provider_name}
+                              </span>
+                              {isActive && (
+                                <StatusBadge variant="accent">
+                                  {t("routes.active")}
+                                </StatusBadge>
+                              )}
+                              {isCooldown && (
+                                <StatusBadge variant="warning">
+                                  {t("routes.cooldown")}
+                                </StatusBadge>
+                              )}
                               {rp.consecutive_failures > 0 && (
-                                <StatusBadge variant="error">{rp.consecutive_failures} {t("routes.failures")}</StatusBadge>
+                                <StatusBadge variant="error">
+                                  {rp.consecutive_failures}{" "}
+                                  {t("routes.failures")}
+                                </StatusBadge>
                               )}
                               {(() => {
                                 const providerProtocols: string[] = (() => {
-                                  try { return JSON.parse(rp.provider_protocol); } catch { return [rp.provider_protocol]; }
+                                  try {
+                                    return JSON.parse(rp.provider_protocol);
+                                  } catch {
+                                    return [rp.provider_protocol];
+                                  }
                                 })();
-                                const inputProto = detail.profile.input_protocol;
+                                const inputProto =
+                                  detail.profile.input_protocol;
                                 const isTransparent =
-                                  (inputProto === "openai_chat_completions" && providerProtocols.includes("openai_chat_completions")) ||
-                                  (inputProto === "anthropic_messages" && rp.has_anthropic_url) ||
-                                  (inputProto === "openai_responses" && providerProtocols.includes("openai_responses"));
+                                  (inputProto === "openai_chat_completions" &&
+                                    providerProtocols.includes(
+                                      "openai_chat_completions"
+                                    )) ||
+                                  (inputProto === "anthropic_messages" &&
+                                    rp.has_anthropic_url) ||
+                                  (inputProto === "openai_responses" &&
+                                    providerProtocols.includes(
+                                      "openai_responses"
+                                    ));
                                 return (
-                                  <StatusBadge variant={isTransparent ? "muted" : "success"}>
-                                    {isTransparent ? t("routes.proxy_mode_transparent") : t("routes.proxy_mode_convert")}
+                                  <StatusBadge
+                                    variant={
+                                      isTransparent ? "muted" : "success"
+                                    }
+                                  >
+                                    {isTransparent
+                                      ? t("routes.proxy_mode_transparent")
+                                      : t("routes.proxy_mode_convert")}
                                   </StatusBadge>
                                 );
                               })()}
@@ -525,52 +787,128 @@ export function Routes() {
                                 legacyVision={rp.supports_vision}
                               />
                               {rp.routing_conditions && (
-                                <StatusBadge variant="success"><Filter className="inline h-2.5 w-2.5 mr-0.5" />{t("routes.has_conditions")}</StatusBadge>
+                                <StatusBadge variant="success">
+                                  <Filter className="inline h-2.5 w-2.5 mr-0.5" />
+                                  {t("routes.has_conditions")}
+                                </StatusBadge>
                               )}
                             </div>
                             <p className="text-[11px] text-text-muted">
                               {rp.provider_type}
-                              {rp.model_override && <> · model: {rp.model_override}</>}
-                              {rp.routing_conditions && (() => {
-                                try {
-                                  const c: RoutingConditions = JSON.parse(rp.routing_conditions);
-                                  const parts: string[] = [];
-                                  if (c.has_images === true) parts.push("images");
-                                  if (c.has_tools === true) parts.push("tools");
-                                  if (c.min_input_chars) parts.push(`≥${(c.min_input_chars/1000).toFixed(0)}K chars`);
-                                  if (c.system_keywords?.length) parts.push(`keywords: ${c.system_keywords.join(",")}`);
-                                  if (c.model_override) parts.push(`→ ${c.model_override}`);
-                                  return parts.length > 0 ? <> · <span className="text-accent">{parts.join(" + ")}</span></> : null;
-                                } catch { return <> · <span className="text-error">{t("routes.invalid_conditions")}</span></>; }
-                              })()}
+                              {rp.model_override && (
+                                <> · model: {rp.model_override}</>
+                              )}
+                              {rp.routing_conditions &&
+                                (() => {
+                                  try {
+                                    const c: RoutingConditions = JSON.parse(
+                                      rp.routing_conditions
+                                    );
+                                    const parts: string[] = [];
+                                    if (c.has_images === true)
+                                      parts.push("images");
+                                    if (c.has_tools === true)
+                                      parts.push("tools");
+                                    if (c.min_input_chars)
+                                      parts.push(
+                                        `≥${(c.min_input_chars / 1000).toFixed(0)}K chars`
+                                      );
+                                    if (c.system_keywords?.length)
+                                      parts.push(
+                                        `keywords: ${c.system_keywords.join(",")}`
+                                      );
+                                    if (c.model_override)
+                                      parts.push(`→ ${c.model_override}`);
+                                    return parts.length > 0 ? (
+                                      <>
+                                        {" "}
+                                        ·{" "}
+                                        <span className="text-accent">
+                                          {parts.join(" + ")}
+                                        </span>
+                                      </>
+                                    ) : null;
+                                  } catch {
+                                    return (
+                                      <>
+                                        {" "}
+                                        ·{" "}
+                                        <span className="text-error">
+                                          {t("routes.invalid_conditions")}
+                                        </span>
+                                      </>
+                                    );
+                                  }
+                                })()}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <button onClick={() => {
-                            let current: RoutingConditions = {};
-                            try { if (rp.routing_conditions) current = JSON.parse(rp.routing_conditions); } catch {}
-                            setConditionsTarget({ profileId: detail.profile.id, providerId: rp.provider_id, providerName: rp.provider_name, inputProtocol: detail.profile.input_protocol, current });
-                          }} className="rounded p-1 text-text-muted hover:bg-border hover:text-accent" title={t("routes.edit_conditions")}>
+                          <button
+                            onClick={() => {
+                              let current: RoutingConditions = {};
+                              try {
+                                if (rp.routing_conditions)
+                                  current = JSON.parse(rp.routing_conditions);
+                              } catch {
+                                /* 存储的条件 JSON 非法时回退为空条件 */
+                              }
+                              setConditionsTarget({
+                                profileId: detail.profile.id,
+                                providerId: rp.provider_id,
+                                providerName: rp.provider_name,
+                                inputProtocol: detail.profile.input_protocol,
+                                current,
+                              });
+                            }}
+                            className="rounded p-1 text-text-muted hover:bg-border hover:text-accent"
+                            title={t("routes.edit_conditions")}
+                          >
                             <Filter className="h-3.5 w-3.5" />
                           </button>
                           {!isActive && (
-                            <button onClick={() => handleSetActive(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary" title={t("routes.set_active")}>
+                            <button
+                              onClick={() => handleSetActive(rp.provider_id)}
+                              className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary"
+                              title={t("routes.set_active")}
+                            >
                               <Star className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <button onClick={() => handleReorder(rp.provider_id, "up")} disabled={idx === 0} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30" title={t("routes.move_up")}>
+                          <button
+                            onClick={() => handleReorder(rp.provider_id, "up")}
+                            disabled={idx === 0}
+                            className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30"
+                            title={t("routes.move_up")}
+                          >
                             <ChevronUp className="h-3.5 w-3.5" />
                           </button>
-                          <button onClick={() => handleReorder(rp.provider_id, "down")} disabled={idx === detail.providers.length - 1} className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30" title={t("routes.move_down")}>
+                          <button
+                            onClick={() =>
+                              handleReorder(rp.provider_id, "down")
+                            }
+                            disabled={idx === detail.providers.length - 1}
+                            className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary disabled:opacity-30"
+                            title={t("routes.move_down")}
+                          >
                             <ChevronDown className="h-3.5 w-3.5" />
                           </button>
                           {isCooldown && (
-                            <button onClick={() => handleResetCooldown(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-border hover:text-warning" title={t("routes.reset_cooldown")}>
+                            <button
+                              onClick={() =>
+                                handleResetCooldown(rp.provider_id)
+                              }
+                              className="rounded p-1 text-text-muted hover:bg-border hover:text-warning"
+                              title={t("routes.reset_cooldown")}
+                            >
                               <RotateCcw className="h-3.5 w-3.5" />
                             </button>
                           )}
-                          <button onClick={() => handleRemoveProvider(rp.provider_id)} className="rounded p-1 text-text-muted hover:bg-error/20 hover:text-error" title={t("common.delete")}>
+                          <button
+                            onClick={() => handleRemoveProvider(rp.provider_id)}
+                            className="rounded p-1 text-text-muted hover:bg-error/20 hover:text-error"
+                            title={t("common.delete")}
+                          >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -582,19 +920,31 @@ export function Routes() {
                 {/* Add provider */}
                 {availableProviders.length > 0 && (
                   <div className="mt-3 flex items-center gap-2">
-                    <select value={addProviderId} onChange={(e) => setAddProviderId(e.target.value)} className="form-input flex-1">
-                      <option value="" disabled>{t("routes.add_provider")}</option>
+                    <select
+                      value={addProviderId}
+                      onChange={(e) => setAddProviderId(e.target.value)}
+                      className="form-input flex-1"
+                    >
+                      <option value="" disabled>
+                        {t("routes.add_provider")}
+                      </option>
                       {availableProviders.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
                       ))}
                     </select>
                     <button
                       onClick={() => {
-                        if (addProviderId) { handleAddProvider(addProviderId); setAddProviderId(""); }
+                        if (addProviderId) {
+                          handleAddProvider(addProviderId);
+                          setAddProviderId("");
+                        }
                       }}
                       className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
                     >
-                      <Plus className="h-3 w-3" />{t("routes.add")}
+                      <Plus className="h-3 w-3" />
+                      {t("routes.add")}
                     </button>
                   </div>
                 )}
@@ -619,15 +969,24 @@ export function Routes() {
         <ConditionsDialog
           target={conditionsTarget}
           onSave={async (conditions) => {
-            const json = Object.values(conditions).some(v => v != null && v !== "" && !(Array.isArray(v) && v.length === 0))
+            const json = Object.values(conditions).some(
+              (v) =>
+                v != null && v !== "" && !(Array.isArray(v) && v.length === 0)
+            )
               ? JSON.stringify(conditions)
               : null;
             try {
-              await api.updateRouteProviderConditions(conditionsTarget.profileId, conditionsTarget.providerId, json);
+              await api.updateRouteProviderConditions(
+                conditionsTarget.profileId,
+                conditionsTarget.providerId,
+                json
+              );
               toast("success", t("routes.conditions_saved"));
               setConditionsTarget(null);
               load();
-            } catch (err) { toast("error", (err as api.AppError).message); }
+            } catch (err) {
+              toast("error", (err as api.AppError).message);
+            }
           }}
           onClose={() => setConditionsTarget(null)}
         />
@@ -643,7 +1002,9 @@ function formatPercent(value: number | undefined): string {
 
 function formatStatLatency(value: number | undefined): string {
   if (!value) return "0 ms";
-  return value >= 1000 ? `${(value / 1000).toFixed(1)} s` : `${Math.round(value)} ms`;
+  return value >= 1000
+    ? `${(value / 1000).toFixed(1)} s`
+    : `${Math.round(value)} ms`;
 }
 
 function formatCost(value: number | undefined): string {
@@ -657,22 +1018,38 @@ function strategyLabel(strategy: string, t: (key: string) => string): string {
   return t("routes.strategy_priority");
 }
 
-function describeRoutingConditions(json: string | null, t: (key: string) => string): string {
+function describeRoutingConditions(
+  json: string | null,
+  t: (key: string) => string
+): string {
   if (!json) return t("routes.no_conditions_summary");
   try {
     const c: RoutingConditions = JSON.parse(json);
     const parts: string[] = [];
-    if (c.has_images === true) parts.push(t("routes.condition_images_required"));
-    if (c.has_images === false) parts.push(t("routes.condition_images_excluded"));
+    if (c.has_images === true)
+      parts.push(t("routes.condition_images_required"));
+    if (c.has_images === false)
+      parts.push(t("routes.condition_images_excluded"));
     if (c.has_tools === true) parts.push(t("routes.condition_tools_required"));
     if (c.has_tools === false) parts.push(t("routes.condition_tools_excluded"));
-    if (c.min_input_chars) parts.push(`${t("routes.condition_min_chars")} ${(c.min_input_chars / 1000).toFixed(0)}K`);
-    if (c.max_input_chars) parts.push(`${t("routes.condition_max_chars")} ${(c.max_input_chars / 1000).toFixed(0)}K`);
-    if (c.system_keywords?.length) parts.push(`${t("routes.condition_keywords")} ${c.system_keywords.join(", ")}`);
-    if (c.model_override) parts.push(`${t("routes.condition_use_model")} ${c.model_override}`);
-    return parts.length > 0 ? parts.join(" · ") : t("routes.no_conditions_summary");
+    if (c.min_input_chars)
+      parts.push(
+        `${t("routes.condition_min_chars")} ${(c.min_input_chars / 1000).toFixed(0)}K`
+      );
+    if (c.max_input_chars)
+      parts.push(
+        `${t("routes.condition_max_chars")} ${(c.max_input_chars / 1000).toFixed(0)}K`
+      );
+    if (c.system_keywords?.length)
+      parts.push(
+        `${t("routes.condition_keywords")} ${c.system_keywords.join(", ")}`
+      );
+    if (c.model_override)
+      parts.push(`${t("routes.condition_use_model")} ${c.model_override}`);
+    return parts.length > 0
+      ? parts.join(" · ")
+      : t("routes.no_conditions_summary");
   } catch {
     return t("routes.invalid_conditions");
   }
 }
-

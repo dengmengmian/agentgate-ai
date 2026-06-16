@@ -1,0 +1,9 @@
+dist
+node_modules
+src-tauri/target
+src/lib/bindings.ts
+pnpm-lock.yaml
+provider-catalog
+site
+agentgate-promo
+*.md
