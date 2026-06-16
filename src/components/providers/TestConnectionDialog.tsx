@@ -56,8 +56,11 @@ export function TestConnectionDialog({ provider, onClose, onSuccess }: Props) {
   // 导致 useEffect 依赖变了重跑测试。useEffect 只跟 provider.id 走。
   const onCloseRef = useRef(onClose);
   const onSuccessRef = useRef(onSuccess);
-  onCloseRef.current = onClose;
-  onSuccessRef.current = onSuccess;
+  // 在 effect 里同步最新回调,避免在 render 期间写 ref.current(react-hooks/refs)
+  useEffect(() => {
+    onCloseRef.current = onClose;
+    onSuccessRef.current = onSuccess;
+  });
 
   useEffect(() => {
     if (!provider) return;
