@@ -7,9 +7,6 @@ on:
       - 'site/**'
       - '.github/workflows/pages.yml'
       - 'package.json'
-  # 发版后自动重新部署一次,把新版本号写进 JSON-LD softwareVersion。
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
