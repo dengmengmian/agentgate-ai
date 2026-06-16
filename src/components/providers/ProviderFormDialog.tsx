@@ -510,9 +510,7 @@ export function ProviderFormDialog({
                         next[i] = e.target.value;
                         setApiKeys(next);
                       }}
-                      placeholder={
-                        i === 0 ? "sk-... / tp-..." : `Key ${i + 1}`
-                      }
+                      placeholder={i === 0 ? "sk-... / tp-..." : `Key ${i + 1}`}
                       className="form-input pr-10"
                     />
                     <button
