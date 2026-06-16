@@ -24,7 +24,7 @@ export function AboutTab({ appVersion, t }: Props) {
       <div className="mt-4 flex gap-2">
         <CheckUpdateButton t={t} />
         <a
-          href="https://github.com/dengmengmian/AgentGate"
+          href="https://github.com/dengmengmian/agentgate-ai"
           target="_blank"
           rel="noopener noreferrer"
           className="btn-secondary"

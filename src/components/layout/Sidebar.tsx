@@ -198,13 +198,17 @@ export function Sidebar() {
 
       {/* Footer */}
       {!collapsed && (
-        <div className="border-t border-border px-5 py-3">
-          <p className="text-[11px] font-medium text-text-secondary">
-            {t("nav.footer_tagline")}
-          </p>
-          <p className="mt-1 text-[11px] text-text-muted">
-            {version ? `v${version} · MIT` : "MIT"}
-          </p>
+        <div className="border-t border-border px-5 py-3.5">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[11px] font-medium text-text-secondary">
+              AgentGate
+            </span>
+            {version && (
+              <span className="rounded bg-hover px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
+                v{version}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </aside>
