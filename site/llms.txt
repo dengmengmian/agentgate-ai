@@ -1,0 +1,46 @@
+# AgentGate
+
+> AgentGate is a local AI gateway for model requests from AI apps and clients. It runs on the user's machine and helps route requests to upstream model providers, trace requests locally, fail over between providers, and keep client configuration reversible.
+
+Website: https://dengmengmian.github.io/agentgate-ai/
+Repository: https://github.com/dengmengmian/agentgate-ai
+Releases: https://github.com/dengmengmian/agentgate-ai/releases
+Sitemap: https://dengmengmian.github.io/agentgate-ai/sitemap.xml
+
+## Core Pages
+
+- [AgentGate homepage](https://dengmengmian.github.io/agentgate-ai/): Local AI gateway for AI model requests.
+- [中文首页](https://dengmengmian.github.io/agentgate-ai/zh/): AgentGate 中文介绍页。
+- [Use Codex with DeepSeek](https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-deepseek/): Route Codex requests to DeepSeek through AgentGate.
+- [Use Claude Code with DeepSeek](https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-deepseek/): Route Claude Code requests to DeepSeek through AgentGate.
+- [Use Codex with OpenRouter](https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-openrouter/): Use AgentGate as the local endpoint for Codex and OpenRouter.
+- [Use Claude Code with OpenRouter](https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-openrouter/): Use AgentGate as the local endpoint for Claude Code and OpenRouter.
+- [Trace Codex requests](https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/): Inspect Codex routing, provider choice, token usage, cost, errors, and failover locally.
+- [Local AI gateway](https://dengmengmian.github.io/agentgate-ai/guides/local-ai-gateway/): Explain AgentGate as a local gateway for routing, tracing, failover, and rollback.
+
+## Comparisons
+
+- [AgentGate vs LiteLLM](https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-litellm/): AgentGate is better for local desktop AI app workflows and reversible client config; LiteLLM is better for server-side proxy infrastructure.
+- [AgentGate vs OpenRouter](https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-openrouter/): AgentGate runs locally and can route to OpenRouter; OpenRouter is a hosted model routing provider.
+- [AgentGate vs direct provider config](https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-direct-provider-config/): Direct provider config is fine for one app and one provider; AgentGate is better for switching, tracing, failover, and rollback.
+
+## Chinese Pages
+
+- [通过 AgentGate 让 Codex 使用 DeepSeek](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-deepseek/)
+- [通过 AgentGate 让 Claude Code 使用 DeepSeek](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-deepseek/)
+- [通过 AgentGate 让 Codex 使用 OpenRouter](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-openrouter/)
+- [通过 AgentGate 让 Claude Code 使用 OpenRouter](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-openrouter/)
+- [本地追踪 Codex 模型请求](https://dengmengmian.github.io/agentgate-ai/zh/guides/trace-codex-requests/)
+- [本地 AI 网关](https://dengmengmian.github.io/agentgate-ai/zh/guides/local-ai-gateway/)
+- [AgentGate vs LiteLLM](https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-litellm/)
+- [AgentGate vs OpenRouter](https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-openrouter/)
+- [AgentGate vs 直接 Provider 配置](https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-direct-provider-config/)
+
+## Facts
+
+- AgentGate is open source under the MIT license.
+- AgentGate is local-first and runs on macOS, Windows, and Linux.
+- AgentGate is not a hosted API reseller.
+- Users bring their own provider keys.
+- AgentGate is designed for AI apps and clients, not only coding tools.
+- Supported workflows include Codex, Claude Code, Gemini CLI, OpenCode, AtomCode, and OpenAI-compatible, Anthropic-compatible, or Gemini-compatible model requests.

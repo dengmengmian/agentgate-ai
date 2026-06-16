@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Use Codex with OpenRouter through AgentGate | AgentGate</title>
+    <meta name="description" content="Point Codex at AgentGate and route requests to OpenRouter or other OpenAI-compatible providers from one local gateway." />
+    <meta name="keywords" content="Codex OpenRouter, use Codex with OpenRouter, OpenRouter local gateway, Codex proxy" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-openrouter/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-openrouter/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-openrouter/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-openrouter/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-openrouter/" />
+    <meta property="og:title" content="Use Codex with OpenRouter through AgentGate" />
+    <meta property="og:description" content="Point Codex at AgentGate and route requests to OpenRouter or other OpenAI-compatible providers from one local gateway." />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Use Codex with OpenRouter through AgentGate" />
+    <meta name="twitter:description" content="Point Codex at AgentGate and route requests to OpenRouter or other OpenAI-compatible providers from one local gateway." />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Use Codex with OpenRouter through AgentGate",
+  "description": "Point Codex at AgentGate and route requests to OpenRouter or other OpenAI-compatible providers from one local gateway.",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-openrouter/"
+}</script>
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Can I use other OpenAI-compatible providers too?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. AgentGate is designed to manage multiple upstream providers from a local gateway."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Do I need to change Codex again later?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Usually no. Keep Codex pointed at AgentGate and change routes inside AgentGate."
+      }
+    }
+  ]
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../assets/tailwind.css" />
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">download <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../zh/guides/use-codex-with-openrouter/" class="hover:text-ink">中文</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/use-codex-with-openrouter</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">Codex + OpenRouter</p>
+          <h1 class="h-display mt-5 text-ink">Use Codex with OpenRouter through AgentGate.</h1>
+          <p class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate gives Codex one local endpoint and lets you choose OpenRouter, DeepSeek, OpenAI, or another upstream provider per route.</p>
+          <div class="mt-8 max-w-2xl border-l-2 border-amber/50 pl-4">
+            <div class="text-xs uppercase tracking-wider text-amber">direct answer</div>
+            <p class="mt-3 text-base leading-relaxed text-ink">Short answer: AgentGate gives Codex one local endpoint and lets you choose OpenRouter, DeepSeek, OpenAI, or another upstream provider per route.</p>
+          </div>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>Download AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto grid max-w-4xl gap-8 px-6 py-16 md:grid-cols-[1fr_260px]">
+          <article class="space-y-8">
+            <section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Best fit</h2>
+              <ul class="mt-4 list-disc space-y-2 pl-5">
+                <li class="leading-relaxed text-ink-soft">You want AI apps to keep one stable local endpoint.</li>
+<li class="leading-relaxed text-ink-soft">You need provider switching, request logs, cost visibility, or failover.</li>
+<li class="leading-relaxed text-ink-soft">You want client config changes to be reversible.</li>
+              </ul>
+            </section>
+            <section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Not ideal</h2>
+              <ul class="mt-4 list-disc space-y-2 pl-5">
+                <li class="leading-relaxed text-ink-soft">You use one client, one provider, and the setup rarely changes.</li>
+<li class="leading-relaxed text-ink-soft">You do not need logs, failover, cost tracking, or config rollback.</li>
+              </ul>
+            </section>
+            <section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Why not edit Codex every time</h2>
+              <p class="mt-4 leading-relaxed text-ink-soft">Provider experiments are easier when Codex points to one stable local gateway. AgentGate keeps that local endpoint stable while route profiles decide the upstream provider.</p>
+            </section>
+<section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Setup path</h2>
+              <p class="mt-4 leading-relaxed text-ink-soft">Create or enable an OpenRouter provider, set the API key, choose a model, then apply the Codex config in AgentGate. Requests should appear in the logs with the selected upstream.</p>
+            </section>
+<section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Routing flexibility</h2>
+              <p class="mt-4 leading-relaxed text-ink-soft">You can keep OpenRouter as the default route, add failover providers, or create separate profiles for different clients and tasks.</p>
+            </section>
+          </article>
+
+          <aside class="space-y-4 text-sm">
+            <div class="frame rounded p-5">
+              <div class="text-xs uppercase tracking-wider text-amber">search intent</div>
+              <p class="mt-3 text-ink-soft">Point Codex at AgentGate and route requests to OpenRouter or other OpenAI-compatible providers from one local gateway.</p>
+            </div>
+            <div class="frame rounded p-5">
+              <div class="text-xs uppercase tracking-wider text-amber">quick links</div>
+              <div class="mt-3 space-y-2">
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai/releases/latest">Latest release <span class="text-faint">↗</span></a>
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">GitHub <span class="text-faint">↗</span></a>
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="../../">Home</a>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --faq</div>
+          <h2 class="h-section mt-4">FAQ.</h2>
+          <div class="mt-10 space-y-4">
+            <details class="frame rounded p-5">
+              <summary class="cursor-pointer text-ink">Can I use other OpenAI-compatible providers too?</summary>
+              <p class="mt-3 leading-relaxed text-ink-soft">Yes. AgentGate is designed to manage multiple upstream providers from a local gateway.</p>
+            </details>
+<details class="frame rounded p-5">
+              <summary class="cursor-pointer text-ink">Do I need to change Codex again later?</summary>
+              <p class="mt-3 leading-relaxed text-ink-soft">Usually no. Keep Codex pointed at AgentGate and change routes inside AgentGate.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="mt-4 text-xl font-medium">Keep reading.</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-with-deepseek/">Codex + DeepSeek <span class="text-faint">— Use Codex with DeepSeek through a local AI gateway</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-deepseek/">Claude Code + DeepSeek <span class="text-faint">— Use Claude Code with DeepSeek through AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— Use Claude Code with OpenRouter through a local gateway</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../trace-codex-requests/">Request tracing <span class="text-faint">— Trace Codex model requests locally with AgentGate</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>local AI model gateway</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

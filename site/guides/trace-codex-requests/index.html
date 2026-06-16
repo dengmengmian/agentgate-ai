@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trace Codex model requests locally with AgentGate | AgentGate</title>
+    <meta name="description" content="Use AgentGate to see where Codex requests went, which provider handled them, token usage, cost, errors, and failover decisions." />
+    <meta name="keywords" content="trace Codex requests, Codex request logs, Codex cost tracking, local AI gateway logs" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/trace-codex-requests/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/" />
+    <meta property="og:title" content="Trace Codex model requests locally with AgentGate" />
+    <meta property="og:description" content="Use AgentGate to see where Codex requests went, which provider handled them, token usage, cost, errors, and failover decisions." />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Trace Codex model requests locally with AgentGate" />
+    <meta name="twitter:description" content="Use AgentGate to see where Codex requests went, which provider handled them, token usage, cost, errors, and failover decisions." />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Trace Codex model requests locally with AgentGate",
+  "description": "Use AgentGate to see where Codex requests went, which provider handled them, token usage, cost, errors, and failover decisions.",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/"
+}</script>
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Are logs stored remotely?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. AgentGate is local-first and stores request traces locally."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Can I debug failed provider calls?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes. The logs and diagnostics pages are designed for exactly that workflow."
+      }
+    }
+  ]
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../assets/tailwind.css" />
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">download <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../zh/guides/trace-codex-requests/" class="hover:text-ink">中文</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/trace-codex-requests</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">Request tracing</p>
+          <h1 class="h-display mt-5 text-ink">Trace Codex model requests locally.</h1>
+          <p class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate records Codex request routing, provider choice, errors, token usage, and cost in a local dashboard.</p>
+          <div class="mt-8 max-w-2xl border-l-2 border-amber/50 pl-4">
+            <div class="text-xs uppercase tracking-wider text-amber">direct answer</div>
+            <p class="mt-3 text-base leading-relaxed text-ink">Short answer: AgentGate records Codex request routing, provider choice, errors, token usage, and cost in a local dashboard.</p>
+          </div>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>Download AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto grid max-w-4xl gap-8 px-6 py-16 md:grid-cols-[1fr_260px]">
+          <article class="space-y-8">
+            <section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Best fit</h2>
+              <ul class="mt-4 list-disc space-y-2 pl-5">
+                <li class="leading-relaxed text-ink-soft">You want AI apps to keep one stable local endpoint.</li>
+<li class="leading-relaxed text-ink-soft">You need provider switching, request logs, cost visibility, or failover.</li>
+<li class="leading-relaxed text-ink-soft">You want client config changes to be reversible.</li>
+              </ul>
+            </section>
+            <section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Not ideal</h2>
+              <ul class="mt-4 list-disc space-y-2 pl-5">
+                <li class="leading-relaxed text-ink-soft">You use one client, one provider, and the setup rarely changes.</li>
+<li class="leading-relaxed text-ink-soft">You do not need logs, failover, cost tracking, or config rollback.</li>
+              </ul>
+            </section>
+            <section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">The problem</h2>
+              <p class="mt-4 leading-relaxed text-ink-soft">When a client talks directly to a provider, failed requests and cost spikes are hard to inspect. AgentGate makes the request path visible before it leaves your machine.</p>
+            </section>
+<section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">What AgentGate records</h2>
+              <p class="mt-4 leading-relaxed text-ink-soft">You can inspect route profile, upstream provider, model, status, latency, token usage, estimated cost, and failover behavior when available.</p>
+            </section>
+<section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">How to use it</h2>
+              <p class="mt-4 leading-relaxed text-ink-soft">Apply the Codex config, run a request, then open the Logs page. Filter by client or provider to understand which route handled the request.</p>
+            </section>
+          </article>
+
+          <aside class="space-y-4 text-sm">
+            <div class="frame rounded p-5">
+              <div class="text-xs uppercase tracking-wider text-amber">search intent</div>
+              <p class="mt-3 text-ink-soft">Use AgentGate to see where Codex requests went, which provider handled them, token usage, cost, errors, and failover decisions.</p>
+            </div>
+            <div class="frame rounded p-5">
+              <div class="text-xs uppercase tracking-wider text-amber">quick links</div>
+              <div class="mt-3 space-y-2">
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai/releases/latest">Latest release <span class="text-faint">↗</span></a>
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">GitHub <span class="text-faint">↗</span></a>
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="../../">Home</a>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --faq</div>
+          <h2 class="h-section mt-4">FAQ.</h2>
+          <div class="mt-10 space-y-4">
+            <details class="frame rounded p-5">
+              <summary class="cursor-pointer text-ink">Are logs stored remotely?</summary>
+              <p class="mt-3 leading-relaxed text-ink-soft">No. AgentGate is local-first and stores request traces locally.</p>
+            </details>
+<details class="frame rounded p-5">
+              <summary class="cursor-pointer text-ink">Can I debug failed provider calls?</summary>
+              <p class="mt-3 leading-relaxed text-ink-soft">Yes. The logs and diagnostics pages are designed for exactly that workflow.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="mt-4 text-xl font-medium">Keep reading.</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-with-deepseek/">Codex + DeepSeek <span class="text-faint">— Use Codex with DeepSeek through a local AI gateway</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-deepseek/">Claude Code + DeepSeek <span class="text-faint">— Use Claude Code with DeepSeek through AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— Use Codex with OpenRouter through AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— Use Claude Code with OpenRouter through a local gateway</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>local AI model gateway</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

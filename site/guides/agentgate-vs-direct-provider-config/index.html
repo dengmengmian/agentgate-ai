@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentGate vs direct provider config for AI apps | AgentGate</title>
+    <meta name="description" content="Compare using AgentGate with editing each AI app provider config directly. Learn when a local gateway is simpler and safer." />
+    <meta name="keywords" content="AI app provider config, local AI gateway vs direct config, AgentGate comparison, model provider switching" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-direct-provider-config/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-direct-provider-config/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-direct-provider-config/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-direct-provider-config/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-direct-provider-config/" />
+    <meta property="og:title" content="AgentGate vs direct provider config for AI apps" />
+    <meta property="og:description" content="Compare using AgentGate with editing each AI app provider config directly. Learn when a local gateway is simpler and safer." />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="AgentGate vs direct provider config for AI apps" />
+    <meta name="twitter:description" content="Compare using AgentGate with editing each AI app provider config directly. Learn when a local gateway is simpler and safer." />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "AgentGate vs direct provider config for AI apps",
+  "description": "Compare using AgentGate with editing each AI app provider config directly. Learn when a local gateway is simpler and safer.",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-direct-provider-config/"
+}</script>
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Is direct config wrong?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. It is the simplest path for a single stable setup."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Why add a gateway?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A gateway becomes useful when provider choice, logs, failover, and rollback matter."
+      }
+    }
+  ]
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../assets/tailwind.css" />
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">download <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../zh/guides/agentgate-vs-direct-provider-config/" class="hover:text-ink">中文</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/agentgate-vs-direct-provider-config</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">Gateway vs direct config</p>
+          <h1 class="h-display mt-5 text-ink">AgentGate vs direct provider config.</h1>
+          <p class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">Direct provider config is fine for one app and one provider. AgentGate is better when you switch providers, need request logs, want failover, or care about safe rollback.</p>
+          <div class="mt-8 max-w-2xl border-l-2 border-amber/50 pl-4">
+            <div class="text-xs uppercase tracking-wider text-amber">direct answer</div>
+            <p class="mt-3 text-base leading-relaxed text-ink">Short answer: Direct provider config is fine for one app and one provider. AgentGate is better when you switch providers, need request logs, want failover, or care about safe rollback.</p>
+          </div>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>Download AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto grid max-w-4xl gap-8 px-6 py-16 md:grid-cols-[1fr_260px]">
+          <article class="space-y-8">
+            <section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Best fit</h2>
+              <ul class="mt-4 list-disc space-y-2 pl-5">
+                <li class="leading-relaxed text-ink-soft">You need to decide where AgentGate fits compared with another option.</li>
+<li class="leading-relaxed text-ink-soft">You are choosing between local AI app routing, hosted routing, or direct provider config.</li>
+<li class="leading-relaxed text-ink-soft">You want clear trade-offs instead of a feature list.</li>
+              </ul>
+            </section>
+            <section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Not ideal</h2>
+              <ul class="mt-4 list-disc space-y-2 pl-5">
+                <li class="leading-relaxed text-ink-soft">You already know which tool you will use and only need API reference.</li>
+<li class="leading-relaxed text-ink-soft">You do not need local client workflow or provider-routing trade-offs.</li>
+              </ul>
+            </section>
+            <section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">The short difference</h2>
+              <p class="mt-4 leading-relaxed text-ink-soft">Direct config changes each client separately. AgentGate keeps clients pointed at one local endpoint and moves provider decisions into one local dashboard.</p>
+            </section>
+<section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Choose AgentGate when</h2>
+              <p class="mt-4 leading-relaxed text-ink-soft">You have multiple AI apps, multiple providers, cost tracking needs, or a workflow where breaking a client config would waste time.</p>
+            </section>
+<section class="frame rounded p-6">
+              <h2 class="text-xl font-medium text-ink">Choose direct config when</h2>
+              <p class="mt-4 leading-relaxed text-ink-soft">You only use one client with one provider and do not need request tracing, failover, local history, or quick rollback.</p>
+            </section>
+          </article>
+
+          <aside class="space-y-4 text-sm">
+            <div class="frame rounded p-5">
+              <div class="text-xs uppercase tracking-wider text-amber">search intent</div>
+              <p class="mt-3 text-ink-soft">Compare using AgentGate with editing each AI app provider config directly. Learn when a local gateway is simpler and safer.</p>
+            </div>
+            <div class="frame rounded p-5">
+              <div class="text-xs uppercase tracking-wider text-amber">quick links</div>
+              <div class="mt-3 space-y-2">
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai/releases/latest">Latest release <span class="text-faint">↗</span></a>
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">GitHub <span class="text-faint">↗</span></a>
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="../../">Home</a>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --faq</div>
+          <h2 class="h-section mt-4">FAQ.</h2>
+          <div class="mt-10 space-y-4">
+            <details class="frame rounded p-5">
+              <summary class="cursor-pointer text-ink">Is direct config wrong?</summary>
+              <p class="mt-3 leading-relaxed text-ink-soft">No. It is the simplest path for a single stable setup.</p>
+            </details>
+<details class="frame rounded p-5">
+              <summary class="cursor-pointer text-ink">Why add a gateway?</summary>
+              <p class="mt-3 leading-relaxed text-ink-soft">A gateway becomes useful when provider choice, logs, failover, and rollback matter.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="mt-4 text-xl font-medium">Keep reading.</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-with-deepseek/">Codex + DeepSeek <span class="text-faint">— Use Codex with DeepSeek through a local AI gateway</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-deepseek/">Claude Code + DeepSeek <span class="text-faint">— Use Claude Code with DeepSeek through AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— Use Codex with OpenRouter through AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— Use Claude Code with OpenRouter through a local gateway</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>local AI model gateway</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

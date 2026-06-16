@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentGate vs LiteLLM：本地桌面网关还是 API 代理 | AgentGate</title>
+    <meta name="description" content="对比 AgentGate 和 LiteLLM 在本地 AI 应用路由、客户端配置回滚、请求追踪、Provider 故障转移和协议兼容上的差异。" />
+    <meta name="keywords" content="AgentGate vs LiteLLM, LiteLLM 替代, 本地 AI 网关, AI 代理对比, 模型网关对比" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-litellm/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-litellm/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-litellm/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-litellm/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-litellm/" />
+    <meta property="og:title" content="AgentGate vs LiteLLM：本地桌面网关还是 API 代理" />
+    <meta property="og:description" content="对比 AgentGate 和 LiteLLM 在本地 AI 应用路由、客户端配置回滚、请求追踪、Provider 故障转移和协议兼容上的差异。" />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="AgentGate vs LiteLLM：本地桌面网关还是 API 代理" />
+    <meta name="twitter:description" content="对比 AgentGate 和 LiteLLM 在本地 AI 应用路由、客户端配置回滚、请求追踪、Provider 故障转移和协议兼容上的差异。" />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "AgentGate vs LiteLLM：本地桌面网关还是 API 代理",
+  "description": "对比 AgentGate 和 LiteLLM 在本地 AI 应用路由、客户端配置回滚、请求追踪、Provider 故障转移和协议兼容上的差异。",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-litellm/"
+}</script>
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "AgentGate 是 LiteLLM 替代品吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "不完全是。两者在 Provider 路由上有重叠，但 AgentGate 更偏本地客户端工作流。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "它们能一起用吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "可以。AgentGate 可以负责本地客户端链路，上游仍然可以接已有的网关基础设施。"
+      }
+    }
+  ]
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../../assets/tailwind.css" />
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">下载 <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../../guides/agentgate-vs-litellm/" class="hover:text-ink">English</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/agentgate-vs-litellm</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">AgentGate vs LiteLLM</p>
+          <h1 class="zh h-display mt-5 text-ink">AgentGate vs LiteLLM。</h1>
+          <p class="zh mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">如果你需要面向 AI 应用的本地桌面网关和可回滚客户端配置，AgentGate 更合适；如果你要给多个服务提供统一 API 代理层，LiteLLM 更合适。</p>
+          <div class="mt-8 max-w-2xl border-l-2 border-amber/50 pl-4">
+            <div class="text-xs uppercase tracking-wider text-amber">直接答案</div>
+            <p class="zh mt-3 text-base leading-relaxed text-ink">简短答案：如果你需要面向 AI 应用的本地桌面网关和可回滚客户端配置，AgentGate 更合适；如果你要给多个服务提供统一 API 代理层，LiteLLM 更合适。</p>
+          </div>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>下载 AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto grid max-w-4xl gap-8 px-6 py-16 md:grid-cols-[1fr_260px]">
+          <article class="space-y-8">
+            <section class="frame rounded p-6">
+              <h2 class="zh text-xl font-medium text-ink">适合场景</h2>
+              <ul class="zh mt-4 list-disc space-y-2 pl-5">
+                <li class="leading-relaxed text-ink-soft">你需要判断 AgentGate 和另一种方案的边界。</li>
+<li class="leading-relaxed text-ink-soft">你在本地 AI 应用、Provider 路由和请求追踪之间做选择。</li>
+<li class="leading-relaxed text-ink-soft">你想知道什么时候该用本地网关，什么时候不该用。</li>
+              </ul>
+            </section>
+            <section class="frame rounded p-6">
+              <h2 class="zh text-xl font-medium text-ink">不适合场景</h2>
+              <ul class="zh mt-4 list-disc space-y-2 pl-5">
+                <li class="leading-relaxed text-ink-soft">你已经确定只使用一种方案，不需要对比取舍。</li>
+<li class="leading-relaxed text-ink-soft">你只想看完整 API 参考，而不是选择建议。</li>
+              </ul>
+            </section>
+            <section class="frame rounded p-6">
+              <h2 class="zh text-xl font-medium text-ink">一句话区别</h2>
+              <p class="zh mt-4 leading-relaxed text-ink-soft">AgentGate 更关注本地应用工作流：应用客户端配置、路由模型请求、查看日志、安全回滚。LiteLLM 更关注给团队和服务使用的可编程代理网关。</p>
+            </section>
+<section class="frame rounded p-6">
+              <h2 class="zh text-xl font-medium text-ink">什么时候选 AgentGate</h2>
+              <p class="zh mt-4 leading-relaxed text-ink-soft">你使用 AI 桌面应用或客户端，需要本地请求历史、快速 Provider 切换，并且希望一键恢复客户端配置，而不是维护一套独立代理服务。</p>
+            </section>
+<section class="frame rounded p-6">
+              <h2 class="zh text-xl font-medium text-ink">什么时候选 LiteLLM</h2>
+              <p class="zh mt-4 leading-relaxed text-ink-soft">你需要给多个应用部署统一代理、做更复杂的服务端策略，或者把网关作为基础设施来管理。</p>
+            </section>
+          </article>
+
+          <aside class="space-y-4 text-sm">
+            <div class="frame rounded p-5">
+              <div class="text-xs uppercase tracking-wider text-amber">适合搜索</div>
+              <p class="zh mt-3 text-ink-soft">对比 AgentGate 和 LiteLLM 在本地 AI 应用路由、客户端配置回滚、请求追踪、Provider 故障转移和协议兼容上的差异。</p>
+            </div>
+            <div class="frame rounded p-5">
+              <div class="text-xs uppercase tracking-wider text-amber">快速入口</div>
+              <div class="mt-3 space-y-2">
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai/releases/latest">下载最新版 <span class="text-faint">↗</span></a>
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">GitHub <span class="text-faint">↗</span></a>
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="../../">回到首页</a>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --faq</div>
+          <h2 class="zh h-section mt-4">常见问题。</h2>
+          <div class="mt-10 space-y-4">
+            <details class="frame rounded p-5">
+              <summary class="zh cursor-pointer text-ink">AgentGate 是 LiteLLM 替代品吗？</summary>
+              <p class="zh mt-3 leading-relaxed text-ink-soft">不完全是。两者在 Provider 路由上有重叠，但 AgentGate 更偏本地客户端工作流。</p>
+            </details>
+<details class="frame rounded p-5">
+              <summary class="zh cursor-pointer text-ink">它们能一起用吗？</summary>
+              <p class="zh mt-3 leading-relaxed text-ink-soft">可以。AgentGate 可以负责本地客户端链路，上游仍然可以接已有的网关基础设施。</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="zh mt-4 text-xl font-medium">继续看。</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-with-deepseek/">Codex + DeepSeek <span class="text-faint">— 通过本地 AI 网关让 Codex 使用 DeepSeek</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-claude-code-with-deepseek/">Claude Code + DeepSeek <span class="text-faint">— 通过 AgentGate 让 Claude Code 使用 DeepSeek</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— 通过 AgentGate 让 Codex 使用 OpenRouter</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— 通过本地网关让 Claude Code 使用 OpenRouter</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>本地 AI 模型网关</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

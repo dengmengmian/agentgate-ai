@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>用 AgentGate 本地追踪 Codex 模型请求 | AgentGate</title>
+    <meta name="description" content="通过 AgentGate 查看 Codex 请求去了哪里、由哪个 Provider 处理、Token 用量、成本、错误和故障转移决策。" />
+    <meta name="keywords" content="追踪 Codex 请求, Codex 请求日志, Codex 成本统计, AI 本地网关日志" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/trace-codex-requests/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/trace-codex-requests/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/zh/guides/trace-codex-requests/" />
+    <meta property="og:title" content="用 AgentGate 本地追踪 Codex 模型请求" />
+    <meta property="og:description" content="通过 AgentGate 查看 Codex 请求去了哪里、由哪个 Provider 处理、Token 用量、成本、错误和故障转移决策。" />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="用 AgentGate 本地追踪 Codex 模型请求" />
+    <meta name="twitter:description" content="通过 AgentGate 查看 Codex 请求去了哪里、由哪个 Provider 处理、Token 用量、成本、错误和故障转移决策。" />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "用 AgentGate 本地追踪 Codex 模型请求",
+  "description": "通过 AgentGate 查看 Codex 请求去了哪里、由哪个 Provider 处理、Token 用量、成本、错误和故障转移决策。",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/zh/guides/trace-codex-requests/"
+}</script>
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "日志会上传吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "不会。AgentGate 是本地优先，追踪数据保存在本地。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "能排查 Provider 调用失败吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "可以。日志和诊断页就是为这类排查准备的。"
+      }
+    }
+  ]
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../../assets/tailwind.css" />
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">下载 <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../../guides/trace-codex-requests/" class="hover:text-ink">English</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/trace-codex-requests</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">请求追踪</p>
+          <h1 class="zh h-display mt-5 text-ink">本地追踪 Codex 模型请求。</h1>
+          <p class="zh mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate 在本地记录 Codex 请求的路由、Provider、错误、Token 用量和成本。</p>
+          <div class="mt-8 max-w-2xl border-l-2 border-amber/50 pl-4">
+            <div class="text-xs uppercase tracking-wider text-amber">直接答案</div>
+            <p class="zh mt-3 text-base leading-relaxed text-ink">简短答案：AgentGate 在本地记录 Codex 请求的路由、Provider、错误、Token 用量和成本。</p>
+          </div>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>下载 AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto grid max-w-4xl gap-8 px-6 py-16 md:grid-cols-[1fr_260px]">
+          <article class="space-y-8">
+            <section class="frame rounded p-6">
+              <h2 class="zh text-xl font-medium text-ink">适合场景</h2>
+              <ul class="zh mt-4 list-disc space-y-2 pl-5">
+                <li class="leading-relaxed text-ink-soft">你想让 AI 应用保持一个稳定的本地入口。</li>
+<li class="leading-relaxed text-ink-soft">你需要切换 Provider、查看请求日志或统计成本。</li>
+<li class="leading-relaxed text-ink-soft">你希望客户端配置可以安全恢复。</li>
+              </ul>
+            </section>
+            <section class="frame rounded p-6">
+              <h2 class="zh text-xl font-medium text-ink">不适合场景</h2>
+              <ul class="zh mt-4 list-disc space-y-2 pl-5">
+                <li class="leading-relaxed text-ink-soft">你只用一个客户端、一个 Provider，且配置长期不变。</li>
+<li class="leading-relaxed text-ink-soft">你不需要日志、故障转移、成本统计或配置回滚。</li>
+              </ul>
+            </section>
+            <section class="frame rounded p-6">
+              <h2 class="zh text-xl font-medium text-ink">问题</h2>
+              <p class="zh mt-4 leading-relaxed text-ink-soft">客户端直接连 Provider 时，请求失败、成本异常和路由结果都不容易看清。AgentGate 让请求离开本机前先变得可观察。</p>
+            </section>
+<section class="frame rounded p-6">
+              <h2 class="zh text-xl font-medium text-ink">AgentGate 会记录什么</h2>
+              <p class="zh mt-4 leading-relaxed text-ink-soft">你可以看到路由策略、上游 Provider、模型、状态码、延迟、Token 用量、估算成本，以及可用时的故障转移行为。</p>
+            </section>
+<section class="frame rounded p-6">
+              <h2 class="zh text-xl font-medium text-ink">怎么用</h2>
+              <p class="zh mt-4 leading-relaxed text-ink-soft">对 Codex 执行 apply，发起一次请求，然后打开日志页。按客户端或 Provider 过滤，就能看清是哪条路由处理了请求。</p>
+            </section>
+          </article>
+
+          <aside class="space-y-4 text-sm">
+            <div class="frame rounded p-5">
+              <div class="text-xs uppercase tracking-wider text-amber">适合搜索</div>
+              <p class="zh mt-3 text-ink-soft">通过 AgentGate 查看 Codex 请求去了哪里、由哪个 Provider 处理、Token 用量、成本、错误和故障转移决策。</p>
+            </div>
+            <div class="frame rounded p-5">
+              <div class="text-xs uppercase tracking-wider text-amber">快速入口</div>
+              <div class="mt-3 space-y-2">
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai/releases/latest">下载最新版 <span class="text-faint">↗</span></a>
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">GitHub <span class="text-faint">↗</span></a>
+                <a class="hover-prompt block text-ink-soft hover:text-ink" href="../../">回到首页</a>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --faq</div>
+          <h2 class="zh h-section mt-4">常见问题。</h2>
+          <div class="mt-10 space-y-4">
+            <details class="frame rounded p-5">
+              <summary class="zh cursor-pointer text-ink">日志会上传吗？</summary>
+              <p class="zh mt-3 leading-relaxed text-ink-soft">不会。AgentGate 是本地优先，追踪数据保存在本地。</p>
+            </details>
+<details class="frame rounded p-5">
+              <summary class="zh cursor-pointer text-ink">能排查 Provider 调用失败吗？</summary>
+              <p class="zh mt-3 leading-relaxed text-ink-soft">可以。日志和诊断页就是为这类排查准备的。</p>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="zh mt-4 text-xl font-medium">继续看。</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-with-deepseek/">Codex + DeepSeek <span class="text-faint">— 通过本地 AI 网关让 Codex 使用 DeepSeek</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-claude-code-with-deepseek/">Claude Code + DeepSeek <span class="text-faint">— 通过 AgentGate 让 Claude Code 使用 DeepSeek</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— 通过 AgentGate 让 Codex 使用 OpenRouter</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— 通过本地网关让 Claude Code 使用 OpenRouter</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>本地 AI 模型网关</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
