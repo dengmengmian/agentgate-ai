@@ -132,20 +132,33 @@ fn send_system_notification(status: CcStatus, app_handle: &tauri::AppHandle) {
         return;
     };
 
-    #[cfg(target_os = "macos")]
-    {
-        if send_macos_system_notification("Claude Code", body).is_ok() {
-            return;
-        }
-    }
-
-    if let Err(e) = app_handle
+    let tauri_result = app_handle
         .notification()
         .builder()
         .title("Claude Code")
         .body(body)
-        .show()
+        .show();
+
+    #[cfg(target_os = "macos")]
     {
+        // In `tauri dev`, the notification plugin routes through Terminal and
+        // reports success before macOS actually displays anything. Keep a
+        // dev-only AppleScript fallback so the hook remains testable locally.
+        if tauri::is_dev() {
+            if let Err(e) = send_macos_system_notification("Claude Code", body) {
+                eprintln!("[cc-notify] dev fallback notification failed: {e}");
+            }
+            return;
+        }
+    }
+
+    if let Err(e) = tauri_result {
+        #[cfg(target_os = "macos")]
+        {
+            if send_macos_system_notification("Claude Code", body).is_ok() {
+                return;
+            }
+        }
         eprintln!("[cc-notify] show system notification failed: {e}");
     }
 }

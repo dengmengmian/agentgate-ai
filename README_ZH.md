@@ -21,6 +21,10 @@
 </p>
 
 <p align="center">
+  GitHub：<a href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+</p>
+
+<p align="center">
   <img src="docs/demo-header-v2.gif" width="800" alt="AgentGate 在本地网关截获 Claude Code、Codex、Gemini CLI 的请求——转换 / 直连 / 路由 / 故障转移到 26 家上游，每条请求都在本地可追踪">
 </p>
 

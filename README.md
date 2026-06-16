@@ -21,6 +21,10 @@
 </p>
 
 <p align="center">
+  GitHub: <a href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+</p>
+
+<p align="center">
   <img src="docs/demo-header-v2.gif" width="800" alt="AgentGate intercepts requests from Claude Code, Codex, and Gemini CLI at a local gateway — converting, passing through, routing, or failing over to 26 providers, with every request traced live">
 </p>
 
