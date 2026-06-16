@@ -55,6 +55,8 @@ export default tseslint.config(
     rules: {
       // 测试里会故意构造常量假值(如 false && "x")验证函数行为
       "no-constant-binary-expression": "off",
+      // 测试 mock 大量用 any 构造桩数据,属合理用法,不当技术债
+      "@typescript-eslint/no-explicit-any": "off",
     },
   }
 );

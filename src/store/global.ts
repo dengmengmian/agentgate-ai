@@ -49,7 +49,7 @@ interface ValueSlice<T> {
 
 // ── providers ──────────────────────────────────────────────────────
 
-interface ProvidersStore extends ListSlice<ProviderView> {}
+type ProvidersStore = ListSlice<ProviderView>;
 
 /// 防重入用的模块级 in-flight promise——zustand state 内放 promise 会触发不必要
 /// 的订阅者重渲染，所以单独放在模块作用域。每个 slice 一个。
@@ -99,7 +99,7 @@ export const useProviders = create<ProvidersStore>((set, get) => ({
 
 // ── gateway settings ───────────────────────────────────────────────
 
-interface GatewaySettingsStore extends ValueSlice<GatewaySettings> {}
+type GatewaySettingsStore = ValueSlice<GatewaySettings>;
 
 let gatewaySettingsInflight: Promise<void> | null = null;
 
@@ -198,7 +198,7 @@ export const usePricing = create<PricingStore>((set, get) => ({
 
 // ── route profiles ─────────────────────────────────────────────────
 
-interface RouteProfilesStore extends ListSlice<RouteProfileView> {}
+type RouteProfilesStore = ListSlice<RouteProfileView>;
 
 let routeProfilesInflight: Promise<void> | null = null;
 

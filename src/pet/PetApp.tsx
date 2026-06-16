@@ -94,8 +94,6 @@ export function PetApp() {
   // 当前窗口"展开偏移量"。onMoved 写 DB 时反向加回去,
   // 保证持久化的位置永远是 idle(未扩展)窗口的左上角。
   const expansionRef = useRef(0);
-  // 仅在轮询/交互回调里写入(不在 render 读),初值用 0 避免 render 期调用 Date.now()
-  const lastActivityRef = useRef(0);
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const lastErrorTsRef = useRef("");
   const bubbleKeyRef = useRef(0);
@@ -210,7 +208,6 @@ export function PetApp() {
           setGatewayState((prev) => {
             if (prev !== info.state) {
               setIsSleeping(false);
-              lastActivityRef.current = Date.now();
               if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
               sleepTimerRef.current = setTimeout(
                 () => setIsSleeping(true),
@@ -300,7 +297,6 @@ export function PetApp() {
 
   const resetSleepTimer = useCallback(() => {
     setIsSleeping(false);
-    lastActivityRef.current = Date.now();
     if (sleepTimerRef.current) clearTimeout(sleepTimerRef.current);
     sleepTimerRef.current = setTimeout(
       () => setIsSleeping(true),
