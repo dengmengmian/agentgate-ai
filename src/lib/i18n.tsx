@@ -24,6 +24,7 @@ const translations: Record<string, Record<Locale, string>> = {
   "nav.settings": { en: "Settings", zh: "设置" },
   "nav.collapse": { en: "Collapse sidebar", zh: "折叠侧边栏" },
   "nav.expand": { en: "Expand sidebar", zh: "展开侧边栏" },
+  "nav.footer_tagline": { en: "Local AI gateway", zh: "本地 AI 网关" },
 
   // ── Command palette ──
   "cmdk.placeholder": {

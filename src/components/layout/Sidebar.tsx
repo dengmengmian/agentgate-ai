@@ -199,8 +199,11 @@ export function Sidebar() {
       {/* Footer */}
       {!collapsed && (
         <div className="border-t border-border px-5 py-3">
-          <p className="text-[11px] text-text-muted">
-            {version ? `v${version}` : ""}
+          <p className="text-[11px] font-medium text-text-secondary">
+            {t("nav.footer_tagline")}
+          </p>
+          <p className="mt-1 text-[11px] text-text-muted">
+            {version ? `v${version} · MIT` : "MIT"}
           </p>
         </div>
       )}
