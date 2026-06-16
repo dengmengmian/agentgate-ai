@@ -5,8 +5,8 @@
 <h1 align="center">AgentGate</h1>
 
 <p align="center">
-  <b>接管 AI 编程工具的请求链路。</b><br>
-  AgentGate 是面向 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 的本地 AI 网关，提供桌面应用与无头 CLI/Docker 两种形态。它把每一次请求路由到你选择的模型，在供应商故障时自动切换，本地完整追踪每一次请求，并打通 OpenAI、Anthropic、Gemini 以及任意 OpenAI 兼容供应商之间的协议差异。
+  <b>一个本地入口，统一管理你的 AI 模型请求。</b><br>
+  AgentGate 是面向 AI 应用和客户端的本地 AI 网关，支持 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode，也可接入兼容 OpenAI、Anthropic、Gemini 协议的应用。它把每一次请求路由到你选择的模型，在供应商故障时自动切换，本地完整追踪每一次请求，并打通不同协议与任意 OpenAI 兼容供应商之间的差异。
 </p>
 
 <p align="center">
@@ -38,11 +38,11 @@
 
 ## 为什么用 AgentGate
 
-| 官方体验不变 | 模型路由归你管 | 请求链路看得见 |
+| 官方体验不变 | 模型路由归你管 | 每次请求看得见 |
 |:---|:---|:---|
 | 保留 Codex / Claude Code / Gemini CLI / OpenCode / AtomCode 原有使用方式，并支持一键恢复官方配置。 | 官方客户端请求先进入 AgentGate，再由本地决定协议转换、原生直连、Provider 和模型。 | 每次请求的路由、转换、上游错误、Token、成本、延迟和失败转移都在本地可追踪。 |
 
-AgentGate 不是托管 API 分发平台，也不是普通代理。它是坐在 AI 编程工具前面的本地网关——每一次模型请求都先进入 AgentGate，再由你决定路由、转换、故障转移还是原生直连。
+AgentGate 不是托管 API 分发平台，也不是普通代理。它是 AI 模型请求的本地入口——每一次模型请求都先进入 AgentGate，再由你决定路由、转换、故障转移还是原生直连。
 
 ## 5 分钟跑通
 

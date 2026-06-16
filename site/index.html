@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AgentGate — Take control of AI coding requests</title>
+    <title>AgentGate — One local gateway for AI model requests</title>
     <meta
       name="description"
-      content="AgentGate intercepts model requests from Codex, Claude Code, Gemini CLI, OpenCode, and AtomCode. Locally converts protocols or passes through to 26 upstream providers. Keeps original client experience intact, with config rollback, cost tracking, and request tracing."
+      content="AgentGate is a local model gateway for AI apps and clients. Locally converts protocols or passes through to 26 upstream providers, while keeping client behavior intact with config rollback, cost tracking, and request tracing."
     />
     <meta
       name="keywords"
-      content="AI agent gateway, Codex DeepSeek, Claude Code DeepSeek, Claude Code Copilot, local LLM proxy, Codex MiMo, Gemini CLI proxy, OpenAI Responses API, Anthropic Messages API, agentgate"
+      content="AI model gateway, AI app gateway, Codex DeepSeek, Claude Code DeepSeek, Claude Code Copilot, local LLM proxy, Codex MiMo, Gemini CLI proxy, OpenAI Responses API, Anthropic Messages API, agentgate"
     />
     <meta name="author" content="dengmengmian" />
 
@@ -46,11 +46,11 @@
     />
     <meta
       property="og:title"
-      content="AgentGate — Take control of AI coding requests"
+      content="AgentGate — One local gateway for AI model requests"
     />
     <meta
       property="og:description"
-      content="Local model gateway for Codex, Claude Code, Gemini CLI, OpenCode, AtomCode. 26 providers, protocol conversion, native pass-through, request tracing — all local."
+      content="Local model gateway for AI apps and clients. 26 providers, protocol conversion, native pass-through, request tracing — all local."
     />
     <meta
       property="og:image"
@@ -63,11 +63,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="AgentGate — Take control of AI coding requests"
+      content="AgentGate — One local gateway for AI model requests"
     />
     <meta
       name="twitter:description"
-      content="Local model gateway for Codex, Claude Code, Gemini CLI, OpenCode, AtomCode. 26 providers, protocol conversion, native pass-through, request tracing — all local."
+      content="Local model gateway for AI apps and clients. 26 providers, protocol conversion, native pass-through, request tracing — all local."
     />
     <meta
       name="twitter:image"
@@ -82,7 +82,7 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "AgentGate",
-        "description": "Local model gateway for AI coding agents — Codex, Claude Code, Gemini CLI, OpenCode, AtomCode. Protocol conversion, native pass-through, multi-provider routing.",
+        "description": "Local model gateway for AI apps and clients — Codex, Claude Code, Gemini CLI, OpenCode, AtomCode, and apps compatible with OpenAI, Anthropic, or Gemini protocols. Protocol conversion, native pass-through, multi-provider routing.",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS, Windows, Linux",
         "offers": {
@@ -167,30 +167,30 @@
 
         <!-- hero title -->
         <h1 class="h-display mt-16 text-ink">
-          Take control of<br />
-          <span class="text-ink-soft">AI coding</span> requests<span
+          One local gateway for<br />
+          <span class="text-ink-soft">AI model</span> requests<span
             class="cursor"
           ></span>.
         </h1>
 
         <p class="comment-zh zh mt-6 max-w-2xl">
-          接管 AI 编程工具的请求链路。
+          一个本地入口，统一管理你的 AI 模型请求。
         </p>
 
         <p class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">
-          AgentGate is a local AI gateway for Codex, Claude Code, Gemini CLI,
-          OpenCode, and AtomCode — desktop app or headless CLI/Docker. It routes
-          each request to the model you choose, fails over automatically when a
-          provider breaks, traces everything locally, and bridges protocol
-          differences across OpenAI, Anthropic, Gemini, and any OpenAI-compatible
-          provider.
+          AgentGate is a local AI gateway for AI apps and clients, including
+          Codex, Claude Code, Gemini CLI, OpenCode, AtomCode, and apps compatible
+          with OpenAI, Anthropic, or Gemini protocols. It routes each request to
+          the model you choose, fails over automatically when a provider breaks,
+          traces everything locally, and bridges protocol differences across
+          OpenAI-compatible providers.
         </p>
 
         <!-- clients → providers diagram -->
         <div class="mt-12 max-w-3xl space-y-2 text-sm leading-relaxed">
           <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span class="text-faint">$</span>
-            <span class="text-ink-soft">clients</span>
+            <span class="text-ink-soft">AI apps</span>
             <span class="text-amber">→</span>
             <span class="text-ink">Codex</span>
             <span class="text-faint">·</span>
@@ -299,7 +299,7 @@
               <span class="text-faint">#</span> your model entry
             </div>
             <p class="mt-4 text-base text-ink">
-              The official API enters AgentGate. You decide protocol
+              Model requests enter AgentGate. You decide protocol
               conversion, passthrough, provider, and model — 26 providers,
               multi-key rotation, automatic failover. All locally.
             </p>
@@ -329,12 +329,12 @@
         <div class="reveal mt-16 border-l-2 border-amber/40 pl-4 text-sm">
           <p class="text-ink-soft">
             AgentGate is not a hosted API reseller. It is a local-first
-            desktop workbench for people who use coding agents and want
-            provider flexibility — without breaking client-specific behavior.
+            desktop entry point for AI model requests. It gives you provider
+            flexibility without breaking client-specific behavior.
           </p>
           <p class="comment-zh zh mt-2">
             不是托管 API
-            分发平台，是给编程 agent 用户的本地桌面工作台。要 provider 自由，又不愿客户端特定能力被破坏。
+            分发平台，是 AI 模型请求的本地桌面入口。要 provider 自由，又不愿客户端原有能力被破坏。
           </p>
         </div>
       </div>

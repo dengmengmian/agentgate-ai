@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AgentGate — 接管 AI 编程工具的请求链路</title>
+    <title>AgentGate — 统一管理你的 AI 模型请求</title>
     <meta
       name="description"
-      content="AgentGate 接管 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 等客户端的模型请求，本地决定转换或直连到 26 家上游 Provider。保留原有工具体验，附带配置回滚、成本统计和请求追踪。"
+      content="AgentGate 是 AI 应用和客户端的本地模型网关。本地决定协议转换、原生直连、Provider 路由和模型选择，保留原有客户端体验，附带配置回滚、成本统计和请求追踪。"
     />
     <meta
       name="keywords"
-      content="AI Agent 本地网关, Codex DeepSeek, Claude Code DeepSeek, Claude Code Copilot, 本地 LLM 代理, Codex MiMo, Gemini CLI, OpenAI Responses API, Anthropic Messages API, agentgate, 编程 agent 网关"
+      content="AI 本地网关, AI 模型请求, Codex DeepSeek, Claude Code DeepSeek, Claude Code Copilot, 本地 LLM 代理, Codex MiMo, Gemini CLI, OpenAI Responses API, Anthropic Messages API, agentgate"
     />
     <meta name="author" content="dengmengmian" />
 
@@ -46,11 +46,11 @@
     />
     <meta
       property="og:title"
-      content="AgentGate — 接管 AI 编程工具的请求链路"
+      content="AgentGate — 统一管理你的 AI 模型请求"
     />
     <meta
       property="og:description"
-      content="给 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 用的本地模型网关。26 个 Provider，协议转换、原生直连、请求追踪 —— 全在你本机。"
+      content="给 AI 应用和客户端用的本地模型网关。26 个 Provider，协议转换、原生直连、请求追踪 —— 全在你本机。"
     />
     <meta
       property="og:image"
@@ -63,11 +63,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="AgentGate — 接管 AI 编程工具的请求链路"
+      content="AgentGate — 统一管理你的 AI 模型请求"
     />
     <meta
       name="twitter:description"
-      content="给 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 用的本地模型网关。26 个 Provider，协议转换、原生直连、请求追踪 —— 全在你本机。"
+      content="给 AI 应用和客户端用的本地模型网关。26 个 Provider，协议转换、原生直连、请求追踪 —— 全在你本机。"
     />
     <meta
       name="twitter:image"
@@ -82,7 +82,7 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "AgentGate",
-        "description": "给 AI 编程 agent 用的本地模型网关 —— Codex、Claude Code、Gemini CLI、OpenCode、AtomCode。协议转换、原生直连、多 Provider 路由。",
+        "description": "给 AI 应用和客户端用的本地模型网关 —— 支持 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode，以及兼容 OpenAI、Anthropic、Gemini 协议的应用。协议转换、原生直连、多 Provider 路由。",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS, Windows, Linux",
         "offers": {
@@ -166,25 +166,25 @@
 
         <!-- hero title -->
         <h1 class="h-display zh mt-16 text-ink">
-          接管 AI 编程工具的<br />
-          <span class="text-ink-soft">请求链路</span><span
+          一个本地入口，统一管理<br />
+          <span class="text-ink-soft">你的 AI 模型请求</span><span
             class="cursor"
           ></span>。
         </h1>
 
         <p class="comment-zh zh mt-6 max-w-2xl">
-          // Take control of AI coding requests.
+          // One local gateway for your AI model requests.
         </p>
 
         <p class="zh mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">
-          AgentGate 是面向 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode 的本地 AI 网关，提供桌面应用与无头 CLI/Docker 两种形态。它把每一次请求路由到你选择的模型，在供应商故障时自动切换，本地完整追踪每一次请求，并打通 OpenAI、Anthropic、Gemini 以及任意 OpenAI 兼容供应商之间的协议差异。
+          AgentGate 是面向 AI 应用和客户端的本地 AI 网关，支持 Codex、Claude Code、Gemini CLI、OpenCode、AtomCode，也可接入兼容 OpenAI、Anthropic、Gemini 协议的应用。它把每一次请求路由到你选择的模型，在供应商故障时自动切换，本地完整追踪每一次请求，并打通不同协议与任意 OpenAI 兼容供应商之间的差异。
         </p>
 
         <!-- clients → providers diagram -->
         <div class="mt-12 max-w-3xl space-y-2 text-sm leading-relaxed">
           <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span class="text-faint">$</span>
-            <span class="text-ink-soft zh">客户端</span>
+            <span class="text-ink-soft zh">AI 应用</span>
             <span class="text-amber">→</span>
             <span class="text-ink">Codex</span>
             <span class="text-faint">·</span>
@@ -290,7 +290,7 @@
               <span class="zh">模型路由归你管</span>
             </div>
             <p class="zh mt-4 text-base text-ink">
-              官方接口进 AgentGate,本地决定转换协议、直连上游、选择 Provider 和模型。26 家 provider,多 key 轮询,故障自动切换 —— 全程跑在你自己的机器上。
+              AI 应用的模型请求进 AgentGate,本地决定转换协议、直连上游、选择 Provider 和模型。26 家 provider,多 key 轮询,故障自动切换 —— 全程跑在你自己的机器上。
             </p>
             <p class="comment-zh mt-3">
               // Official API enters AgentGate. You decide — locally.
@@ -301,7 +301,7 @@
           <article class="reveal frame rounded p-6 md:p-8">
             <div class="text-xs uppercase tracking-wider text-amber">
               <span class="text-faint">#</span>
-              <span class="zh">请求链路看得见</span>
+              <span class="zh">每次请求看得见</span>
             </div>
             <p class="zh mt-4 text-base text-ink">
               每次请求的路由、转换、错误、Token、成本和故障转移都在本地面板可追踪。哪条请求花了多少、跑到哪、为什么转移,都有据可查。
@@ -315,8 +315,8 @@
         <!-- positioning blurb -->
         <div class="reveal mt-16 border-l-2 border-amber/40 pl-4 text-sm">
           <p class="zh text-ink-soft">
-            AgentGate 不是托管 API 分发平台,而是给编程 agent 用户准备的本地桌面工作台。
-            要 provider 自由,又不愿客户端特定能力被破坏。
+            AgentGate 不是托管 API 分发平台,而是 AI 模型请求的本地桌面入口。
+            要 provider 自由,又不愿客户端原有能力被破坏。
           </p>
           <p class="comment-zh mt-2">
             // Not a hosted API reseller — a local-first desktop workbench.
