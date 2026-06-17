@@ -52,3 +52,95 @@ pub fn import_config_json(
         .map_err(|_| AppError::internal("DB lock failed"))?;
     storage::config_backups::import(&mut conn, &payload)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use r2d2::Pool;
+    use r2d2_sqlite::SqliteConnectionManager;
+
+    use super::*;
+    use crate::app::state::AppState;
+    use crate::models::provider::CreateProviderInput;
+    use crate::storage;
+
+    fn test_state() -> AppState {
+        let manager = SqliteConnectionManager::memory();
+        let pool = Pool::builder().max_size(1).build(manager).unwrap();
+        {
+            let conn = pool.get().unwrap();
+            crate::storage::migrations::run_migrations(&conn).unwrap();
+        }
+        AppState {
+            db: pool,
+            gateway_runtime: Arc::new(Mutex::new(
+                crate::models::gateway::GatewayRuntimeState::default(),
+            )),
+            pet_click_through: Arc::new(Mutex::new(false)),
+        }
+    }
+
+    unsafe fn as_state<'r>(state: &'r AppState) -> tauri::State<'r, AppState> {
+        std::mem::transmute(state)
+    }
+
+    fn seed_provider(state: &AppState) {
+        let conn = state.db.get().unwrap();
+        storage::providers::create(
+            &conn,
+            CreateProviderInput {
+                name: "ExportProvider".to_string(),
+                provider_type: "openai".to_string(),
+                base_url: "https://api.openai.com".to_string(),
+                api_key: Some("sk-secret".to_string()),
+                default_model: "gpt-4".to_string(),
+                protocol: r#"["openai_chat_completions"]"#.to_string(),
+                timeout_seconds: Some(120),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn export_config_json_strips_secrets_by_default() {
+        let state = test_state();
+        seed_provider(&state);
+        let json = export_config_json(false, unsafe { as_state(&state) }).unwrap();
+        let export: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let provider = export["providers"].as_array().unwrap().iter().find(|p| p["name"] == "ExportProvider").unwrap();
+        assert!(provider["api_key"].is_null());
+    }
+
+    #[test]
+    fn export_config_json_includes_secrets_when_requested() {
+        let state = test_state();
+        seed_provider(&state);
+        let json = export_config_json(true, unsafe { as_state(&state) }).unwrap();
+        let export: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let provider = export["providers"].as_array().unwrap().iter().find(|p| p["name"] == "ExportProvider").unwrap();
+        assert_eq!(provider["api_key"].as_str().unwrap(), "sk-secret");
+    }
+
+    #[test]
+    fn import_config_json_round_trips() {
+        let state = test_state();
+        seed_provider(&state);
+        let json = export_config_json(true, unsafe { as_state(&state) }).unwrap();
+
+        let summary = import_config_json(json, unsafe { as_state(&state) }).unwrap();
+        assert!(summary.providers_imported > 0);
+        assert!(summary.secrets_applied);
+
+        let providers = storage::providers::list_all(&state.db.get().unwrap()).unwrap();
+        assert!(providers.iter().any(|p| p.name == "ExportProvider" && p.api_key.as_deref() == Some("sk-secret")));
+    }
+
+    #[test]
+    fn import_config_json_rejects_invalid_json() {
+        let state = test_state();
+        let err = import_config_json("not json".to_string(), unsafe { as_state(&state) }).unwrap_err();
+        assert_eq!(err.code, "CONFIG_IMPORT_PARSE_ERROR");
+    }
+}

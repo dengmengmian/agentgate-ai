@@ -735,3 +735,440 @@ pub fn export_bundle(
         warnings,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::provider::UpdateProviderInput;
+    use crate::models::route_profile::{AddProviderToRouteInput, CreateRouteProfileInput};
+    use crate::storage::db::DbPool;
+    use crate::storage::route_profiles;
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
+    use r2d2::Pool;
+    use r2d2_sqlite::SqliteConnectionManager;
+    use rusqlite::params;
+    use std::time::Duration;
+
+    fn setup_db_pool() -> (DbPool, std::path::PathBuf) {
+        let temp = std::env::temp_dir().join(format!(
+            "agentgate_checks_test_{}_{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let db_path = temp.join("test.db");
+        let manager = SqliteConnectionManager::file(&db_path);
+        let pool = Pool::builder().max_size(2).build(manager).unwrap();
+        let conn = pool.get().unwrap();
+        crate::storage::migrations::run_migrations(&*conn).unwrap();
+        (pool, temp)
+    }
+
+    fn broken_db_pool() -> (DbPool, std::path::PathBuf) {
+        let temp = std::env::temp_dir().join(format!(
+            "agentgate_checks_broken_test_{}_{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let db_path = temp.join("test.db");
+        let manager = SqliteConnectionManager::file(&db_path);
+        let pool = Pool::builder()
+            .max_size(1)
+            .connection_timeout(Duration::from_millis(1))
+            .build(manager)
+            .unwrap();
+        (pool, temp)
+    }
+
+    fn write_token(token: &str) {
+        let dir = crate::security::local_token::token_dir();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(crate::security::local_token::token_path(), token).unwrap();
+    }
+
+    fn find_check<'a>(report: &'a CheckReport, id: &'a str) -> Option<&'a CheckItem> {
+        report.checks.iter().find(|c| c.id == id)
+    }
+
+    fn assert_check_status(report: &CheckReport, id: &str, expected: &str) {
+        let item = find_check(report, id).unwrap_or_else(|| panic!("missing check {id}"));
+        assert_eq!(
+            item.status, expected,
+            "check {id} expected {expected}, got {}",
+            item.status
+        );
+    }
+
+    // ── Health Check ──────────────────────────────────────────────
+
+    #[test]
+    fn health_check_warns_when_token_missing() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        let _ = std::fs::remove_file(crate::security::local_token::token_path());
+        let (pool, db_temp) = setup_db_pool();
+
+        let report = health_check(&pool);
+        assert_check_status(&report, "token_file", "warning");
+        assert_check_status(&report, "db_lock", "ok");
+        assert_check_status(&report, "table_providers", "ok");
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn health_check_ok_when_token_valid() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        write_token("ag_local_1234567890123456789012345678901234567890");
+        let (pool, db_temp) = setup_db_pool();
+
+        let report = health_check(&pool);
+        assert_check_status(&report, "token_file", "ok");
+        assert_check_status(&report, "token_format", "ok");
+        assert_check_status(&report, "db_lock", "ok");
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn health_check_warns_when_token_format_invalid() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        write_token("not_an_agentgate_token");
+        let (pool, db_temp) = setup_db_pool();
+
+        let report = health_check(&pool);
+        assert_check_status(&report, "token_file", "ok");
+        assert_check_status(&report, "token_format", "warning");
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn health_check_fails_when_db_lock_unavailable() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        write_token("ag_local_1234567890123456789012345678901234567890");
+        let (pool, db_temp) = broken_db_pool();
+        // Create and hold the only connection so subsequent get() calls time out.
+        let conn = pool.get().unwrap();
+        crate::storage::migrations::run_migrations(&*conn).unwrap();
+
+        let report = health_check(&pool);
+        assert_check_status(&report, "db_lock", "failed");
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    // ── Database Check ────────────────────────────────────────────
+
+    #[test]
+    fn database_check_reports_row_counts() {
+        let (pool, db_temp) = setup_db_pool();
+        let report = database_check(&pool);
+        assert_check_status(&report, "count_providers", "ok");
+        assert_check_status(&report, "count_route_profiles", "ok");
+        assert_check_status(&report, "count_request_logs", "ok");
+        assert_check_status(&report, "count_config_backups", "ok");
+        assert_check_status(&report, "count_client_apply_history", "ok");
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn database_check_warns_when_logs_exceed_threshold() {
+        let (pool, db_temp) = setup_db_pool();
+        let mut conn = pool.get().unwrap();
+        let tx = conn.transaction().unwrap();
+        for i in 0..10001 {
+            tx.execute(
+                "INSERT INTO request_logs (id, request_id, timestamp) VALUES (?1, ?2, ?3)",
+                params![
+                    format!("id-{i}"),
+                    format!("req-{i}"),
+                    "2024-01-01T00:00:00Z"
+                ],
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+
+        let report = database_check(&pool);
+        assert_check_status(&report, "logs_size", "warning");
+        assert!(find_check(&report, "logs_size")
+            .unwrap()
+            .message
+            .contains("10001"));
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn database_check_warns_on_orphan_route_providers() {
+        let (pool, db_temp) = setup_db_pool();
+        let conn = pool.get().unwrap();
+        conn.execute(
+            "INSERT INTO route_profile_providers (id, route_profile_id, provider_id, priority, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+            params!["rpp-orphan", "rp-missing", "provider-missing", 1, "2024-01-01T00:00:00Z"],
+        )
+        .unwrap();
+
+        let report = database_check(&pool);
+        assert_check_status(&report, "orphan_rpp", "warning");
+        assert!(find_check(&report, "orphan_rpp")
+            .unwrap()
+            .message
+            .contains("1"));
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    // ── Gateway Auth Check ────────────────────────────────────────
+
+    #[test]
+    fn gateway_auth_check_passes_with_valid_token() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        write_token("ag_local_1234567890123456789012345678901234567890");
+        let (pool, db_temp) = setup_db_pool();
+
+        let report = gateway_auth_check(&pool);
+        assert_check_status(&report, "token_exists", "ok");
+        assert_check_status(&report, "token_format", "ok");
+        assert_check_status(&report, "token_leakage", "ok");
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn gateway_auth_check_warns_on_invalid_token_format() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        write_token("ag_local_x");
+        let (pool, db_temp) = setup_db_pool();
+
+        let report = gateway_auth_check(&pool);
+        assert_check_status(&report, "token_exists", "ok");
+        assert_check_status(&report, "token_format", "warning");
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn gateway_auth_check_fails_when_token_leaked_in_logs() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        let token = "ag_local_1234567890123456789012345678901234567890";
+        write_token(token);
+        let (pool, db_temp) = setup_db_pool();
+        let conn = pool.get().unwrap();
+        conn.execute(
+            "INSERT INTO request_logs (id, request_id, timestamp, raw_request) VALUES (?1, ?2, ?3, ?4)",
+            params!["log-1", "req-1", "2024-01-01T00:00:00Z", format!("bearer {token}")],
+        )
+        .unwrap();
+
+        let report = gateway_auth_check(&pool);
+        assert_check_status(&report, "token_leakage", "failed");
+        assert!(find_check(&report, "token_leakage")
+            .unwrap()
+            .message
+            .contains("1"));
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    // ── Provider Check ────────────────────────────────────────────
+
+    #[test]
+    fn provider_check_reports_default_providers() {
+        let (pool, db_temp) = setup_db_pool();
+        let report = provider_check(&pool);
+        assert_check_status(&report, "enabled_count", "ok");
+        assert_check_status(&report, "active", "ok");
+        // Default active provider has no API key.
+        assert_check_status(&report, "active_key", "failed");
+        assert_check_status(&report, "cooldown", "ok");
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn provider_check_fails_when_no_providers_enabled() {
+        let (pool, db_temp) = setup_db_pool();
+        let conn = pool.get().unwrap();
+        for p in crate::storage::providers::list_all(&conn).unwrap() {
+            crate::storage::providers::update(
+                &conn,
+                &p.id,
+                UpdateProviderInput {
+                    enabled: Some(false),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+
+        let report = provider_check(&pool);
+        assert_check_status(&report, "enabled_count", "failed");
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn provider_check_ok_when_active_provider_has_key() {
+        let (pool, db_temp) = setup_db_pool();
+        let conn = pool.get().unwrap();
+        let active = crate::storage::providers::list_all(&conn)
+            .unwrap()
+            .into_iter()
+            .find(|p| p.is_active)
+            .expect("no active provider");
+        crate::storage::providers::update(
+            &conn,
+            &active.id,
+            UpdateProviderInput {
+                api_key: Some("sk-test".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let report = provider_check(&pool);
+        assert_check_status(&report, "active_key", "ok");
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    // ── Route Profile Check ───────────────────────────────────────
+
+    #[test]
+    fn route_profile_check_reports_defaults() {
+        let (pool, db_temp) = setup_db_pool();
+        let report = route_profile_check(&pool);
+        assert_check_status(&report, "profiles", "ok");
+        assert_check_status(&report, "default", "ok");
+        assert_check_status(&report, "default_providers", "ok");
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn route_profile_check_warns_when_no_profiles() {
+        let (pool, db_temp) = setup_db_pool();
+        let conn = pool.get().unwrap();
+        conn.execute("DELETE FROM route_profiles", []).unwrap();
+
+        let report = route_profile_check(&pool);
+        assert_check_status(&report, "profiles", "warning");
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn route_profile_check_warns_on_failover_with_insufficient_providers() {
+        let (pool, db_temp) = setup_db_pool();
+        let conn = pool.get().unwrap();
+        conn.execute("DELETE FROM route_profiles", []).unwrap();
+
+        let profile = route_profiles::create(
+            &conn,
+            CreateRouteProfileInput {
+                name: "Failover".to_string(),
+                input_protocol: "openai_chat_completions".to_string(),
+                mode: Some("failover".to_string()),
+            },
+        )
+        .unwrap();
+        route_profiles::set_default(&conn, &profile.id).unwrap();
+
+        let provider = crate::storage::providers::list_all(&conn).unwrap().pop().unwrap();
+        route_profiles::add_provider(
+            &conn,
+            &profile.id,
+            &provider.id,
+            AddProviderToRouteInput {
+                priority: Some(1),
+                model_override: None,
+                cooldown_seconds: None,
+                failover_on_status_codes: None,
+                failover_on_error_keywords: None,
+                routing_conditions: None,
+            },
+        )
+        .unwrap();
+
+        let report = route_profile_check(&pool);
+        assert_check_status(&report, "profiles", "ok");
+        assert_check_status(&report, "failover_count", "warning");
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    // ── Codex / Claude Code Config Checks ─────────────────────────
+
+    #[test]
+    fn codex_config_check_skips_when_not_configured() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        let (pool, db_temp) = setup_db_pool();
+
+        let report = codex_config_check(&pool);
+        assert_check_status(&report, "not_configured", "ok");
+        assert_eq!(report.status, "ok");
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[test]
+    fn claude_code_config_check_skips_when_not_configured() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        let (pool, db_temp) = setup_db_pool();
+
+        let report = claude_code_config_check(&pool);
+        assert_check_status(&report, "not_configured", "ok");
+        assert_eq!(report.status, "ok");
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    // ── Full Self Test ────────────────────────────────────────────
+
+    #[test]
+    fn full_self_test_returns_reports() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        let (pool, db_temp) = setup_db_pool();
+
+        let report = full_self_test(&pool);
+        assert!(!report.reports.is_empty());
+        assert!(!report.summary.is_empty());
+        assert!(!report.created_at.is_empty());
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    // ── Diagnostic Bundle Export ──────────────────────────────────
+
+    #[test]
+    fn export_bundle_creates_files() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let home = setup_temp_home();
+        let (pool, db_temp) = setup_db_pool();
+
+        let result = export_bundle(&pool, false, 10).unwrap();
+        assert!(result.success);
+        assert!(!result.path.is_empty());
+        assert!(result.files.contains(&"self_test_report.json".to_string()));
+        assert!(result.files.contains(&"README.txt".to_string()));
+        assert!(std::path::Path::new(&result.path).exists());
+
+        cleanup(&home);
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+}

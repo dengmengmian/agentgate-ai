@@ -35,8 +35,52 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Build
+        run: pnpm build
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Playwright smoke
+        run: node scripts/test-playwright-smoke.mjs
+
       - name: Test
         run: pnpm test:run
+
+      - name: Download docs check
+        run: pnpm docs:download:check
+
+  quickstart-smoke:
+    name: Quickstart core smoke
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: quickstart-smoke
+
+      - name: Install deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Run quickstart smoke
+        run: pnpm test:quickstart
 
   fixture-tests:
     name: Offline capability + protocol fixture tests

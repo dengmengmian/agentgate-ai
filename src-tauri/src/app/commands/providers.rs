@@ -685,6 +685,198 @@ pub async fn detect_provider_vision(
     })
 }
 
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use r2d2::Pool;
+    use r2d2_sqlite::SqliteConnectionManager;
+
+    use super::*;
+    use crate::app::state::AppState;
+    use crate::models::provider::{CreateProviderInput, UpdateProviderInput};
+
+    fn test_state() -> AppState {
+        let manager = SqliteConnectionManager::memory();
+        let pool = Pool::builder().max_size(1).build(manager).unwrap();
+        {
+            let conn = pool.get().unwrap();
+            crate::storage::migrations::run_migrations(&conn).unwrap();
+        }
+        AppState {
+            db: pool,
+            gateway_runtime: Arc::new(Mutex::new(
+                crate::models::gateway::GatewayRuntimeState::default(),
+            )),
+            pet_click_through: Arc::new(Mutex::new(false)),
+        }
+    }
+
+    unsafe fn as_state<'r>(state: &'r AppState) -> tauri::State<'r, AppState> {
+        std::mem::transmute(state)
+    }
+
+    fn sample_create_input() -> CreateProviderInput {
+        CreateProviderInput {
+            name: "Test Provider".to_string(),
+            provider_type: "openai".to_string(),
+            base_url: "https://api.openai.com".to_string(),
+            api_key: Some("sk-test".to_string()),
+            default_model: "gpt-4".to_string(),
+            protocol: r#"["openai_chat_completions"]"#.to_string(),
+            timeout_seconds: Some(120),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn seed_model_capabilities_returns_sensible_defaults() {
+        let caps = seed_model_capabilities(
+            "openai".to_string(),
+            vec!["gpt-4".to_string(), "gpt-3.5-turbo".to_string()],
+        )
+        .unwrap();
+        assert!(caps.contains_key("gpt-4"));
+        assert!(caps.contains_key("gpt-3.5-turbo"));
+    }
+
+    #[test]
+    fn list_providers_includes_defaults() {
+        let state = test_state();
+        let providers = list_providers(unsafe { as_state(&state) }).unwrap();
+        assert!(!providers.is_empty());
+    }
+
+    #[test]
+    fn create_provider_validates_empty_name() {
+        let state = test_state();
+        let mut input = sample_create_input();
+        input.name = "   ".to_string();
+        let err = create_provider(input, unsafe { as_state(&state) }).unwrap_err();
+        assert_eq!(err.code, "VALIDATION_ERROR");
+    }
+
+    #[test]
+    fn create_provider_validates_empty_base_url() {
+        let state = test_state();
+        let mut input = sample_create_input();
+        input.base_url = "".to_string();
+        let err = create_provider(input, unsafe { as_state(&state) }).unwrap_err();
+        assert_eq!(err.code, "VALIDATION_ERROR");
+    }
+
+    #[test]
+    fn create_provider_validates_empty_default_model() {
+        let state = test_state();
+        let mut input = sample_create_input();
+        input.default_model = "".to_string();
+        let err = create_provider(input, unsafe { as_state(&state) }).unwrap_err();
+        assert_eq!(err.code, "VALIDATION_ERROR");
+    }
+
+    #[test]
+    fn create_provider_validates_non_positive_timeout() {
+        let state = test_state();
+        let mut input = sample_create_input();
+        input.timeout_seconds = Some(0);
+        let err = create_provider(input, unsafe { as_state(&state) }).unwrap_err();
+        assert_eq!(err.code, "VALIDATION_ERROR");
+    }
+
+    #[test]
+    fn create_provider_persists_and_returns_view() {
+        let state = test_state();
+        let view = create_provider(sample_create_input(), unsafe { as_state(&state) }).unwrap();
+        assert_eq!(view.name, "Test Provider");
+        assert_eq!(view.default_model, "gpt-4");
+
+        let fetched = get_provider(view.id.clone(), unsafe { as_state(&state) }).unwrap();
+        assert_eq!(fetched.id, view.id);
+        assert_eq!(fetched.name, "Test Provider");
+    }
+
+    #[test]
+    fn get_provider_keys_returns_empty_when_unset() {
+        let state = test_state();
+        let view = create_provider(sample_create_input(), unsafe { as_state(&state) }).unwrap();
+        let keys = get_provider_keys(view.id, unsafe { as_state(&state) }).unwrap();
+        assert_eq!(keys, vec!["sk-test"]);
+    }
+
+    #[test]
+    fn get_provider_keys_parses_json_array() {
+        let state = test_state();
+        let mut input = sample_create_input();
+        input.api_key = Some(r#"["sk-a", "sk-b"]"#.to_string());
+        let view = create_provider(input, unsafe { as_state(&state) }).unwrap();
+        let keys = get_provider_keys(view.id, unsafe { as_state(&state) }).unwrap();
+        assert_eq!(keys, vec!["sk-a", "sk-b"]);
+    }
+
+    #[test]
+    fn get_provider_returns_not_found_for_missing() {
+        let state = test_state();
+        let err = get_provider("no-such-id".to_string(), unsafe { as_state(&state) }).unwrap_err();
+        assert_eq!(err.code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn update_provider_changes_name() {
+        let state = test_state();
+        let view = create_provider(sample_create_input(), unsafe { as_state(&state) }).unwrap();
+        let updated = update_provider(
+            view.id.clone(),
+            UpdateProviderInput {
+                name: Some("Renamed".to_string()),
+                ..Default::default()
+            },
+            unsafe { as_state(&state) },
+        )
+        .unwrap();
+        assert_eq!(updated.name, "Renamed");
+
+        let fetched = get_provider(view.id, unsafe { as_state(&state) }).unwrap();
+        assert_eq!(fetched.name, "Renamed");
+    }
+
+    #[test]
+    fn update_provider_validates_empty_name() {
+        let state = test_state();
+        let view = create_provider(sample_create_input(), unsafe { as_state(&state) }).unwrap();
+        let err = update_provider(
+            view.id,
+            UpdateProviderInput {
+                name: Some("".to_string()),
+                ..Default::default()
+            },
+            unsafe { as_state(&state) },
+        )
+        .unwrap_err();
+        assert_eq!(err.code, "VALIDATION_ERROR");
+    }
+
+    #[test]
+    fn delete_provider_removes_record() {
+        let state = test_state();
+        let view = create_provider(sample_create_input(), unsafe { as_state(&state) }).unwrap();
+        let deleted = delete_provider(view.id.clone(), unsafe { as_state(&state) }).unwrap();
+        assert!(deleted);
+        let err = get_provider(view.id, unsafe { as_state(&state) }).unwrap_err();
+        assert_eq!(err.code, "NOT_FOUND");
+    }
+
+    #[test]
+    fn autofill_provider_capabilities_fills_missing_models() {
+        let state = test_state();
+        let view = create_provider(sample_create_input(), unsafe { as_state(&state) }).unwrap();
+        let filled = autofill_provider_capabilities(view.id.clone(), unsafe { as_state(&state) }).unwrap();
+        assert_eq!(filled, 1);
+
+        let filled_again = autofill_provider_capabilities(view.id, unsafe { as_state(&state) }).unwrap();
+        assert_eq!(filled_again, 0);
+    }
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn detect_provider_cache(

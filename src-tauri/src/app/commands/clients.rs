@@ -710,3 +710,242 @@ pub fn open_atomcode_config() -> Result<bool, AppError> {
     crate::tools::atomcode::open_config()?;
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use r2d2::Pool;
+    use r2d2_sqlite::SqliteConnectionManager;
+
+    use super::*;
+    use crate::app::state::AppState;
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
+
+    fn test_state() -> AppState {
+        let manager = SqliteConnectionManager::memory();
+        let pool = Pool::builder().max_size(1).build(manager).unwrap();
+        {
+            let conn = pool.get().unwrap();
+            crate::storage::migrations::run_migrations(&conn).unwrap();
+        }
+        AppState {
+            db: pool,
+            gateway_runtime: Arc::new(Mutex::new(
+                crate::models::gateway::GatewayRuntimeState::default(),
+            )),
+            pet_click_through: Arc::new(Mutex::new(false)),
+        }
+    }
+
+    /// Convert a borrowed `AppState` into Tauri's `State` wrapper.
+    /// This is test-only: `State` is a single-field struct around `&AppState`.
+    unsafe fn as_state<'r>(state: &'r AppState) -> tauri::State<'r, AppState> {
+        std::mem::transmute(state)
+    }
+
+    #[test]
+    fn list_tools_returns_five_clients() {
+        let tools = list_tools().unwrap();
+        assert_eq!(tools.len(), 5);
+        let ids: Vec<_> = tools.iter().map(|t| t.id.as_str()).collect();
+        assert!(ids.contains(&"claude-code"));
+        assert!(ids.contains(&"codex"));
+        assert!(ids.contains(&"opencode"));
+        assert!(ids.contains(&"atomcode"));
+        assert!(ids.contains(&"gemini_cli"));
+    }
+
+    #[test]
+    fn list_tools_reflects_config_existence() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let codex_dir = temp.join(".codex");
+        std::fs::create_dir_all(&codex_dir).unwrap();
+        std::fs::write(codex_dir.join("config.toml"), "[model_providers.OpenAI]\n").unwrap();
+
+        let tools = list_tools().unwrap();
+        let codex = tools.iter().find(|t| t.id == "codex").unwrap();
+        assert!(codex.config_exists);
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn generate_codex_config_uses_gateway_settings_and_token() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let state = test_state();
+        let snippet = generate_codex_config(unsafe { as_state(&state) }).unwrap();
+        assert!(snippet.contains("model_provider = \"OpenAI\""));
+        assert!(snippet.contains("requires_openai_auth = true"));
+        assert!(snippet.contains("experimental_bearer_token = \"ag_local_"));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn detect_codex_config_reports_missing_config() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let status = detect_codex_config().unwrap();
+        assert!(!status.exists);
+        assert!(!status.has_agentgate);
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn detect_codex_config_recognises_agentgate_snippet() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let codex_dir = temp.join(".codex");
+        std::fs::create_dir_all(&codex_dir).unwrap();
+        std::fs::write(
+            codex_dir.join("config.toml"),
+            crate::tools::codex::generate_snippet("127.0.0.1", 9090, "ag_local_testtoken"),
+        )
+        .unwrap();
+        let status = detect_codex_config().unwrap();
+        assert!(status.exists);
+        assert!(status.has_agentgate);
+        assert!(status.is_agentgate_active);
+        assert_eq!(status.current_provider, Some("OpenAI".to_string()));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn apply_codex_config_creates_hijack_config() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let state = test_state();
+        let result = apply_codex_config(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        assert!(crate::tools::codex::config_path().exists());
+        let cfg = std::fs::read_to_string(crate::tools::codex::config_path()).unwrap();
+        assert!(cfg.contains("model_provider = \"OpenAI\""));
+        assert!(cfg.contains("requires_openai_auth = true"));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn apply_codex_config_records_history() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let state = test_state();
+        let result = apply_codex_config(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        let clients = clients_with_apply_history(unsafe { as_state(&state) }).unwrap();
+        assert!(clients.contains(&"codex".to_string()));
+        let history = list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
+        assert!(!history.is_empty());
+        assert_eq!(history[0].action, "apply");
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn toggle_codex_provider_round_trip() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let state = test_state();
+        // Start from an official config so apply saves a restore point.
+        std::fs::create_dir_all(crate::tools::codex::config_path().parent().unwrap()).unwrap();
+        std::fs::write(
+            crate::tools::codex::config_path(),
+            "model_provider = \"openai\"\n",
+        )
+        .unwrap();
+
+        let result = apply_codex_config(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        assert!(crate::tools::codex::detect().is_agentgate_active);
+
+        let result = toggle_codex_provider(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        assert!(!crate::tools::codex::detect().is_agentgate_active);
+
+        let result = toggle_codex_provider(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        assert_eq!(result.new_provider, "agentgate");
+        assert!(crate::tools::codex::detect().is_agentgate_active);
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn disable_codex_agentgate_restores_official_config() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let state = test_state();
+        std::fs::create_dir_all(crate::tools::codex::config_path().parent().unwrap()).unwrap();
+        std::fs::write(
+            crate::tools::codex::config_path(),
+            "model_provider = \"openai\"\n[plugins.\"browser@openai-bundled\"]\nenabled = true\n",
+        )
+        .unwrap();
+
+        let result = apply_codex_config(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        assert!(crate::tools::codex::detect().is_agentgate_active);
+
+        let result = disable_codex_agentgate(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        let cfg = std::fs::read_to_string(crate::tools::codex::config_path()).unwrap();
+        assert!(cfg.contains("model_provider = \"openai\""));
+        assert!(cfg.contains("browser@openai-bundled"));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn clients_with_apply_history_includes_codex_after_apply() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let state = test_state();
+        let result = apply_codex_config(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        let clients = clients_with_apply_history(unsafe { as_state(&state) }).unwrap();
+        assert!(clients.contains(&"codex".to_string()));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn list_client_apply_history_returns_entries() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let state = test_state();
+        let result = apply_codex_config(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        let history = list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
+        assert!(!history.is_empty());
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn delete_client_apply_history_removes_entry() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let state = test_state();
+        // First apply creates a protected initial snapshot.
+        let result = apply_codex_config(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        // Second apply creates a deletable entry.
+        let result = apply_codex_config(unsafe { as_state(&state) }).unwrap();
+        assert!(result.success);
+        let history = list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
+        assert!(history.len() >= 2);
+        let id = history.iter().find(|h| !h.is_initial).map(|h| h.id.clone()).unwrap();
+        delete_client_apply_history(unsafe { as_state(&state) }, id.clone()).unwrap();
+        let history = list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
+        assert!(!history.iter().any(|h| h.id == id));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn detect_client_running_rejects_unknown_client() {
+        let err = detect_client_running("unknown".to_string()).unwrap_err();
+        assert_eq!(err.code, "VALIDATION_ERROR");
+    }
+
+    #[test]
+    fn detect_client_running_returns_list_for_known_client() {
+        let result = detect_client_running("codex".to_string()).unwrap();
+        // On macOS/Linux pgrep may find nothing in CI; empty is a valid shape.
+        assert!(result.is_empty() || result.iter().all(|p| !p.command.is_empty()));
+    }
+}

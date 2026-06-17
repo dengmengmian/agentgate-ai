@@ -35,10 +35,13 @@ export default tseslint.config(
       // 不阻断 CI;no-unused-vars 等真实问题仍保持 error。
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-empty-object-type": "warn",
-      "react-hooks/set-state-in-effect": "warn",
+      // React 19 的 advisory lint 对当前异步页面加载模式噪音较高。
+      // 关闭这类非正确性规则，并用 `eslint --max-warnings=0` 保证新增 warning 不被淹没。
+      "react-hooks/set-state-in-effect": "off",
       "react-hooks/refs": "warn",
       "react-hooks/purity": "warn",
-      "react-refresh/only-export-components": "warn",
+      // 多个 UI helper 文件有意同时导出组件和纯 helper，HMR 规则不作为发版门禁。
+      "react-refresh/only-export-components": "off",
       // 允许下划线前缀表达"故意忽略"(如解构剥离 prop)
       "@typescript-eslint/no-unused-vars": [
         "error",

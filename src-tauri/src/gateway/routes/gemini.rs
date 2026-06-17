@@ -593,3 +593,601 @@ pub async fn handle_gemini_generate(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::StatusCode;
+    use axum::response::IntoResponse;
+    use serde_json::{json, Value};
+    use std::sync::atomic::AtomicU64;
+    use std::sync::Arc;
+    use wiremock::matchers::{method, path_regex};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    use crate::models::provider::Provider;
+    use crate::security::local_token;
+    use crate::storage;
+    use crate::storage::db::DbPool;
+    use crate::test_utils::{setup_temp_home, FS_LOCK};
+
+    fn auth_headers() -> axum::http::HeaderMap {
+        let token = local_token::ensure_token().unwrap();
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert(
+            "authorization",
+            format!("Bearer {token}").parse().unwrap(),
+        );
+        headers
+    }
+
+    fn db_pool() -> DbPool {
+        let manager = r2d2_sqlite::SqliteConnectionManager::memory();
+        let pool = r2d2::Pool::builder().max_size(1).build(manager).unwrap();
+        let conn = pool.get().unwrap();
+        storage::migrations::run_migrations(&conn).unwrap();
+        // Clear seeded defaults so each test starts from a known empty state.
+        conn.execute("DELETE FROM route_profile_providers", [])
+            .unwrap();
+        conn.execute("DELETE FROM route_profiles", []).unwrap();
+        conn.execute("DELETE FROM providers", []).unwrap();
+        conn.execute("UPDATE gateway_settings SET active_provider_id = NULL", [])
+            .unwrap();
+        pool
+    }
+
+    fn gateway_state(db: DbPool) -> GatewayState {
+        GatewayState {
+            db,
+            http_client: reqwest::Client::new(),
+            active_requests: Arc::new(AtomicU64::new(0)),
+        }
+    }
+
+    /// Prepares an isolated test environment: holds the FS_LOCK, points HOME at
+    /// a temp directory (so the local token is isolated), and returns a clean
+    /// in-memory GatewayState. The lock must outlive the test to prevent other
+    /// HOME-modifying tests from racing.
+    fn setup_test() -> (
+        std::sync::MutexGuard<'static, ()>,
+        std::path::PathBuf,
+        GatewayState,
+    ) {
+        let guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let state = gateway_state(db_pool());
+        (guard, temp, state)
+    }
+
+    fn create_provider(
+        conn: &rusqlite::Connection,
+        id: &str,
+        name: &str,
+        provider_type: &str,
+        base_url: &str,
+        protocol: &str,
+        default_model: &str,
+        model_mapping: Option<&str>,
+    ) -> Provider {
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO providers (
+                id, name, provider_type, base_url, api_key, default_model,
+                protocol, timeout_seconds, status, enabled, is_active,
+                created_at, updated_at, model_mapping
+             ) VALUES (?1, ?2, ?3, ?4, 'sk-test', ?5, ?6, 120, 'ok', 1, 1, ?7, ?7, ?8)",
+            rusqlite::params![
+                id,
+                name,
+                provider_type,
+                base_url,
+                default_model,
+                protocol,
+                now,
+                model_mapping
+            ],
+        )
+        .unwrap();
+        storage::providers::get_by_id(conn, id).unwrap()
+    }
+
+    fn create_route_profile(conn: &rusqlite::Connection, id: &str, input_protocol: &str) {
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO route_profiles (id, name, client_type, input_protocol, mode, enabled, is_default, created_at, updated_at)
+             VALUES (?1, ?2, '', ?3, 'manual', 1, 1, ?4, ?4)",
+            rusqlite::params![id, id, input_protocol, now],
+        )
+        .unwrap();
+    }
+
+    fn link_provider_to_profile(
+        conn: &rusqlite::Connection,
+        profile_id: &str,
+        provider_id: &str,
+        priority: i64,
+        model_override: Option<&str>,
+    ) {
+        let now = chrono::Utc::now().to_rfc3339();
+        conn.execute(
+            "INSERT INTO route_profile_providers (
+                id, route_profile_id, provider_id, priority, enabled,
+                model_override, cooldown_seconds, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, 1, ?5, 600, ?6, ?6)",
+            rusqlite::params![
+                uuid::Uuid::new_v4().to_string(),
+                profile_id,
+                provider_id,
+                priority,
+                model_override,
+                now
+            ],
+        )
+        .unwrap();
+    }
+
+    async fn body_to_json(resp: axum::response::Response) -> Value {
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    async fn body_to_string(resp: axum::response::Response) -> String {
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        String::from_utf8_lossy(&bytes).to_string()
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn count_tokens_estimates_from_text_parts() {
+        let (_guard, _temp, state) = setup_test();
+        let body = json!({
+            "contents": [
+                {"role": "user", "parts": [{"text": "hello"}, {"text": "世界"}]},
+                {"role": "model", "parts": [{"text": "!"}]}
+            ]
+        })
+        .to_string();
+
+        let resp = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:countTokens".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from(body),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_to_json(resp).await;
+        // hello(5) + 世界(2) + !(1) = 8 chars; ceil(8/4) = 2
+        assert_eq!(v["totalTokens"], 2);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn count_tokens_empty_contents_returns_zero() {
+        let (_guard, _temp, state) = setup_test();
+        let body = json!({"contents": []}).to_string();
+
+        let resp = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:countTokens".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from(body),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_to_json(resp).await;
+        assert_eq!(v["totalTokens"], 0);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn count_tokens_invalid_json_returns_parse_error() {
+        let (_guard, _temp, state) = setup_test();
+
+        let err = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:countTokens".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from("not json"),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(err.0.code, crate::errors::codes::COUNT_TOKENS_PARSE_ERROR);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn generate_content_extracts_model_name_and_stream_flag() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex("/v1beta/models/[^/]+:generateContent"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "candidates": [{"content": {"parts": [{"text": "ok"}]}}]
+            })))
+            .mount(&server)
+            .await;
+
+        let (_guard, _temp, state) = setup_test();
+        let conn = state.db.get().unwrap();
+        create_provider(
+            &conn,
+            "p1",
+            "Gemini",
+            "google_gemini",
+            &server.uri(),
+            "openai_responses",
+            "gemini-2.5-flash",
+            None,
+        );
+        create_route_profile(&conn, "rp1", "openai_responses");
+        link_provider_to_profile(&conn, "rp1", "p1", 1, None);
+        drop(conn);
+
+        let body = json!({"contents": [{"role": "user", "parts": [{"text": "hi"}]}]}).to_string();
+        let resp = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from(body),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_to_json(resp).await;
+        assert_eq!(v["candidates"][0]["content"]["parts"][0]["text"], "ok");
+
+        let received = server.received_requests().await.unwrap();
+        assert_eq!(received.len(), 1);
+        assert!(received[0].url.path().contains("/v1beta/models/gemini-2.5-flash:generateContent"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn generate_content_stream_uses_stream_generate_content() {
+        let server = MockServer::start().await;
+        let sse = "data: {\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"streamed\"}]}}]}\n\ndata: [DONE]\n\n";
+        Mock::given(method("POST"))
+            .and(path_regex("/v1beta/models/[^/]+:streamGenerateContent"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_raw(sse.as_bytes(), "text/event-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let (_guard, _temp, state) = setup_test();
+        let conn = state.db.get().unwrap();
+        create_provider(
+            &conn,
+            "p1",
+            "Gemini",
+            "google_gemini",
+            &server.uri(),
+            "openai_responses",
+            "gemini-2.5-flash",
+            None,
+        );
+        create_route_profile(&conn, "rp1", "openai_responses");
+        link_provider_to_profile(&conn, "rp1", "p1", 1, None);
+        drop(conn);
+
+        let body = json!({"contents": [{"role": "user", "parts": [{"text": "hi"}]}]}).to_string();
+        let resp = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:streamGenerateContent".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from(body),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let text = body_to_string(resp).await;
+        assert!(text.contains("streamed"));
+
+        let received = server.received_requests().await.unwrap();
+        assert_eq!(received.len(), 1);
+        assert!(received[0].url.path().contains(":streamGenerateContent"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn generate_content_gemini_native_passthrough_non_stream() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex("/v1beta/models/[^/]+:generateContent"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "candidates": [{"content": {"parts": [{"text": "native"}]}}]
+            })))
+            .mount(&server)
+            .await;
+
+        let (_guard, _temp, state) = setup_test();
+        let conn = state.db.get().unwrap();
+        create_provider(
+            &conn,
+            "p1",
+            "Gemini",
+            "google_gemini",
+            &server.uri(),
+            "openai_responses",
+            "gemini-2.5-flash",
+            None,
+        );
+        create_route_profile(&conn, "rp1", "openai_responses");
+        link_provider_to_profile(&conn, "rp1", "p1", 1, None);
+        drop(conn);
+
+        let body = json!({
+            "contents": [{"role": "user", "parts": [{"text": "hi"}]}],
+            "safetySettings": [{"category": "HARM_CATEGORY_SEXUAL", "threshold": "BLOCK_NONE"}]
+        })
+        .to_string();
+        let resp = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from(body),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_to_json(resp).await;
+        assert_eq!(v["candidates"][0]["content"]["parts"][0]["text"], "native");
+
+        let received = server.received_requests().await.unwrap();
+        assert_eq!(received.len(), 1);
+        let upstream_body: Value = serde_json::from_slice(&received[0].body).unwrap();
+        // Gemini-only field should be preserved in native passthrough.
+        assert!(upstream_body.get("safetySettings").is_some());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn generate_content_openai_chat_conversion_non_stream() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex("/v1/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "chatcmpl-mock",
+                "model": "gpt-4",
+                "choices": [{"message": {"role": "assistant", "content": "chat"}}],
+                "usage": {"prompt_tokens": 4, "completion_tokens": 2, "total_tokens": 6}
+            })))
+            .mount(&server)
+            .await;
+
+        let (_guard, _temp, state) = setup_test();
+        let conn = state.db.get().unwrap();
+        create_provider(
+            &conn,
+            "p1",
+            "OpenAI",
+            "openai",
+            &server.uri(),
+            "openai_chat_completions",
+            "gpt-4",
+            None,
+        );
+        create_route_profile(&conn, "rp1", "openai_responses");
+        link_provider_to_profile(&conn, "rp1", "p1", 1, None);
+        drop(conn);
+
+        let body = json!({"contents": [{"role": "user", "parts": [{"text": "hi"}]}]}).to_string();
+        let resp = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from(body),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_to_json(resp).await;
+        assert_eq!(v["candidates"][0]["content"]["parts"][0]["text"], "chat");
+
+        let received = server.received_requests().await.unwrap();
+        assert_eq!(received.len(), 1);
+        let upstream_body: Value = serde_json::from_slice(&received[0].body).unwrap();
+        assert_eq!(upstream_body["model"], "gpt-4");
+        assert_eq!(upstream_body["messages"][0]["role"], "user");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn generate_content_openai_chat_conversion_stream() {
+        let server = MockServer::start().await;
+        let sse = format!(
+            "data: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
+            json!({"id":"c1","choices":[{"index":0,"delta":{"role":"assistant","content":"chat"}}]}),
+            json!({"id":"c1","choices":[{"index":0,"delta":{"content":" stream"}}]})
+        );
+        Mock::given(method("POST"))
+            .and(path_regex("/v1/chat/completions"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .insert_header("content-type", "text/event-stream")
+                    .set_body_raw(sse.into_bytes(), "text/event-stream"),
+            )
+            .mount(&server)
+            .await;
+
+        let (_guard, _temp, state) = setup_test();
+        let conn = state.db.get().unwrap();
+        create_provider(
+            &conn,
+            "p1",
+            "OpenAI",
+            "openai",
+            &server.uri(),
+            "openai_chat_completions",
+            "gpt-4",
+            None,
+        );
+        create_route_profile(&conn, "rp1", "openai_responses");
+        link_provider_to_profile(&conn, "rp1", "p1", 1, None);
+        drop(conn);
+
+        let body = json!({"contents": [{"role": "user", "parts": [{"text": "hi"}]}]}).to_string();
+        let resp = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:streamGenerateContent".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from(body),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let text = body_to_string(resp).await;
+        assert!(text.contains("chat") && text.contains(" stream"), "stream text missing: {}", text);
+
+        let received = server.received_requests().await.unwrap();
+        assert_eq!(received.len(), 1);
+        let upstream_body: Value = serde_json::from_slice(&received[0].body).unwrap();
+        assert_eq!(upstream_body["stream"], true);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn generate_content_falls_back_to_chat_completions_profile() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex("/v1/chat/completions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "id": "chatcmpl-mock",
+                "model": "gpt-4",
+                "choices": [{"message": {"role": "assistant", "content": "fallback"}}],
+                "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+            })))
+            .mount(&server)
+            .await;
+
+        let (_guard, _temp, state) = setup_test();
+        let conn = state.db.get().unwrap();
+        create_provider(
+            &conn,
+            "p1",
+            "OpenAI",
+            "openai",
+            &server.uri(),
+            "openai_chat_completions",
+            "gpt-4",
+            None,
+        );
+        // Only a chat_completions profile exists; openai_responses profile is missing.
+        create_route_profile(&conn, "rp1", "openai_chat_completions");
+        link_provider_to_profile(&conn, "rp1", "p1", 1, None);
+        drop(conn);
+
+        let body = json!({"contents": [{"role": "user", "parts": [{"text": "hi"}]}]}).to_string();
+        let resp = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from(body),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_to_json(resp).await;
+        assert_eq!(v["candidates"][0]["content"]["parts"][0]["text"], "fallback");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn generate_content_model_mapping_override() {
+        let server = MockServer::start().await;
+        Mock::given(method("POST"))
+            .and(path_regex("/v1beta/models/mapped-gemini:generateContent"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "candidates": [{"content": {"parts": [{"text": "mapped"}]}}]
+            })))
+            .mount(&server)
+            .await;
+
+        let (_guard, _temp, state) = setup_test();
+        let conn = state.db.get().unwrap();
+        create_provider(
+            &conn,
+            "p1",
+            "Gemini",
+            "google_gemini",
+            &server.uri(),
+            "openai_responses",
+            "gemini-default",
+            Some(r#"{"gemini-2.5-flash": "mapped-gemini"}"#),
+        );
+        create_route_profile(&conn, "rp1", "openai_responses");
+        link_provider_to_profile(&conn, "rp1", "p1", 1, None);
+        drop(conn);
+
+        let body = json!({"contents": [{"role": "user", "parts": [{"text": "hi"}]}]}).to_string();
+        let resp = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from(body),
+        )
+        .await
+        .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
+        .into_response();
+
+        assert_eq!(resp.status(), StatusCode::OK);
+        let v = body_to_json(resp).await;
+        assert_eq!(v["candidates"][0]["content"]["parts"][0]["text"], "mapped");
+
+        let received = server.received_requests().await.unwrap();
+        assert_eq!(received.len(), 1);
+        assert!(received[0].url.path().contains("/v1beta/models/mapped-gemini:generateContent"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn generate_content_invalid_json_returns_gemini_parse_error() {
+        let (_guard, _temp, state) = setup_test();
+
+        let err = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from("not json"),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(err.0.code, crate::errors::codes::GEMINI_PARSE_ERROR);
+        let response = err.into_response();
+        // GEMINI_PARSE_ERROR is not in the IntoResponse BAD_REQUEST list.
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn generate_content_no_provider_returns_error() {
+        let (_guard, _temp, state) = setup_test();
+        let body = json!({"contents": [{"role": "user", "parts": [{"text": "hi"}]}]}).to_string();
+
+        let err = handle_gemini_generate(
+            auth_headers(),
+            axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
+            axum::extract::State(state),
+            bytes::Bytes::from(body),
+        )
+        .await
+        .unwrap_err();
+
+        assert_eq!(
+            err.0.code,
+            crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND
+        );
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+}

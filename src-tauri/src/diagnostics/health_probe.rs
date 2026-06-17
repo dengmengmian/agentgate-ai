@@ -76,3 +76,161 @@ async fn run_once(db: &crate::storage::db::DbPool) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::gateway::UpdateGatewaySettingsInput;
+    use crate::models::provider::UpdateProviderInput;
+    use crate::storage::db::DbPool;
+    use r2d2::Pool;
+    use r2d2_sqlite::SqliteConnectionManager;
+    use std::time::Duration;
+
+    fn setup_db_pool() -> (DbPool, std::path::PathBuf) {
+        let temp = std::env::temp_dir().join(format!(
+            "agentgate_health_probe_test_{}_{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let db_path = temp.join("test.db");
+        let manager = SqliteConnectionManager::file(&db_path);
+        let pool = Pool::builder().max_size(2).build(manager).unwrap();
+        let conn = pool.get().unwrap();
+        crate::storage::migrations::run_migrations(&*conn).unwrap();
+        (pool, temp)
+    }
+
+    fn set_health_probe_enabled(pool: &DbPool, enabled: bool) {
+        let conn = pool.get().unwrap();
+        crate::storage::gateway_settings::update(
+            &conn,
+            UpdateGatewaySettingsInput {
+                health_probe_enabled: Some(enabled),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn run_once_skips_when_disabled() {
+        let (pool, db_temp) = setup_db_pool();
+        // Default gateway settings have health_probe_enabled = false.
+        let conn = pool.get().unwrap();
+        let provider_ids: Vec<String> = crate::storage::providers::list_all(&conn)
+            .unwrap()
+            .into_iter()
+            .map(|p| p.id)
+            .collect();
+        drop(conn);
+
+        run_once(&pool).await;
+
+        let conn = pool.get().unwrap();
+        for id in provider_ids {
+            let s = crate::storage::provider_runtime_status::get(&conn, &id).unwrap();
+            assert!(
+                s.last_probe_at.is_none(),
+                "probe should not run when disabled"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[tokio::test]
+    async fn run_once_skips_when_no_enabled_providers() {
+        let (pool, db_temp) = setup_db_pool();
+        set_health_probe_enabled(&pool, true);
+
+        let conn = pool.get().unwrap();
+        for p in crate::storage::providers::list_all(&conn).unwrap() {
+            crate::storage::providers::update(
+                &conn,
+                &p.id,
+                UpdateProviderInput {
+                    enabled: Some(false),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        drop(conn);
+
+        run_once(&pool).await;
+
+        let conn = pool.get().unwrap();
+        let statuses = crate::storage::provider_runtime_status::list_all(&conn).unwrap();
+        for s in statuses {
+            assert!(
+                s.last_probe_at.is_none(),
+                "probe should not run with no enabled providers"
+            );
+        }
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[tokio::test]
+    async fn run_once_records_probe_result_for_enabled_provider() {
+        let (pool, db_temp) = setup_db_pool();
+        set_health_probe_enabled(&pool, true);
+
+        let conn = pool.get().unwrap();
+        // Leave the default enabled provider in place but ensure it has no API key
+        // so the probe fails immediately without making a network request.
+        let enabled = crate::storage::providers::list_all(&conn)
+            .unwrap()
+            .into_iter()
+            .find(|p| p.enabled)
+            .expect("expected an enabled provider");
+        crate::storage::providers::update(
+            &conn,
+            &enabled.id,
+            UpdateProviderInput {
+                api_key: Some("".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        drop(conn);
+
+        run_once(&pool).await;
+
+        let conn = pool.get().unwrap();
+        let s = crate::storage::provider_runtime_status::get(&conn, &enabled.id).unwrap();
+        assert!(
+            s.last_probe_at.is_some(),
+            "probe timestamp should be recorded"
+        );
+        assert_eq!(s.last_probe_ok, Some(false), "probe should record failure");
+        assert!(
+            s.last_probe_error.is_some(),
+            "probe error should be recorded"
+        );
+        let _ = std::fs::remove_dir_all(&db_temp);
+    }
+
+    #[tokio::test]
+    async fn run_once_returns_early_on_db_lock_failure() {
+        let temp = std::env::temp_dir().join(format!(
+            "agentgate_health_probe_broken_test_{}_{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&temp).unwrap();
+        let db_path = temp.join("test.db");
+        let manager = SqliteConnectionManager::file(&db_path);
+        let pool = Pool::builder()
+            .max_size(1)
+            .connection_timeout(Duration::from_millis(1))
+            .build(manager)
+            .unwrap();
+        // Hold the only connection so run_once cannot acquire one.
+        let _conn = pool.get().unwrap();
+
+        // Should not panic and should return immediately.
+        run_once(&pool).await;
+        let _ = std::fs::remove_dir_all(&temp);
+    }
+}

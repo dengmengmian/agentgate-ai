@@ -661,3 +661,500 @@ async fn client_chat_to_anthropic_stream(
         .body(body)
         .unwrap())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::errors::codes;
+    use crate::gateway::provider_selector::{should_failover, ProviderCandidate};
+    use crate::gateway::routes::GatewayState;
+    use crate::models::provider::{CreateProviderInput, Provider};
+    use crate::models::route_profile::{
+        AddProviderToRouteInput, CreateRouteProfileInput, RouteProfile,
+    };
+    use crate::providers::adapter::ProviderConfig;
+    use crate::storage::{self, providers as providers_storage, route_profiles};
+    use axum::http::{HeaderMap, HeaderName};
+    use bytes::Bytes;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+    use std::time::Instant;
+
+    fn in_memory_pool() -> crate::storage::db::DbPool {
+        let manager = r2d2_sqlite::SqliteConnectionManager::memory();
+        r2d2::Pool::builder().max_size(1).build(manager).unwrap()
+    }
+
+    fn gateway_state(pool: crate::storage::db::DbPool) -> GatewayState {
+        GatewayState {
+            db: pool,
+            http_client: reqwest::Client::new(),
+            active_requests: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        }
+    }
+
+    fn create_test_provider(
+        conn: &rusqlite::Connection,
+        name: &str,
+        provider_type: &str,
+        base_url: &str,
+        api_key: &str,
+        protocol: &str,
+        default_model: &str,
+    ) -> Provider {
+        providers_storage::create(
+            conn,
+            CreateProviderInput {
+                name: name.to_string(),
+                provider_type: provider_type.to_string(),
+                base_url: base_url.to_string(),
+                api_key: Some(api_key.to_string()),
+                default_model: default_model.to_string(),
+                reasoning_model: None,
+                supported_models: None,
+                model_mapping: None,
+                extra_headers: None,
+                anthropic_base_url: if provider_type == "anthropic" {
+                    Some(base_url.to_string())
+                } else {
+                    None
+                },
+                responses_base_url: None,
+                protocol: protocol.to_string(),
+                timeout_seconds: Some(120),
+                auto_cache_control: None,
+                model_capabilities: None,
+                provider_quirks: None,
+                body_filter_enabled: None,
+                thinking_rectifier_enabled: None,
+                error_mapper_enabled: None,
+                model_degradation_chain: None,
+                model_context_windows: None,
+                enabled: Some(true),
+            },
+        )
+        .unwrap()
+    }
+
+    fn create_failover_profile(conn: &rusqlite::Connection, input_protocol: &str) -> RouteProfile {
+        let profile = route_profiles::create(
+            conn,
+            CreateRouteProfileInput {
+                name: format!("{} test", input_protocol),
+                input_protocol: input_protocol.to_string(),
+                mode: Some("failover".to_string()),
+            },
+        )
+        .unwrap();
+        route_profiles::set_default(conn, &profile.id).unwrap();
+        profile
+    }
+
+    fn add_provider_input(priority: i64) -> AddProviderToRouteInput {
+        AddProviderToRouteInput {
+            priority: Some(priority),
+            model_override: None,
+            cooldown_seconds: None,
+            failover_on_status_codes: None,
+            failover_on_error_keywords: None,
+            routing_conditions: None,
+        }
+    }
+
+    fn chat_provider_for_override() -> Provider {
+        Provider {
+            id: "p-override".into(),
+            name: "Override".into(),
+            provider_type: "openai".into(),
+            base_url: "https://api.openai.com".into(),
+            api_key: Some("sk-test".into()),
+            default_model: "gpt-4o-mini".into(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
+            protocol: r#"["openai_chat_completions"]"#.into(),
+            timeout_seconds: 120,
+            status: "ok".into(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
+            model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
+            model_context_windows: None,
+            enabled: true,
+            is_active: false,
+            created_at: "2024-01-01".into(),
+            updated_at: "2024-01-01".into(),
+        }
+    }
+
+    fn anthropic_provider() -> Provider {
+        Provider {
+            id: "p-anthropic".into(),
+            name: "Anthropic".into(),
+            provider_type: "anthropic".into(),
+            base_url: "https://api.anthropic.com".into(),
+            api_key: Some("sk-ant-test".into()),
+            default_model: "claude-3-5-sonnet-latest".into(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: Some("https://api.anthropic.com".into()),
+            responses_base_url: None,
+            protocol: r#"["anthropic_messages"]"#.into(),
+            timeout_seconds: 120,
+            status: "ok".into(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
+            model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
+            model_context_windows: None,
+            enabled: true,
+            is_active: false,
+            created_at: "2024-01-01".into(),
+            updated_at: "2024-01-01".into(),
+        }
+    }
+
+    fn extract_requested_model(body: &str) -> Option<String> {
+        serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|v| v.get("model").and_then(|m| m.as_str()).map(str::to_string))
+    }
+
+    fn hdrs(encoding: Option<&str>) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        if let Some(enc) = encoding {
+            h.insert(
+                HeaderName::from_static("content-encoding"),
+                enc.parse().unwrap(),
+            );
+        }
+        h
+    }
+
+    // ── native_model_override (chat-specific) ─────────────────────
+
+    #[test]
+    fn native_model_override_maps_agentgate_to_default() {
+        let provider = chat_provider_for_override();
+        assert_eq!(
+            super::native_model_override(&provider, Some("agentgate"), None),
+            Some("gpt-4o-mini".to_string())
+        );
+    }
+
+    #[test]
+    fn native_model_override_uses_candidate_model_for_agentgate() {
+        let provider = chat_provider_for_override();
+        assert_eq!(
+            super::native_model_override(
+                &provider,
+                Some("agentgate"),
+                Some("claude-3-5-sonnet-latest")
+            ),
+            Some("claude-3-5-sonnet-latest".to_string())
+        );
+    }
+
+    #[test]
+    fn native_model_override_maps_explicit_alias() {
+        let mut provider = chat_provider_for_override();
+        provider.model_mapping = Some(r#"{"gpt-4o":"custom-gpt-4o"}"#.into());
+        assert_eq!(
+            super::native_model_override(&provider, Some("gpt-4o"), None),
+            Some("custom-gpt-4o".to_string())
+        );
+    }
+
+    #[test]
+    fn native_model_override_leaves_unmapped_real_model_alone() {
+        let provider = chat_provider_for_override();
+        assert_eq!(
+            super::native_model_override(&provider, Some("gpt-4o"), None),
+            None
+        );
+    }
+
+    // ── body decode + model extraction ────────────────────────────
+
+    #[test]
+    fn body_decode_plain_and_extract_model() {
+        let body = Bytes::from_static(br#"{"model":"gpt-4o","messages":[]}"#);
+        let decoded = crate::gateway::body_decode::decode(&hdrs(None), body).unwrap();
+        assert_eq!(
+            extract_requested_model(&decoded),
+            Some("gpt-4o".to_string())
+        );
+    }
+
+    #[test]
+    fn body_decode_gzip_and_extract_model() {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(br#"{"model":"gpt-4","messages":[]}"#)
+            .unwrap();
+        let compressed = Bytes::from(encoder.finish().unwrap());
+        let decoded = crate::gateway::body_decode::decode(&hdrs(Some("gzip")), compressed).unwrap();
+        assert_eq!(
+            extract_requested_model(&decoded),
+            Some("gpt-4".to_string())
+        );
+    }
+
+    #[test]
+    fn requested_model_none_for_malformed_json() {
+        assert_eq!(extract_requested_model("not json"), None);
+    }
+
+    #[test]
+    fn requested_model_none_when_model_missing() {
+        assert_eq!(extract_requested_model(r#"{"messages":[]}"#), None);
+    }
+
+    // ── provider selection fallback ───────────────────────────────
+
+    #[test]
+    fn provider_selection_falls_back_from_openai_chat_to_anthropic_messages() {
+        let pool = in_memory_pool();
+        let conn = pool.get().unwrap();
+        storage::migrations::run_migrations(&conn).unwrap();
+
+        // Force the openai_chat_completions lookup to fail so the chat handler
+        // would fall back to the anthropic_messages profile.
+        conn.execute(
+            "UPDATE route_profiles SET enabled = 0 WHERE input_protocol = 'openai_chat_completions'",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE gateway_settings SET active_provider_id = NULL",
+            [],
+        )
+        .unwrap();
+
+        let anthropic = create_test_provider(
+            &conn,
+            "Fallback Anthropic",
+            "anthropic",
+            "https://api.anthropic.com",
+            "sk-ant-test",
+            r#"["anthropic_messages"]"#,
+            "claude-3-5-sonnet-latest",
+        );
+        let profile = create_failover_profile(&conn, "anthropic_messages");
+        route_profiles::add_provider(
+            &conn,
+            &profile.id,
+            &anthropic.id,
+            add_provider_input(1),
+        )
+        .unwrap();
+        // Release the single in-memory connection before select_for_failover
+        // tries to borrow another one from the pool.
+        drop(conn);
+
+        let first = crate::gateway::provider_selector::select_for_failover(
+            &pool,
+            "openai_chat_completions",
+            Some("claude-3-5-sonnet-latest"),
+            None,
+        );
+        assert!(first.is_err());
+
+        let second = crate::gateway::provider_selector::select_for_failover(
+            &pool,
+            "anthropic_messages",
+            Some("claude-3-5-sonnet-latest"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(second.provider.id, anthropic.id);
+        assert_eq!(second.provider.provider_type, "anthropic");
+    }
+
+    // ── failover / attempt loop decision logic ────────────────────
+
+    #[test]
+    fn failover_attempt_order_prefers_primary_then_backup() {
+        let pool = in_memory_pool();
+        let conn = pool.get().unwrap();
+        storage::migrations::run_migrations(&conn).unwrap();
+
+        let primary = create_test_provider(
+            &conn,
+            "Primary",
+            "openai",
+            "https://api.openai.com",
+            "sk-primary",
+            r#"["openai_chat_completions"]"#,
+            "gpt-4o",
+        );
+        let backup = create_test_provider(
+            &conn,
+            "Backup",
+            "openai",
+            "https://api.openai.com",
+            "sk-backup",
+            r#"["openai_chat_completions"]"#,
+            "gpt-4o-mini",
+        );
+
+        let profile = create_failover_profile(&conn, "openai_chat_completions");
+        route_profiles::add_provider(&conn, &profile.id, &primary.id, add_provider_input(1)).unwrap();
+        route_profiles::add_provider(&conn, &profile.id, &backup.id, add_provider_input(2)).unwrap();
+        // Release the single in-memory connection before select_for_failover
+        // tries to borrow another one from the pool.
+        drop(conn);
+
+        let selection = crate::gateway::provider_selector::select_for_failover(
+            &pool,
+            "openai_chat_completions",
+            Some("gpt-4o"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(selection.mode, "failover");
+        assert_eq!(selection.candidates.len(), 2);
+
+        let order = crate::gateway::failover::build_attempt_order(
+            &selection.candidates,
+            &selection.provider.id,
+            true,
+            false,
+            None,
+        );
+        let ids: Vec<String> = order.iter().map(|c| c.provider_id.clone()).collect();
+        assert_eq!(ids, vec![primary.id.clone(), backup.id.clone()]);
+    }
+
+    #[test]
+    fn failover_attempt_order_skips_cooldown_backup() {
+        let candidates = vec![
+            ProviderCandidate {
+                provider_id: "p1".into(),
+                provider_name: "Primary".into(),
+                priority: 1,
+                model: "m1".into(),
+                routing_conditions: None,
+                in_cooldown: false,
+                supports_vision: None,
+                cooldown_seconds: 60,
+                failover_on_status_codes: vec![],
+                failover_on_error_keywords: vec![],
+            },
+            ProviderCandidate {
+                provider_id: "p2".into(),
+                provider_name: "Backup".into(),
+                priority: 2,
+                model: "m2".into(),
+                routing_conditions: None,
+                in_cooldown: true,
+                supports_vision: None,
+                cooldown_seconds: 60,
+                failover_on_status_codes: vec![],
+                failover_on_error_keywords: vec![],
+            },
+        ];
+
+        let order = crate::gateway::failover::build_attempt_order(
+            &candidates,
+            "p1",
+            true,
+            false,
+            None,
+        );
+        assert_eq!(order.len(), 1);
+        assert_eq!(order[0].provider_id, "p1");
+    }
+
+    #[test]
+    fn should_failover_uses_candidate_config() {
+        let candidate = ProviderCandidate {
+            provider_id: "p1".into(),
+            provider_name: "Test".into(),
+            priority: 1,
+            model: "m".into(),
+            routing_conditions: None,
+            in_cooldown: false,
+            supports_vision: None,
+            cooldown_seconds: 60,
+            failover_on_status_codes: vec![418],
+            failover_on_error_keywords: vec!["quota".into()],
+        };
+        assert!(should_failover(Some(418), "ok", &candidate));
+        assert!(!should_failover(Some(500), "ok", &candidate));
+        assert!(should_failover(None, "insufficient quota", &candidate));
+    }
+
+    // ── Anthropic branch decision ─────────────────────────────────
+
+    #[test]
+    fn anthropic_branch_triggered_for_anthropic_provider_with_url() {
+        let provider = anthropic_provider();
+        let config = ProviderConfig::from_provider(&provider).unwrap();
+        assert!(config.is_anthropic() && config.has_anthropic_url());
+    }
+
+    #[test]
+    fn anthropic_branch_not_triggered_for_openai_provider() {
+        let mut provider = anthropic_provider();
+        provider.provider_type = "openai".into();
+        provider.anthropic_base_url = None;
+        let config = ProviderConfig::from_provider(&provider).unwrap();
+        assert!(!(config.is_anthropic() && config.has_anthropic_url()));
+    }
+
+    // ── internal error mapping ────────────────────────────────────
+
+    #[tokio::test]
+    async fn malformed_chat_body_returns_chat_parse_error() {
+        // log_request_success/error record Prometheus metrics; ensure a recorder
+        // is installed so the test path does not panic.
+        let _ = crate::gateway::metrics::init();
+
+        let pool = in_memory_pool();
+        let conn = pool.get().unwrap();
+        storage::migrations::run_migrations(&conn).unwrap();
+
+        let provider = create_test_provider(
+            &conn,
+            "Anthropic Error",
+            "anthropic",
+            "https://api.anthropic.com",
+            "sk-ant-test",
+            r#"["anthropic_messages"]"#,
+            "claude-3-5-sonnet-latest",
+        );
+        let config = ProviderConfig::from_provider(&provider).unwrap();
+        let state = gateway_state(pool);
+
+        let err = super::client_chat_to_anthropic_handle(
+            state,
+            config,
+            provider,
+            "not valid json",
+            "claude-3-5-sonnet-latest".into(),
+            "req_test".into(),
+            "not valid json".into(),
+            Instant::now(),
+            "test".into(),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.0.code, codes::CHAT_PARSE_ERROR);
+    }
+}

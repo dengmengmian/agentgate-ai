@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, act, waitFor, screen } from "@testing-library/react";
+import { fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 vi.mock("@/lib/api");
@@ -25,6 +26,28 @@ function logItem(id: string, model: string) {
   } as any;
 }
 
+function logDetail(id: string): any {
+  return {
+    ...logItem(id, "gpt-4"),
+    provider: "OpenAI",
+    client: "Codex",
+    route: "/v1/chat/completions",
+    input_tokens: 3,
+    output_tokens: 4,
+    cost: 0.001,
+    cache_write_tokens: null,
+    cache_read_tokens: null,
+    raw_request: '{"messages":[{"role":"user","content":"hi"}]}',
+    converted_request: null,
+    raw_response: '{"choices":[{"message":{"content":"hello"}}]}',
+    converted_response: null,
+    sse_events: null,
+    tool_calls: null,
+    trace_json: null,
+    external_id: null,
+  };
+}
+
 describe("Logs", () => {
   beforeEach(() => {
     __resetGlobalStoresForTest();
@@ -33,6 +56,26 @@ describe("Logs", () => {
     vi.mocked(api.listLogModels).mockResolvedValue([]);
     vi.mocked(api.listProviders).mockResolvedValue([] as any);
     vi.mocked(api.listRouteProfiles).mockResolvedValue([] as any);
+    vi.mocked(api.getRequestLogDetail).mockResolvedValue(logDetail("a"));
+    vi.mocked(api.clearRequestLogs).mockResolvedValue(true);
+    vi.mocked(api.syncClaudeSessions).mockResolvedValue({
+      files_scanned: 0,
+      imported: 0,
+      skipped: 0,
+      errors: [],
+    } as any);
+    vi.mocked(api.syncCodexSessions).mockResolvedValue({
+      files_scanned: 0,
+      imported: 0,
+      skipped: 0,
+      errors: [],
+    } as any);
+    vi.mocked(api.syncGeminiSessions).mockResolvedValue({
+      files_scanned: 0,
+      imported: 0,
+      skipped: 0,
+      errors: [],
+    } as any);
   });
 
   it("慢返回的旧请求结果不覆盖新请求", async () => {
@@ -93,5 +136,58 @@ describe("Logs", () => {
       next.click();
     });
     expect(scrollSpy).toHaveBeenCalled();
+  });
+
+  it("opens the detail drawer and copies raw payload content", async () => {
+    const clipboard = { writeText: vi.fn().mockResolvedValue(undefined) };
+    Object.assign(navigator, { clipboard });
+    vi.mocked(api.listRequestLogs).mockResolvedValue([
+      {
+        ...logItem("a", "gpt-4"),
+        provider: "OpenAI",
+        route: "/v1/chat/completions",
+      },
+    ] as any);
+    vi.mocked(api.countRequestLogs).mockResolvedValue(1);
+
+    render(
+      <MemoryRouter>
+        <Logs />
+      </MemoryRouter>
+    );
+
+    const modelCell = await screen.findByText("gpt-4");
+    await act(async () => fireEvent.click(modelCell.closest("tr")!));
+
+    await waitFor(() =>
+      expect(api.getRequestLogDetail).toHaveBeenCalledWith("a")
+    );
+    expect(await screen.findByText("logs.raw_request")).toBeInTheDocument();
+
+    await act(async () => {
+      screen.getAllByTitle("common.copy")[0].click();
+    });
+    expect(clipboard.writeText).toHaveBeenCalledWith(
+      '{"messages":[{"role":"user","content":"hi"}]}'
+    );
+  });
+
+  it("syncs imported logs and confirms clearing logs", async () => {
+    render(
+      <MemoryRouter>
+        <Logs />
+      </MemoryRouter>
+    );
+
+    await screen.findByText("logs.no_logs");
+    await act(async () => screen.getByText("logs.sync_logs").click());
+    await act(async () => screen.getByText("logs.sync_codex").click());
+    await waitFor(() => expect(api.syncCodexSessions).toHaveBeenCalled());
+
+    await act(async () => screen.getByText("logs.clear").click());
+    expect(await screen.findByText("logs.clear_title")).toBeInTheDocument();
+    await act(async () => screen.getByText("logs.clear_confirm").click());
+
+    await waitFor(() => expect(api.clearRequestLogs).toHaveBeenCalled());
   });
 });

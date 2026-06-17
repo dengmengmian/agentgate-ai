@@ -255,3 +255,101 @@ pub fn open_token_folder() -> Result<bool, AppError> {
     open::that(&dir).map_err(|e| AppError::internal(format!("Failed to open folder: {e}")))?;
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use r2d2::Pool;
+    use r2d2_sqlite::SqliteConnectionManager;
+
+    use super::*;
+    use crate::app::state::AppState;
+    use crate::models::gateway::GatewayRuntimeState;
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
+
+    fn test_state() -> AppState {
+        let manager = SqliteConnectionManager::memory();
+        let pool = Pool::builder().max_size(1).build(manager).unwrap();
+        {
+            let conn = pool.get().unwrap();
+            crate::storage::migrations::run_migrations(&conn).unwrap();
+        }
+        AppState {
+            db: pool,
+            gateway_runtime: Arc::new(Mutex::new(GatewayRuntimeState::default())),
+            pet_click_through: Arc::new(Mutex::new(false)),
+        }
+    }
+
+    unsafe fn as_state<'r>(state: &'r AppState) -> tauri::State<'r, AppState> {
+        std::mem::transmute(state)
+    }
+
+    #[test]
+    fn get_gateway_settings_returns_defaults() {
+        let state = test_state();
+        let settings = get_gateway_settings(unsafe { as_state(&state) }).unwrap();
+        assert_eq!(settings.host, "127.0.0.1");
+        assert_eq!(settings.port, 9090);
+    }
+
+    #[test]
+    fn update_gateway_settings_persists_changes() {
+        let state = test_state();
+        let updated = update_gateway_settings(
+            UpdateGatewaySettingsInput {
+                host: Some("0.0.0.0".to_string()),
+                port: Some(8080),
+                ..Default::default()
+            },
+            unsafe { as_state(&state) },
+        )
+        .unwrap();
+        assert_eq!(updated.host, "0.0.0.0");
+        assert_eq!(updated.port, 8080);
+
+        let fetched = get_gateway_settings(unsafe { as_state(&state) }).unwrap();
+        assert_eq!(fetched.host, "0.0.0.0");
+        assert_eq!(fetched.port, 8080);
+    }
+
+    #[test]
+    fn get_gateway_status_reflects_runtime_and_settings() {
+        let state = test_state();
+        let status = get_gateway_status(unsafe { as_state(&state) }).unwrap();
+        assert!(!status.running);
+        assert_eq!(status.host, "127.0.0.1");
+        assert_eq!(status.port, 9090);
+    }
+
+    #[test]
+    fn get_gateway_auth_settings_reports_enabled_mode() {
+        let settings = get_gateway_auth_settings().unwrap();
+        assert!(settings.gateway_auth_enabled);
+        assert_eq!(settings.auth_mode, "local_token_file");
+    }
+
+    #[test]
+    fn ensure_local_access_token_generates_token() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let settings = ensure_local_access_token().unwrap();
+        assert!(settings.gateway_auth_enabled);
+        assert!(!settings.masked_token.is_empty());
+
+        let token = get_local_access_token().unwrap();
+        assert!(token.starts_with("ag_local_"));
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn regenerate_local_access_token_changes_token() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let first = ensure_local_access_token().unwrap();
+        let second = regenerate_local_access_token().unwrap();
+        assert_ne!(first.masked_token, second.masked_token);
+        cleanup(&temp);
+    }
+}

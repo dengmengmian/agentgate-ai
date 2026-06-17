@@ -422,6 +422,7 @@ export function Routes() {
                             setEditingName(true);
                           }}
                           className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary"
+                          title={t("routes.rename_profile")}
                         >
                           <Pencil className="h-3 w-3" />
                         </button>
@@ -498,6 +499,7 @@ export function Routes() {
                     <button
                       onClick={() => setDeleteTarget(detail.profile)}
                       className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-error/20 hover:text-error"
+                      title={t("routes.delete_profile")}
                     >
                       <Trash2 className="h-3 w-3" />
                     </button>

@@ -883,3 +883,594 @@ impl IntoResponse for GatewayError {
         (status, Json(body)).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+    use axum::http::{HeaderMap, StatusCode};
+    use axum::response::IntoResponse;
+    use r2d2::Pool;
+    use r2d2_sqlite::SqliteConnectionManager;
+    use serde_json::{json, Value};
+
+    use crate::errors::AppError;
+    use crate::models::gateway::UpdateGatewaySettingsInput;
+    use crate::models::provider::Provider;
+    use crate::models::route_profile::RouteProfileProviderView;
+    use crate::protocol::openai_responses::ResponsesRequest;
+    use crate::security::local_token;
+    use crate::storage::migrations::run_migrations;
+    use crate::test_utils::{cleanup, setup_temp_home, FS_LOCK};
+
+    fn test_provider() -> Provider {
+        Provider {
+            id: "p1".to_string(),
+            name: "Test".to_string(),
+            provider_type: "deepseek".to_string(),
+            base_url: "https://api.test.com".to_string(),
+            api_key: Some("sk-test".to_string()),
+            default_model: "test-model".to_string(),
+            reasoning_model: None,
+            supported_models: None,
+            model_mapping: None,
+            extra_headers: None,
+            anthropic_base_url: None,
+            responses_base_url: None,
+            protocol: "openai_chat_completions".to_string(),
+            timeout_seconds: 60,
+            status: "active".to_string(),
+            supports_vision: None,
+            auto_cache_control: None,
+            supports_cache: None,
+            model_capabilities: None,
+            provider_quirks: None,
+            body_filter_enabled: None,
+            thinking_rectifier_enabled: None,
+            error_mapper_enabled: None,
+            model_degradation_chain: None,
+            model_context_windows: None,
+            enabled: true,
+            is_active: true,
+            created_at: "now".to_string(),
+            updated_at: "now".to_string(),
+        }
+    }
+
+    fn provider_with_mapping() -> Provider {
+        Provider {
+            model_mapping: Some(r#"{"gpt-5.5":"deepseek-v4-pro"}"#.to_string()),
+            default_model: "deepseek-v4-flash".to_string(),
+            ..test_provider()
+        }
+    }
+
+    fn responses_req_with_input(input: Value) -> ResponsesRequest {
+        ResponsesRequest {
+            model: Some("gpt-5".into()),
+            input,
+            instructions: None,
+            system: None,
+            previous_response_id: None,
+            tools: None,
+            tool_choice: None,
+            stream: Some(false),
+            temperature: None,
+            top_p: None,
+            max_output_tokens: None,
+            parallel_tool_calls: None,
+            reasoning: None,
+            text: None,
+            metadata: None,
+            seed: None,
+            stop: None,
+            frequency_penalty: None,
+            presence_penalty: None,
+            extra: Default::default(),
+        }
+    }
+
+    fn memory_pool_with_refiners() -> crate::storage::db::DbPool {
+        let manager = SqliteConnectionManager::memory();
+        let pool = Pool::builder().max_size(1).build(manager).unwrap();
+        let conn = pool.get().unwrap();
+        run_migrations(&conn).unwrap();
+        crate::storage::gateway_settings::update(
+            &conn,
+            UpdateGatewaySettingsInput {
+                body_filter_global: Some(true),
+                thinking_rectifier_global: Some(true),
+                error_mapper_global: Some(false),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        drop(conn);
+        pool
+    }
+
+    // ── detect_client_from_ua ──
+
+    #[test]
+    fn detect_client_from_ua_empty_uses_route_default() {
+        let headers = HeaderMap::new();
+        assert_eq!(detect_client_from_ua(&headers, "Codex"), "Codex");
+    }
+
+    #[test]
+    fn detect_client_from_ua_codex_patterns() {
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "codex-cli/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "Codex");
+
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "codex/1.0.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "Codex");
+
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "OpenAI/Python 1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "OpenAI SDK");
+
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "OpenAI/Python 1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Codex"), "Codex");
+    }
+
+    #[test]
+    fn detect_client_from_ua_claude_code() {
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "claude-code/0.1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "Claude Code");
+    }
+
+    #[test]
+    fn detect_client_from_ua_kimi() {
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "KimiCLI/1.40.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "Kimi CLI");
+    }
+
+    #[test]
+    fn detect_client_from_ua_cursor() {
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "Cursor/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "Cursor");
+    }
+
+    #[test]
+    fn detect_client_from_ua_openai_sdk() {
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "openai-python/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "OpenAI SDK");
+    }
+
+    #[test]
+    fn detect_client_from_ua_anthropic_sdk() {
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "anthropic-sdk/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "Anthropic SDK");
+    }
+
+    #[test]
+    fn detect_client_from_ua_python_and_node_sdks() {
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "python-requests/2.28".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "Python SDK");
+
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "node-fetch/1.0".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "Node SDK");
+    }
+
+    #[test]
+    fn detect_client_from_ua_curl() {
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "curl/7.64.1".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "curl");
+    }
+
+    #[test]
+    fn detect_client_from_ua_unknown_returns_first_token() {
+        let mut h = HeaderMap::new();
+        h.insert("user-agent", "MyCustomAgent/1.0 extra".parse().unwrap());
+        assert_eq!(detect_client_from_ua(&h, "Default"), "MyCustomAgent/1.0");
+    }
+
+    // ── validate_request_boundary / host_is_allowed / origin_is_allowed ──
+
+    #[test]
+    fn host_is_allowed_accepts_empty_ip_localhost() {
+        assert!(host_is_allowed("", ""));
+        assert!(host_is_allowed("127.0.0.1", ""));
+        assert!(host_is_allowed("127.0.0.1:9090", ""));
+        assert!(host_is_allowed("localhost", ""));
+        assert!(host_is_allowed("localhost:9090", ""));
+        assert!(host_is_allowed("[::1]:9090", ""));
+        assert!(host_is_allowed("::1", ""));
+    }
+
+    #[test]
+    fn host_is_allowed_rejects_dns_without_whitelist() {
+        assert!(!host_is_allowed("evil.com", ""));
+        assert!(!host_is_allowed("evil.com:9090", ""));
+    }
+
+    #[test]
+    fn host_is_allowed_respects_whitelist() {
+        assert!(host_is_allowed("my.app", "my.app"));
+        assert!(host_is_allowed("my.app:9090", "my.app"));
+        assert!(host_is_allowed("a.example.com", "b.example.com, a.example.com"));
+    }
+
+    #[test]
+    fn origin_is_allowed_accepts_empty_localhost_ip_and_whitelist() {
+        assert!(origin_is_allowed("", "", ""));
+        assert!(origin_is_allowed("http://localhost:1420", "", ""));
+        assert!(origin_is_allowed("http://127.0.0.1:1420", "", ""));
+        assert!(origin_is_allowed("tauri://localhost", "", ""));
+        assert!(origin_is_allowed("https://my.app", "https://my.app", ""));
+    }
+
+    #[test]
+    fn origin_is_allowed_rejects_cross_site_and_null() {
+        assert!(!origin_is_allowed("https://evil.com", "", ""));
+        assert!(!origin_is_allowed("null", "", ""));
+        assert!(!origin_is_allowed("https://evil.com", "https://other.app", ""));
+    }
+
+    #[test]
+    #[serial_test::serial(env)]
+    fn validate_request_boundary_allows_localhost_and_rejects_dns() {
+        std::env::remove_var("AGENTGATE_ALLOWED_HOSTS");
+        std::env::remove_var("AGENTGATE_ALLOWED_ORIGINS");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "127.0.0.1:9090".parse().unwrap());
+        assert!(validate_request_boundary(&headers).is_ok());
+
+        let mut headers = HeaderMap::new();
+        headers.insert("host", "evil.com".parse().unwrap());
+        let err = validate_request_boundary(&headers).unwrap_err();
+        assert_eq!(err.0.code, "GATEWAY_HOST_REJECTED");
+    }
+
+    // ── validate_auth ──
+
+    #[test]
+    fn validate_auth_missing() {
+        let headers = HeaderMap::new();
+        let err = validate_auth(&headers).unwrap_err();
+        assert_eq!(err.0.code, "GATEWAY_AUTH_MISSING");
+    }
+
+    #[test]
+    fn validate_auth_invalid_format() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let _ = local_token::ensure_token().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", "not-a-valid-token".parse().unwrap());
+        let err = validate_auth(&headers).unwrap_err();
+        assert_eq!(err.0.code, "GATEWAY_AUTH_INVALID");
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn validate_auth_valid_bearer() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let token = local_token::ensure_token().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("authorization", format!("Bearer {token}").parse().unwrap());
+        assert!(validate_auth(&headers).is_ok());
+        cleanup(&temp);
+    }
+
+    #[test]
+    fn validate_auth_valid_x_api_key() {
+        let _guard = FS_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let temp = setup_temp_home();
+        let token = local_token::ensure_token().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-api-key", token.parse().unwrap());
+        assert!(validate_auth(&headers).is_ok());
+        cleanup(&temp);
+    }
+
+    // ── sanitize_body / truncate_str ──
+
+    #[test]
+    fn truncate_str_ascii_and_multibyte_boundaries() {
+        assert_eq!(truncate_str("hello", 10), "hello");
+        assert_eq!(truncate_str("hello world", 5), "hello");
+        let s = "你好世界";
+        assert_eq!(truncate_str(s, 4), "你");
+        assert_eq!(truncate_str(s, 5), "你");
+        assert_eq!(truncate_str(s, 6), "你好");
+        assert_eq!(truncate_str(s, 100), s);
+    }
+
+    #[test]
+    fn sanitize_body_redacts_sensitive_values() {
+        let body = r#"{"key": "sk-abcdefghij1234567890", "x-api-key": "supersecretvalue123"}"#;
+        let sanitized = sanitize_body(body);
+        assert!(!sanitized.contains("abcdefghij1234567890"));
+        assert!(!sanitized.contains("supersecretvalue123"));
+        assert!(sanitized.contains("sk-"));
+    }
+
+    #[test]
+    fn sanitize_body_truncates_long_bodies() {
+        let body = "a".repeat(60_000);
+        let sanitized = sanitize_body(&body);
+        assert!(sanitized.len() <= 50_000);
+    }
+
+    // ── native_model_override ──
+
+    #[test]
+    fn native_model_override_agentgate_virtual_model() {
+        let provider = provider_with_mapping();
+        assert_eq!(
+            native_model_override(&provider, Some("agentgate"), None),
+            Some("deepseek-v4-flash".to_string())
+        );
+        assert_eq!(
+            native_model_override(&provider, Some("openai/agentgate"), None),
+            Some("deepseek-v4-flash".to_string())
+        );
+        assert_eq!(
+            native_model_override(&provider, Some("agentgate"), Some("deepseek-v4-pro")),
+            Some("deepseek-v4-pro".to_string())
+        );
+    }
+
+    #[test]
+    fn native_model_override_explicit_mapping_wins_and_unmapped_returns_none() {
+        let provider = provider_with_mapping();
+        assert_eq!(
+            native_model_override(&provider, Some("gpt-5.5"), Some("deepseek-v4-flash")),
+            Some("deepseek-v4-pro".to_string())
+        );
+        assert_eq!(
+            native_model_override(&provider, Some("mimo-v2.5"), Some("deepseek-v4-flash")),
+            None
+        );
+        assert_eq!(native_model_override(&provider, Some(""), None), None);
+        assert_eq!(native_model_override(&provider, None, None), None);
+    }
+
+    // ── chat_request_has_images / request_contains_images ──
+
+    #[test]
+    fn request_contains_images_current_turn_only() {
+        let text_only = responses_req_with_input(json!([
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "hi"}
+            ]}
+        ]));
+        assert!(!request_contains_images(&text_only));
+
+        let current_image = responses_req_with_input(json!([
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_image", "image_url": {"url": "x"}}
+            ]}
+        ]));
+        assert!(request_contains_images(&current_image));
+    }
+
+    #[test]
+    fn request_contains_images_ignores_historic_image() {
+        let req = responses_req_with_input(json!([
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_image", "image_url": {"url": "x"}}
+            ]},
+            {"type": "message", "role": "assistant", "content": "ok"},
+            {"type": "message", "role": "user", "content": [
+                {"type": "input_text", "text": "and now"}
+            ]}
+        ]));
+        assert!(!request_contains_images(&req));
+    }
+
+    #[test]
+    fn request_contains_images_top_level_content_parts() {
+        let req = responses_req_with_input(json!([
+            {"type": "input_text", "text": "describe this"},
+            {"type": "input_image", "image_url": {"url": "x"}}
+        ]));
+        assert!(request_contains_images(&req));
+    }
+
+    #[test]
+    fn chat_request_has_images_current_turn_only() {
+        let current_image = json!({"messages": [
+            {"role": "user", "content": [
+                {"type": "text", "text": "what"},
+                {"type": "image_url", "image_url": {"url": "x"}}
+            ]}
+        ]}).to_string();
+        assert!(chat_request_has_images(&current_image));
+
+        let historic_image = json!({"messages": [
+            {"role": "user", "content": [{"type": "image_url", "image_url": {"url": "x"}}]},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": [{"type": "text", "text": "and now"}]}
+        ]}).to_string();
+        assert!(!chat_request_has_images(&historic_image));
+
+        let text_only = json!({"messages": [
+            {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+        ]}).to_string();
+        assert!(!chat_request_has_images(&text_only));
+    }
+
+    // ── route_fallback_chain / route_candidate_skip_reasons ──
+
+    #[test]
+    fn route_fallback_chain_marks_roles_and_selected() {
+        let mk = |priority: i64, name: &str| RouteProfileProviderView {
+            id: format!("rpp{priority}"),
+            provider_id: format!("p{priority}"),
+            provider_name: name.into(),
+            provider_type: "openai".into(),
+            provider_protocol: "openai_responses".into(),
+            has_anthropic_url: false,
+            supports_vision: None,
+            model_capabilities: None,
+            priority,
+            enabled: true,
+            model_override: None,
+            cooldown_seconds: 600,
+            failover_on_status_codes: None,
+            failover_on_error_keywords: None,
+            routing_conditions: None,
+            runtime_available: true,
+            cooldown_until: None,
+            consecutive_failures: 0,
+        };
+        let providers = vec![mk(1, "Primary"), mk(2, "Backup")];
+        let chain = route_fallback_chain(&providers, "Backup");
+        assert_eq!(chain[0]["role"], "primary");
+        assert_eq!(chain[1]["role"], "fallback");
+        assert_eq!(chain[0]["step"], 1);
+        assert_eq!(chain[1]["step"], 2);
+        assert_eq!(chain[1]["selected"], true);
+        assert_eq!(chain[0]["selected"], false);
+    }
+
+    #[test]
+    fn route_candidate_skip_reasons_collects_skip_reasons() {
+        let provider = RouteProfileProviderView {
+            id: "rpp1".into(),
+            provider_id: "p1".into(),
+            provider_name: "NoVision".into(),
+            provider_type: "openai".into(),
+            provider_protocol: "openai_responses".into(),
+            has_anthropic_url: false,
+            supports_vision: Some(false),
+            model_capabilities: None,
+            priority: 1,
+            enabled: false,
+            model_override: None,
+            cooldown_seconds: 600,
+            failover_on_status_codes: None,
+            failover_on_error_keywords: None,
+            routing_conditions: None,
+            runtime_available: false,
+            cooldown_until: Some((chrono::Utc::now() + chrono::Duration::minutes(5)).to_rfc3339()),
+            consecutive_failures: 3,
+        };
+        let reasons = route_candidate_skip_reasons(&provider, true);
+        assert!(reasons.contains(&"disabled".to_string()));
+        assert!(reasons.contains(&"runtime_unavailable".to_string()));
+        assert!(reasons.contains(&"cooldown".to_string()));
+        assert!(reasons.contains(&"unsupported_vision".to_string()));
+    }
+
+    // ── refine_value_body / refine_struct_body ──
+
+    #[test]
+    fn refine_value_body_no_op_when_db_unavailable() {
+        let manager = SqliteConnectionManager::memory();
+        let pool = Pool::builder()
+            .max_size(1)
+            .connection_timeout(Duration::from_millis(100))
+            .build(manager)
+            .unwrap();
+        // Hold the only connection on another thread so refine_value_body cannot acquire one.
+        let pool2 = pool.clone();
+        let handle = std::thread::spawn(move || {
+            let _conn = pool2.get().unwrap();
+            std::thread::sleep(Duration::from_millis(300));
+        });
+        std::thread::sleep(Duration::from_millis(50));
+        let mut body = json!({"web_search": true});
+        let log = refine_value_body(&pool, &test_provider(), &mut body);
+        assert!(log.is_empty());
+        assert!(body.get("web_search").is_some());
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn refine_value_body_applies_refiners_when_settings_available() {
+        let pool = memory_pool_with_refiners();
+        let mut provider = test_provider();
+        provider.provider_type = "deepseek".to_string();
+        let mut body = json!({"web_search": true, "model": "m"});
+        let log = refine_value_body(&pool, &provider, &mut body);
+        assert!(log.body_filter.is_some());
+        assert!(body.get("web_search").is_none());
+    }
+
+    #[test]
+    fn refine_struct_body_applies_refiners_and_deserializes_back() {
+        let pool = memory_pool_with_refiners();
+        let mut provider = test_provider();
+        provider.provider_type = "deepseek".to_string();
+
+        #[derive(serde::Serialize, serde::Deserialize, Debug)]
+        struct Body {
+            #[serde(default)]
+            pub web_search: bool,
+            pub model: String,
+        }
+
+        let mut req = Body {
+            web_search: true,
+            model: "m".to_string(),
+        };
+        let log = refine_struct_body(&pool, &provider, &mut req);
+        assert!(log.body_filter.is_some());
+        assert!(!req.web_search);
+        assert_eq!(req.model, "m");
+    }
+
+    // ── GatewayError IntoResponse ──
+
+    #[test]
+    fn gateway_error_maps_status_codes() {
+        assert_eq!(
+            GatewayError(AppError::new(crate::errors::codes::RESPONSES_PARSE_ERROR, "bad"))
+                .into_response()
+                .status(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            GatewayError(AppError::new(crate::errors::codes::PROVIDER_API_KEY_MISSING, "no key"))
+                .into_response()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            GatewayError(AppError::new(crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND, "none"))
+                .into_response()
+                .status(),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+        assert_eq!(
+            GatewayError(AppError::new("UPSTREAM_STREAM_ERROR", "err"))
+                .into_response()
+                .status(),
+            StatusCode::BAD_GATEWAY
+        );
+        assert_eq!(
+            GatewayError(AppError::new("UNKNOWN_CODE", "err"))
+                .into_response()
+                .status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+    }
+
+    #[test]
+    fn gateway_error_body_has_openai_shape() {
+        let err = GatewayError(
+            AppError::new(crate::errors::codes::GATEWAY_AUTH_INVALID, "bad token")
+                .with_detail("token mismatch")
+                .with_suggestion("regenerate"),
+        );
+        let response = err.into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+}

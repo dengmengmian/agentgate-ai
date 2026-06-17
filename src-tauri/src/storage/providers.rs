@@ -265,6 +265,8 @@ pub fn set_active(conn: &Connection, id: &str) -> Result<Provider, AppError> {
         params![id, &now],
     )?;
 
+    ensure_provider_in_default_route_profiles(conn, id, &now)?;
+
     // Sync all default route profiles
     conn.execute(
         "UPDATE route_profiles SET active_provider_id = ?1, updated_at = ?2 WHERE is_default = 1",
@@ -272,6 +274,54 @@ pub fn set_active(conn: &Connection, id: &str) -> Result<Provider, AppError> {
     )?;
 
     get_by_id(conn, id)
+}
+
+fn ensure_provider_in_default_route_profiles(
+    conn: &Connection,
+    provider_id: &str,
+    now: &str,
+) -> Result<(), AppError> {
+    let mut stmt = conn.prepare("SELECT id FROM route_profiles WHERE is_default = 1")?;
+    let profile_ids = stmt
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    for profile_id in profile_ids {
+        let exists: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM route_profile_providers WHERE route_profile_id = ?1 AND provider_id = ?2",
+            params![&profile_id, provider_id],
+            |row| row.get(0),
+        )?;
+        if exists > 0 {
+            continue;
+        }
+
+        let priority: i64 = conn.query_row(
+            "SELECT COALESCE(MAX(priority), 0) + 1 FROM route_profile_providers WHERE route_profile_id = ?1",
+            [&profile_id],
+            |row| row.get(0),
+        )?;
+        let default_codes = "[402,429,500,502,503,504]";
+
+        conn.execute(
+            "INSERT INTO route_profile_providers (
+                id, route_profile_id, provider_id, priority, enabled,
+                cooldown_seconds, failover_on_status_codes,
+                created_at, updated_at
+             )
+             VALUES (?1, ?2, ?3, ?4, 1, 600, ?5, ?6, ?6)",
+            params![
+                uuid::Uuid::new_v4().to_string(),
+                &profile_id,
+                provider_id,
+                priority,
+                default_codes,
+                now,
+            ],
+        )?;
+    }
+
+    Ok(())
 }
 
 pub fn update_status(conn: &Connection, id: &str, status: &str) -> Result<(), AppError> {
@@ -382,6 +432,33 @@ mod tests {
         let fetched = get_by_id(&conn, &p.id).unwrap();
         assert_eq!(fetched.id, p.id);
         assert_eq!(fetched.name, "TestProvider");
+    }
+
+    #[test]
+    fn test_set_active_adds_provider_to_default_route_candidates() {
+        let conn = setup_db();
+        let provider = create_test_provider(&conn, "QuickstartProvider");
+
+        set_active(&conn, &provider.id).unwrap();
+
+        let profiles = crate::storage::route_profiles::list_all(&conn).unwrap();
+        let default_profiles: Vec<_> = profiles
+            .into_iter()
+            .filter(|profile| profile.is_default)
+            .collect();
+        assert!(!default_profiles.is_empty());
+
+        for profile in default_profiles {
+            let providers =
+                crate::storage::route_profiles::list_providers(&conn, &profile.id).unwrap();
+            assert!(
+                providers
+                    .iter()
+                    .any(|candidate| candidate.provider_id == provider.id),
+                "active provider should be available in default route profile {}",
+                profile.name
+            );
+        }
     }
 
     #[test]

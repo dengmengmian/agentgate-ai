@@ -44,14 +44,16 @@ For important releases, add a curated release note before tagging so GitHub Rele
 
 Before tagging:
 
+- Run the full local release gate. This is the only accepted pre-release entrypoint; if Docker preflight cannot run, the release check is not complete.
+
+```bash
+pnpm test:release-local
+```
+
 - Confirm `README.md` and `README_ZH.md` point to the new installer filenames after release assets are known, or keep them pointing at the latest stable release intentionally.
 - Confirm `CHANGELOG.md` has a version section.
 - Add `docs/release-notes/<version>.md` for important releases.
-- Run release preflight locally when Docker is available:
-
-```bash
-pnpm release:preflight
-```
+- For non-release local debugging only, `AGENTGATE_SKIP_DOCKER_PREFLIGHT=1 pnpm test:release-local` may be used to isolate frontend/unit/quickstart failures.
 
 After publishing:
 

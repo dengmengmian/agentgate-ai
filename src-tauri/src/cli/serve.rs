@@ -629,7 +629,10 @@ fn cmd_provider_add(
     match agentgate_lib::storage::providers::create(&conn, input) {
         Ok(p) => {
             if active {
-                let _ = agentgate_lib::storage::providers::set_active(&conn, &p.id);
+                if let Err(e) = agentgate_lib::storage::providers::set_active(&conn, &p.id) {
+                    eprintln!("Provider created, but activation failed: {}", e.message);
+                    std::process::exit(1);
+                }
             }
             println!(
                 "✓ Provider '{}' created (type: {}, model: {}, active: {})",

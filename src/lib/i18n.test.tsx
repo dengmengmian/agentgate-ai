@@ -1,0 +1,83 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { I18nProvider, useI18n } from "./i18n";
+
+function TestComponent() {
+  const { locale, setLocale, t } = useI18n();
+  return (
+    <div>
+      <span data-testid="locale">{locale}</span>
+      <span data-testid="dashboard">{t("dashboard.gateway", "fallback")}</span>
+      <span data-testid="missing">{t("missing.key", "fallback")}</span>
+      <button onClick={() => setLocale("zh")}>switch</button>
+    </div>
+  );
+}
+
+describe("I18nProvider", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it("defaults to navigator language when no saved preference", () => {
+    render(
+      <I18nProvider>
+        <TestComponent />
+      </I18nProvider>
+    );
+    const expectedLocale = navigator.language.startsWith("zh") ? "zh" : "en";
+    expect(screen.getByTestId("locale").textContent).toBe(expectedLocale);
+  });
+
+  it("uses saved locale from localStorage", () => {
+    localStorage.setItem("agentgate_locale", "zh");
+    render(
+      <I18nProvider>
+        <TestComponent />
+      </I18nProvider>
+    );
+    expect(screen.getByTestId("locale").textContent).toBe("zh");
+    expect(screen.getByTestId("dashboard").textContent).toBe("网关");
+  });
+
+  it("translates known keys and falls back for unknown keys", () => {
+    render(
+      <I18nProvider>
+        <TestComponent />
+      </I18nProvider>
+    );
+    expect(screen.getByTestId("dashboard").textContent).toBe("Gateway");
+    expect(screen.getByTestId("missing").textContent).toBe("fallback");
+  });
+
+  it("switches locale and persists to localStorage", async () => {
+    render(
+      <I18nProvider>
+        <TestComponent />
+      </I18nProvider>
+    );
+    fireEvent.click(screen.getByText("switch"));
+    await waitFor(() => {
+      expect(screen.getByTestId("locale").textContent).toBe("zh");
+    });
+    expect(screen.getByTestId("dashboard").textContent).toBe("网关");
+    expect(localStorage.getItem("agentgate_locale")).toBe("zh");
+  });
+
+  it("returns the key itself when no translation and no fallback", () => {
+    function NoFallback() {
+      const { t } = useI18n();
+      return <span>{t("no.such.key")}</span>;
+    }
+    render(
+      <I18nProvider>
+        <NoFallback />
+      </I18nProvider>
+    );
+    expect(screen.getByText("no.such.key")).toBeInTheDocument();
+  });
+});
