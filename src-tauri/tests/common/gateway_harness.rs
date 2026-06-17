@@ -145,35 +145,8 @@ impl GatewayHarness {
         .expect("insert mock provider");
 
         storage::providers::set_active(&conn, &provider_id).expect("set provider active");
-
-        // Wire the mock provider into every seeded default route profile so
-        // requests on /v1/chat/completions, /v1/responses, and /v1/messages
-        // all resolve to it.
-        let profile_ids: Vec<String> = {
-            let mut stmt = conn
-                .prepare("SELECT id FROM route_profiles WHERE is_default = 1")
-                .expect("prepare profile lookup");
-            stmt.query_map([], |row| row.get::<_, String>(0))
-                .expect("query profiles")
-                .filter_map(|r| r.ok())
-                .collect()
-        };
-        for profile_id in &profile_ids {
-            storage::route_profiles::add_provider(
-                &conn,
-                profile_id,
-                &provider_id,
-                agentgate_lib::models::route_profile::AddProviderToRouteInput {
-                    priority: Some(1),
-                    model_override: None,
-                    cooldown_seconds: Some(0),
-                    failover_on_status_codes: None,
-                    failover_on_error_keywords: None,
-                    routing_conditions: None,
-                },
-            )
-            .expect("add mock provider to route profile");
-        }
+        // set_active 内部已调用 ensure_provider_in_default_route_profiles，把 mock provider
+        // 加进所有默认 route profile，所以这里不需要再手动 add_provider。
 
         // setup 阶段拿的 conn 在 server::start 前 drop,归还给 pool。
         drop(conn);

@@ -37,7 +37,9 @@ jobs:
 
       - name: Install
         working-directory: site
-        run: pnpm install --frozen-lockfile
+        # site 是独立子站,根目录的 pnpm-workspace.yaml 会让 pnpm 把它当
+        # workspace 成员、依赖装不进 site/node_modules,用 --ignore-workspace 独立安装。
+        run: pnpm install --frozen-lockfile --ignore-workspace
 
       - name: Sync version into HTML
         # 从根 package.json 读 version,sed 替换 site HTML 里的
