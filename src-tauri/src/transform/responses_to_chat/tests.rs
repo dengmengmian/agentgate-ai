@@ -60,6 +60,69 @@ fn test_convert_with_instructions() {
     assert_eq!(result.messages[1].role, "user");
 }
 
+// 复现:新会话首条「文字 + 图片」多模态 user turn,跟在一条纯文本 user 消息之后。
+// merge_consecutive_messages 合并两条连续 user 时,多模态那条 content 是数组、
+// as_str() 为 None,被当成空内容直接 continue 丢弃 —— 用户问题和图片一起消失。
+#[test]
+fn test_multimodal_user_message_not_dropped_when_merged_after_text() {
+    let req = ResponsesRequest {
+        model: Some("gpt-4".to_string()),
+        input: json!([
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "AGENTS 指令"}]
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "这是什么内容？"},
+                    {"type": "input_image", "image_url": "data:image/png;base64,AAAA"}
+                ]
+            }
+        ]),
+        instructions: None,
+        system: None,
+        previous_response_id: None,
+        tools: None,
+        tool_choice: None,
+        stream: None,
+        temperature: None,
+        top_p: None,
+        max_output_tokens: None,
+        ..Default::default()
+    };
+    let result = convert_with_provider(&req, "gpt-4", &DefaultProvider).unwrap();
+
+    let mut all_text = String::new();
+    let mut has_image = false;
+    for m in &result.messages {
+        match m.content.as_ref() {
+            Some(Value::String(s)) => all_text.push_str(s),
+            Some(Value::Array(parts)) => {
+                for p in parts {
+                    match p.get("type").and_then(|t| t.as_str()) {
+                        Some("text") => {
+                            all_text.push_str(p.get("text").and_then(|t| t.as_str()).unwrap_or(""))
+                        }
+                        Some("image_url") => has_image = true,
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    assert!(
+        all_text.contains("这是什么内容？"),
+        "用户问题文字丢失: messages={:?}",
+        result.messages
+    );
+    assert!(has_image, "用户图片丢失: messages={:?}", result.messages);
+}
+
 #[test]
 fn test_convert_instructions_priority_over_system() {
     let req = ResponsesRequest {

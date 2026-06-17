@@ -301,6 +301,18 @@ fn connector_cli_hints(labels: &[String]) -> Vec<String> {
     hints
 }
 
+/// 把一条消息的 content 规范成 Chat 多模态 parts 列表。字符串转成单个 text 块,
+/// 数组原样保留,空/缺失返回空列表。用于合并含图片的同角色消息时不丢内容。
+fn content_to_parts(content: Option<&Value>) -> Vec<Value> {
+    match content {
+        Some(Value::String(s)) if !s.is_empty() => {
+            vec![serde_json::json!({"type": "text", "text": s})]
+        }
+        Some(Value::Array(arr)) => arr.clone(),
+        _ => Vec::new(),
+    }
+}
+
 /// Merge consecutive messages of the same role (user+user, assistant+assistant).
 /// Some providers reject consecutive same-role messages.
 pub(super) fn merge_consecutive_messages(messages: Vec<ChatMessage>) -> Vec<ChatMessage> {
@@ -316,16 +328,33 @@ pub(super) fn merge_consecutive_messages(messages: Vec<ChatMessage>) -> Vec<Chat
                 && msg.tool_call_id.is_none()
                 && (msg.role == "user" || msg.role == "system")
             {
-                // Merge content
-                let last_text = last.content.as_ref().and_then(|c| c.as_str()).unwrap_or("");
-                let new_text = msg.content.as_ref().and_then(|c| c.as_str()).unwrap_or("");
-                if !new_text.is_empty() {
-                    let merged = if last_text.is_empty() {
-                        new_text.to_string()
-                    } else {
-                        format!("{last_text}\n\n{new_text}")
-                    };
-                    last.content = Some(Value::String(merged));
+                let last_is_str = last
+                    .content
+                    .as_ref()
+                    .map_or(true, |c| c.is_string() || c.is_null());
+                let new_is_str = msg
+                    .content
+                    .as_ref()
+                    .map_or(true, |c| c.is_string() || c.is_null());
+                if last_is_str && new_is_str {
+                    // 两条都是纯文本:沿用 \n\n 拼接。
+                    let last_text = last.content.as_ref().and_then(|c| c.as_str()).unwrap_or("");
+                    let new_text = msg.content.as_ref().and_then(|c| c.as_str()).unwrap_or("");
+                    if !new_text.is_empty() {
+                        let merged = if last_text.is_empty() {
+                            new_text.to_string()
+                        } else {
+                            format!("{last_text}\n\n{new_text}")
+                        };
+                        last.content = Some(Value::String(merged));
+                    }
+                } else {
+                    // 任一条是多模态数组(图片等):合并成 parts 数组,绝不丢内容。
+                    // as_str() 对数组返回 None,旧逻辑会把整条消息连同图片和文字
+                    // 一起吞掉,所以这里必须按 parts 合并。
+                    let mut parts = content_to_parts(last.content.as_ref());
+                    parts.extend(content_to_parts(msg.content.as_ref()));
+                    last.content = Some(Value::Array(parts));
                 }
                 continue;
             }
