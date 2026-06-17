@@ -368,22 +368,32 @@ mod tests {
 
     #[test]
     fn capacity_overflow_evicts_least_recently_hit() {
-        // 填满 512 条后再插第 513 条，应淘汰 last_hit_at_ms 最旧的那条。
-        // 批量 record 的时间戳几乎相同，回拨其中一条使最旧者确定。
+        // 验证 record 在 store 满载时会淘汰 last_hit_at_ms 最旧的那条。
+        // 直接在 store 里构造满载状态，避免 512 次 record 调用在 CI 高并发下
+        // 因进程全局状态污染导致条目数不稳定（此前偶发 499/512）。
         let _g = SESSION_LOCK.lock().unwrap_or_else(|p| p.into_inner());
         clear();
-        for i in 0..MAX_ENTRIES {
-            record(&format!("sa_cap_{i}"), "prov_x");
-        }
+        let oldest_key = "sa_cap_7";
         {
             let mut g = store().lock().unwrap_or_else(|e| e.into_inner());
+            for i in 0..MAX_ENTRIES {
+                g.insert(
+                    format!("sa_cap_{i}"),
+                    AffinityEntry {
+                        provider_id: "prov_x".to_string(),
+                        created_at_ms: now_ms(),
+                        last_hit_at_ms: now_ms(),
+                        hit_count: 1,
+                    },
+                );
+            }
+            g.get_mut(oldest_key).unwrap().last_hit_at_ms = now_ms() - 60_000;
             assert_eq!(g.len(), MAX_ENTRIES);
-            g.get_mut("sa_cap_7").unwrap().last_hit_at_ms = now_ms() - 60_000;
         }
         record("sa_cap_overflow", "prov_x");
         let g = store().lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(g.len(), MAX_ENTRIES, "淘汰后回到容量上限");
-        assert!(!g.contains_key("sa_cap_7"), "最久未命中的条目被淘汰");
+        assert!(!g.contains_key(oldest_key), "最久未命中的条目被淘汰");
         assert!(g.contains_key("sa_cap_overflow"), "新条目保留");
     }
 
