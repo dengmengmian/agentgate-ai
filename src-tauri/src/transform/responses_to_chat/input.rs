@@ -218,27 +218,17 @@ pub(super) fn convert_input_array(
                 });
             }
             "compaction" | "context_compaction" | "compaction_summary" => {
-                // Codex auto-compact: convert summary to user message
+                // Codex auto-compact: convert summary to user message.
+                // 取 `summary` / `content` 文本;无法还原时兜底占位。
                 flush_tool_calls(
                     &mut messages,
                     &mut pending_tool_calls,
                     &mut pending_reasoning,
                 );
-                // 优先识别 AgentGate 自己塞的 encrypted_content(magic prefix),
-                // 解码出原 summary 文本注入。这样跨多轮 compact 也能正确还原历史。
-                // 真正的 OpenAI 加密 token 或 `summary` / `content` 字段走 fallback。
                 let summary = item
-                    .get("encrypted_content")
-                    .and_then(|v| v.as_str())
-                    .and_then(crate::gateway::codex_compact::decode_summary)
-                    .map(|s| {
-                        Value::String(format!("[Prior compacted history]\n\n{s}"))
-                    })
-                    .or_else(|| {
-                        item.get("summary")
-                            .or(item.get("content"))
-                            .map(|v| extract_content(Some(v)))
-                    })
+                    .get("summary")
+                    .or(item.get("content"))
+                    .map(|v| extract_content(Some(v)))
                     .unwrap_or(Value::String("[context compacted]".to_string()));
                 messages.push(ChatMessage {
                     role: "user".to_string(),

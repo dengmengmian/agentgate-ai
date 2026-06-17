@@ -1,5 +1,5 @@
 use axum::body::Body;
-use axum::extract::{State as AxumState, OriginalUri};
+use axum::extract::State as AxumState;
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 use serde_json::{json, Value};
@@ -33,7 +33,6 @@ use gemini::*;
 // ── POST /v1/responses ─────────────────────────────────────────
 
 pub async fn handle_responses(
-    OriginalUri(uri): OriginalUri,
     headers: HeaderMap,
     AxumState(state): AxumState<GatewayState>,
     body: bytes::Bytes,
@@ -45,8 +44,6 @@ pub async fn handle_responses(
         uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string()
     );
     let client_type = detect_client_from_ua(&headers, "Codex");
-    let uri_path = uri.path().to_string();
-    let is_codex_compact = crate::gateway::codex_compact::is_codex_v2_compaction(&headers, &uri_path);
 
     // Decompress if needed — Codex.app with `requires_openai_auth = true`
     // gzip-compresses the request body to match the production OpenAI flow.
@@ -151,63 +148,6 @@ pub async fn handle_responses(
         };
 
         let model = candidate.model.clone();
-
-        // Codex remote compaction v2:本地做 summary,绕过上游(上游模型多半接不上)。
-        // 走 chat completions 调用,跟当前 provider 共用同一把 API key 和模型。
-        // 失败不再失败转移——compact 是 best-effort,上层失败就让原流程接力。
-        if is_codex_compact {
-            return match crate::gateway::codex_compact::handle_codex_compaction(
-                &state.http_client,
-                &config,
-                &req,
-                &request_id,
-                start,
-            )
-            .await
-            {
-                Ok(resp) => {
-                    let trace = json!({
-                        "mode": "codex_compact",
-                        "client_protocol": "openai_responses",
-                        "provider_protocol": "openai_chat_completions",
-                        "route": &uri_path,
-                        "summary": "AgentGate 本地做 summary 替代远程 v2 compaction",
-                    })
-                    .to_string();
-                    log_request_success(
-                        &state.db,
-                        &client_type,
-                        &uri_path,
-                        &request_id,
-                        &sanitize_body(&body),
-                        "",
-                        "(codex_compact SSE)",
-                        "",
-                        None,
-                        &provider.name,
-                        &model,
-                        200,
-                        start.elapsed().as_millis() as i64,
-                        Some(&trace),
-                        crate::gateway::usage::TokenUsage::default(),
-                    );
-                    Ok(resp)
-                }
-                Err(e) => {
-                    log_request_error(
-                        &state.db,
-                        &client_type,
-                        &uri_path,
-                        &request_id,
-                        &sanitize_body(&body),
-                        Some(&provider.name),
-                        &e.0,
-                        start.elapsed().as_millis() as i64,
-                    );
-                    Err(e)
-                }
-            };
-        }
 
         let result = if config.has_responses_url() {
             // Pass-through: provider has explicit Responses API endpoint
