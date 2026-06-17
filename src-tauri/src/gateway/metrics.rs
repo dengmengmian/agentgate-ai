@@ -106,3 +106,51 @@ pub fn record_failover(from_provider: &str, reason: &str) {
 pub fn set_active_requests(n: u64) {
     metrics::gauge!("agentgate_active_requests").set(n as f64);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn init_second_call_returns_false() {
+        // First call may have already happened in another test in the same binary,
+        // so we only assert on the idempotent property.
+        let _ = init();
+        assert!(!init());
+    }
+
+    #[tokio::test]
+    #[serial]
+    async fn render_after_init_returns_ok() {
+        // Other tests may have already installed the global recorder; init is idempotent.
+        let _ = init();
+        record_request("/v1/chat/completions", "Codex", "openai", 200, 0.123);
+        record_tokens("openai", "gpt-5", "input", 100);
+        record_failover("openai", "429");
+        set_active_requests(3);
+
+        let response = render().await;
+        let (parts, body) = response.into_response().into_parts();
+        assert_eq!(parts.status, axum::http::StatusCode::OK);
+        let body_text = body_to_string(body).await;
+        assert!(body_text.contains("agentgate_requests_total"));
+        assert!(body_text.contains("agentgate_upstream_tokens_total"));
+        assert!(body_text.contains("agentgate_failover_attempts_total"));
+        assert!(body_text.contains("agentgate_active_requests"));
+    }
+
+    async fn body_to_string(body: axum::body::Body) -> String {
+        let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
+        String::from_utf8_lossy(&bytes).to_string()
+    }
+
+    #[test]
+    #[serial]
+    fn record_tokens_ignores_non_positive_counts() {
+        // Just ensure it does not panic; recorder may or may not be installed.
+        record_tokens("p", "m", "input", 0);
+        record_tokens("p", "m", "input", -5);
+    }
+}

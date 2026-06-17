@@ -199,3 +199,200 @@ pub fn cleanup_older_than(conn: &Connection, retention_days: i64) -> Result<usiz
     let deleted = conn.execute("DELETE FROM request_logs WHERE timestamp < ?1", [&cutoff])?;
     Ok(deleted)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::request_log::RequestLogFilter;
+    use crate::storage::request_logs::query;
+    use rusqlite::Connection;
+
+    fn empty_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE request_logs (
+                id TEXT PRIMARY KEY,
+                request_id TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                client TEXT,
+                provider TEXT,
+                model TEXT,
+                route TEXT,
+                status_code INTEGER,
+                latency_ms INTEGER,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                raw_request TEXT,
+                converted_request TEXT,
+                raw_response TEXT,
+                converted_response TEXT,
+                sse_events TEXT,
+                tool_calls TEXT,
+                error_message TEXT,
+                cost REAL,
+                trace_json TEXT,
+                cache_write_tokens INTEGER,
+                cache_read_tokens INTEGER,
+                source TEXT,
+                session_id TEXT,
+                external_id TEXT
+            );",
+        )
+        .unwrap();
+        conn
+    }
+
+    fn empty_filter() -> RequestLogFilter {
+        RequestLogFilter {
+            client: None,
+            provider: None,
+            model: None,
+            route_profile_id: None,
+            status: None,
+            error_type: None,
+            keyword: None,
+            source: None,
+            session_id: None,
+            limit: Some(100),
+            offset: Some(0),
+        }
+    }
+
+    #[test]
+    fn insert_creates_gateway_row_with_defaults() {
+        let conn = empty_db();
+        insert(
+            &conn,
+            "req-1",
+            "Codex",
+            "openai_official",
+            "gpt-5",
+            "/v1/responses",
+            200,
+            120,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(10),
+            Some(20),
+            Some(0.001),
+            Some(1),
+            Some(2),
+            None,
+            Some("sess-1"),
+            None,
+        )
+        .unwrap();
+
+        let rows = query::list(&conn, empty_filter()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].request_id, "req-1");
+        assert_eq!(rows[0].source, Some("gateway".to_string())); // default source
+        assert_eq!(rows[0].session_id, Some("sess-1".to_string()));
+    }
+
+    #[test]
+    fn insert_session_log_creates_client_session_row() {
+        let conn = empty_db();
+        insert_session_log(
+            &conn,
+            "2026-06-01T12:00:00Z",
+            "Codex",
+            "openai_official",
+            "gpt-5",
+            "/v1/responses",
+            "codex_session",
+            "sess-a",
+            "ext-1",
+            Some(5),
+            Some(15),
+            Some(0),
+            Some(1),
+            Some(0.0005),
+        )
+        .unwrap();
+
+        let rows = query::list(&conn, empty_filter()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].client, Some("Codex".to_string()));
+        assert_eq!(rows[0].source, Some("codex_session".to_string()));
+        assert_eq!(rows[0].status_code, Some(200));
+        assert_eq!(rows[0].latency_ms, Some(0));
+    }
+
+    #[test]
+    fn delete_by_session_removes_only_target_session() {
+        let conn = empty_db();
+        insert(
+            &conn, "r1", "c", "p", "m", "/r", 200, 0, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, Some("s1"), None,
+        )
+        .unwrap();
+        insert(
+            &conn, "r2", "c", "p", "m", "/r", 200, 0, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, Some("s2"), None,
+        )
+        .unwrap();
+
+        let deleted = delete_by_session(&conn, "s1").unwrap();
+        assert_eq!(deleted, 1);
+
+        let rows = query::list(&conn, empty_filter()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].session_id, Some("s2".to_string()));
+    }
+
+    #[test]
+    fn external_ids_for_source_returns_existing_ids() {
+        let conn = empty_db();
+        insert_session_log(&conn, "2026-06-01T12:00:00Z", "c", "p", "m", "/r", "codex_session", "s", "ext-a", None, None, None, None, None).unwrap();
+        insert_session_log(&conn, "2026-06-01T12:00:01Z", "c", "p", "m", "/r", "codex_session", "s", "ext-b", None, None, None, None, None).unwrap();
+
+        let found = external_ids_for_source(&conn, "codex_session", &["ext-a".to_string(), "ext-c".to_string()]).unwrap();
+        assert!(found.contains("ext-a"));
+        assert!(!found.contains("ext-b"));
+        assert!(!found.contains("ext-c"));
+    }
+
+    #[test]
+    fn external_ids_for_source_empty_candidates_returns_empty() {
+        let conn = empty_db();
+        let found = external_ids_for_source(&conn, "codex_session", &[]).unwrap();
+        assert!(found.is_empty());
+    }
+
+    #[test]
+    fn clear_removes_all_rows() {
+        let conn = empty_db();
+        insert(
+            &conn, "r1", "c", "p", "m", "/r", 200, 0, None, None, None, None, None, None, None,
+            None, None, None, None, None, None, None, None, None,
+        )
+        .unwrap();
+        assert!(clear(&conn).unwrap());
+        let rows = query::list(&conn, empty_filter()).unwrap();
+        assert!(rows.is_empty());
+    }
+
+    #[test]
+    fn cleanup_older_than_deletes_only_old_rows() {
+        let conn = empty_db();
+        let old = (chrono::Utc::now() - chrono::Duration::days(10)).to_rfc3339();
+        let recent = (chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339();
+
+        insert_session_log(&conn, &old, "c", "p", "m", "/r", "codex_session", "s1", "old-1", None, None, None, None, None).unwrap();
+        insert_session_log(&conn, &recent, "c", "p", "m", "/r", "codex_session", "s2", "new-1", None, None, None, None, None).unwrap();
+
+        let deleted = cleanup_older_than(&conn, 7).unwrap();
+        assert_eq!(deleted, 1);
+
+        let rows = query::list(&conn, empty_filter()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].session_id, Some("s2".to_string()));
+    }
+}
