@@ -310,13 +310,22 @@ pub fn generate_snippet(host: &str, port: i64, bearer_token: &str) -> String {
     //   base_url = "http://localhost:9090/v1"  ← override points to us
     //   requires_openai_auth = true             ← keep ChatGPT auth state live
     //
-    // This is the magic: Codex.app's IDE entries (Mobile, plugins, quota,
-    // bundled extensions) gate themselves on `model_provider == openai/
-    // chatgpt`. By naming the provider `OpenAI` we satisfy that check, and
-    // by overriding its `base_url` the actual traffic still flows through
-    // AgentGate. `requires_openai_auth = true` tells Codex "treat this
-    // provider as one that still needs ChatGPT login state to be valid",
-    // so the IDE keeps the official auth-aware UI alive.
+    // `name = "OpenAI"` is load-bearing and MUST stay "OpenAI":
+    //   1. IDE feature gate — Codex.app lights up the plugin marketplace,
+    //      Browser, Computer Use and quota only when the active provider's
+    //      `name == "OpenAI"` (`is_openai()`). Rename it and the marketplace
+    //      vanishes (learned the hard way).
+    //   2. It also switches remote compaction v2 ON. That needs OpenAI's
+    //      encrypted context which third-party upstreams (MiMo etc.) can't
+    //      produce, so Codex would hang mid-turn — EXCEPT we declare a huge
+    //      `model_context_window = 1000000`, pushing the compaction trigger to
+    //      ~950k tokens a normal session never reaches. The gateway's own
+    //      auto_compact tidies the real ~128k window long before that.
+    //
+    // Net: keep `name = "OpenAI"` (IDE alive) + big window (compaction never
+    // fires). This is cc-switch's approach. `requires_openai_auth = true`
+    // keeps the ChatGPT auth-aware UI / mobile login alive; overriding
+    // `base_url` routes the actual traffic through AgentGate.
     //
     // `experimental_bearer_token` carries the local AgentGate access token
     // — Codex sends `Authorization: Bearer ag_local_…` to us. auth.json is
@@ -333,6 +342,8 @@ pub fn generate_snippet(host: &str, port: i64, bearer_token: &str) -> String {
     // official ChatGPT IDE features.
     format!(
         r#"model_provider = "OpenAI"
+model_context_window = 1000000
+model_auto_compact_token_limit = 9000000
 
 [model_providers.OpenAI]
 name = "OpenAI"
@@ -393,8 +404,9 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     // config (approval_policy / model_reasoning_effort / [projects] trust
     // levels / [mcp_servers] / inline comments) that we have no business
     // touching. Only two keys move:
-    //   - top-level `model_provider = "OpenAI"`
-    //   - `[model_providers.OpenAI]` table body (5 keys)
+    //   - top-level `model_provider` + `model_context_window` +
+    //     `model_auto_compact_token_limit`
+    //   - `[model_providers.OpenAI]` table body (name=OpenAI + 4 keys)
     // Everything else in the file is preserved byte-for-byte.
     let existing = if path.exists() {
         fs::read_to_string(&path).unwrap_or_default()
@@ -404,6 +416,16 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
     let mut merged = existing;
     merged =
         crate::tools::toml_merge::upsert_top_level_key(&merged, "model_provider", "\"OpenAI\"");
+    // 报大 window + 拉高本地 compact 阈值 → Codex 不触发任何 compaction。
+    merged =
+        crate::tools::toml_merge::upsert_top_level_key(&merged, "model_context_window", "1000000");
+    merged = crate::tools::toml_merge::upsert_top_level_key(
+        &merged,
+        "model_auto_compact_token_limit",
+        "9000000",
+    );
+    // name 保持 "OpenAI":插件市场/IDE 门控只认 name=="OpenAI";compaction 由
+    // 上面的大 window 挡住,不靠改 name(改了会丢插件市场)。
     let section_body = format!(
         "name = \"OpenAI\"\nbase_url = \"http://{host}:{port}/v1\"\nwire_api = \"responses\"\nexperimental_bearer_token = \"{token}\"\nrequires_openai_auth = true\n"
     );
@@ -617,7 +639,14 @@ mod tests {
             "must use the official OpenAI provider name (not a custom one)"
         );
         assert!(snippet.contains("[model_providers.OpenAI]"));
-        assert!(snippet.contains("name = \"OpenAI\""));
+        assert!(
+            snippet.contains("name = \"OpenAI\""),
+            "name MUST be OpenAI — the IDE plugin marketplace gates on is_openai()"
+        );
+        assert!(
+            snippet.contains("model_context_window = 1000000"),
+            "large window keeps Codex from ever triggering remote compaction"
+        );
         assert!(snippet.contains("base_url = \"http://127.0.0.1:9090/v1\""));
         assert!(snippet.contains("wire_api = \"responses\""));
         assert!(
@@ -678,6 +707,8 @@ mod tests {
             "new hijack-OpenAI format"
         );
         assert!(cfg.contains("requires_openai_auth = true"));
+        assert!(cfg.contains("model_context_window = 1000000"));
+        assert!(cfg.contains("name = \"OpenAI\""));
         assert!(cfg.contains("experimental_bearer_token = \"ag_local_"));
         cleanup(&temp);
     }
