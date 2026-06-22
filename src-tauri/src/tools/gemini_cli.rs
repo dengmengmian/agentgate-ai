@@ -234,6 +234,8 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
             format!("Failed to replace: {e}"),
         )
     })?;
+    crate::tools::config_verify::verify_written(&sp, format!("{new_content}\n").as_bytes())
+        .map_err(|e| AppError::new(crate::errors::codes::GEMINI_CONFIG_WRITE_FAILED, e))?;
 
     // Write .env file in ~/.gemini/ (Gemini CLI loads env from here)
     let env_path = env_file_path();
@@ -246,6 +248,8 @@ pub fn apply(host: &str, port: i64, model: &str) -> Result<ApplyConfigResult, Ap
             format!("Failed to write .env: {e}"),
         )
     })?;
+    crate::tools::config_verify::verify_written(&env_path, env_content.as_bytes())
+        .map_err(|e| AppError::new(crate::errors::codes::GEMINI_CONFIG_WRITE_FAILED, e))?;
 
     if has_saved_official() {
         warnings.push("Original settings saved. Use toggle to switch back.".to_string());

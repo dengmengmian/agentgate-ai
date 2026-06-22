@@ -442,6 +442,8 @@ pub fn apply_config(host: &str, port: i64, model: &str) -> Result<ApplyConfigRes
             format!("Failed to replace: {e}"),
         )
     })?;
+    crate::tools::config_verify::verify_written(&sp, new_content.as_bytes())
+        .map_err(|e| AppError::new(crate::errors::codes::CLAUDE_CONFIG_WRITE_FAILED, e))?;
 
     if has_saved_official() {
         warnings.push("Original settings saved. Use toggle to switch back.".to_string());

@@ -186,12 +186,14 @@ pub fn snapshot_paths() -> Vec<(&'static str, PathBuf)> {
 fn write_json(path: &PathBuf, value: &Value) -> Result<(), AppError> {
     let data = serde_json::to_vec_pretty(value)
         .map_err(|e| AppError::internal(format!("serialize json: {e}")))?;
-    fs::write(path, data).map_err(|e| {
+    fs::write(path, &data).map_err(|e| {
         AppError::new(
             crate::errors::codes::CLAUDE_DESKTOP_WRITE_FAILED,
             format!("写入 {} 失败: {e}", path.display()),
         )
-    })
+    })?;
+    crate::tools::config_verify::verify_written(path, &data)
+        .map_err(|e| AppError::new(crate::errors::codes::CLAUDE_DESKTOP_WRITE_FAILED, e))
 }
 
 /// surgical merge _meta.json：保留用户已有 entries，加/更新 AgentGate 条目，

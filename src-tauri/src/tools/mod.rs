@@ -3,6 +3,7 @@ pub mod claude_code;
 pub mod claude_desktop;
 pub mod codex;
 pub mod codex_restart;
+pub mod config_verify;
 pub mod gemini_cli;
 pub mod instructions;
 pub mod instructions_templates;

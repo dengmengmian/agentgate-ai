@@ -182,6 +182,8 @@ pub fn apply(host: &str, port: i64, _model: &str) -> Result<ApplyConfigResult, A
             format!("Failed to replace: {e}"),
         )
     })?;
+    crate::tools::config_verify::verify_written(&path, merged.as_bytes())
+        .map_err(|e| AppError::new(crate::errors::codes::ATOMCODE_CONFIG_WRITE_FAILED, e))?;
 
     Ok(ApplyConfigResult {
         success: true,

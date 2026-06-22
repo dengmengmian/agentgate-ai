@@ -446,6 +446,8 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
             format!("Failed to replace config: {e}"),
         )
     })?;
+    crate::tools::config_verify::verify_written(&path, merged.as_bytes())
+        .map_err(|e| AppError::new(crate::errors::codes::CODEX_CONFIG_WRITE_FAILED, e))?;
 
     if has_saved_official() {
         warnings.push("已备份原始 config.toml，可随时切换回官方配置。".to_string());

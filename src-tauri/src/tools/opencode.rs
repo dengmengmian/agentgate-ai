@@ -145,6 +145,8 @@ pub fn apply(host: &str, port: i64) -> Result<ApplyConfigResult, AppError> {
             format!("Failed to replace: {e}"),
         )
     })?;
+    crate::tools::config_verify::verify_written(&path, format!("{new_content}\n").as_bytes())
+        .map_err(|e| AppError::new(crate::errors::codes::OPENCODE_CONFIG_WRITE_FAILED, e))?;
 
     let changed_keys = vec!["model".to_string(), "provider.openai".to_string()];
 
