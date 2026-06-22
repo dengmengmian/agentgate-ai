@@ -184,4 +184,56 @@ describe("global store", () => {
       expect(s.value).toBeNull();
     });
   });
+
+  describe("useGatewaySettings refetch", () => {
+    it("refetch re-invokes api even after success", async () => {
+      vi.mocked(api.getGatewaySettings)
+        .mockResolvedValueOnce({ id: 1, port: 9090 } as any)
+        .mockResolvedValueOnce({ id: 1, port: 8080 } as any);
+      await useGatewaySettings.getState().fetch();
+      expect(useGatewaySettings.getState().value).toEqual({ id: 1, port: 9090 });
+      await useGatewaySettings.getState().refetch();
+      expect(useGatewaySettings.getState().value).toEqual({ id: 1, port: 8080 });
+      expect(api.getGatewaySettings).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("usePricing error path", () => {
+    it("fetch records error message on failure", async () => {
+      vi.mocked(api.listModelPricing).mockRejectedValue({ message: "db err" });
+      await usePricing.getState().fetch();
+      const s = usePricing.getState();
+      expect(s.error).toBe("db err");
+      expect(s.loading).toBe(false);
+      expect(s.items).toEqual([]);
+    });
+  });
+
+  describe("useRouteProfiles refetch", () => {
+    it("refetch re-invokes api even after success", async () => {
+      vi.mocked(api.listRouteProfiles)
+        .mockResolvedValueOnce([{ id: "a" }] as any)
+        .mockResolvedValueOnce([{ id: "a" }, { id: "b" }] as any);
+      await useRouteProfiles.getState().fetch();
+      expect(useRouteProfiles.getState().items).toHaveLength(1);
+      await useRouteProfiles.getState().refetch();
+      expect(useRouteProfiles.getState().items).toHaveLength(2);
+      expect(api.listRouteProfiles).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("useGatewayStatus refetch", () => {
+    it("refetch re-invokes api even after success", async () => {
+      const running = { running: true, host: "127.0.0.1", port: 9090 } as any;
+      const stopped = { running: false, host: "127.0.0.1", port: 9090 } as any;
+      vi.mocked(api.getGatewayStatus)
+        .mockResolvedValueOnce(running)
+        .mockResolvedValueOnce(stopped);
+      await useGatewayStatus.getState().fetch();
+      expect(useGatewayStatus.getState().value).toEqual(running);
+      await useGatewayStatus.getState().refetch();
+      expect(useGatewayStatus.getState().value).toEqual(stopped);
+      expect(api.getGatewayStatus).toHaveBeenCalledTimes(2);
+    });
+  });
 });

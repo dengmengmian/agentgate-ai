@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { PROVIDER_TYPES } from "@/types/provider";
 import {
   firstApiKey,
+  isMimoProviderType,
+  isKnownMimoEndpointUrl,
   getMimoEndpointsForKey,
   PROVIDER_PRESETS,
   resolveKnownProviderEndpoints,
@@ -80,5 +82,69 @@ describe("MiMo provider endpoints", () => {
     const optionTypes = PROVIDER_TYPES.map((type) => type.value).sort();
     const presetTypes = Object.keys(PROVIDER_PRESETS).sort();
     expect(optionTypes).toEqual(presetTypes);
+  });
+});
+
+describe("isMimoProviderType", () => {
+  it("matches mimo, xiaomi, and case-insensitive variants", () => {
+    expect(isMimoProviderType("mimo")).toBe(true);
+    expect(isMimoProviderType("xiaomi")).toBe(true);
+    expect(isMimoProviderType("MIMO")).toBe(true);
+    expect(isMimoProviderType("  mimo  ")).toBe(true);
+    expect(isMimoProviderType("something-mimo-extra")).toBe(true);
+  });
+
+  it("does not match unrelated types", () => {
+    expect(isMimoProviderType("openai")).toBe(false);
+    expect(isMimoProviderType("deepseek")).toBe(false);
+    expect(isMimoProviderType("")).toBe(false);
+  });
+});
+
+describe("firstApiKey", () => {
+  it("returns empty string for null/undefined/empty", () => {
+    expect(firstApiKey(null)).toBe("");
+    expect(firstApiKey(undefined)).toBe("");
+    expect(firstApiKey("")).toBe("");
+    expect(firstApiKey("   ")).toBe("");
+  });
+
+  it("returns plain key as-is", () => {
+    expect(firstApiKey("sk-abc123")).toBe("sk-abc123");
+  });
+
+  it("trims whitespace from plain key", () => {
+    expect(firstApiKey("  sk-abc123  ")).toBe("sk-abc123");
+  });
+
+  it("parses JSON array and returns first non-empty string", () => {
+    expect(firstApiKey('["key-a","key-b"]')).toBe("key-a");
+  });
+
+  it("skips empty strings in JSON array", () => {
+    expect(firstApiKey('["","key-b"]')).toBe("key-b");
+  });
+
+  it("returns raw value when JSON parse fails", () => {
+    expect(firstApiKey("[invalid json")).toBe("[invalid json");
+  });
+
+  it("returns raw value when JSON is not an array", () => {
+    expect(firstApiKey('{"a":1}')).toBe('{"a":1}');
+  });
+});
+
+describe("isKnownMimoEndpointUrl", () => {
+  it("returns true for known MiMo endpoints", () => {
+    expect(isKnownMimoEndpointUrl("https://api.xiaomimimo.com/v1")).toBe(true);
+  });
+
+  it("returns false for unknown URLs", () => {
+    expect(isKnownMimoEndpointUrl("https://api.openai.com/v1")).toBe(false);
+  });
+
+  it("returns false for null/undefined", () => {
+    expect(isKnownMimoEndpointUrl(null)).toBe(false);
+    expect(isKnownMimoEndpointUrl(undefined)).toBe(false);
   });
 });

@@ -42,6 +42,8 @@ const CONTEXT_WINDOW_USAGE_PERCENT: usize = 85;
 const TAIL_BUDGET_TOKENS: usize = 40_000;
 /// 单次摘要调用的 middle 输入分块预算(token)。须远小于上游上限,留空间给提示词+输出。
 const CHUNK_BUDGET_TOKENS: usize = 80_000;
+/// middle 低于此 token 数不值得单独发一次摘要调用,直接跳过压缩(省上游调用/成本/延迟)。
+const MIN_MIDDLE_TOKENS: usize = 1_000;
 /// 图片块的估算 token(粗略,按低分辨率计)。
 const IMAGE_TOKENS: usize = 1024;
 /// 单条消息渲染进 transcript 时的字符上限,防止单条巨大 tool 结果撑爆分块。
@@ -328,6 +330,13 @@ fn plan_compaction(messages: &[ChatMessage], tail_budget: usize) -> Option<Plan>
     }
 
     if middle_chunks.is_empty() {
+        return None;
+    }
+
+    // middle 过小不值得一次摘要 round-trip：跳过,让请求原样透传(仍在阈值边缘,
+    // 下一轮历史再长一点自然会触发)。
+    let middle_tokens: usize = middle_chunks.iter().map(|c| estimate_tokens(c)).sum();
+    if middle_tokens < MIN_MIDDLE_TOKENS {
         return None;
     }
 
@@ -788,6 +797,23 @@ mod tests {
             msg("assistant", "yo"),
         ];
         assert!(plan_compaction(&messages, TAIL_BUDGET_TOKENS).is_none());
+    }
+
+    #[test]
+    fn plan_skips_when_middle_too_small() {
+        // middle 只剩一小块(~200 token),低于值得摘要的下限 → 应跳过,
+        // 不为这点历史白发一次摘要 round-trip(省一次上游调用/成本/延迟)。
+        let messages = vec![
+            msg("system", "sys"),
+            msg("user", &"旧".repeat(200)), // middle ~200 tok
+            msg("user", &"近".repeat(200)), // tail
+            msg("assistant", &"答".repeat(200)), // tail
+        ];
+        // tail_budget=500:tail 收下最近两块(~408 tok),只留 middle 一小块(~204)。
+        assert!(
+            plan_compaction(&messages, 500).is_none(),
+            "middle 过小应跳过摘要"
+        );
     }
 
     #[test]

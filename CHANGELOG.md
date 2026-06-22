@@ -1,5 +1,16 @@
 # Changelog / 更新日志
 
+## [1.4.5] - 2026-06-22
+
+### Fixes / 修复
+
+- **Codex long-conversation stall / Codex 长对话卡死** —— Applying a Codex config now enlarges the context window, so auto-compaction no longer triggers early and freezes long chats. 应用 Codex 配置时加大上下文窗口，避免自动压缩过早触发、把长对话卡住。
+- **Image+text dropped when sent to Codex / 发图文给 Codex 内容被丢弃** —— Fixed the message body being dropped when sending mixed image/text content to Codex. 修复混合图文消息发给 Codex 时正文被丢弃的问题。
+
+### Performance / 性能
+
+- **Skip summary round-trip for tiny history / 历史过小跳过摘要调用** —— When the middle history to compact is below ~1k tokens, the gateway skips the summary call and passes the request through, saving an upstream call / cost / latency. 待压缩的中间历史低于约 1k token 时，网关跳过摘要调用、原样透传请求，省一次上游调用 / 成本 / 延迟。
+
 ## [1.4.3] - 2026-06-15
 
 ### Added / 新增

@@ -272,3 +272,36 @@ describe("API error extraction", () => {
     });
   });
 });
+
+describe("API error normalization edge cases", () => {
+  beforeEach(() => {
+    vi.mocked(invoke).mockReset();
+  });
+
+  it("falls back to generic error when code field is missing", async () => {
+    vi.mocked(invoke).mockRejectedValue({ message: "something broke" });
+    await expect(listProviders()).rejects.toEqual({
+      code: "UNKNOWN",
+      message: "An unexpected error occurred",
+    });
+  });
+
+  it("falls back to generic error when message field is missing", async () => {
+    vi.mocked(invoke).mockRejectedValue({ code: "TIMEOUT" });
+    await expect(listProviders()).rejects.toEqual({
+      code: "UNKNOWN",
+      message: "An unexpected error occurred",
+    });
+  });
+
+  it("handles error object with extra fields (detail, suggestion)", async () => {
+    const err = {
+      code: "RATE_LIMIT",
+      message: "too many requests",
+      detail: "retry after 60s",
+      suggestion: "slow down",
+    };
+    vi.mocked(invoke).mockRejectedValue(err);
+    await expect(listProviders()).rejects.toEqual(err);
+  });
+});
