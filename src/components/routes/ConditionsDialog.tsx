@@ -4,6 +4,7 @@ import {
   Image as ImageIcon,
   FileText,
   Wrench,
+  Moon,
   type LucideIcon,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
@@ -16,15 +17,26 @@ type ConditionPreset = {
 };
 
 const CONDITION_PRESETS: ConditionPreset[] = [
+  {
+    key: "background",
+    icon: Moon,
+    conditions: { model_name_match: ["haiku"] },
+  },
   { key: "images", icon: ImageIcon, conditions: { has_images: true } },
   { key: "long_text", icon: FileText, conditions: { min_input_chars: 100000 } },
   { key: "tools", icon: Wrench, conditions: { has_tools: true } },
 ];
 
+function isBackgroundPreset(names?: string[] | null): boolean {
+  return names?.length === 1 && names[0] === "haiku";
+}
+
 function hasCustomOnlyConditions(c: RoutingConditions): boolean {
   if (c.max_input_chars != null) return true;
   if (c.has_images === false || c.has_tools === false) return true;
   if (c.min_input_chars != null && c.min_input_chars !== 100000) return true;
+  if (c.model_name_match?.length && !isBackgroundPreset(c.model_name_match))
+    return true;
   return Boolean(c.system_keywords?.length);
 }
 
@@ -34,6 +46,7 @@ function detectCheckedPresets(c: RoutingConditions): Set<string> {
   if (c.has_tools === true) checked.add("tools");
   if (c.min_input_chars && c.min_input_chars >= 100000)
     checked.add("long_text");
+  if (isBackgroundPreset(c.model_name_match)) checked.add("background");
   return checked;
 }
 
@@ -42,6 +55,7 @@ function mergePresetConditions(checked: Set<string>): RoutingConditions {
   if (checked.has("images")) c.has_images = true;
   if (checked.has("tools")) c.has_tools = true;
   if (checked.has("long_text")) c.min_input_chars = 100000;
+  if (checked.has("background")) c.model_name_match = ["haiku"];
   return c;
 }
 
@@ -93,6 +107,9 @@ export function ConditionsDialog({
   const [keywords, setKeywords] = useState(
     target.current.system_keywords?.join(", ") ?? ""
   );
+  const [modelNameMatch, setModelNameMatch] = useState(
+    target.current.model_name_match?.join(", ") ?? ""
+  );
 
   const toggle = (key: string) => {
     const next = new Set(checked);
@@ -115,6 +132,11 @@ export function ConditionsDialog({
       else if (hasTools === "false") c.has_tools = false;
       if (keywords.trim())
         c.system_keywords = keywords
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+      if (modelNameMatch.trim())
+        c.model_name_match = modelNameMatch
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean);
@@ -272,6 +294,20 @@ export function ConditionsDialog({
                 />
                 <p className="mt-0.5 text-[10px] text-text-muted">
                   {t("routes.keywords_hint")}
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] text-text-muted">
+                  {t("routes.model_name_match")}
+                </label>
+                <input
+                  value={modelNameMatch}
+                  onChange={(e) => setModelNameMatch(e.target.value)}
+                  placeholder="haiku, flash"
+                  className="form-input w-full"
+                />
+                <p className="mt-0.5 text-[10px] text-text-muted">
+                  {t("routes.model_name_match_hint")}
                 </p>
               </div>
             </div>

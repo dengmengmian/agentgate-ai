@@ -1,5 +1,19 @@
 # Changelog / 更新日志
 
+## [1.4.6] - 2026-06-22
+
+### Added / 新增
+
+- **Scenario routing by model name / 按模型名做场景路由** —— A route profile's provider can match on the requested model name (`model_name_match`), routing background subtasks (e.g. Claude Code `haiku` calls) to a cheaper provider while the main conversation stays on the primary. Works on all three protocols (Claude Code / Codex / Gemini) since it only depends on the model name. 路由档位的供应商可按请求模型名匹配(`model_name_match`)，把后台子任务(如 Claude Code 的 `haiku` 调用)分流到便宜供应商，主对话仍走主力。只依赖模型名，三协议(Claude Code / Codex / Gemini)全部生效。
+
+### Fixes / 修复
+
+- **Config write verification / 配置写后校验** —— After applying a client config (Codex / Claude Code / Claude Desktop / atomcode / Gemini / OpenCode), AgentGate reads the file back and byte-compares it; a mis-written config now reports an error instead of a false success. 应用客户端配置(Codex / Claude Code / Claude Desktop / atomcode / Gemini / OpenCode)后读回文件逐字节比对，写歪时报错而非假成功。
+
+### Improvements / 改进
+
+- **Slimmer Routes page / 路由页更精简** —— Removed the duplicated "Conditions" summary block (already shown per-provider) and the fallback chain now only renders in failover mode. 去掉与供应商行重复的「条件」汇总区块，失败转移链路仅在故障转移模式显示。
+
 ## [1.4.5] - 2026-06-22
 
 ### Fixes / 修复

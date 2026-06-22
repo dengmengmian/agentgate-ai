@@ -93,6 +93,22 @@ pub struct RoutingConditions {
     pub has_tools: Option<bool>,
     pub system_keywords: Option<Vec<String>>,
     pub model_override: Option<String>,
+    /// 客户端请求的 model 名匹配(子串,大小写不敏感)。命中任一即满足。
+    /// 仅依赖 model 名 → 三协议(Claude Code / Codex / Gemini)全部生效。
+    /// 典型用法:`["haiku"]` 把 Claude Code 的 background 小任务导到便宜 provider。
+    pub model_name_match: Option<Vec<String>>,
+}
+
+/// model_name_match 评估:只依赖客户端请求的 model 名,与协议无关,三协议都能用。
+/// 未配置该条件时恒为 true(不约束)。
+fn model_name_matches(conditions: &RoutingConditions, requested_model: Option<&str>) -> bool {
+    match &conditions.model_name_match {
+        Some(names) if !names.is_empty() => {
+            let m = requested_model.unwrap_or("").to_lowercase();
+            names.iter().any(|n| m.contains(&n.to_lowercase()))
+        }
+        _ => true,
+    }
 }
 
 /// Check if all non-null conditions match the request analysis.
@@ -141,14 +157,22 @@ fn build_candidates(
             continue;
         }
 
-        // Check routing conditions (if analysis available and conditions configured)
+        // 路由条件评估。model_name_match 只依赖 model 名(三协议通用);其余条件
+        // 依赖请求体分析,analysis 缺失(非 Codex 协议)时无法判定 → 保守跳过。
         let mut condition_model_override: Option<String> = None;
-        if let (Some(ref cond_json), Some(ref req_analysis)) = (&rpp.routing_conditions, &analysis)
-        {
+        if let Some(ref cond_json) = rpp.routing_conditions {
             match serde_json::from_str::<RoutingConditions>(cond_json) {
                 Ok(conditions) => {
-                    if !matches_conditions(&conditions, req_analysis) {
+                    if !model_name_matches(&conditions, requested_model) {
                         continue;
+                    }
+                    // analysis 存在(Codex)才评估依赖请求体的条件;缺失(其余协议)则
+                    // 只靠 model_name_match 判定,其余条件忽略而非跳过——避免把配了
+                    // 长度/工具等条件的 provider 在非 Codex 协议上误杀。A3 接通后再生效。
+                    if let Some(req_analysis) = analysis {
+                        if !matches_conditions(&conditions, req_analysis) {
+                            continue;
+                        }
                     }
                     condition_model_override = conditions.model_override.clone();
                 }
@@ -729,6 +753,30 @@ mod tests {
             system_text: system.to_string(),
             message_count: 1,
         }
+    }
+
+    // ── Scenario routing condition tests ──
+
+    #[test]
+    fn model_name_match_hits_substring_case_insensitive() {
+        let cond = RoutingConditions {
+            model_name_match: Some(vec!["haiku".into()]),
+            ..Default::default()
+        };
+        // Claude Code background 任务发 claude-3-5-haiku → 命中
+        assert!(model_name_matches(&cond, Some("claude-3-5-haiku-20241022")));
+        assert!(model_name_matches(&cond, Some("Claude-HAIKU")));
+        // 主对话发 opus → 不命中
+        assert!(!model_name_matches(&cond, Some("claude-opus-4")));
+        // 无 model 名 → 不命中
+        assert!(!model_name_matches(&cond, None));
+    }
+
+    #[test]
+    fn model_name_match_unset_is_unconstrained() {
+        let cond = RoutingConditions::default();
+        assert!(model_name_matches(&cond, Some("anything")));
+        assert!(model_name_matches(&cond, None));
     }
 
     // ── Capability promotion tests ──

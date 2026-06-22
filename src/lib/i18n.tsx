@@ -940,23 +940,10 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "routes.fallback_count": { en: "backup", zh: "个备用" },
   "routes.not_enabled": { en: "Off", zh: "未启用" },
-  "routes.conditions_section": { en: "Conditions", zh: "条件" },
-  "routes.conditions_section_hint": {
-    en: "Conditional providers only match specific request types. Empty means always available.",
-    zh: "有条件的供应商只匹配特定请求；无条件表示始终可用。",
-  },
-  "routes.no_conditions_summary": {
-    en: "No conditional providers. This route only uses provider order and runtime status.",
-    zh: "暂无条件供应商。此策略只按供应商顺序和运行状态选择。",
-  },
   "routes.fallback_section": { en: "Fallback Path", zh: "失败转移链路" },
   "routes.fallback_section_hint": {
     en: "When the primary provider fails, AgentGate continues with the next candidate.",
     zh: "主供应商失败时，AgentGate 会继续尝试下一个候选。",
-  },
-  "routes.fallback_disabled_hint": {
-    en: "Manual mode keeps the route fixed to the active provider.",
-    zh: "固定模式会锁定到主供应商。",
   },
   "routes.primary_provider": { en: "Primary", zh: "主" },
   "routes.fallback_provider": { en: "Fallback", zh: "备用" },
@@ -964,21 +951,6 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Add at least one more provider to make failover useful.",
     zh: "至少再添加一个供应商，失败转移才有意义。",
   },
-  "routes.manual_no_fallback": {
-    en: "Fallback is disabled. Switch to Failover mode to use backup providers.",
-    zh: "失败转移未启用。切到故障转移模式后才会使用备用供应商。",
-  },
-  "routes.condition_images_required": {
-    en: "requires images",
-    zh: "必须有图片",
-  },
-  "routes.condition_images_excluded": { en: "no images", zh: "不能有图片" },
-  "routes.condition_tools_required": { en: "requires tools", zh: "必须有工具" },
-  "routes.condition_tools_excluded": { en: "no tools", zh: "不能有工具" },
-  "routes.condition_min_chars": { en: "min", zh: "最少" },
-  "routes.condition_max_chars": { en: "max", zh: "最多" },
-  "routes.condition_keywords": { en: "keywords", zh: "关键词" },
-  "routes.condition_use_model": { en: "use model", zh: "使用模型" },
   "routes.stats_requests": { en: "Requests", zh: "请求数" },
   "routes.stats_window": { en: "Last 7 days", zh: "最近 7 天" },
   "routes.stats_success_rate": { en: "Success Rate", zh: "成功率" },
@@ -1044,6 +1016,11 @@ const translations: Record<string, Record<Locale, string>> = {
   },
   "routes.scene_tools": { en: "Tool-Heavy Requests", zh: "工具密集型请求" },
   "routes.scene_custom": { en: "Custom...", zh: "自定义..." },
+  "routes.model_name_match": { en: "Model Name Match", zh: "模型名匹配" },
+  "routes.model_name_match_hint": {
+    en: "Comma-separated. Match if requested model name contains ANY. Works on all clients (e.g. haiku for Claude Code background tasks).",
+    zh: "逗号分隔。请求模型名包含任一即匹配。所有客户端生效(如 haiku 匹配 Claude Code 后台任务)。",
+  },
   "routes.custom_conditions_hint": {
     en: "Use custom rules only when you know the request signal is stable. Keyword matching only checks the system prompt.",
     zh: "仅在请求特征稳定时使用自定义规则。关键词只匹配系统提示词。",

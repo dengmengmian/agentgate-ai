@@ -38,4 +38,6 @@ export interface RoutingConditions {
   has_tools?: boolean | null;
   system_keywords?: string[] | null;
   model_override?: string | null;
+  // 请求 model 名匹配(子串,大小写不敏感)。仅依赖 model 名 → 所有客户端生效。
+  model_name_match?: string[] | null;
 }

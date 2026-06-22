@@ -86,7 +86,10 @@ describe("pickModels (generic)", () => {
   });
 
   it("handles date-stamped models without treating dates as version numbers", () => {
-    const result = pickModels(["claude-haiku-4-5", "claude-haiku-4-5-20251001"]);
+    const result = pickModels([
+      "claude-haiku-4-5",
+      "claude-haiku-4-5-20251001",
+    ]);
     expect(result.default).toBe("claude-haiku-4-5");
   });
 

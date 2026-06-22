@@ -577,90 +577,24 @@ export function Routes() {
                 />
               </div>
 
-              {/* Conditions */}
-              <div className="rounded-xl border border-border bg-card p-5">
-                <div className="mb-3">
-                  <h4 className="text-xs font-semibold text-text-primary">
-                    {t("routes.conditions_section")}
-                  </h4>
-                  <p className="mt-0.5 text-[11px] text-text-muted">
-                    {t("routes.conditions_section_hint")}
-                  </p>
-                </div>
-                {detail.providers.some((rp) => rp.routing_conditions) ? (
-                  <div className="space-y-2">
-                    {detail.providers
-                      .filter((rp) => rp.routing_conditions)
-                      .map((rp) => (
-                        <div
-                          key={rp.id}
-                          className="flex items-center justify-between rounded-md border border-border/50 bg-card-secondary px-4 py-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-text-primary">
-                              {rp.provider_name}
-                            </p>
-                            <p className="mt-0.5 text-[11px] text-text-muted">
-                              {describeRoutingConditions(
-                                rp.routing_conditions,
-                                t
-                              )}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => {
-                              let current: RoutingConditions = {};
-                              try {
-                                if (rp.routing_conditions)
-                                  current = JSON.parse(rp.routing_conditions);
-                              } catch {
-                                /* 存储的条件 JSON 非法时回退为空条件 */
-                              }
-                              setConditionsTarget({
-                                profileId: detail.profile.id,
-                                providerId: rp.provider_id,
-                                providerName: rp.provider_name,
-                                inputProtocol: detail.profile.input_protocol,
-                                current,
-                              });
-                            }}
-                            className="ml-3 rounded p-1 text-text-muted hover:bg-border hover:text-accent"
-                            title={t("routes.edit_conditions")}
-                          >
-                            <Filter className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                  </div>
-                ) : (
-                  <p className="rounded-md border border-border/50 bg-card-secondary px-4 py-3 text-[11px] text-text-muted">
-                    {t("routes.no_conditions_summary")}
-                  </p>
-                )}
-              </div>
-
-              {/* Fallback */}
-              <div className="rounded-xl border border-border bg-card p-5">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div>
-                    <h4 className="text-xs font-semibold text-text-primary">
-                      {t("routes.fallback_section")}
-                    </h4>
-                    <p className="mt-0.5 text-[11px] text-text-muted">
-                      {detail.profile.mode === "failover"
-                        ? t("routes.fallback_section_hint")
-                        : t("routes.fallback_disabled_hint")}
-                    </p>
-                  </div>
-                  {detail.profile.mode === "failover" && (
+              {/* Fallback chain — 仅故障转移模式有意义,固定模式不展示空占位 */}
+              {detail.profile.mode === "failover" && (
+                <div className="rounded-xl border border-border bg-card p-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-xs font-semibold text-text-primary">
+                        {t("routes.fallback_section")}
+                      </h4>
+                      <p className="mt-0.5 text-[11px] text-text-muted">
+                        {t("routes.fallback_section_hint")}
+                      </p>
+                    </div>
                     <StatusBadge variant="accent">
                       {t("routes.strategy")}:{" "}
                       {strategyLabel(detail.profile.selection_strategy, t)}
                     </StatusBadge>
-                  )}
-                </div>
-                {detail.profile.mode === "failover" ? (
-                  detail.providers.length > 1 ? (
+                  </div>
+                  {detail.providers.length > 1 ? (
                     <div className="flex flex-wrap items-center gap-2">
                       {detail.providers.map((rp, idx) => (
                         <div key={rp.id} className="flex items-center gap-2">
@@ -682,13 +616,9 @@ export function Routes() {
                     <p className="rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-[11px] text-warning">
                       {t("routes.fallback_needs_more")}
                     </p>
-                  )
-                ) : (
-                  <p className="rounded-md border border-border/50 bg-card-secondary px-4 py-3 text-[11px] text-text-muted">
-                    {t("routes.manual_no_fallback")}
-                  </p>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
 
               {/* Provider order */}
               <div className="rounded-xl border border-border bg-card p-5">
@@ -1018,40 +948,4 @@ function strategyLabel(strategy: string, t: (key: string) => string): string {
   if (strategy === "cheapest") return t("routes.strategy_cheapest");
   if (strategy === "fastest") return t("routes.strategy_fastest");
   return t("routes.strategy_priority");
-}
-
-function describeRoutingConditions(
-  json: string | null,
-  t: (key: string) => string
-): string {
-  if (!json) return t("routes.no_conditions_summary");
-  try {
-    const c: RoutingConditions = JSON.parse(json);
-    const parts: string[] = [];
-    if (c.has_images === true)
-      parts.push(t("routes.condition_images_required"));
-    if (c.has_images === false)
-      parts.push(t("routes.condition_images_excluded"));
-    if (c.has_tools === true) parts.push(t("routes.condition_tools_required"));
-    if (c.has_tools === false) parts.push(t("routes.condition_tools_excluded"));
-    if (c.min_input_chars)
-      parts.push(
-        `${t("routes.condition_min_chars")} ${(c.min_input_chars / 1000).toFixed(0)}K`
-      );
-    if (c.max_input_chars)
-      parts.push(
-        `${t("routes.condition_max_chars")} ${(c.max_input_chars / 1000).toFixed(0)}K`
-      );
-    if (c.system_keywords?.length)
-      parts.push(
-        `${t("routes.condition_keywords")} ${c.system_keywords.join(", ")}`
-      );
-    if (c.model_override)
-      parts.push(`${t("routes.condition_use_model")} ${c.model_override}`);
-    return parts.length > 0
-      ? parts.join(" · ")
-      : t("routes.no_conditions_summary");
-  } catch {
-    return t("routes.invalid_conditions");
-  }
 }

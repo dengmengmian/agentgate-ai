@@ -191,9 +191,15 @@ describe("global store", () => {
         .mockResolvedValueOnce({ id: 1, port: 9090 } as any)
         .mockResolvedValueOnce({ id: 1, port: 8080 } as any);
       await useGatewaySettings.getState().fetch();
-      expect(useGatewaySettings.getState().value).toEqual({ id: 1, port: 9090 });
+      expect(useGatewaySettings.getState().value).toEqual({
+        id: 1,
+        port: 9090,
+      });
       await useGatewaySettings.getState().refetch();
-      expect(useGatewaySettings.getState().value).toEqual({ id: 1, port: 8080 });
+      expect(useGatewaySettings.getState().value).toEqual({
+        id: 1,
+        port: 8080,
+      });
       expect(api.getGatewaySettings).toHaveBeenCalledTimes(2);
     });
   });
