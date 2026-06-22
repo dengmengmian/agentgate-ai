@@ -197,6 +197,19 @@ export function Settings() {
     }
   };
 
+  const handleUpdateCostAlert = async (patch: {
+    cost_alert_enabled?: boolean;
+    cost_alert_threshold?: number;
+  }) => {
+    try {
+      await api.updateGatewaySettings(patch);
+      toast("success", t("settings.updated"));
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
+
   const handleCopyToken = async () => {
     try {
       const token = await api.getLocalAccessToken();
@@ -291,6 +304,7 @@ export function Settings() {
             setTheme={setTheme}
             handleUpdateAutoStart={handleUpdateAutoStart}
             handleUpdateRefinerGlobal={handleUpdateRefinerGlobal}
+            handleUpdateCostAlert={handleUpdateCostAlert}
             t={t}
             ToggleSwitch={ToggleSwitch}
             ThemePicker={ThemePicker}

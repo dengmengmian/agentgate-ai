@@ -19,6 +19,10 @@ interface Props {
       | "health_probe_enabled",
     val: boolean
   ) => Promise<void>;
+  handleUpdateCostAlert: (patch: {
+    cost_alert_enabled?: boolean;
+    cost_alert_threshold?: number;
+  }) => Promise<void>;
   t: (key: string) => string;
   ToggleSwitch: React.ComponentType<{
     checked: boolean;
@@ -38,6 +42,7 @@ export function GeneralTab({
   setTheme,
   handleUpdateAutoStart,
   handleUpdateRefinerGlobal,
+  handleUpdateCostAlert,
   t,
   ToggleSwitch,
   ThemePicker,
@@ -214,6 +219,55 @@ export function GeneralTab({
                 }
               />
             </div>
+            <div className="flex items-center justify-between">
+              <div className="flex-1 pr-4">
+                <p className="text-sm text-text-primary">
+                  {t("settings.cost_alert")}
+                </p>
+                <p className="text-xs text-text-muted">
+                  {t("settings.cost_alert_desc")}
+                </p>
+              </div>
+              <ToggleSwitch
+                checked={settings.cost_alert_enabled}
+                onChange={(v) =>
+                  handleUpdateCostAlert({ cost_alert_enabled: v })
+                }
+              />
+            </div>
+            {settings.cost_alert_enabled && (
+              <div className="flex items-center justify-between">
+                <div className="flex-1 pr-4">
+                  <p className="text-sm text-text-primary">
+                    {t("settings.cost_alert_threshold")}
+                  </p>
+                  <p className="text-xs text-text-muted">
+                    {t("settings.cost_alert_threshold_desc")}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm text-text-muted">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    defaultValue={settings.cost_alert_threshold ?? ""}
+                    onBlur={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (
+                        !Number.isNaN(v) &&
+                        v > 0 &&
+                        v !== settings.cost_alert_threshold
+                      ) {
+                        handleUpdateCostAlert({ cost_alert_threshold: v });
+                      }
+                    }}
+                    placeholder="10"
+                    className="form-input w-24"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

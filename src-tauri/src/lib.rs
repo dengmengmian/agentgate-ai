@@ -516,6 +516,7 @@ pub fn run() {
             let cleanup_db = state.db.clone();
             let session_sync_db = state.db.clone();
             let health_probe_db = state.db.clone();
+            let cost_alert_db = state.db.clone();
             app.manage(state);
 
             // ── Ensure local access token exists ──
@@ -552,6 +553,11 @@ pub fn run() {
             // 的 provider 发 1-token 探测，结果写 provider_runtime_status.last_probe_*，
             // 仅用于展示，不影响路由。
             crate::diagnostics::health_probe::spawn(health_probe_db);
+
+            // ── 后台成本预警 ──
+            // 默认关（gateway_settings.cost_alert_enabled）；开启后每 30 分钟检查今日花费，
+            // 超过 cost_alert_threshold（USD）时发系统通知 + 桌宠气泡，当天去重。
+            crate::diagnostics::cost_alert::spawn(cost_alert_db, app.handle().clone());
 
             // ── System Tray ──
             setup_tray(app)?;

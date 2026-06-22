@@ -330,6 +330,17 @@ fn legacy_baseline_v1(conn: &Connection) -> Result<(), AppError> {
         )?;
     }
 
+    // Migration: gateway_settings cost alert —— 今日花费预警开关 + 阈值(USD),默认关。
+    let has_cost_alert: bool = conn
+        .prepare("SELECT cost_alert_enabled FROM gateway_settings LIMIT 0")
+        .is_ok();
+    if !has_cost_alert {
+        conn.execute_batch(
+            "ALTER TABLE gateway_settings ADD COLUMN cost_alert_enabled INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE gateway_settings ADD COLUMN cost_alert_threshold REAL;",
+        )?;
+    }
+
     // Migration: add model_capabilities column to providers
     // Stores per-model capability matrix as JSON: {"model_id": ["text","vision","reasoning",...]}
     // Routing layer uses this to pick the right model when request features (image/audio/...)

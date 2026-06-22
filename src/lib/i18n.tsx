@@ -1726,6 +1726,19 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Sends a 1-token probe to enabled providers every 10 minutes; results show on provider cards (display only, does not affect routing). Consumes a small amount of quota.",
     zh: "每 10 分钟对启用的供应商发 1-token 探测，结果显示在供应商卡片（仅展示，不影响路由）。会消耗少量额度。",
   },
+  "settings.cost_alert": { en: "Daily cost alert", zh: "今日花费预警" },
+  "settings.cost_alert_desc": {
+    en: "When today's total spend exceeds your threshold, send a system notification + pet bubble. At most once per day.",
+    zh: "当今日累计花费超过阈值时，发系统通知 + 桌宠气泡提醒。每天最多提醒一次。",
+  },
+  "settings.cost_alert_threshold": {
+    en: "Alert threshold (USD)",
+    zh: "预警阈值（美元）",
+  },
+  "settings.cost_alert_threshold_desc": {
+    en: "Today's spend reaching this amount triggers the alert.",
+    zh: "今日花费达到此金额即触发预警。",
+  },
   "settings.config_backup": {
     en: "Config Import / Export",
     zh: "配置导入导出",

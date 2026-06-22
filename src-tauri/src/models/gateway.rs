@@ -30,6 +30,10 @@ pub struct GatewaySettings {
     pub codex_compact_enabled: bool,
     /// codex_compact 触发后给上游 summary 调用的 max_completion_tokens 上限。
     pub codex_compact_summary_max_tokens: i64,
+    /// 今日花费预警开关(默认关)。
+    pub cost_alert_enabled: bool,
+    /// 今日花费预警阈值(USD)。None / <=0 视为未设。
+    pub cost_alert_threshold: Option<f64>,
     pub updated_at: String,
 }
 
@@ -48,6 +52,8 @@ pub struct UpdateGatewaySettingsInput {
     pub health_probe_enabled: Option<bool>,
     pub codex_compact_enabled: Option<bool>,
     pub codex_compact_summary_max_tokens: Option<i64>,
+    pub cost_alert_enabled: Option<bool>,
+    pub cost_alert_threshold: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -109,6 +115,8 @@ mod tests {
             health_probe_enabled: false,
             codex_compact_enabled: true,
             codex_compact_summary_max_tokens: 1500,
+            cost_alert_enabled: false,
+            cost_alert_threshold: None,
             updated_at: "2024-01-01T00:00:00Z".into(),
         };
         let json = serde_json::to_string(&s).unwrap();

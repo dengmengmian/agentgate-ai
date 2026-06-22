@@ -8,7 +8,8 @@ pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
         "SELECT id, host, port, active_provider_id, input_protocol, output_protocol,
                 auto_start, log_retention_days, body_filter_global, thinking_rectifier_global,
                 error_mapper_global, updated_at, health_probe_enabled,
-                codex_compact_enabled, codex_compact_summary_max_tokens
+                codex_compact_enabled, codex_compact_summary_max_tokens,
+                cost_alert_enabled, cost_alert_threshold
          FROM gateway_settings WHERE id = 1",
         [],
         |row| {
@@ -28,6 +29,8 @@ pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
                 health_probe_enabled: row.get(12)?,
                 codex_compact_enabled: row.get(13)?,
                 codex_compact_summary_max_tokens: row.get(14)?,
+                cost_alert_enabled: row.get(15)?,
+                cost_alert_threshold: row.get(16)?,
             })
         },
     )
@@ -76,6 +79,13 @@ pub fn update(
     let codex_compact_summary_max_tokens = input
         .codex_compact_summary_max_tokens
         .unwrap_or(existing.codex_compact_summary_max_tokens);
+    let cost_alert_enabled = input
+        .cost_alert_enabled
+        .unwrap_or(existing.cost_alert_enabled);
+    let cost_alert_threshold = match input.cost_alert_threshold {
+        Some(v) => Some(v),
+        None => existing.cost_alert_threshold,
+    };
 
     conn.execute(
         "UPDATE gateway_settings SET host=?1, port=?2, active_provider_id=?3,
@@ -83,7 +93,8 @@ pub fn update(
                 log_retention_days=?7, body_filter_global=?8,
                 thinking_rectifier_global=?9, error_mapper_global=?10,
                 health_probe_enabled=?11, codex_compact_enabled=?12,
-                codex_compact_summary_max_tokens=?13, updated_at=?14
+                codex_compact_summary_max_tokens=?13,
+                cost_alert_enabled=?14, cost_alert_threshold=?15, updated_at=?16
          WHERE id = 1",
         params![
             &host,
@@ -99,6 +110,8 @@ pub fn update(
             health_probe_enabled,
             codex_compact_enabled,
             codex_compact_summary_max_tokens,
+            cost_alert_enabled,
+            cost_alert_threshold,
             &now,
         ],
     )?;
