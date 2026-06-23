@@ -4,7 +4,7 @@ use crate::errors::AppError;
 
 /// 当前 schema 版本。每加一段新迁移就 +1,放到 `run_versioned_migrations`
 /// 里 match 上对应的 version。读 `PRAGMA user_version` 决定该跑哪些。
-const CURRENT_SCHEMA_VERSION: u32 = 5;
+const CURRENT_SCHEMA_VERSION: u32 = 6;
 
 fn get_user_version(conn: &Connection) -> Result<u32, AppError> {
     let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -97,6 +97,22 @@ fn run_versioned_migrations(conn: &Connection, from_version: u32) -> Result<(), 
                                 cache_write_tokens, cache_read_tokens);",
         )?;
         set_user_version(conn, 5)?;
+    }
+    if from_version < 6 {
+        // v6:今日花费预警的开关 + 阈值。带幂等守卫——之前这两列错误地塞在
+        // legacy_baseline_v1 里(只对全新 DB 跑),已 current>=1 的存量用户漏列、
+        // 升级后 get() 崩;此处补回。守卫还能兼容"曾被手动加过列"的 DB,避免
+        // 重复 ALTER 报错。
+        let has_cost_alert = conn
+            .prepare("SELECT cost_alert_enabled FROM gateway_settings LIMIT 0")
+            .is_ok();
+        if !has_cost_alert {
+            conn.execute_batch(
+                "ALTER TABLE gateway_settings ADD COLUMN cost_alert_enabled INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE gateway_settings ADD COLUMN cost_alert_threshold REAL;",
+            )?;
+        }
+        set_user_version(conn, 6)?;
     }
     Ok(())
 }
@@ -330,16 +346,9 @@ fn legacy_baseline_v1(conn: &Connection) -> Result<(), AppError> {
         )?;
     }
 
-    // Migration: gateway_settings cost alert —— 今日花费预警开关 + 阈值(USD),默认关。
-    let has_cost_alert: bool = conn
-        .prepare("SELECT cost_alert_enabled FROM gateway_settings LIMIT 0")
-        .is_ok();
-    if !has_cost_alert {
-        conn.execute_batch(
-            "ALTER TABLE gateway_settings ADD COLUMN cost_alert_enabled INTEGER NOT NULL DEFAULT 0;
-             ALTER TABLE gateway_settings ADD COLUMN cost_alert_threshold REAL;",
-        )?;
-    }
+    // 注:gateway_settings 的 cost_alert 列改由 v6 versioned migration 负责
+    // (见 run_versioned_migrations)。新列必须走 versioned + bump version,
+    // 否则已 current>=1 的存量用户跑不到 baseline、永远漏列(2026-06 踩过)。
 
     // Migration: add model_capabilities column to providers
     // Stores per-model capability matrix as JSON: {"model_id": ["text","vision","reasoning",...]}
@@ -755,6 +764,62 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM providers", [], |r| r.get(0))
             .unwrap();
         assert!(provider_count > 0, "seed providers 应仍存在");
+    }
+
+    #[test]
+    fn existing_v5_db_gets_cost_alert_columns_on_upgrade() {
+        // 复现 2026-06 实际事故:存量用户 DB 已 current=5,但缺 cost_alert 列
+        // ——因为该列曾被错误塞进 legacy_baseline_v1(只对全新 DB 跑),current>=1
+        // 的存量用户跑不到、永远漏列,升级后 gateway_settings::get()(查全部列)崩。
+        // 修复后 cost_alert 改由 v6 versioned migration 补,此测试锁死这条升级路径。
+        let conn = Connection::open_in_memory().unwrap();
+        // 构造真实的 v5 DB:baseline + v2 的 codex_compact 列(versioned 列不在 baseline)。
+        // 这样 gateway_settings 拥有除 v6 cost_alert 外的全部列,精确复现存量 v5 用户。
+        legacy_baseline_v1(&conn).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE gateway_settings ADD COLUMN codex_compact_enabled INTEGER NOT NULL DEFAULT 1;
+             ALTER TABLE gateway_settings ADD COLUMN codex_compact_summary_max_tokens INTEGER NOT NULL DEFAULT 1500;",
+        )
+        .unwrap();
+        set_user_version(&conn, 5).unwrap(); // 模拟已升级到 v5 的存量用户
+
+        // 前提自检:此时确实缺 cost_alert 列,否则升级补列路径没被测到。
+        assert!(
+            conn.prepare("SELECT cost_alert_enabled FROM gateway_settings LIMIT 0")
+                .is_err(),
+            "v5 存量 DB 不应有 cost_alert 列,否则测不到 v6 补列"
+        );
+
+        run_migrations(&conn).unwrap();
+        assert_eq!(get_user_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
+
+        // v6 补列后 get() 必须成功、不报 DATABASE_ERROR。
+        let settings = crate::storage::gateway_settings::get(&conn)
+            .expect("v5 存量 DB 升级后 gateway_settings::get() 必须成功");
+        assert_eq!(settings.id, 1);
+        assert!(!settings.cost_alert_enabled);
+        assert!(settings.cost_alert_threshold.is_none());
+    }
+
+    #[test]
+    fn v6_migration_is_idempotent_on_manually_patched_db() {
+        // 边缘:有 DB 曾被手动补过 cost_alert 列(线上热修),current 仍 5。
+        // v6 的幂等守卫必须跳过 ALTER,不能因列已存在而报错导致启动失败。
+        let conn = Connection::open_in_memory().unwrap();
+        legacy_baseline_v1(&conn).unwrap();
+        // 真实 v5 DB(含 codex_compact)+ 线上热修手动补过的 cost_alert 列。
+        conn.execute_batch(
+            "ALTER TABLE gateway_settings ADD COLUMN codex_compact_enabled INTEGER NOT NULL DEFAULT 1;
+             ALTER TABLE gateway_settings ADD COLUMN codex_compact_summary_max_tokens INTEGER NOT NULL DEFAULT 1500;
+             ALTER TABLE gateway_settings ADD COLUMN cost_alert_enabled INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE gateway_settings ADD COLUMN cost_alert_threshold REAL;",
+        )
+        .unwrap();
+        set_user_version(&conn, 5).unwrap();
+
+        run_migrations(&conn).expect("已手动补列的 DB 跑 v6 不应报错");
+        assert_eq!(get_user_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
+        assert!(crate::storage::gateway_settings::get(&conn).is_ok());
     }
 
     #[test]
