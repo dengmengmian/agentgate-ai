@@ -1,5 +1,15 @@
 # Changelog / 更新日志
 
+## [1.4.7] - 2026-06-23
+
+### Added / 新增
+
+- **Daily cost alert / 今日花费预警** —— Set a daily spend threshold; when today's total cost exceeds it, AgentGate fires a system notification + pet bubble (at most once per day). Configurable in Settings. 在设置里设一个每日花费阈值,当今日累计花费超过它时,AgentGate 发系统通知 + 桌宠气泡提醒(每天最多一次)。
+
+### Fixes / 修复
+
+- **Existing-user upgrade crash on missing columns / 存量用户升级缺列崩溃** —— New `gateway_settings` columns had been added in a code path that only runs for brand-new databases, so already-installed users got `DATABASE_ERROR` on every settings read after upgrading (blank Overview). New columns now go through versioned migrations with idempotent guards, and a regression test covers the existing-DB upgrade path. 新增的 `gateway_settings` 列此前加在只对全新数据库执行的代码路径里,导致已安装用户升级后每次读设置都 `DATABASE_ERROR`(概览白屏)。现改为走带幂等守卫的版本化迁移,并补了存量数据库升级的回归测试。
+
 ## [1.4.6] - 2026-06-22
 
 ### Added / 新增

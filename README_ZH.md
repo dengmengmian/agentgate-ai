@@ -32,11 +32,11 @@
 
 | 你的机器 | 下载 |
 |---|---|
-| macOS Apple 芯片 | [AgentGate_1.4.6_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.6/AgentGate_1.4.6_aarch64.dmg) |
-| macOS Intel 芯片 | [AgentGate_1.4.6_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.6/AgentGate_1.4.6_x64.dmg) |
-| Windows 10 / 11 | [AgentGate_1.4.6_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.6/AgentGate_1.4.6_x64-setup.exe) |
-| Debian / Ubuntu | [AgentGate_1.4.6_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.6/AgentGate_1.4.6_amd64.deb) |
-| 其他 Linux 发行版 | [AgentGate_1.4.6_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.6/AgentGate_1.4.6_amd64.AppImage) |
+| macOS Apple 芯片 | [AgentGate_1.4.7_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.7/AgentGate_1.4.7_aarch64.dmg) |
+| macOS Intel 芯片 | [AgentGate_1.4.7_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.7/AgentGate_1.4.7_x64.dmg) |
+| Windows 10 / 11 | [AgentGate_1.4.7_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.7/AgentGate_1.4.7_x64-setup.exe) |
+| Debian / Ubuntu | [AgentGate_1.4.7_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.7/AgentGate_1.4.7_amd64.deb) |
+| 其他 Linux 发行版 | [AgentGate_1.4.7_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.7/AgentGate_1.4.7_amd64.AppImage) |
 
 无界面 CLI（`agentgate-serve`）压缩包和历史版本在 [Releases](https://github.com/dengmengmian/agentgate-ai/releases) 页面。
 
