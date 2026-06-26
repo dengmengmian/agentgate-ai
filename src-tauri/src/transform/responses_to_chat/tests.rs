@@ -4,8 +4,8 @@ use super::super::providers::{DeepSeekProvider, DefaultProvider, KimiProvider};
 use super::convert::merge_consecutive_messages;
 use super::effort::apply_effort_overrides;
 use super::input::{
-    convert_input, convert_input_array, extract_content, flatten_tool_output_with_events,
-    map_role, msg,
+    convert_input, convert_input_array, extract_content, flatten_tool_output_with_events, map_role,
+    msg,
 };
 use super::think::trailing_partial;
 use super::*;
@@ -1206,14 +1206,21 @@ fn matrix_with_vision_keeps_images() {
         convert_with_provider_matrix(&image_req(), "vision-model", &DefaultProvider, &matrix)
             .unwrap();
     let content = serde_json::to_string(&result.messages.last().unwrap().content).unwrap();
-    assert!(content.contains("image_url"), "声明 vision 的模型图片应保留");
+    assert!(
+        content.contains("image_url"),
+        "声明 vision 的模型图片应保留"
+    );
 }
 
 #[test]
 fn empty_matrix_keeps_images_back_compat() {
     let matrix = std::collections::HashMap::new();
-    let result = convert_with_provider_matrix(&image_req(), "unknown-model", &DefaultProvider, &matrix)
-        .unwrap();
+    let result =
+        convert_with_provider_matrix(&image_req(), "unknown-model", &DefaultProvider, &matrix)
+            .unwrap();
     let content = serde_json::to_string(&result.messages.last().unwrap().content).unwrap();
-    assert!(content.contains("image_url"), "矩阵无条目时不动(与 web_search 门控同语义)");
+    assert!(
+        content.contains("image_url"),
+        "矩阵无条目时不动(与 web_search 门控同语义)"
+    );
 }

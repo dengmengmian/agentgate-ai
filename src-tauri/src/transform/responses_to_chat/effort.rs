@@ -6,7 +6,10 @@
 /// env 配置示例：
 ///   AGENTGATE_FORCE_HIGH_EFFORT_PROVIDERS=mimo,deepseek  # None → high
 ///   AGENTGATE_EFFORT_FLOOR_PROVIDERS=mimo                # low/medium → high
-pub(super) fn apply_effort_overrides(provider_type: &str, current: Option<String>) -> Option<String> {
+pub(super) fn apply_effort_overrides(
+    provider_type: &str,
+    current: Option<String>,
+) -> Option<String> {
     // 1. floor 覆盖（先看，因为它对 Some/None 都生效）
     if provider_in_env_list(provider_type, "AGENTGATE_EFFORT_FLOOR_PROVIDERS") {
         let needs_lift = current

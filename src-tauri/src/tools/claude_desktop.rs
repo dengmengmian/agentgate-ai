@@ -262,8 +262,12 @@ mod tests {
         assert!(p.profile.starts_with(base));
         assert!(p.meta.starts_with(base));
         // 相对布局与 macOS 现状完全一致
-        assert!(p.normal_config.ends_with("Claude/claude_desktop_config.json"));
-        assert!(p.threep_config.ends_with("Claude-3p/claude_desktop_config.json"));
+        assert!(p
+            .normal_config
+            .ends_with("Claude/claude_desktop_config.json"));
+        assert!(p
+            .threep_config
+            .ends_with("Claude-3p/claude_desktop_config.json"));
         assert!(p
             .profile
             .ends_with(format!("Claude-3p/configLibrary/{PROFILE_ID}.json")));

@@ -28,11 +28,11 @@
 
 | Your machine | Download |
 |---|---|
-| 🍎 macOS — Apple Silicon (M1–M4) | [AgentGate_1.4.7_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.7/AgentGate_1.4.7_aarch64.dmg) |
-| 🍎 macOS — Intel | [AgentGate_1.4.7_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.7/AgentGate_1.4.7_x64.dmg) |
-| 🪟 Windows 10 / 11 | [AgentGate_1.4.7_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.7/AgentGate_1.4.7_x64-setup.exe) |
-| 🐧 Linux — Debian / Ubuntu | [AgentGate_1.4.7_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.7/AgentGate_1.4.7_amd64.deb) |
-| 🐧 Linux — other distros | [AgentGate_1.4.7_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.7/AgentGate_1.4.7_amd64.AppImage) |
+| 🍎 macOS — Apple Silicon (M1–M4) | [AgentGate_1.4.8_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.8/AgentGate_1.4.8_aarch64.dmg) |
+| 🍎 macOS — Intel | [AgentGate_1.4.8_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.8/AgentGate_1.4.8_x64.dmg) |
+| 🪟 Windows 10 / 11 | [AgentGate_1.4.8_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.8/AgentGate_1.4.8_x64-setup.exe) |
+| 🐧 Linux — Debian / Ubuntu | [AgentGate_1.4.8_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.8/AgentGate_1.4.8_amd64.deb) |
+| 🐧 Linux — other distros | [AgentGate_1.4.8_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.8/AgentGate_1.4.8_amd64.AppImage) |
 
 > Headless CLI (`agentgate-serve`) tarballs and all versions: [Releases](https://github.com/dengmengmian/agentgate-ai/releases)
 

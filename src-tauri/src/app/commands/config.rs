@@ -109,7 +109,12 @@ mod tests {
         seed_provider(&state);
         let json = export_config_json(false, unsafe { as_state(&state) }).unwrap();
         let export: serde_json::Value = serde_json::from_str(&json).unwrap();
-        let provider = export["providers"].as_array().unwrap().iter().find(|p| p["name"] == "ExportProvider").unwrap();
+        let provider = export["providers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["name"] == "ExportProvider")
+            .unwrap();
         assert!(provider["api_key"].is_null());
     }
 
@@ -119,7 +124,12 @@ mod tests {
         seed_provider(&state);
         let json = export_config_json(true, unsafe { as_state(&state) }).unwrap();
         let export: serde_json::Value = serde_json::from_str(&json).unwrap();
-        let provider = export["providers"].as_array().unwrap().iter().find(|p| p["name"] == "ExportProvider").unwrap();
+        let provider = export["providers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["name"] == "ExportProvider")
+            .unwrap();
         assert_eq!(provider["api_key"].as_str().unwrap(), "sk-secret");
     }
 
@@ -134,13 +144,16 @@ mod tests {
         assert!(summary.secrets_applied);
 
         let providers = storage::providers::list_all(&state.db.get().unwrap()).unwrap();
-        assert!(providers.iter().any(|p| p.name == "ExportProvider" && p.api_key.as_deref() == Some("sk-secret")));
+        assert!(providers
+            .iter()
+            .any(|p| p.name == "ExportProvider" && p.api_key.as_deref() == Some("sk-secret")));
     }
 
     #[test]
     fn import_config_json_rejects_invalid_json() {
         let state = test_state();
-        let err = import_config_json("not json".to_string(), unsafe { as_state(&state) }).unwrap_err();
+        let err =
+            import_config_json("not json".to_string(), unsafe { as_state(&state) }).unwrap_err();
         assert_eq!(err.code, "CONFIG_IMPORT_PARSE_ERROR");
     }
 }

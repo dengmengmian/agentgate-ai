@@ -72,7 +72,10 @@ fn find_unix(needles: &[&str]) -> Vec<RunningProcess> {
 fn find_windows(needles: &[&str]) -> Vec<RunningProcess> {
     use std::process::Command;
 
-    let Ok(output) = Command::new("tasklist").args(["/FO", "CSV", "/NH"]).output() else {
+    let Ok(output) = Command::new("tasklist")
+        .args(["/FO", "CSV", "/NH"])
+        .output()
+    else {
         return Vec::new();
     };
     if !output.status.success() {

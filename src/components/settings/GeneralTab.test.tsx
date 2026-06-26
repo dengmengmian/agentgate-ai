@@ -36,6 +36,7 @@ function baseSettings(over: Record<string, unknown> = {}) {
     health_probe_enabled: false,
     codex_compact_enabled: true,
     codex_compact_summary_max_tokens: 1500,
+    request_body_limit_mb: 32,
     cost_alert_enabled: false,
     cost_alert_threshold: null,
     updated_at: "",
@@ -45,6 +46,7 @@ function baseSettings(over: Record<string, unknown> = {}) {
 
 function setup(over: Record<string, unknown> = {}) {
   const handleUpdateCostAlert = vi.fn();
+  const handleUpdateRequestBodyLimit = vi.fn();
   renderWithProviders(
     <GeneralTab
       settings={baseSettings(over) as any}
@@ -55,12 +57,13 @@ function setup(over: Record<string, unknown> = {}) {
       handleUpdateAutoStart={vi.fn()}
       handleUpdateRefinerGlobal={vi.fn()}
       handleUpdateCostAlert={handleUpdateCostAlert}
+      handleUpdateRequestBodyLimit={handleUpdateRequestBodyLimit}
       t={(k: string) => k}
       ToggleSwitch={ToggleSwitch}
       ThemePicker={ThemePicker}
     />
   );
-  return { handleUpdateCostAlert };
+  return { handleUpdateCostAlert, handleUpdateRequestBodyLimit };
 }
 
 describe("GeneralTab 成本预警", () => {
@@ -98,5 +101,34 @@ describe("GeneralTab 成本预警", () => {
     fireEvent.blur(input, { target: { value: "abc" } }); // NaN
     fireEvent.blur(input, { target: { value: "5" } }); // 与当前值相同
     expect(handleUpdateCostAlert).not.toHaveBeenCalled();
+  });
+
+  it("有效请求体上限 onBlur 保存", () => {
+    const { handleUpdateRequestBodyLimit } = setup();
+    fireEvent.blur(screen.getByDisplayValue("32"), {
+      target: { value: "64" },
+    });
+    expect(handleUpdateRequestBodyLimit).toHaveBeenCalledWith(64);
+  });
+
+  it("请求体上限为 0 / 非法 / 不变时不保存", () => {
+    const { handleUpdateRequestBodyLimit } = setup({
+      request_body_limit_mb: 32,
+    });
+    const input = screen.getByDisplayValue("32");
+    fireEvent.blur(input, { target: { value: "0" } });
+    fireEvent.blur(input, { target: { value: "abc" } });
+    fireEvent.blur(input, { target: { value: "32" } });
+    expect(handleUpdateRequestBodyLimit).not.toHaveBeenCalled();
+  });
+
+  it("请求体上限超过 128MB 时不保存", () => {
+    const { handleUpdateRequestBodyLimit } = setup({
+      request_body_limit_mb: 32,
+    });
+    fireEvent.blur(screen.getByDisplayValue("32"), {
+      target: { value: "4096" },
+    });
+    expect(handleUpdateRequestBodyLimit).not.toHaveBeenCalled();
   });
 });

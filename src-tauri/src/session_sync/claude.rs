@@ -399,10 +399,7 @@ mod tests {
         // ~/.claude/projects 永远找不到,用量统计同步静默变 no-op。
         crate::test_utils::with_windows_style_home(|fake| {
             let dir = claude_projects_dir();
-            assert!(
-                dir.starts_with(fake),
-                "应退到 USERPROFILE,实际 {dir:?}"
-            );
+            assert!(dir.starts_with(fake), "应退到 USERPROFILE,实际 {dir:?}");
         });
     }
 

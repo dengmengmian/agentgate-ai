@@ -89,9 +89,7 @@ fn redact_named_value(text: &str, name: &str) -> String {
         }
         let val_rest = &rest[val_start..];
         let val_end = val_rest
-            .find(|c: char| {
-                c.is_whitespace() || matches!(c, '"' | '\'' | ',' | '}' | ')' | '&')
-            })
+            .find(|c: char| c.is_whitespace() || matches!(c, '"' | '\'' | ',' | '}' | ')' | '&'))
             .unwrap_or(val_rest.len());
         result.push_str(sep);
         if val_end > 8 {

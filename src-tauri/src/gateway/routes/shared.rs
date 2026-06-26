@@ -1,5 +1,7 @@
+use axum::extract::rejection::BytesRejection;
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
+use bytes::Bytes;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
@@ -309,6 +311,23 @@ pub(crate) fn validate_auth(headers: &HeaderMap) -> Result<(), GatewayError> {
     }
 
     Ok(())
+}
+
+pub(crate) fn request_body_or_gateway_error(
+    body: Result<Bytes, BytesRejection>,
+) -> Result<Bytes, GatewayError> {
+    body.map_err(|e| {
+        GatewayError(
+            AppError::new(
+                crate::errors::codes::REQUEST_BODY_TOO_LARGE,
+                "请求内容过大，AgentGate 无法接收本次上下文",
+            )
+            .with_detail(format!(
+                "通常是对话历史太长、粘贴了大文件/日志、图片或工具输出过长。原始错误: {e}"
+            ))
+            .with_suggestion("请新开会话或减少本次发送内容；也可在设置里调大请求体上限，或设置 AGENTGATE_REQUEST_BODY_LIMIT_MB 后重启网关"),
+        )
+    })
 }
 
 pub(crate) fn get_active_provider(
@@ -856,6 +875,7 @@ impl IntoResponse for GatewayError {
             "PROVIDER_API_KEY_MISSING" | "GATEWAY_AUTH_MISSING" | "GATEWAY_AUTH_INVALID" => {
                 StatusCode::UNAUTHORIZED
             }
+            "REQUEST_BODY_TOO_LARGE" => StatusCode::PAYLOAD_TOO_LARGE,
             "ACTIVE_PROVIDER_NOT_FOUND" => StatusCode::SERVICE_UNAVAILABLE,
             c if c.starts_with("UPSTREAM") => StatusCode::BAD_GATEWAY,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
@@ -1100,7 +1120,10 @@ mod tests {
     fn host_is_allowed_respects_whitelist() {
         assert!(host_is_allowed("my.app", "my.app"));
         assert!(host_is_allowed("my.app:9090", "my.app"));
-        assert!(host_is_allowed("a.example.com", "b.example.com, a.example.com"));
+        assert!(host_is_allowed(
+            "a.example.com",
+            "b.example.com, a.example.com"
+        ));
     }
 
     #[test]
@@ -1116,7 +1139,11 @@ mod tests {
     fn origin_is_allowed_rejects_cross_site_and_null() {
         assert!(!origin_is_allowed("https://evil.com", "", ""));
         assert!(!origin_is_allowed("null", "", ""));
-        assert!(!origin_is_allowed("https://evil.com", "https://other.app", ""));
+        assert!(!origin_is_allowed(
+            "https://evil.com",
+            "https://other.app",
+            ""
+        ));
     }
 
     #[test]
@@ -1290,19 +1317,22 @@ mod tests {
                 {"type": "text", "text": "what"},
                 {"type": "image_url", "image_url": {"url": "x"}}
             ]}
-        ]}).to_string();
+        ]})
+        .to_string();
         assert!(chat_request_has_images(&current_image));
 
         let historic_image = json!({"messages": [
             {"role": "user", "content": [{"type": "image_url", "image_url": {"url": "x"}}]},
             {"role": "assistant", "content": "ok"},
             {"role": "user", "content": [{"type": "text", "text": "and now"}]}
-        ]}).to_string();
+        ]})
+        .to_string();
         assert!(!chat_request_has_images(&historic_image));
 
         let text_only = json!({"messages": [
             {"role": "user", "content": [{"type": "text", "text": "hi"}]}
-        ]}).to_string();
+        ]})
+        .to_string();
         assert!(!chat_request_has_images(&text_only));
     }
 
@@ -1432,21 +1462,30 @@ mod tests {
     #[test]
     fn gateway_error_maps_status_codes() {
         assert_eq!(
-            GatewayError(AppError::new(crate::errors::codes::RESPONSES_PARSE_ERROR, "bad"))
-                .into_response()
-                .status(),
+            GatewayError(AppError::new(
+                crate::errors::codes::RESPONSES_PARSE_ERROR,
+                "bad"
+            ))
+            .into_response()
+            .status(),
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
-            GatewayError(AppError::new(crate::errors::codes::PROVIDER_API_KEY_MISSING, "no key"))
-                .into_response()
-                .status(),
+            GatewayError(AppError::new(
+                crate::errors::codes::PROVIDER_API_KEY_MISSING,
+                "no key"
+            ))
+            .into_response()
+            .status(),
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            GatewayError(AppError::new(crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND, "none"))
-                .into_response()
-                .status(),
+            GatewayError(AppError::new(
+                crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND,
+                "none"
+            ))
+            .into_response()
+            .status(),
             StatusCode::SERVICE_UNAVAILABLE
         );
         assert_eq!(
@@ -1454,6 +1493,12 @@ mod tests {
                 .into_response()
                 .status(),
             StatusCode::BAD_GATEWAY
+        );
+        assert_eq!(
+            GatewayError(AppError::new("REQUEST_BODY_TOO_LARGE", "too large"))
+                .into_response()
+                .status(),
+            StatusCode::PAYLOAD_TOO_LARGE
         );
         assert_eq!(
             GatewayError(AppError::new("UNKNOWN_CODE", "err"))

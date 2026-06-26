@@ -1,8 +1,38 @@
 //! 写入与清理：插入（网关请求 / 会话日志）、同步去重辅助、删除与保留期清理。
 
 use rusqlite::Connection;
+use std::borrow::Cow;
 
 use crate::errors::AppError;
+
+const MAX_LOG_FIELD_BYTES: usize = 1024 * 1024;
+const TRUNCATED_MARKER: &str = "\n...[truncated by AgentGate]";
+
+fn truncate_log_field(value: Option<&str>) -> Option<Cow<'_, str>> {
+    let value = value?;
+    if value.len() <= MAX_LOG_FIELD_BYTES {
+        return Some(Cow::Borrowed(value));
+    }
+
+    let keep = MAX_LOG_FIELD_BYTES.saturating_sub(TRUNCATED_MARKER.len());
+    let mut end = keep;
+    while !value.is_char_boundary(end) {
+        end -= 1;
+    }
+    let mut truncated = String::with_capacity(MAX_LOG_FIELD_BYTES);
+    truncated.push_str(&value[..end]);
+    truncated.push_str(TRUNCATED_MARKER);
+    Some(Cow::Owned(truncated))
+}
+
+fn shrink_database_after_delete(conn: &Connection) {
+    if let Err(err) = conn.execute_batch(
+        "PRAGMA wal_checkpoint(TRUNCATE);
+         VACUUM;",
+    ) {
+        eprintln!("[log-cleanup] SQLite shrink skipped: {err}");
+    }
+}
 
 /// 删除某个会话在 request_logs 里的全部行，返回删除行数。
 pub fn delete_by_session(conn: &Connection, session_id: &str) -> Result<usize, AppError> {
@@ -44,6 +74,12 @@ pub fn insert(
     let now = chrono::Utc::now().to_rfc3339();
     // 缺省视为 'gateway' —— 旧调用方迁移期间还没传，保持以前的语义。
     let source = source.unwrap_or("gateway");
+    let raw_request = truncate_log_field(raw_request);
+    let converted_request = truncate_log_field(converted_request);
+    let raw_response = truncate_log_field(raw_response);
+    let converted_response = truncate_log_field(converted_response);
+    let sse_events = truncate_log_field(sse_events);
+    let trace_json = truncate_log_field(trace_json);
 
     conn.execute(
         "INSERT INTO request_logs (id, request_id, timestamp, client, provider, model, route,
@@ -54,8 +90,9 @@ pub fn insert(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25)",
         rusqlite::params![
             &id, request_id, &now, client, provider, model, route,
-            status_code, latency_ms, raw_request, converted_request, raw_response,
-            converted_response, sse_events, tool_calls, error_message, trace_json,
+            status_code, latency_ms, raw_request.as_deref(), converted_request.as_deref(),
+            raw_response.as_deref(), converted_response.as_deref(), sse_events.as_deref(),
+            tool_calls, error_message, trace_json.as_deref(),
             input_tokens, output_tokens, cost, cache_write_tokens, cache_read_tokens,
             source, session_id, external_id,
         ],
@@ -189,7 +226,10 @@ pub fn extract_cache_tokens(usage: &serde_json::Value) -> (Option<i64>, Option<i
 }
 
 pub fn clear(conn: &Connection) -> Result<bool, AppError> {
-    conn.execute("DELETE FROM request_logs", [])?;
+    let deleted = conn.execute("DELETE FROM request_logs", [])?;
+    if deleted > 0 {
+        shrink_database_after_delete(conn);
+    }
     Ok(true)
 }
 
@@ -197,6 +237,9 @@ pub fn clear(conn: &Connection) -> Result<bool, AppError> {
 pub fn cleanup_older_than(conn: &Connection, retention_days: i64) -> Result<usize, AppError> {
     let cutoff = (chrono::Utc::now() - chrono::Duration::days(retention_days)).to_rfc3339();
     let deleted = conn.execute("DELETE FROM request_logs WHERE timestamp < ?1", [&cutoff])?;
+    if deleted > 0 {
+        shrink_database_after_delete(conn);
+    }
     Ok(deleted)
 }
 
@@ -297,6 +340,48 @@ mod tests {
     }
 
     #[test]
+    fn insert_truncates_large_log_bodies() {
+        let conn = empty_db();
+        let big = "x".repeat(2 * 1024 * 1024);
+        insert(
+            &conn,
+            "req-big",
+            "Codex",
+            "openai_official",
+            "gpt-5",
+            "/v1/responses",
+            200,
+            120,
+            Some(&big),
+            Some(&big),
+            Some(&big),
+            Some(&big),
+            Some(&big),
+            None,
+            Some(&big),
+            None,
+            Some(10),
+            Some(20),
+            Some(0.001),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        let raw_len: i64 = conn
+            .query_row(
+                "SELECT length(raw_request) FROM request_logs WHERE request_id='req-big'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(raw_len <= 1024 * 1024);
+    }
+
+    #[test]
     fn insert_session_log_creates_client_session_row() {
         let conn = empty_db();
         insert_session_log(
@@ -329,13 +414,57 @@ mod tests {
     fn delete_by_session_removes_only_target_session() {
         let conn = empty_db();
         insert(
-            &conn, "r1", "c", "p", "m", "/r", 200, 0, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, Some("s1"), None,
+            &conn,
+            "r1",
+            "c",
+            "p",
+            "m",
+            "/r",
+            200,
+            0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("s1"),
+            None,
         )
         .unwrap();
         insert(
-            &conn, "r2", "c", "p", "m", "/r", 200, 0, None, None, None, None, None, None, None,
-            None, None, None, None, None, None, None, Some("s2"), None,
+            &conn,
+            "r2",
+            "c",
+            "p",
+            "m",
+            "/r",
+            200,
+            0,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("s2"),
+            None,
         )
         .unwrap();
 
@@ -350,10 +479,47 @@ mod tests {
     #[test]
     fn external_ids_for_source_returns_existing_ids() {
         let conn = empty_db();
-        insert_session_log(&conn, "2026-06-01T12:00:00Z", "c", "p", "m", "/r", "codex_session", "s", "ext-a", None, None, None, None, None).unwrap();
-        insert_session_log(&conn, "2026-06-01T12:00:01Z", "c", "p", "m", "/r", "codex_session", "s", "ext-b", None, None, None, None, None).unwrap();
+        insert_session_log(
+            &conn,
+            "2026-06-01T12:00:00Z",
+            "c",
+            "p",
+            "m",
+            "/r",
+            "codex_session",
+            "s",
+            "ext-a",
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        insert_session_log(
+            &conn,
+            "2026-06-01T12:00:01Z",
+            "c",
+            "p",
+            "m",
+            "/r",
+            "codex_session",
+            "s",
+            "ext-b",
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
-        let found = external_ids_for_source(&conn, "codex_session", &["ext-a".to_string(), "ext-c".to_string()]).unwrap();
+        let found = external_ids_for_source(
+            &conn,
+            "codex_session",
+            &["ext-a".to_string(), "ext-c".to_string()],
+        )
+        .unwrap();
         assert!(found.contains("ext-a"));
         assert!(!found.contains("ext-b"));
         assert!(!found.contains("ext-c"));
@@ -385,8 +551,40 @@ mod tests {
         let old = (chrono::Utc::now() - chrono::Duration::days(10)).to_rfc3339();
         let recent = (chrono::Utc::now() - chrono::Duration::days(1)).to_rfc3339();
 
-        insert_session_log(&conn, &old, "c", "p", "m", "/r", "codex_session", "s1", "old-1", None, None, None, None, None).unwrap();
-        insert_session_log(&conn, &recent, "c", "p", "m", "/r", "codex_session", "s2", "new-1", None, None, None, None, None).unwrap();
+        insert_session_log(
+            &conn,
+            &old,
+            "c",
+            "p",
+            "m",
+            "/r",
+            "codex_session",
+            "s1",
+            "old-1",
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        insert_session_log(
+            &conn,
+            &recent,
+            "c",
+            "p",
+            "m",
+            "/r",
+            "codex_session",
+            "s2",
+            "new-1",
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
 
         let deleted = cleanup_older_than(&conn, 7).unwrap();
         assert_eq!(deleted, 1);

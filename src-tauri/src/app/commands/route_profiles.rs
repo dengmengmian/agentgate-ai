@@ -396,7 +396,8 @@ mod tests {
     fn delete_route_profile_removes_non_default() {
         let state = test_state();
         let profile = create_test_profile(&state);
-        let deleted = delete_route_profile(profile.id.clone(), unsafe { as_state(&state) }).unwrap();
+        let deleted =
+            delete_route_profile(profile.id.clone(), unsafe { as_state(&state) }).unwrap();
         assert!(deleted);
         let err = get_route_profile(profile.id, unsafe { as_state(&state) }).unwrap_err();
         assert_eq!(err.code, "ROUTE_PROFILE_NOT_FOUND");
@@ -424,11 +425,9 @@ mod tests {
     fn set_route_profile_mode_updates_mode() {
         let state = test_state();
         let profile = create_test_profile(&state);
-        set_route_profile_mode(
-            profile.id.clone(),
-            "failover".to_string(),
-            unsafe { as_state(&state) },
-        )
+        set_route_profile_mode(profile.id.clone(), "failover".to_string(), unsafe {
+            as_state(&state)
+        })
         .unwrap();
         let detail = get_route_profile(profile.id, unsafe { as_state(&state) }).unwrap();
         assert_eq!(detail.profile.mode, "failover");
@@ -459,11 +458,9 @@ mod tests {
         assert_eq!(detail.providers.len(), 1);
         assert_eq!(detail.providers[0].provider_id, provider_id);
 
-        remove_provider_from_route(
-            profile.id.clone(),
-            provider_id.clone(),
-            unsafe { as_state(&state) },
-        )
+        remove_provider_from_route(profile.id.clone(), provider_id.clone(), unsafe {
+            as_state(&state)
+        })
         .unwrap();
         let detail = get_route_profile(profile.id, unsafe { as_state(&state) }).unwrap();
         assert!(detail.providers.is_empty());
@@ -490,11 +487,9 @@ mod tests {
         )
         .unwrap();
 
-        set_route_active_provider(
-            profile.id.clone(),
-            provider_id.clone(),
-            unsafe { as_state(&state) },
-        )
+        set_route_active_provider(profile.id.clone(), provider_id.clone(), unsafe {
+            as_state(&state)
+        })
         .unwrap();
 
         let detail = get_route_profile(profile.id, unsafe { as_state(&state) }).unwrap();
@@ -580,14 +575,19 @@ mod tests {
         .unwrap();
 
         let detail = get_route_profile(profile.id, unsafe { as_state(&state) }).unwrap();
-        assert_eq!(detail.providers[0].routing_conditions, Some(cond.to_string()));
+        assert_eq!(
+            detail.providers[0].routing_conditions,
+            Some(cond.to_string())
+        );
     }
 
     #[test]
     fn reset_provider_runtime_status_resets_one() {
         let state = test_state();
         let provider_id = create_test_provider(&state);
-        let status = reset_provider_runtime_status(provider_id.clone(), unsafe { as_state(&state) }).unwrap();
+        let status =
+            reset_provider_runtime_status(provider_id.clone(), unsafe { as_state(&state) })
+                .unwrap();
         assert_eq!(status.provider_id, provider_id);
         assert!(status.available);
     }

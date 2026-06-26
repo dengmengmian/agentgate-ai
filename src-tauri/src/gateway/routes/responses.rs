@@ -18,8 +18,9 @@ use crate::transform::{responses_to_anthropic, responses_to_chat, responses_to_g
 
 use super::shared::{
     detect_client_from_ua, lock_db, log_request_error, log_request_error_full, log_request_success,
-    native_model_override, refine_struct_body, refine_value_body, request_contains_images,
-    sanitize_body, trace_with_degradation_events, truncate_str, validate_auth, GatewayError,
+    native_model_override, refine_struct_body, refine_value_body, request_body_or_gateway_error,
+    request_contains_images, sanitize_body, trace_with_degradation_events, truncate_str,
+    validate_auth, GatewayError,
 };
 use super::GatewayState;
 
@@ -35,8 +36,9 @@ use gemini::*;
 pub async fn handle_responses(
     headers: HeaderMap,
     AxumState(state): AxumState<GatewayState>,
-    body: bytes::Bytes,
+    body: Result<bytes::Bytes, axum::extract::rejection::BytesRejection>,
 ) -> Result<Response, GatewayError> {
+    let body = request_body_or_gateway_error(body)?;
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!(

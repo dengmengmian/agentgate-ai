@@ -3,13 +3,15 @@ use rusqlite::{params, Connection};
 use crate::errors::AppError;
 use crate::models::gateway::{GatewaySettings, UpdateGatewaySettingsInput};
 
+const MAX_REQUEST_BODY_LIMIT_MB: i64 = 128;
+
 pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
     conn.query_row(
         "SELECT id, host, port, active_provider_id, input_protocol, output_protocol,
                 auto_start, log_retention_days, body_filter_global, thinking_rectifier_global,
                 error_mapper_global, updated_at, health_probe_enabled,
                 codex_compact_enabled, codex_compact_summary_max_tokens,
-                cost_alert_enabled, cost_alert_threshold
+                request_body_limit_mb, cost_alert_enabled, cost_alert_threshold
          FROM gateway_settings WHERE id = 1",
         [],
         |row| {
@@ -29,8 +31,9 @@ pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
                 health_probe_enabled: row.get(12)?,
                 codex_compact_enabled: row.get(13)?,
                 codex_compact_summary_max_tokens: row.get(14)?,
-                cost_alert_enabled: row.get(15)?,
-                cost_alert_threshold: row.get(16)?,
+                request_body_limit_mb: row.get(15)?,
+                cost_alert_enabled: row.get(16)?,
+                cost_alert_threshold: row.get(17)?,
             })
         },
     )
@@ -79,6 +82,10 @@ pub fn update(
     let codex_compact_summary_max_tokens = input
         .codex_compact_summary_max_tokens
         .unwrap_or(existing.codex_compact_summary_max_tokens);
+    let request_body_limit_mb = input
+        .request_body_limit_mb
+        .unwrap_or(existing.request_body_limit_mb)
+        .clamp(1, MAX_REQUEST_BODY_LIMIT_MB);
     let cost_alert_enabled = input
         .cost_alert_enabled
         .unwrap_or(existing.cost_alert_enabled);
@@ -94,7 +101,8 @@ pub fn update(
                 thinking_rectifier_global=?9, error_mapper_global=?10,
                 health_probe_enabled=?11, codex_compact_enabled=?12,
                 codex_compact_summary_max_tokens=?13,
-                cost_alert_enabled=?14, cost_alert_threshold=?15, updated_at=?16
+                request_body_limit_mb=?14,
+                cost_alert_enabled=?15, cost_alert_threshold=?16, updated_at=?17
          WHERE id = 1",
         params![
             &host,
@@ -110,6 +118,7 @@ pub fn update(
             health_probe_enabled,
             codex_compact_enabled,
             codex_compact_summary_max_tokens,
+            request_body_limit_mb,
             cost_alert_enabled,
             cost_alert_threshold,
             &now,
@@ -137,6 +146,7 @@ mod tests {
         assert_eq!(settings.id, 1);
         assert_eq!(settings.host, "127.0.0.1");
         assert_eq!(settings.port, 9090);
+        assert_eq!(settings.request_body_limit_mb, 32);
     }
 
     #[test]
@@ -150,6 +160,7 @@ mod tests {
                 input_protocol: Some("openai_chat_completions".to_string()),
                 auto_start: Some(true),
                 log_retention_days: Some(7),
+                request_body_limit_mb: Some(32),
                 ..Default::default()
             },
         )
@@ -159,6 +170,7 @@ mod tests {
         assert_eq!(updated.input_protocol, "openai_chat_completions");
         assert_eq!(updated.auto_start, true);
         assert_eq!(updated.log_retention_days, 7);
+        assert_eq!(updated.request_body_limit_mb, 32);
     }
 
     #[test]
@@ -176,5 +188,23 @@ mod tests {
         assert_eq!(updated.host, "0.0.0.0");
         assert_eq!(updated.port, original.port);
         assert_eq!(updated.input_protocol, original.input_protocol);
+        assert_eq!(
+            updated.request_body_limit_mb,
+            original.request_body_limit_mb
+        );
+    }
+
+    #[test]
+    fn request_body_limit_is_clamped_before_save() {
+        let conn = setup_db();
+        let updated = update(
+            &conn,
+            UpdateGatewaySettingsInput {
+                request_body_limit_mb: Some(4096),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(updated.request_body_limit_mb, 128);
     }
 }

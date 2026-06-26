@@ -1,4 +1,5 @@
 use axum::body::Body;
+use axum::extract::DefaultBodyLimit;
 use axum::routing::{get, post};
 use axum::Router;
 use axum_server::tls_rustls::RustlsConfig;
@@ -25,6 +26,9 @@ pub struct TlsConfig {
 /// 优雅 shutdown 等 in-flight 完成的最大时长。SSE 长流式响应仍可能超时被切，
 /// 但 30s 给"正常 chat completion + 短 SSE"留够余地。
 const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(30);
+const DEFAULT_REQUEST_BODY_LIMIT_MB: i64 = 32;
+const MAX_REQUEST_BODY_LIMIT_MB: i64 = 128;
+const BYTES_PER_MIB: usize = 1024 * 1024;
 
 /// 包一层 Body，使 active-requests 计数器在 **body 真正流完**（或被
 /// drop——客户端断开）时才 decrement。
@@ -129,6 +133,15 @@ pub async fn start(
         http_client,
         active_requests: active_requests.clone(),
     };
+    let configured_body_limit_mb = state
+        .db
+        .get()
+        .ok()
+        .and_then(|conn| crate::storage::gateway_settings::get(&conn).ok())
+        .map(|settings| settings.request_body_limit_mb)
+        .unwrap_or(DEFAULT_REQUEST_BODY_LIMIT_MB);
+    let body_limit_mb = effective_request_body_limit_mb(configured_body_limit_mb);
+    let body_limit_bytes = request_body_limit_bytes(body_limit_mb);
 
     // ── 主动延迟探测循环(喂 fastest 路由的冷启动)──
     // 默认关:探测发的是真实最小补全(speedtest::probe),会产生少量 token
@@ -146,10 +159,7 @@ pub async fn start(
                 let providers = {
                     let Ok(conn) = probe_db.get() else { continue };
                     let has_fastest = crate::storage::route_profiles::list_all(&conn)
-                        .map(|ps| {
-                            ps.iter()
-                                .any(|p| p.selection_strategy == "fastest")
-                        })
+                        .map(|ps| ps.iter().any(|p| p.selection_strategy == "fastest"))
                         .unwrap_or(false);
                     if !has_fastest {
                         continue;
@@ -230,6 +240,7 @@ pub async fn start(
                 }
             },
         ))
+        .layer(DefaultBodyLimit::max(body_limit_bytes))
         .with_state(state);
 
     // 可选 per-IP 限流(默认关)。AGENTGATE_RATE_LIMIT = 每 IP 每秒最大请求数。
@@ -320,6 +331,7 @@ pub async fn start(
         host = %host,
         port = bound_port,
         tls = tls.is_some(),
+        request_body_limit_mb = body_limit_mb,
         "gateway listening"
     );
 
@@ -356,4 +368,55 @@ pub async fn start(
     };
 
     Ok((shutdown_tx, join_handle, active_requests, bound_port))
+}
+
+fn effective_request_body_limit_mb(configured_mb: i64) -> i64 {
+    let configured_mb = configured_mb.clamp(1, MAX_REQUEST_BODY_LIMIT_MB);
+    std::env::var("AGENTGATE_REQUEST_BODY_LIMIT_MB")
+        .ok()
+        .and_then(|v| v.trim().parse::<i64>().ok())
+        .filter(|v| *v > 0)
+        .map(|v| v.clamp(1, MAX_REQUEST_BODY_LIMIT_MB))
+        .unwrap_or(configured_mb)
+}
+
+fn request_body_limit_bytes(limit_mb: i64) -> usize {
+    (limit_mb.clamp(1, MAX_REQUEST_BODY_LIMIT_MB) as usize).saturating_mul(BYTES_PER_MIB)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[test]
+    fn request_body_limit_prefers_valid_env() {
+        let _guard = env_lock();
+        std::env::set_var("AGENTGATE_REQUEST_BODY_LIMIT_MB", "4096");
+        assert_eq!(effective_request_body_limit_mb(32), 128);
+        std::env::remove_var("AGENTGATE_REQUEST_BODY_LIMIT_MB");
+    }
+
+    #[test]
+    fn request_body_limit_ignores_invalid_env() {
+        let _guard = env_lock();
+        std::env::set_var("AGENTGATE_REQUEST_BODY_LIMIT_MB", "0");
+        assert_eq!(effective_request_body_limit_mb(32), 32);
+        std::env::set_var("AGENTGATE_REQUEST_BODY_LIMIT_MB", "abc");
+        assert_eq!(effective_request_body_limit_mb(32), 32);
+        std::env::remove_var("AGENTGATE_REQUEST_BODY_LIMIT_MB");
+    }
+
+    #[test]
+    fn request_body_limit_clamps_configured_value() {
+        let _guard = env_lock();
+        std::env::remove_var("AGENTGATE_REQUEST_BODY_LIMIT_MB");
+        assert_eq!(effective_request_body_limit_mb(4096), 128);
+        assert_eq!(request_body_limit_bytes(4096), 128 * BYTES_PER_MIB);
+    }
 }

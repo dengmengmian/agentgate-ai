@@ -13,8 +13,8 @@ use crate::transform::gemini_to_chat;
 
 use super::shared::{
     detect_client_from_ua, log_request_error, log_request_error_full, log_request_success,
-    native_model_override, refine_struct_body, sanitize_body, trace_with_degradation_events,
-    validate_auth, GatewayError,
+    native_model_override, refine_struct_body, request_body_or_gateway_error, sanitize_body,
+    trace_with_degradation_events, validate_auth, GatewayError,
 };
 use super::GatewayState;
 
@@ -24,8 +24,9 @@ pub async fn handle_gemini_generate(
     headers: HeaderMap,
     axum::extract::Path(model_path): axum::extract::Path<String>,
     AxumState(state): AxumState<GatewayState>,
-    body: bytes::Bytes,
+    body: Result<bytes::Bytes, axum::extract::rejection::BytesRejection>,
 ) -> Result<Response, GatewayError> {
+    let body = request_body_or_gateway_error(body)?;
     validate_auth(&headers)?;
 
     // Gemini 路径形如 "gemini-2.5-flash:generateContent" / ":streamGenerateContent"
@@ -614,10 +615,7 @@ mod tests {
     fn auth_headers() -> axum::http::HeaderMap {
         let token = local_token::ensure_token().unwrap();
         let mut headers = axum::http::HeaderMap::new();
-        headers.insert(
-            "authorization",
-            format!("Bearer {token}").parse().unwrap(),
-        );
+        headers.insert("authorization", format!("Bearer {token}").parse().unwrap());
         headers
     }
 
@@ -727,12 +725,16 @@ mod tests {
     }
 
     async fn body_to_json(resp: axum::response::Response) -> Value {
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         serde_json::from_slice(&bytes).unwrap()
     }
 
     async fn body_to_string(resp: axum::response::Response) -> String {
-        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
         String::from_utf8_lossy(&bytes).to_string()
     }
 
@@ -751,7 +753,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:countTokens".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from(body),
+            Ok(bytes::Bytes::from(body)),
         )
         .await
         .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
@@ -772,7 +774,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:countTokens".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from(body),
+            Ok(bytes::Bytes::from(body)),
         )
         .await
         .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
@@ -791,7 +793,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:countTokens".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from("not json"),
+            Ok(bytes::Bytes::from("not json")),
         )
         .await
         .unwrap_err();
@@ -831,7 +833,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from(body),
+            Ok(bytes::Bytes::from(body)),
         )
         .await
         .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
@@ -843,7 +845,10 @@ mod tests {
 
         let received = server.received_requests().await.unwrap();
         assert_eq!(received.len(), 1);
-        assert!(received[0].url.path().contains("/v1beta/models/gemini-2.5-flash:generateContent"));
+        assert!(received[0]
+            .url
+            .path()
+            .contains("/v1beta/models/gemini-2.5-flash:generateContent"));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -881,7 +886,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:streamGenerateContent".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from(body),
+            Ok(bytes::Bytes::from(body)),
         )
         .await
         .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
@@ -932,7 +937,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from(body),
+            Ok(bytes::Bytes::from(body)),
         )
         .await
         .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
@@ -984,7 +989,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from(body),
+            Ok(bytes::Bytes::from(body)),
         )
         .await
         .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
@@ -1040,7 +1045,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:streamGenerateContent".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from(body),
+            Ok(bytes::Bytes::from(body)),
         )
         .await
         .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
@@ -1048,7 +1053,11 @@ mod tests {
 
         assert_eq!(resp.status(), StatusCode::OK);
         let text = body_to_string(resp).await;
-        assert!(text.contains("chat") && text.contains(" stream"), "stream text missing: {}", text);
+        assert!(
+            text.contains("chat") && text.contains(" stream"),
+            "stream text missing: {}",
+            text
+        );
 
         let received = server.received_requests().await.unwrap();
         assert_eq!(received.len(), 1);
@@ -1092,7 +1101,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from(body),
+            Ok(bytes::Bytes::from(body)),
         )
         .await
         .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
@@ -1100,7 +1109,10 @@ mod tests {
 
         assert_eq!(resp.status(), StatusCode::OK);
         let v = body_to_json(resp).await;
-        assert_eq!(v["candidates"][0]["content"]["parts"][0]["text"], "fallback");
+        assert_eq!(
+            v["candidates"][0]["content"]["parts"][0]["text"],
+            "fallback"
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -1135,7 +1147,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from(body),
+            Ok(bytes::Bytes::from(body)),
         )
         .await
         .unwrap_or_else(|e| panic!("handler failed: {} - {}", e.0.code, e.0.message))
@@ -1147,7 +1159,10 @@ mod tests {
 
         let received = server.received_requests().await.unwrap();
         assert_eq!(received.len(), 1);
-        assert!(received[0].url.path().contains("/v1beta/models/mapped-gemini:generateContent"));
+        assert!(received[0]
+            .url
+            .path()
+            .contains("/v1beta/models/mapped-gemini:generateContent"));
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -1158,7 +1173,7 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from("not json"),
+            Ok(bytes::Bytes::from("not json")),
         )
         .await
         .unwrap_err();
@@ -1178,15 +1193,12 @@ mod tests {
             auth_headers(),
             axum::extract::Path("gemini-2.5-flash:generateContent".to_string()),
             axum::extract::State(state),
-            bytes::Bytes::from(body),
+            Ok(bytes::Bytes::from(body)),
         )
         .await
         .unwrap_err();
 
-        assert_eq!(
-            err.0.code,
-            crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND
-        );
+        assert_eq!(err.0.code, crate::errors::codes::ACTIVE_PROVIDER_NOT_FOUND);
         let response = err.into_response();
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }

@@ -12,7 +12,8 @@ use crate::providers::adapter::{self, ProviderConfig};
 use super::shared::{
     anthropic_request_has_images, detect_client_from_ua, lock_db, log_request_error,
     log_request_error_full, log_request_success, native_model_override, refine_struct_body,
-    sanitize_body, trace_with_degradation_events, validate_auth, GatewayError,
+    request_body_or_gateway_error, sanitize_body, trace_with_degradation_events, validate_auth,
+    GatewayError,
 };
 use super::GatewayState;
 
@@ -88,8 +89,9 @@ fn apply_compaction_overrides(
 pub async fn handle_messages(
     headers: HeaderMap,
     AxumState(state): AxumState<GatewayState>,
-    body: bytes::Bytes,
+    body: Result<bytes::Bytes, axum::extract::rejection::BytesRejection>,
 ) -> Result<Response, GatewayError> {
+    let body = request_body_or_gateway_error(body)?;
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!(
@@ -671,25 +673,21 @@ mod tests {
         // 复现 bug:用 Claude Code(走 AgentGate)开发 AgentGate 时读到本文件源码,
         // tool_result 里带着标记串字面量,曾让该会话后续所有请求被当成压缩请求,
         // 工具被剥掉、agent 无法继续调工具。
-        let r = req(
-            r#"{"system":"You are a coding agent.","messages":[
+        let r = req(r#"{"system":"You are a coding agent.","messages":[
                 {"role":"user","content":"读下 messages.rs"},
                 {"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"read","input":{}}]},
                 {"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"fn is_claude_code_compaction ... CRITICAL: Respond with TEXT ONLY. Do NOT call any tools. ..."}]}
-            ]}"#,
-        );
+            ]}"#);
         assert!(!is_claude_code_compaction(&r));
     }
 
     #[test]
     fn marker_in_history_not_flagged_when_last_message_is_normal() {
-        let r = req(
-            r#"{"system":"You are a coding agent.","messages":[
+        let r = req(r#"{"system":"You are a coding agent.","messages":[
                 {"role":"user","content":"上一轮提到 CRITICAL: Respond with TEXT ONLY. Do NOT call any tools. 这个串"},
                 {"role":"assistant","content":"好的"},
                 {"role":"user","content":"继续修"}
-            ]}"#,
-        );
+            ]}"#);
         assert!(!is_claude_code_compaction(&r));
     }
 

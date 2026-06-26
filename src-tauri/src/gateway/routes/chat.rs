@@ -14,7 +14,7 @@ use crate::providers::adapter::{self, ProviderConfig};
 use super::shared::{
     chat_request_has_images, detect_client_from_ua, lock_db, log_request_error,
     log_request_error_full, log_request_success, native_model_override, refine_value_body,
-    sanitize_body, truncate_str, validate_auth, GatewayError,
+    request_body_or_gateway_error, sanitize_body, truncate_str, validate_auth, GatewayError,
 };
 use super::GatewayState;
 
@@ -23,8 +23,9 @@ use super::GatewayState;
 pub async fn handle_chat_completions(
     headers: HeaderMap,
     AxumState(state): AxumState<GatewayState>,
-    body: bytes::Bytes,
+    body: Result<bytes::Bytes, axum::extract::rejection::BytesRejection>,
 ) -> Result<Response, GatewayError> {
+    let body = request_body_or_gateway_error(body)?;
     validate_auth(&headers)?;
     let start = Instant::now();
     let request_id = format!(
@@ -498,7 +499,11 @@ async fn client_chat_to_anthropic_stream(
                     }
                     None => break,
                 };
-                crate::gateway::stream_utf8::append_utf8_safe(&mut buffer, &mut utf8_pending, &chunk);
+                crate::gateway::stream_utf8::append_utf8_safe(
+                    &mut buffer,
+                    &mut utf8_pending,
+                    &chunk,
+                );
                 buffer = buffer.replace("\r\n", "\n");
             }
             bootstrap_replayed = true;
@@ -909,10 +914,7 @@ mod tests {
             .unwrap();
         let compressed = Bytes::from(encoder.finish().unwrap());
         let decoded = crate::gateway::body_decode::decode(&hdrs(Some("gzip")), compressed).unwrap();
-        assert_eq!(
-            extract_requested_model(&decoded),
-            Some("gpt-4".to_string())
-        );
+        assert_eq!(extract_requested_model(&decoded), Some("gpt-4".to_string()));
     }
 
     #[test]
@@ -940,11 +942,8 @@ mod tests {
             [],
         )
         .unwrap();
-        conn.execute(
-            "UPDATE gateway_settings SET active_provider_id = NULL",
-            [],
-        )
-        .unwrap();
+        conn.execute("UPDATE gateway_settings SET active_provider_id = NULL", [])
+            .unwrap();
 
         let anthropic = create_test_provider(
             &conn,
@@ -956,13 +955,8 @@ mod tests {
             "claude-3-5-sonnet-latest",
         );
         let profile = create_failover_profile(&conn, "anthropic_messages");
-        route_profiles::add_provider(
-            &conn,
-            &profile.id,
-            &anthropic.id,
-            add_provider_input(1),
-        )
-        .unwrap();
+        route_profiles::add_provider(&conn, &profile.id, &anthropic.id, add_provider_input(1))
+            .unwrap();
         // Release the single in-memory connection before select_for_failover
         // tries to borrow another one from the pool.
         drop(conn);
@@ -1014,8 +1008,10 @@ mod tests {
         );
 
         let profile = create_failover_profile(&conn, "openai_chat_completions");
-        route_profiles::add_provider(&conn, &profile.id, &primary.id, add_provider_input(1)).unwrap();
-        route_profiles::add_provider(&conn, &profile.id, &backup.id, add_provider_input(2)).unwrap();
+        route_profiles::add_provider(&conn, &profile.id, &primary.id, add_provider_input(1))
+            .unwrap();
+        route_profiles::add_provider(&conn, &profile.id, &backup.id, add_provider_input(2))
+            .unwrap();
         // Release the single in-memory connection before select_for_failover
         // tries to borrow another one from the pool.
         drop(conn);
@@ -1070,13 +1066,8 @@ mod tests {
             },
         ];
 
-        let order = crate::gateway::failover::build_attempt_order(
-            &candidates,
-            "p1",
-            true,
-            false,
-            None,
-        );
+        let order =
+            crate::gateway::failover::build_attempt_order(&candidates, "p1", true, false, None);
         assert_eq!(order.len(), 1);
         assert_eq!(order[0].provider_id, "p1");
     }

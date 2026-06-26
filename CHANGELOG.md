@@ -1,5 +1,20 @@
 # Changelog / 更新日志
 
+## [1.4.8] - 2026-06-26
+
+### Added / 新增
+
+- **Configurable request body limit / 请求体上限可配置** —— The gateway request body limit now defaults to 32 MB and can be changed in Settings or via `AGENTGATE_REQUEST_BODY_LIMIT_MB`; both paths are capped at 128 MB to avoid accidental memory blow-ups. 网关单次请求体上限默认 32 MB，可在设置里调整，也可用 `AGENTGATE_REQUEST_BODY_LIMIT_MB` 覆盖；两条路径都硬限制最高 128 MB，避免误设超大值打爆内存。
+
+### Fixes / 修复
+
+- **Friendly 413 errors / 413 错误提示可理解** —— Oversized requests now return a structured AgentGate error with guidance to start a new session, reduce payload size, or raise the configured limit, instead of surfacing Axum's raw `Payload Too Large` message. 请求过大时返回结构化 AgentGate 错误，并提示新开会话、减少内容或调大上限，不再把 Axum 原始 `Payload Too Large` 文案直接丢给用户。
+- **Existing database upgrade path / 存量数据库升级路径** —— Existing v6 databases now receive the `request_body_limit_mb` column through a guarded v7 migration, preventing settings reads from breaking after upgrade. 存量 v6 数据库会通过带守卫的 v7 迁移补上 `request_body_limit_mb` 字段，避免升级后读取设置失败。
+
+### Performance / 性能
+
+- **Bounded request-log storage / 请求日志存储有界** —— Large raw/converted request and response bodies, SSE event logs, and trace JSON are capped per field before writing to SQLite; retention cleanup and manual log clearing now checkpoint and vacuum the database so deleted log pages can be returned to disk. 写入 SQLite 前会限制大体积原始/转换请求、响应、SSE 事件和 trace JSON 的单字段大小；保留期清理和手动清空日志后会执行 checkpoint 与 vacuum，让删除后的日志页释放回磁盘。
+
 ## [1.4.7] - 2026-06-23
 
 ### Added / 新增

@@ -1726,6 +1726,14 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Sends a 1-token probe to enabled providers every 10 minutes; results show on provider cards (display only, does not affect routing). Consumes a small amount of quota.",
     zh: "每 10 分钟对启用的供应商发 1-token 探测，结果显示在供应商卡片（仅展示，不影响路由）。会消耗少量额度。",
   },
+  "settings.request_body_limit": {
+    en: "Request body limit",
+    zh: "请求体上限",
+  },
+  "settings.request_body_limit_desc": {
+    en: "Maximum inbound request size accepted by the gateway, capped at 128 MB. Takes effect after restarting the gateway; AGENTGATE_REQUEST_BODY_LIMIT_MB overrides this value.",
+    zh: "网关接收单次请求的最大体积，最高 128 MB。重启网关后生效；AGENTGATE_REQUEST_BODY_LIMIT_MB 会覆盖此设置。",
+  },
   "settings.cost_alert": { en: "Daily cost alert", zh: "今日花费预警" },
   "settings.cost_alert_desc": {
     en: "When today's total spend exceeds your threshold, send a system notification + pet bubble. At most once per day.",

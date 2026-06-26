@@ -389,7 +389,10 @@ mod tests {
 
     #[test]
     fn classify_no_messages_is_user() {
-        assert_eq!(classify_initiator(&json!({"model": "claude-sonnet-4.6"})), "user");
+        assert_eq!(
+            classify_initiator(&json!({"model": "claude-sonnet-4.6"})),
+            "user"
+        );
         assert_eq!(classify_initiator(&json!({"messages": []})), "user");
     }
 
@@ -560,12 +563,7 @@ mod tests {
     #[test]
     fn request_headers_contain_required_pairs() {
         let headers = copilot_request_headers();
-        let find = |name: &str| {
-            headers
-                .iter()
-                .find(|(k, _)| *k == name)
-                .map(|(_, v)| *v)
-        };
+        let find = |name: &str| headers.iter().find(|(k, _)| *k == name).map(|(_, v)| *v);
         assert_eq!(find("copilot-integration-id"), Some("vscode-chat"));
         assert_eq!(find("editor-version"), Some("vscode/1.110.1"));
         assert_eq!(find("editor-plugin-version"), Some("copilot-chat/0.38.2"));

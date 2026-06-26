@@ -95,7 +95,10 @@ fn restart_windows() -> CodexRestartResult {
 
     // /IM 按映像名匹配，/F 强杀。退码 0 = 至少杀掉一个；128 = 没匹到；
     // 其他 = taskkill 缺失或权限不足，都按「本来就没跑」处理（同 macOS pkill）。
-    if let Ok(status) = Command::new("taskkill").args(["/IM", "Codex.exe", "/F"]).status() {
+    if let Ok(status) = Command::new("taskkill")
+        .args(["/IM", "Codex.exe", "/F"])
+        .status()
+    {
         if taskkill_killed(status.code()) {
             was_running = true;
             killed = 1;

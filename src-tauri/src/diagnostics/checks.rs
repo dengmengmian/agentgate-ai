@@ -1084,7 +1084,10 @@ mod tests {
         .unwrap();
         route_profiles::set_default(&conn, &profile.id).unwrap();
 
-        let provider = crate::storage::providers::list_all(&conn).unwrap().pop().unwrap();
+        let provider = crate::storage::providers::list_all(&conn)
+            .unwrap()
+            .pop()
+            .unwrap();
         route_profiles::add_provider(
             &conn,
             &profile.id,

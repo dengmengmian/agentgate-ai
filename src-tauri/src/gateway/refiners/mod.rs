@@ -155,6 +155,7 @@ mod tests {
             health_probe_enabled: false,
             codex_compact_enabled: true,
             codex_compact_summary_max_tokens: 1500,
+            request_body_limit_mb: 32,
             cost_alert_enabled: false,
             cost_alert_threshold: None,
             updated_at: "now".into(),

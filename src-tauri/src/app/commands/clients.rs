@@ -834,7 +834,8 @@ mod tests {
         assert!(result.success);
         let clients = clients_with_apply_history(unsafe { as_state(&state) }).unwrap();
         assert!(clients.contains(&"codex".to_string()));
-        let history = list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
+        let history =
+            list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
         assert!(!history.is_empty());
         assert_eq!(history[0].action, "apply");
         cleanup(&temp);
@@ -911,7 +912,8 @@ mod tests {
         let state = test_state();
         let result = apply_codex_config(unsafe { as_state(&state) }).unwrap();
         assert!(result.success);
-        let history = list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
+        let history =
+            list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
         assert!(!history.is_empty());
         cleanup(&temp);
     }
@@ -927,11 +929,17 @@ mod tests {
         // Second apply creates a deletable entry.
         let result = apply_codex_config(unsafe { as_state(&state) }).unwrap();
         assert!(result.success);
-        let history = list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
+        let history =
+            list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
         assert!(history.len() >= 2);
-        let id = history.iter().find(|h| !h.is_initial).map(|h| h.id.clone()).unwrap();
+        let id = history
+            .iter()
+            .find(|h| !h.is_initial)
+            .map(|h| h.id.clone())
+            .unwrap();
         delete_client_apply_history(unsafe { as_state(&state) }, id.clone()).unwrap();
-        let history = list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
+        let history =
+            list_client_apply_history(unsafe { as_state(&state) }, "codex".to_string()).unwrap();
         assert!(!history.iter().any(|h| h.id == id));
         cleanup(&temp);
     }

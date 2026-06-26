@@ -23,6 +23,7 @@ interface Props {
     cost_alert_enabled?: boolean;
     cost_alert_threshold?: number;
   }) => Promise<void>;
+  handleUpdateRequestBodyLimit: (mb: number) => Promise<void>;
   t: (key: string) => string;
   ToggleSwitch: React.ComponentType<{
     checked: boolean;
@@ -43,6 +44,7 @@ export function GeneralTab({
   handleUpdateAutoStart,
   handleUpdateRefinerGlobal,
   handleUpdateCostAlert,
+  handleUpdateRequestBodyLimit,
   t,
   ToggleSwitch,
   ThemePicker,
@@ -98,6 +100,38 @@ export function GeneralTab({
             checked={launchAtLogin}
             onChange={handleToggleLaunchAtLogin}
           />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="flex-1 pr-4">
+            <p className="text-sm text-text-primary">
+              {t("settings.request_body_limit")}
+            </p>
+            <p className="text-xs text-text-muted">
+              {t("settings.request_body_limit_desc")}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="1"
+              max="128"
+              step="1"
+              defaultValue={settings.request_body_limit_mb}
+              onBlur={(e) => {
+                const v = Math.floor(Number(e.target.value));
+                if (
+                  Number.isFinite(v) &&
+                  v > 0 &&
+                  v <= 128 &&
+                  v !== settings.request_body_limit_mb
+                ) {
+                  handleUpdateRequestBodyLimit(v);
+                }
+              }}
+              className="form-input w-24"
+            />
+            <span className="text-sm text-text-muted">MB</span>
+          </div>
         </div>
         <div className="flex items-center justify-between">
           <div>

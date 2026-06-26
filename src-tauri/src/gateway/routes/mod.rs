@@ -15,8 +15,8 @@ pub(crate) use shared::{
     anthropic_request_has_images, chat_request_has_images, detect_client_from_ua,
     enrich_trace_with_route_decision, get_active_provider, lock_db, log_request_error,
     log_request_error_full, log_request_success, native_model_override, refine_struct_body,
-    refine_value_body, request_contains_images, request_contains_images_pub,
-    route_candidate_skip_reasons, route_fallback_chain, sanitize_body,
+    refine_value_body, request_body_or_gateway_error, request_contains_images,
+    request_contains_images_pub, route_candidate_skip_reasons, route_fallback_chain, sanitize_body,
     trace_with_degradation_events, truncate_str, validate_auth, GatewayError,
 };
 #[allow(unused_imports)]
@@ -192,7 +192,10 @@ mod tests {
         assert!(!host_is_allowed("evil.com:9090", ""));
         // 白名单放行
         assert!(host_is_allowed("my.box.local:9090", "my.box.local"));
-        assert!(host_is_allowed("a.example.com", "b.example.com, a.example.com"));
+        assert!(host_is_allowed(
+            "a.example.com",
+            "b.example.com, a.example.com"
+        ));
     }
 
     #[test]
@@ -207,11 +210,7 @@ mod tests {
         assert!(!origin_is_allowed("https://evil.com", "", ""));
         assert!(!origin_is_allowed("null", "", ""));
         // 白名单整条放行
-        assert!(origin_is_allowed(
-            "https://my.app",
-            "https://my.app",
-            ""
-        ));
+        assert!(origin_is_allowed("https://my.app", "https://my.app", ""));
     }
 
     #[test]

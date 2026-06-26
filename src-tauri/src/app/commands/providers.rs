@@ -869,10 +869,12 @@ mod tests {
     fn autofill_provider_capabilities_fills_missing_models() {
         let state = test_state();
         let view = create_provider(sample_create_input(), unsafe { as_state(&state) }).unwrap();
-        let filled = autofill_provider_capabilities(view.id.clone(), unsafe { as_state(&state) }).unwrap();
+        let filled =
+            autofill_provider_capabilities(view.id.clone(), unsafe { as_state(&state) }).unwrap();
         assert_eq!(filled, 1);
 
-        let filled_again = autofill_provider_capabilities(view.id, unsafe { as_state(&state) }).unwrap();
+        let filled_again =
+            autofill_provider_capabilities(view.id, unsafe { as_state(&state) }).unwrap();
         assert_eq!(filled_again, 0);
     }
 }

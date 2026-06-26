@@ -805,8 +805,8 @@ mod tests {
         // 不为这点历史白发一次摘要 round-trip(省一次上游调用/成本/延迟)。
         let messages = vec![
             msg("system", "sys"),
-            msg("user", &"旧".repeat(200)), // middle ~200 tok
-            msg("user", &"近".repeat(200)), // tail
+            msg("user", &"旧".repeat(200)),      // middle ~200 tok
+            msg("user", &"近".repeat(200)),      // tail
             msg("assistant", &"答".repeat(200)), // tail
         ];
         // tail_budget=500:tail 收下最近两块(~408 tok),只留 middle 一小块(~204)。

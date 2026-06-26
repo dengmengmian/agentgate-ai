@@ -30,6 +30,8 @@ pub struct GatewaySettings {
     pub codex_compact_enabled: bool,
     /// codex_compact 触发后给上游 summary 调用的 max_completion_tokens 上限。
     pub codex_compact_summary_max_tokens: i64,
+    /// 网关接收单次请求体的上限(MB)。可被 AGENTGATE_REQUEST_BODY_LIMIT_MB 覆盖。
+    pub request_body_limit_mb: i64,
     /// 今日花费预警开关(默认关)。
     pub cost_alert_enabled: bool,
     /// 今日花费预警阈值(USD)。None / <=0 视为未设。
@@ -52,6 +54,7 @@ pub struct UpdateGatewaySettingsInput {
     pub health_probe_enabled: Option<bool>,
     pub codex_compact_enabled: Option<bool>,
     pub codex_compact_summary_max_tokens: Option<i64>,
+    pub request_body_limit_mb: Option<i64>,
     pub cost_alert_enabled: Option<bool>,
     pub cost_alert_threshold: Option<f64>,
 }
@@ -115,6 +118,7 @@ mod tests {
             health_probe_enabled: false,
             codex_compact_enabled: true,
             codex_compact_summary_max_tokens: 1500,
+            request_body_limit_mb: 32,
             cost_alert_enabled: false,
             cost_alert_threshold: None,
             updated_at: "2024-01-01T00:00:00Z".into(),
@@ -125,15 +129,18 @@ mod tests {
         let de: GatewaySettings = serde_json::from_str(&json).unwrap();
         assert_eq!(de.port, 9090);
         assert_eq!(de.auto_start, true);
+        assert_eq!(de.request_body_limit_mb, 32);
     }
 
     #[test]
     fn update_gateway_settings_input_deserialization() {
-        let json = r#"{"host":"0.0.0.0","port":8080,"auto_start":false}"#;
+        let json =
+            r#"{"host":"0.0.0.0","port":8080,"auto_start":false,"request_body_limit_mb":32}"#;
         let input: UpdateGatewaySettingsInput = serde_json::from_str(json).unwrap();
         assert_eq!(input.host, Some("0.0.0.0".into()));
         assert_eq!(input.port, Some(8080));
         assert_eq!(input.auto_start, Some(false));
+        assert_eq!(input.request_body_limit_mb, Some(32));
         assert!(input.active_provider_id.is_none());
     }
 

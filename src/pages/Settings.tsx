@@ -210,6 +210,16 @@ export function Settings() {
     }
   };
 
+  const handleUpdateRequestBodyLimit = async (mb: number) => {
+    try {
+      await api.updateGatewaySettings({ request_body_limit_mb: mb });
+      toast("success", t("settings.updated"));
+      load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
+
   const handleCopyToken = async () => {
     try {
       const token = await api.getLocalAccessToken();
@@ -305,6 +315,7 @@ export function Settings() {
             handleUpdateAutoStart={handleUpdateAutoStart}
             handleUpdateRefinerGlobal={handleUpdateRefinerGlobal}
             handleUpdateCostAlert={handleUpdateCostAlert}
+            handleUpdateRequestBodyLimit={handleUpdateRequestBodyLimit}
             t={t}
             ToggleSwitch={ToggleSwitch}
             ThemePicker={ThemePicker}

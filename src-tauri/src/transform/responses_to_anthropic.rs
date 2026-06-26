@@ -1143,11 +1143,19 @@ mod tests {
     fn test_thinking_stripped_for_haiku() {
         // Haiku 不支持 thinking,带上会 400 —— 客户端要思考也得剥。
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "high"})), "claude-haiku-4-5", 64000, false),
+            convert_thinking(
+                &Some(json!({"effort": "high"})),
+                "claude-haiku-4-5",
+                64000,
+                false
+            ),
             None
         );
         // 强开也不适用于 haiku
-        assert_eq!(convert_thinking(&None, "claude-haiku-4-5", 64000, false), None);
+        assert_eq!(
+            convert_thinking(&None, "claude-haiku-4-5", 64000, false),
+            None
+        );
     }
 
     #[test]
@@ -1168,7 +1176,12 @@ mod tests {
         }
         // 老模型保持 legacy budget 形态
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "high"})), "claude-sonnet-4-5", 64000, false),
+            convert_thinking(
+                &Some(json!({"effort": "high"})),
+                "claude-sonnet-4-5",
+                64000,
+                false
+            ),
             Some(json!({"type": "enabled", "budget_tokens": 16384}))
         );
     }
@@ -1178,7 +1191,12 @@ mod tests {
         // Anthropic 要求 budget_tokens < max_tokens,否则 400。
         // 此前 effort=high 固定给 16384,而 max_tokens 默认 8192,本就有潜在 400。
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "high"})), "claude-3-5-sonnet", 8192, false),
+            convert_thinking(
+                &Some(json!({"effort": "high"})),
+                "claude-3-5-sonnet",
+                8192,
+                false
+            ),
             Some(json!({"type": "enabled", "budget_tokens": 8191}))
         );
         // max_tokens 装不下最低 1024 budget → 不开
@@ -1192,10 +1210,18 @@ mod tests {
     fn test_thinking_skipped_when_tool_choice_forced() {
         // thinking 与强制工具调用(tool_choice: any/tool)不兼容,带上 400。
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "high"})), "claude-3-5-sonnet", 64000, true),
+            convert_thinking(
+                &Some(json!({"effort": "high"})),
+                "claude-3-5-sonnet",
+                64000,
+                true
+            ),
             None
         );
-        assert_eq!(convert_thinking(&None, "claude-opus-4-8", 64000, true), None);
+        assert_eq!(
+            convert_thinking(&None, "claude-opus-4-8", 64000, true),
+            None
+        );
     }
 
     #[test]
@@ -1204,7 +1230,12 @@ mod tests {
         // effort,不强开。
         assert_eq!(convert_thinking(&None, "mimo-v2.5-pro", 64000, false), None);
         assert_eq!(
-            convert_thinking(&Some(json!({"effort": "high"})), "mimo-v2.5-pro", 64000, false),
+            convert_thinking(
+                &Some(json!({"effort": "high"})),
+                "mimo-v2.5-pro",
+                64000,
+                false
+            ),
             Some(json!({"type": "enabled", "budget_tokens": 16384}))
         );
     }
@@ -1218,7 +1249,10 @@ mod tests {
         req.max_output_tokens = Some(32000);
         let body = convert(&req, "claude-sonnet-4-5", false).unwrap();
         assert_eq!(body["thinking"]["type"], "enabled");
-        assert!(body.get("temperature").is_none(), "开思考时不得带 temperature");
+        assert!(
+            body.get("temperature").is_none(),
+            "开思考时不得带 temperature"
+        );
         assert!(body.get("top_p").is_none(), "开思考时不得带 top_p");
         // haiku 不开思考 → 采样参数照常透传
         let body = convert(&req, "claude-haiku-4-5", false).unwrap();
@@ -1360,7 +1394,9 @@ mod tests {
         });
         inject_cache_control(&mut body);
         assert!(
-            body["messages"][1]["content"][0].get("cache_control").is_none(),
+            body["messages"][1]["content"][0]
+                .get("cache_control")
+                .is_none(),
             "预算用尽不得再注入"
         );
     }

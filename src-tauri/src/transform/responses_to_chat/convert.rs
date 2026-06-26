@@ -95,11 +95,13 @@ pub fn convert_with_provider_matrix(
     //     候选层 vision 过滤在"全部候选都不支持"时会放行原始顺序(failover.rs),
     //     这里是防 400 的最后一道闸。矩阵无该模型条目则不动(与 web_search 门控
     //     同语义);DeepSeek/MiMo 在各自 transform 已剥过,到这里天然幂等。
-    let lacks_vision = matrix.get(tool_calls::model_base(model)).is_some_and(|caps| {
-        !caps
-            .iter()
-            .any(|c| c == crate::providers::capabilities::CAP_VISION)
-    });
+    let lacks_vision = matrix
+        .get(tool_calls::model_base(model))
+        .is_some_and(|caps| {
+            !caps
+                .iter()
+                .any(|c| c == crate::providers::capabilities::CAP_VISION)
+        });
     if lacks_vision {
         diagnostic_events.extend(
             crate::transform::degradation::strip_image_parts_with_notice(

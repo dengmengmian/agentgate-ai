@@ -220,14 +220,18 @@ mod tests {
             tool_calls: None,
             tool_call_id: None,
         }];
-        let events = strip_image_parts_with_notice(&mut msgs, "ds", "DeepSeek", "ds-chat", "use vision");
+        let events =
+            strip_image_parts_with_notice(&mut msgs, "ds", "DeepSeek", "ds-chat", "use vision");
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].capability, "vision");
         assert_eq!(events[0].source, "provider_transform");
         assert_eq!(events[0].provider, Some("ds".to_string()));
         assert_eq!(events[0].model, Some("ds-chat".to_string()));
         assert_eq!(events[0].count, Some(1));
-        assert_eq!(events[0].reason, Some("model_does_not_support_image_input".to_string()));
+        assert_eq!(
+            events[0].reason,
+            Some("model_does_not_support_image_input".to_string())
+        );
 
         let parts = msgs[0].content.as_ref().unwrap().as_array().unwrap();
         assert_eq!(parts.len(), 1);
@@ -260,7 +264,10 @@ mod tests {
         assert_eq!(e.capability, "vision");
         assert_eq!(e.source, "tool_output_transform");
         assert_eq!(e.count, Some(3));
-        assert_eq!(e.reason, Some("chat_completions_tool_messages_do_not_support_images".to_string()));
+        assert_eq!(
+            e.reason,
+            Some("chat_completions_tool_messages_do_not_support_images".to_string())
+        );
         assert!(e.message.contains("3 image attachments omitted"));
     }
 

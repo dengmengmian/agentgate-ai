@@ -597,14 +597,8 @@ fn log_to_db(
 
     tokio::task::spawn_blocking(move || {
         if let Some(conn) = lock_db(&db) {
-            let enriched = with_route_decision(
-                &conn,
-                &route,
-                &provider,
-                &model,
-                &raw_request,
-                &trace_json,
-            );
+            let enriched =
+                with_route_decision(&conn, &route, &provider, &model, &raw_request, &trace_json);
             let _ = crate::storage::request_logs::insert(
                 &conn,
                 &request_id,

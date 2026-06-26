@@ -51,7 +51,9 @@ async fn copilot_token_exchange_401_maps_to_actionable_error() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
         .and(path("/copilot_internal/v2/token"))
-        .respond_with(ResponseTemplate::new(401).set_body_json(json!({"message": "Bad credentials"})))
+        .respond_with(
+            ResponseTemplate::new(401).set_body_json(json!({"message": "Bad credentials"})),
+        )
         .mount(&server)
         .await;
 
@@ -117,8 +119,10 @@ async fn copilot_token_exchange_5xx_keeps_body_detail() {
 async fn copilot_gateway_end_to_end() {
     let mock = MockUpstream::start().await;
     let far_future = chrono::Utc::now().timestamp() + 3600;
-    mock.stub_copilot_token_ok("tok_copilot_e2e", far_future).await;
-    mock.stub_anthropic_messages_ok("claude-sonnet-4.6", "ok").await;
+    mock.stub_copilot_token_ok("tok_copilot_e2e", far_future)
+        .await;
+    mock.stub_anthropic_messages_ok("claude-sonnet-4.6", "ok")
+        .await;
 
     // token 交换基址注入到同一个 mock(生产默认 api.github.com)
     std::env::set_var("AGENTGATE_COPILOT_GITHUB_API_BASE", mock.url());
@@ -149,7 +153,11 @@ async fn copilot_gateway_end_to_end() {
         .send()
         .await
         .expect("send /v1/messages (agent)");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     // 2) 用户新输入 → x-initiator: user(同一 GitHub token,应命中 token 缓存)
     let res = client
@@ -163,7 +171,11 @@ async fn copilot_gateway_end_to_end() {
         .send()
         .await
         .expect("send /v1/messages (user)");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = mock.received().await;
     let token_calls: Vec<_> = received
@@ -212,8 +224,8 @@ async fn copilot_gateway_end_to_end() {
         .stub_chat_completions_ok("claude-sonnet-4.6", "pong")
         .await;
     // 复用同一 GitHub token:exchange 已缓存,不需要 token 端点
-    let spec = ProviderSpec::chat_only("copilot", "claude-sonnet-4.6")
-        .with_api_key("gho_gateway_e2e");
+    let spec =
+        ProviderSpec::chat_only("copilot", "claude-sonnet-4.6").with_api_key("gho_gateway_e2e");
     let harness = GatewayHarness::start(spec, &chat_mock).await;
     let client = harness.client();
 
@@ -229,7 +241,11 @@ async fn copilot_gateway_end_to_end() {
         .send()
         .await
         .expect("send /v1/responses");
-    assert!(res.status().is_success(), "gateway returned {}", res.status());
+    assert!(
+        res.status().is_success(),
+        "gateway returned {}",
+        res.status()
+    );
 
     let received = chat_mock.received().await;
     let chat_call = received
@@ -241,7 +257,10 @@ async fn copilot_gateway_end_to_end() {
         Some("Bearer tok_copilot_e2e"),
         "chat path must also auth with the Copilot bearer token"
     );
-    assert_eq!(chat_call.header("copilot-integration-id"), Some("vscode-chat"));
+    assert_eq!(
+        chat_call.header("copilot-integration-id"),
+        Some("vscode-chat")
+    );
     assert_eq!(chat_call.header("editor-version"), Some("vscode/1.110.1"));
 
     harness.shutdown().await;

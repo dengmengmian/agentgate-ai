@@ -5,7 +5,9 @@ use serde_json::{json, Value};
 
 use crate::errors::AppError;
 
-use super::shared::{get_active_provider, validate_auth, GatewayError};
+use super::shared::{
+    get_active_provider, request_body_or_gateway_error, validate_auth, GatewayError,
+};
 use super::GatewayState;
 
 // ── GET /health ────────────────────────────────────────────────
@@ -66,8 +68,9 @@ pub async fn list_models(
 pub async fn handle_count_tokens(
     headers: HeaderMap,
     AxumState(_state): AxumState<GatewayState>,
-    body: bytes::Bytes,
+    body: Result<bytes::Bytes, axum::extract::rejection::BytesRejection>,
 ) -> Result<Json<Value>, GatewayError> {
+    let body = request_body_or_gateway_error(body)?;
     validate_auth(&headers)?;
     let body = crate::gateway::body_decode::decode(&headers, body).map_err(GatewayError)?;
     let v: Value = serde_json::from_str(&body).map_err(|e| {

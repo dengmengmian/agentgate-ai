@@ -6,8 +6,8 @@
 
 use std::time::Duration;
 
-use tauri_specta::Event;
 use tauri_plugin_notification::NotificationExt;
+use tauri_specta::Event;
 
 use crate::app::events::PetBubble;
 use crate::storage::db::DbPool;
@@ -107,7 +107,8 @@ fn run_once(db: &DbPool, app_handle: &tauri::AppHandle, last_alert_date: &mut Op
 
 fn notify(app_handle: &tauri::AppHandle, cost: f64, threshold: f64) {
     let body_zh = format!("今日 AI 花费 ${cost:.2} 已超预警阈值 ${threshold:.2}");
-    let body_en = format!("Today's AI spend ${cost:.2} exceeded your alert threshold ${threshold:.2}");
+    let body_en =
+        format!("Today's AI spend ${cost:.2} exceeded your alert threshold ${threshold:.2}");
 
     let _ = app_handle
         .notification()
@@ -166,6 +167,12 @@ mod tests {
 
     #[test]
     fn new_day_alerts_again() {
-        assert!(should_alert(true, Some(10.0), 50.0, Some("2026-06-21"), TODAY));
+        assert!(should_alert(
+            true,
+            Some(10.0),
+            50.0,
+            Some("2026-06-21"),
+            TODAY
+        ));
     }
 }

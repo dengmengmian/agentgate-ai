@@ -4,7 +4,7 @@ use crate::errors::AppError;
 
 /// 当前 schema 版本。每加一段新迁移就 +1,放到 `run_versioned_migrations`
 /// 里 match 上对应的 version。读 `PRAGMA user_version` 决定该跑哪些。
-const CURRENT_SCHEMA_VERSION: u32 = 6;
+const CURRENT_SCHEMA_VERSION: u32 = 7;
 
 fn get_user_version(conn: &Connection) -> Result<u32, AppError> {
     let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -113,6 +113,17 @@ fn run_versioned_migrations(conn: &Connection, from_version: u32) -> Result<(), 
             )?;
         }
         set_user_version(conn, 6)?;
+    }
+    if from_version < 7 {
+        let has_request_body_limit = conn
+            .prepare("SELECT request_body_limit_mb FROM gateway_settings LIMIT 0")
+            .is_ok();
+        if !has_request_body_limit {
+            conn.execute_batch(
+                "ALTER TABLE gateway_settings ADD COLUMN request_body_limit_mb INTEGER NOT NULL DEFAULT 32;",
+            )?;
+        }
+        set_user_version(conn, 7)?;
     }
     Ok(())
 }
@@ -820,6 +831,30 @@ mod tests {
         run_migrations(&conn).expect("已手动补列的 DB 跑 v6 不应报错");
         assert_eq!(get_user_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
         assert!(crate::storage::gateway_settings::get(&conn).is_ok());
+    }
+
+    #[test]
+    fn existing_v6_db_gets_request_body_limit_column_on_upgrade() {
+        let conn = Connection::open_in_memory().unwrap();
+        legacy_baseline_v1(&conn).unwrap();
+        conn.execute_batch(
+            "ALTER TABLE gateway_settings ADD COLUMN codex_compact_enabled INTEGER NOT NULL DEFAULT 1;
+             ALTER TABLE gateway_settings ADD COLUMN codex_compact_summary_max_tokens INTEGER NOT NULL DEFAULT 1500;
+             ALTER TABLE gateway_settings ADD COLUMN cost_alert_enabled INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE gateway_settings ADD COLUMN cost_alert_threshold REAL;",
+        )
+        .unwrap();
+        set_user_version(&conn, 6).unwrap();
+
+        assert!(conn
+            .prepare("SELECT request_body_limit_mb FROM gateway_settings LIMIT 0")
+            .is_err());
+
+        run_migrations(&conn).unwrap();
+        assert_eq!(get_user_version(&conn).unwrap(), CURRENT_SCHEMA_VERSION);
+        let settings = crate::storage::gateway_settings::get(&conn)
+            .expect("v6 存量 DB 升级后 gateway_settings::get() 必须成功");
+        assert_eq!(settings.request_body_limit_mb, 32);
     }
 
     #[test]
