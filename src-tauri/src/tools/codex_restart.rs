@@ -10,8 +10,10 @@
 //! 再从常见安装目录拉起。Linux Codex Desktop 没有官方包，直接 supported=false。
 
 use serde::Serialize;
-use std::thread;
-use std::time::Duration;
+// thread / Duration 只在 macOS / Windows 的 restart 路径用到;Linux 下这两条
+// import 会变成 unused(CI 在 Linux 上以 -D warnings 编译会因此失败)。
+#[cfg(any(target_os = "macos", target_os = "windows"))]
+use std::{thread, time::Duration};
 
 use crate::errors::AppError;
 
