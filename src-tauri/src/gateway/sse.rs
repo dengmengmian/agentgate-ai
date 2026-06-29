@@ -652,7 +652,7 @@ async fn finalize(
     // Close tool calls. 用 tc.output_index（不是 idx + 1）+ JSON salvage + namespace 还原。
     if has_tool_calls {
         let finish = acc.finish_reason.as_deref();
-        for (_, tc) in &acc.tool_calls {
+        for tc in acc.tool_calls.values() {
             let safe_args = crate::transform::tool_calls::salvage_tool_arguments(
                 &tc.arguments,
                 &tc.name,

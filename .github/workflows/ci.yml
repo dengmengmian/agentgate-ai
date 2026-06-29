@@ -98,12 +98,24 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
           key: fixture-tests
+
+      - name: Rustfmt check
+        working-directory: src-tauri
+        run: cargo fmt --check
+
+      # clippy 与下面的 lib test 用同一 feature 组合(cli,无 GUI),复用同一份缓存编译。
+      # -D warnings:存量已清零,之后任何新 warning 直接挡在 CI。
+      - name: Clippy
+        working-directory: src-tauri
+        run: cargo clippy --no-default-features --features cli --lib -- -D warnings
 
       # cli feature 的 agentgate-serve bin 不在 `cargo test` 的编译范围内,
       # 单独 build 一次,防止 CLI 编译失败只在 release 才暴露(1.3.6 就是这么漏的)。

@@ -1,3 +1,11 @@
+// 以下为设计性/纯样式 clippy lint,与逻辑无关,crate 级放行:
+// - too_many_arguments / type_complexity:协议转换函数参数天然多,硬拆成参数结构体属于提前抽象;
+// - doc_lazy_continuation / doc_overindented_list_items:仅注释续行排版,强改会破坏既有中文对齐。
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::doc_lazy_continuation)]
+#![allow(clippy::doc_overindented_list_items)]
+
 #[cfg(feature = "desktop")]
 mod app;
 // tools / diagnostics 大部分入口是 Tauri 命令(desktop)。cli(headless)构建

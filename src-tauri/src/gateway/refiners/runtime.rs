@@ -79,8 +79,10 @@ pub fn apply_response_error(
         return None;
     }
     let mapped = error_mapper::apply(provider, body, status, client_protocol)?;
-    let mut log = RefinerLog::default();
-    log.error_mapper = Some(mapped.action);
+    let log = RefinerLog {
+        error_mapper: Some(mapped.action),
+        ..Default::default()
+    };
     Some((mapped.body, log))
 }
 

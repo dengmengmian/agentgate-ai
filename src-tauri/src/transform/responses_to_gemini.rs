@@ -126,7 +126,7 @@ pub fn convert(req: &ResponsesRequest, _model: &str) -> Result<Value, AppError> 
     if let Some(tools) = tools {
         body["tools"] = json!([{"functionDeclarations": tools}]);
     }
-    if gen_config.as_object().map_or(false, |o| !o.is_empty()) {
+    if gen_config.as_object().is_some_and(|o| !o.is_empty()) {
         body["generationConfig"] = gen_config;
     }
 

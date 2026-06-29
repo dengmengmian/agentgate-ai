@@ -74,7 +74,7 @@ pub fn convert(upstream: &Value, model: &str) -> Value {
         .unwrap_or_else(|| {
             format!(
                 "chatcmpl_{}",
-                uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string()
+                &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]
             )
         });
 

@@ -163,15 +163,16 @@ pub async fn handle_chat_completions(
                             candidate.cooldown_seconds,
                         );
                     }
-                    if is_failover && attempt_idx < attempt_order.len() - 1 {
-                        if crate::gateway::provider_selector::should_failover(
+                    if is_failover
+                        && attempt_idx < attempt_order.len() - 1
+                        && crate::gateway::provider_selector::should_failover(
                             Some(502),
                             &err.0.message,
                             candidate,
-                        ) {
-                            last_error = Some(err.0);
-                            continue;
-                        }
+                        )
+                    {
+                        last_error = Some(err.0);
+                        continue;
                     }
                     return Err(err);
                 }
@@ -239,15 +240,16 @@ pub async fn handle_chat_completions(
                         candidate.cooldown_seconds,
                     );
                 }
-                if is_failover && attempt_idx < attempt_order.len() - 1 {
-                    if crate::gateway::provider_selector::should_failover(
+                if is_failover
+                    && attempt_idx < attempt_order.len() - 1
+                    && crate::gateway::provider_selector::should_failover(
                         Some(502),
                         &err.message,
                         candidate,
-                    ) {
-                        last_error = Some(err);
-                        continue;
-                    }
+                    )
+                {
+                    last_error = Some(err);
+                    continue;
                 }
                 return Err(GatewayError(err));
             }

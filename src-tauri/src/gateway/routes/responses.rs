@@ -43,7 +43,7 @@ pub async fn handle_responses(
     let start = Instant::now();
     let request_id = format!(
         "req_{}",
-        uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string()
+        &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]
     );
     let client_type = detect_client_from_ua(&headers, "Codex");
 
@@ -171,7 +171,7 @@ pub async fn handle_responses(
                 Some(&headers),
             )
             .await
-            .map_err(|e| GatewayError(e))
+            .map_err(GatewayError)
         } else if config.is_anthropic() {
             // Claude Messages API conversion (only for Anthropic-type providers)
             // auto_cache_control: default true unless provider explicitly set false

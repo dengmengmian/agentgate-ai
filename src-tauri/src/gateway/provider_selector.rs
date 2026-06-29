@@ -57,7 +57,7 @@ pub fn analyze_request(req: &ResponsesRequest) -> RequestAnalysis {
 
     let has_images = crate::gateway::routes::request_contains_images_pub(req);
 
-    let has_tools = req.tools.as_ref().map_or(false, |t| !t.is_empty());
+    let has_tools = req.tools.as_ref().is_some_and(|t| !t.is_empty());
     let tool_count = req.tools.as_ref().map_or(0, |t| t.len());
 
     let system_text = req
@@ -206,7 +206,7 @@ fn build_candidates(
             model
         };
 
-        let in_cooldown = rpp.cooldown_until.as_ref().map_or(false, |until| {
+        let in_cooldown = rpp.cooldown_until.as_ref().is_some_and(|until| {
             chrono::DateTime::parse_from_rfc3339(until)
                 .map(|cd| cd > chrono::Utc::now())
                 .unwrap_or(false)
@@ -493,7 +493,7 @@ fn pick_best_substitute(
             .unwrap_or_default();
         let overlap = original.iter().filter(|c| model_caps.contains(*c)).count();
         // Strict > so the first model with this score wins (stable tie-break).
-        if best.as_ref().map_or(true, |(_, score)| overlap > *score) {
+        if best.as_ref().is_none_or(|(_, score)| overlap > *score) {
             best = Some((model, overlap));
         }
     }

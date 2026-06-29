@@ -186,10 +186,8 @@ pub fn external_ids_for_source(
         let rows = stmt.query_map(rusqlite::params_from_iter(params.iter()), |r| {
             r.get::<_, String>(0)
         })?;
-        for r in rows {
-            if let Ok(id) = r {
-                found.insert(id);
-            }
+        for id in rows.flatten() {
+            found.insert(id);
         }
     }
     Ok(found)

@@ -43,7 +43,7 @@ pub fn apply(
     client_protocol: &str,
 ) -> Option<MappedError> {
     let (upstream_code, upstream_message) = extract_upstream(body, status);
-    if upstream_code.is_none() && upstream_message.is_none() && !(status >= 400) {
+    if upstream_code.is_none() && upstream_message.is_none() && (status < 400) {
         return None;
     }
 
@@ -213,10 +213,7 @@ fn detect_context_overflow(message: &str, upstream_code: Option<&str>) -> bool {
 }
 
 fn normalise_code(code: &str) -> String {
-    code.trim()
-        .replace(' ', "_")
-        .replace('-', "_")
-        .to_ascii_lowercase()
+    code.trim().replace([' ', '-'], "_").to_ascii_lowercase()
 }
 
 /// Reshape the error body into the client protocol's expected shape.

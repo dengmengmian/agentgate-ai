@@ -95,7 +95,7 @@ pub(super) fn merge_system_messages(messages: &mut Vec<ChatMessage>) {
     let all_text = messages
         .iter()
         .filter(|m| m.role == "system")
-        .all(|m| m.content.as_ref().map_or(true, Value::is_string));
+        .all(|m| m.content.as_ref().is_none_or(Value::is_string));
     if !all_text {
         return;
     }

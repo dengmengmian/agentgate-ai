@@ -192,7 +192,7 @@ pub(super) async fn handle_anthropic_stream_response(
                 let latency = start.elapsed().as_millis() as i64;
                 let tc_list = acc.tool_calls_list();
 
-                if let (Some(ref sid), Some(usage)) = (sa_session.as_ref(), acc.usage.as_ref()) {
+                if let (Some(sid), Some(usage)) = (sa_session.as_ref(), acc.usage.as_ref()) {
                     crate::gateway::session_affinity::record_if_cache_hit(sid, &sa_provider, usage);
                 }
 

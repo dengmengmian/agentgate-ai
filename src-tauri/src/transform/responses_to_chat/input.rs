@@ -348,7 +348,7 @@ fn flush_tool_calls(
     if let Some(last) = messages.last_mut() {
         if last.role == "assistant"
             && last.tool_calls.is_none()
-            && last.content.as_ref().map_or(false, |c| !c.is_null())
+            && last.content.as_ref().is_some_and(|c| !c.is_null())
         {
             last.tool_calls = Some(std::mem::take(pending));
             if last.reasoning_content.is_none() {

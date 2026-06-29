@@ -289,7 +289,7 @@ pub(super) async fn handle_non_stream_response(
             let (cache_w, cache_r) = chat_resp
                 .usage
                 .as_ref()
-                .map(|u| crate::storage::request_logs::extract_cache_tokens(u))
+                .map(crate::storage::request_logs::extract_cache_tokens)
                 .unwrap_or((None, None));
 
             // Record session affinity if the upstream reported cache hits.
@@ -499,7 +499,7 @@ pub(super) async fn handle_stream_response(
                 // Record session affinity when the upstream confirmed a cache
                 // hit (acc.usage was normalized to the Responses-shape during
                 // stream processing — input_tokens_details.cached_tokens etc.).
-                if let (Some(ref sid), Some(usage)) = (sa_session.as_ref(), acc.usage.as_ref()) {
+                if let (Some(sid), Some(usage)) = (sa_session.as_ref(), acc.usage.as_ref()) {
                     crate::gateway::session_affinity::record_if_cache_hit(sid, &sa_provider, usage);
                 }
 
@@ -519,7 +519,7 @@ pub(super) async fn handle_stream_response(
                         {
                             type CM = crate::protocol::chat_completions::ChatMessage;
                             type TC = crate::protocol::chat_completions::ToolCall;
-                            type TCF = crate::protocol::chat_completions::ToolCallFunction;
+                            type Tcf = crate::protocol::chat_completions::ToolCallFunction;
                             let mut asst_msgs: Vec<CM> = vec![];
                             let rc_opt = if acc.reasoning_content.is_empty() {
                                 None
@@ -535,7 +535,7 @@ pub(super) async fn handle_stream_response(
                                         .map(|tc| TC {
                                             id: tc.id.clone(),
                                             call_type: "function".to_string(),
-                                            function: TCF {
+                                            function: Tcf {
                                                 name: tc.name.clone(),
                                                 arguments: tc.arguments.clone(),
                                             },

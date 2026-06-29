@@ -15,6 +15,8 @@ run() {
 run pnpm format:check
 run pnpm lint
 run pnpm build
+run cargo fmt --manifest-path src-tauri/Cargo.toml --check
+run cargo clippy --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --lib -- -D warnings
 run cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --features cli --lib
 run node scripts/test-playwright-smoke.mjs
 run pnpm vitest run

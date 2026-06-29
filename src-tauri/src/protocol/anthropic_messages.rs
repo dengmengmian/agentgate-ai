@@ -107,7 +107,7 @@ pub fn to_chat_messages(
                                 .to_string();
                             let output = block
                                 .get("content")
-                                .map(|c| extract_text_content(c))
+                                .map(extract_text_content)
                                 .unwrap_or_default();
                             messages.push(crate::protocol::chat_completions::ChatMessage {
                                 role: "tool".to_string(),

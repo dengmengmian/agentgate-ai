@@ -1,4 +1,4 @@
-/// Unified redaction utility for sensitive values.
+//! Unified redaction utility for sensitive values.
 
 /// Redact a string that looks like an API key or token.
 pub fn redact_value(val: &str) -> String {

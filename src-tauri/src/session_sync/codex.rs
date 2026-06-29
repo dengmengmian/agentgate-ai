@@ -196,7 +196,7 @@ fn find_session_file(session_id: &str) -> Option<PathBuf> {
         .find(|p| {
             p.file_name()
                 .and_then(|n| n.to_str())
-                .map_or(false, |n| n.contains(session_id))
+                .is_some_and(|n| n.contains(session_id))
         })
 }
 

@@ -31,7 +31,7 @@ pub fn apply_to_create_input(input: &mut CreateProviderInput) {
         if input
             .anthropic_base_url
             .as_deref()
-            .map_or(true, should_replace_mimo_url)
+            .is_none_or(should_replace_mimo_url)
         {
             input.anthropic_base_url = Some(urls.anthropic_base_url);
         }
@@ -43,21 +43,21 @@ pub fn apply_to_create_input(input: &mut CreateProviderInput) {
         if input
             .anthropic_base_url
             .as_deref()
-            .map_or(true, should_replace_deepseek_url)
+            .is_none_or(should_replace_deepseek_url)
         {
             input.anthropic_base_url = Some(DEEPSEEK_ANTHROPIC_URL.to_string());
         }
         if input
             .reasoning_model
             .as_deref()
-            .map_or(true, |model| model.trim().is_empty())
+            .is_none_or(|model| model.trim().is_empty())
         {
             input.reasoning_model = Some(DEEPSEEK_REASONING_MODEL.to_string());
         }
         if input
             .supported_models
             .as_deref()
-            .map_or(true, |models| models.trim().is_empty())
+            .is_none_or(|models| models.trim().is_empty())
         {
             input.supported_models = Some(DEEPSEEK_SUPPORTED_MODELS.to_string());
         }
@@ -87,7 +87,7 @@ pub fn apply_to_update_input(
         if should_replace_mimo_url(base_candidate) {
             input.base_url = Some(urls.base_url);
         }
-        if anthropic_candidate.map_or(true, should_replace_mimo_url) {
+        if anthropic_candidate.is_none_or(should_replace_mimo_url) {
             input.anthropic_base_url = Some(urls.anthropic_base_url);
         }
         let protocol = input.protocol.as_deref().unwrap_or(current_protocol);
@@ -101,7 +101,7 @@ pub fn apply_to_update_input(
             .anthropic_base_url
             .as_deref()
             .or(current_anthropic_base_url);
-        if anthropic_candidate.map_or(true, should_replace_deepseek_url) {
+        if anthropic_candidate.is_none_or(should_replace_deepseek_url) {
             input.anthropic_base_url = Some(DEEPSEEK_ANTHROPIC_URL.to_string());
         }
         let protocol = input.protocol.as_deref().unwrap_or(current_protocol);

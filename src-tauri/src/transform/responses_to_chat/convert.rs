@@ -122,12 +122,14 @@ pub fn convert_with_provider_matrix(
     for msg in &mut messages {
         if let Some(ref mut tcs) = msg.tool_calls {
             for tc in tcs {
-                if !tc.function.arguments.is_empty() {
-                    if serde_json::from_str::<Value>(&tc.function.arguments).is_err() {
-                        eprintln!("[warn] Invalid JSON in tool call '{}' arguments, replaced with {{}}: {}",
-                            tc.function.name, tc.function.arguments);
-                        tc.function.arguments = "{}".to_string();
-                    }
+                if !tc.function.arguments.is_empty()
+                    && serde_json::from_str::<Value>(&tc.function.arguments).is_err()
+                {
+                    eprintln!(
+                        "[warn] Invalid JSON in tool call '{}' arguments, replaced with {{}}: {}",
+                        tc.function.name, tc.function.arguments
+                    );
+                    tc.function.arguments = "{}".to_string();
                 }
             }
         }
@@ -333,11 +335,11 @@ pub(super) fn merge_consecutive_messages(messages: Vec<ChatMessage>) -> Vec<Chat
                 let last_is_str = last
                     .content
                     .as_ref()
-                    .map_or(true, |c| c.is_string() || c.is_null());
+                    .is_none_or(|c| c.is_string() || c.is_null());
                 let new_is_str = msg
                     .content
                     .as_ref()
-                    .map_or(true, |c| c.is_string() || c.is_null());
+                    .is_none_or(|c| c.is_string() || c.is_null());
                 if last_is_str && new_is_str {
                     // 两条都是纯文本:沿用 \n\n 拼接。
                     let last_text = last.content.as_ref().and_then(|c| c.as_str()).unwrap_or("");

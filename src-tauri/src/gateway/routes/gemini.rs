@@ -58,7 +58,7 @@ pub async fn handle_gemini_generate(
     let start = Instant::now();
     let request_id = format!(
         "req_{}",
-        uuid::Uuid::new_v4().to_string().replace('-', "")[..12].to_string()
+        &uuid::Uuid::new_v4().to_string().replace('-', "")[..12]
     );
     let client_type = detect_client_from_ua(&headers, "Gemini CLI");
 

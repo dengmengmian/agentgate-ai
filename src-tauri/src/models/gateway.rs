@@ -73,6 +73,7 @@ pub struct GatewayStatus {
 /// Runtime state for the gateway HTTP server.
 /// The shutdown_tx and server_handle cannot be Clone,
 /// so they live behind Option and are taken when stopping.
+#[derive(Default)]
 pub struct GatewayRuntimeState {
     pub running: bool,
     pub host: String,
@@ -81,20 +82,6 @@ pub struct GatewayRuntimeState {
     pub shutdown_tx: Option<oneshot::Sender<()>>,
     pub server_handle: Option<JoinHandle<()>>,
     pub active_requests: Option<Arc<AtomicU64>>,
-}
-
-impl Default for GatewayRuntimeState {
-    fn default() -> Self {
-        Self {
-            running: false,
-            host: String::new(),
-            port: 0,
-            started_at: None,
-            shutdown_tx: None,
-            server_handle: None,
-            active_requests: None,
-        }
-    }
 }
 
 #[cfg(test)]

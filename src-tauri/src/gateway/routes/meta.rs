@@ -108,8 +108,8 @@ fn estimate_anthropic_tokens(req: &Value) -> i64 {
 fn count_chars(v: &Value) -> usize {
     match v {
         Value::String(s) => s.chars().count(),
-        Value::Array(arr) => arr.iter().map(|x| count_chars(x)).sum(),
-        Value::Object(o) => o.values().map(|x| count_chars(x)).sum(),
+        Value::Array(arr) => arr.iter().map(count_chars).sum(),
+        Value::Object(o) => o.values().map(count_chars).sum(),
         _ => 0,
     }
 }

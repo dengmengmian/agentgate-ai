@@ -101,7 +101,7 @@ pub fn read(scope: InstructionsScope) -> InstructionsStatus {
     let path = scope.path();
     let (exists, content, size_bytes) = match fs::read_to_string(&path) {
         Ok(s) => {
-            let len = s.as_bytes().len() as u64;
+            let len = s.len() as u64;
             (true, s, len)
         }
         Err(_) => (false, String::new(), 0),

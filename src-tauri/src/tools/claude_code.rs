@@ -108,7 +108,7 @@ pub struct ApplyConfigResult {
     pub warnings: Vec<String>,
 }
 
-/// Claude Code settings.json path
+// Claude Code settings.json path
 // ===== CC 实时状态提醒(信箱文件方式,接收端见 app::cc_notify)=====
 
 /// CC 状态信箱文件:~/.claude/agentgate-cc-notify.json(与 settings.json 同目录)。

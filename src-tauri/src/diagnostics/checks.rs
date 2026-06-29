@@ -255,7 +255,7 @@ pub fn provider_check(db: &crate::storage::db::DbPool) -> CheckReport {
     match active {
         Some(p) => {
             checks.push(CheckItem::ok("active", "Active provider", &p.name));
-            if p.api_key.as_ref().map_or(true, |k| k.is_empty()) {
+            if p.api_key.as_ref().is_none_or(|k| k.is_empty()) {
                 checks.push(
                     CheckItem::failed("active_key", "Active provider API key", "API key not set")
                         .with_suggestion("Set API key in Providers page"),

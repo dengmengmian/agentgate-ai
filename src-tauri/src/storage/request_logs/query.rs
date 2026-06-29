@@ -23,7 +23,7 @@ pub fn count(conn: &Connection, filter: &RequestLogFilter) -> Result<i64, AppErr
         .query_row(&sql, rusqlite::params_from_iter(params.iter()), |r| {
             r.get(0)
         })
-        .map_err(|e| AppError::from(e))?;
+        .map_err(AppError::from)?;
     Ok(total)
 }
 

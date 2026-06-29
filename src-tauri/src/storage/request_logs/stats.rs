@@ -466,10 +466,8 @@ pub fn get_stats_for_range(conn: &Connection, daily_window: i64) -> Result<Reque
             r.get::<_, i64>(7)?,
         ))
     })?;
-    for row in rows {
-        if let Ok((day, count, errs, inp, outp, cost, cw, cr)) = row {
-            daily_map.insert(day, (count, errs, inp, outp, cost, cw, cr));
-        }
+    for (day, count, errs, inp, outp, cost, cw, cr) in rows.flatten() {
+        daily_map.insert(day, (count, errs, inp, outp, cost, cw, cr));
     }
     let mut daily = Vec::new();
     for i in (0..daily_window).rev() {
