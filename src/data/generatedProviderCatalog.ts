@@ -428,9 +428,16 @@ export const GENERATED_PROVIDER_CATALOG = {
       baseUrl:
         "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     },
-    defaultModel: "gemini-2.5-flash",
-    supportedModels: ["gemini-2.5-flash", "gemini-2.5-pro"],
+    defaultModel: "gemini-3.5-flash",
+    supportedModels: ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-2.5-pro"],
     models: [
+      {
+        id: "gemini-3.5-flash",
+        pricing: {
+          inputPerMillion: 1.5,
+          outputPerMillion: 9,
+        },
+      },
       {
         id: "gemini-2.5-flash",
         pricing: {
@@ -563,9 +570,16 @@ export const GENERATED_PROVIDER_CATALOG = {
       baseUrl: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
       anthropicBaseUrl: "https://open.bigmodel.cn/api/anthropic",
     },
-    defaultModel: "glm-5",
-    supportedModels: ["glm-5", "glm-5.1", "glm-4-plus"],
+    defaultModel: "glm-5.2",
+    supportedModels: ["glm-5.2", "glm-5", "glm-5.1", "glm-4-plus"],
     models: [
+      {
+        id: "glm-5.2",
+        pricing: {
+          inputPerMillion: 1.4,
+          outputPerMillion: 4.4,
+        },
+      },
       {
         id: "glm-5",
         pricing: {
@@ -812,9 +826,16 @@ export const GENERATED_PROVIDER_CATALOG = {
     endpoints: {
       baseUrl: "https://api.x.ai",
     },
-    defaultModel: "grok-3-latest",
-    supportedModels: ["grok-3-latest"],
+    defaultModel: "grok-4.3",
+    supportedModels: ["grok-4.3", "grok-3-latest"],
     models: [
+      {
+        id: "grok-4.3",
+        pricing: {
+          inputPerMillion: 1.25,
+          outputPerMillion: 2.5,
+        },
+      },
       {
         id: "grok-3-latest",
         pricing: {
@@ -1106,7 +1127,7 @@ export const GENERATED_PROVIDER_PRESETS = {
     baseUrl:
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     protocols: ["openai_chat_completions"],
-    defaultModel: "gemini-2.5-flash",
+    defaultModel: "gemini-3.5-flash",
   },
   kimi: {
     baseUrl: "https://api.moonshot.cn",
@@ -1122,7 +1143,7 @@ export const GENERATED_PROVIDER_PRESETS = {
   glm: {
     baseUrl: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
     protocols: ["openai_chat_completions"],
-    defaultModel: "glm-5",
+    defaultModel: "glm-5.2",
     anthropicBaseUrl: "https://open.bigmodel.cn/api/anthropic",
   },
   dashscope: {
@@ -1169,7 +1190,7 @@ export const GENERATED_PROVIDER_PRESETS = {
   xai: {
     baseUrl: "https://api.x.ai",
     protocols: ["openai_chat_completions"],
-    defaultModel: "grok-3-latest",
+    defaultModel: "grok-4.3",
   },
   mistral: {
     baseUrl: "https://api.mistral.ai",
