@@ -267,7 +267,7 @@ fn provider_presets() -> std::collections::HashMap<&'static str, (&'static str, 
             "deepseek",
             ("https://api.deepseek.com", "deepseek-v4-flash"),
         ),
-        ("openai", ("https://api.openai.com", "gpt-4o")),
+        ("openai", ("https://api.openai.com", "gpt-5.5")),
         (
             "anthropic",
             ("https://api.anthropic.com", "claude-sonnet-4-7"),

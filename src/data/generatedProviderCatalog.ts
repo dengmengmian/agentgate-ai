@@ -360,7 +360,7 @@ export const GENERATED_PROVIDER_CATALOG = {
       baseUrl: "https://api.openai.com",
       responsesBaseUrl: "https://api.openai.com",
     },
-    defaultModel: "gpt-4o",
+    defaultModel: "gpt-5.5",
     supportedModels: ["gpt-4o", "gpt-4o-mini", "gpt-5.5", "o3", "o4-mini"],
     models: [
       {
@@ -1099,7 +1099,7 @@ export const GENERATED_PROVIDER_PRESETS = {
   openai: {
     baseUrl: "https://api.openai.com",
     protocols: ["openai_chat_completions", "openai_responses"],
-    defaultModel: "gpt-4o",
+    defaultModel: "gpt-5.5",
     responsesBaseUrl: "https://api.openai.com",
   },
   google_gemini: {
