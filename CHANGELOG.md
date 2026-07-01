@@ -1,5 +1,15 @@
 # Changelog / 更新日志
 
+## [1.4.9] - 2026-07-01
+
+### Added / 新增
+
+- **Latest flagship models / 补齐最新旗舰模型** —— Added `gemini-3.5-flash`, `grok-4.3`, and `glm-5.2` to the built-in provider catalog with pricing, and bumped OpenAI's default model to `gpt-5.5`. 内置供应商目录补齐 `gemini-3.5-flash`、`grok-4.3`、`glm-5.2`（含价格），OpenAI 默认模型升级到 `gpt-5.5`。
+
+### Improvements / 改进
+
+- **CI supply-chain & lint gates / CI 供应链与静态检查门禁** —— CI now enforces Rust `clippy` + `rustfmt` and adds dependency security audits (`cargo audit` for Rust, `pnpm audit --prod` for the frontend); `react-router-dom` was upgraded to clear a production dependency advisory. CI 新增 Rust `clippy` + `rustfmt` 门禁和依赖安全审计（Rust `cargo audit`、前端 `pnpm audit --prod`）；升级 `react-router-dom` 清除生产依赖安全告警。
+
 ## [1.4.8] - 2026-06-26
 
 ### Added / 新增
