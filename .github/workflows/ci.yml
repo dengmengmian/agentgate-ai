@@ -29,6 +29,11 @@ jobs:
       - name: Install deps
         run: pnpm install --frozen-lockfile
 
+      # 只审生产依赖:dev 工具链(vitest/jsdom/undici 等)的传递漏洞不进
+      # 最终 app,不该卡 CI;生产依赖当前零漏洞,-D low 门槛守得住。
+      - name: Audit production deps
+        run: pnpm audit --prod --audit-level=low
+
       - name: Format check
         run: pnpm format:check
 
@@ -138,3 +143,21 @@ jobs:
                      --test kimi_capabilities \
                      --test protocol_fixture \
                      -- --nocapture
+
+  cargo-audit:
+    name: Rust dependency audit
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      # 预编译二进制,秒级安装,不用每次 cargo install 编译。
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      # 默认只对 vulnerability 级 RUSTSEC 漏洞 fail;unmaintained / unsound
+      # 类 warning(多为 tauri/webkit 桌面传递依赖)不阻断。当前 0 漏洞。
+      - name: Audit Rust deps
+        working-directory: src-tauri
+        run: cargo audit
