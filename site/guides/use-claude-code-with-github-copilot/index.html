@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Use Claude Code with GitHub Copilot through AgentGate | AgentGate</title>
+    <meta name="description" content="Route Claude Code requests to Claude models in a GitHub Copilot subscription through AgentGate: token exchange, model normalization, limits, and terms-of-service notes." />
+    <meta name="keywords" content="Claude Code GitHub Copilot, use Claude Code with Copilot, Copilot Claude models, AgentGate" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-github-copilot/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/" />
+    <meta property="og:title" content="Use Claude Code with GitHub Copilot through AgentGate" />
+    <meta property="og:description" content="Route Claude Code requests to Claude models in a GitHub Copilot subscription through AgentGate: token exchange, model normalization, limits, and terms-of-service notes." />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Use Claude Code with GitHub Copilot through AgentGate" />
+    <meta name="twitter:description" content="Route Claude Code requests to Claude models in a GitHub Copilot subscription through AgentGate: token exchange, model normalization, limits, and terms-of-service notes." />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Use Claude Code with GitHub Copilot through AgentGate",
+  "description": "Route Claude Code requests to Claude models in a GitHub Copilot subscription through AgentGate: token exchange, model normalization, limits, and terms-of-service notes.",
+  "datePublished": "2026-06-13",
+  "dateModified": "2026-06-13",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/"
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../assets/tailwind.css" />
+    <script data-goatcounter="https://agentgate.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">download <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../zh/guides/use-claude-code-with-github-copilot/" class="hover:text-ink">中文</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/use-claude-code-with-github-copilot</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">Claude Code + Copilot</p>
+          <h1 class="h-display mt-5 text-ink">Use Claude Code with GitHub Copilot through AgentGate</h1>
+          <p class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate turns Claude Code's Anthropic Messages entry into a local model entry, then routes selected requests to Claude models available through a GitHub Copilot subscription. This is optional and intended for personal evaluation; using Copilot outside official clients may be a gray area under GitHub's terms.</p>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>Download AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <article class="doc-body">
+<h2>When to use this</h2>
+<p>Use this guide if you want:</p>
+<ul>
+<li>Claude Code to use Copilot-provided Claude models without a separate Anthropic API key.</li>
+<li>AgentGate to exchange a GitHub OAuth token for a Copilot API credential automatically.</li>
+<li>Tool continuations and history compaction requests tagged as agent traffic so they do not consume premium user requests.</li>
+<li>Logs that show the <code>x-initiator</code> classification per request.</li>
+</ul>
+<h2>Risk disclosure</h2>
+<p>This feature is optional. If you do not add a <code>copilot</code> provider, AgentGate never uses this path.</p>
+<p>Using a Copilot subscription outside official clients is a terms-of-service gray area. Community tools with similar behavior have existed for a long time, but account risk cannot be ruled out. Avoid using important corporate accounts for experiments.</p>
+<h2>Quick Setup</h2>
+<ol>
+<li>Make sure you have an active GitHub Copilot subscription.</li>
+<li>Get a GitHub OAuth token. If you are signed into VS Code Copilot, check <code>~/.config/github-copilot/apps.json</code> for <code>oauth_token</code>.</li>
+<li>Open AgentGate, go to <strong>Providers</strong>, and add a provider with type <strong>GitHub Copilot</strong>.</li>
+<li>Paste the <code>gho_</code> or <code>ghu_</code> token as the API key. AgentGate fills the base URL and model list.</li>
+<li>Start the gateway from <strong>Overview</strong> or <strong>Gateway</strong>.</li>
+<li>Open <strong>Clients</strong> and apply the Claude Code config.</li>
+<li>Send a test message and check <strong>Logs</strong> for provider <code>GitHub Copilot</code> and <code>x-initiator</code> classification.</li>
+</ol>
+<h2>What AgentGate handles</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Credential exchange</td>
+<td>GitHub OAuth token is exchanged for a Copilot bearer credential and renewed automatically.</td>
+</tr>
+<tr>
+<td>Storage</td>
+<td>Copilot credentials are cached by hash and are not stored as plaintext tokens.</td>
+</tr>
+<tr>
+<td>Premium request classification</td>
+<td>User messages are tagged as user traffic; tool continuations and compaction are tagged as agent traffic.</td>
+</tr>
+<tr>
+<td>Model names</td>
+<td>Claude Code model names such as <code>claude-sonnet-4-6</code> are normalized to Copilot&#39;s expected form.</td>
+</tr>
+</tbody></table>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Check</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Token exchange fails</td>
+<td>Confirm the token starts with <code>gho_</code> or <code>ghu_</code> and belongs to an account with Copilot access.</td>
+</tr>
+<tr>
+<td>Model is rejected</td>
+<td>Check the Copilot provider&#39;s model list after saving the provider.</td>
+</tr>
+<tr>
+<td>Premium requests look higher than expected</td>
+<td>Open request logs and compare <code>x-initiator: user</code> vs <code>x-initiator: agent</code>.</td>
+</tr>
+<tr>
+<td>You want to avoid this path</td>
+<td>Remove or disable the Copilot provider and use DeepSeek, MiMo, Anthropic, or another provider.</td>
+</tr>
+</tbody></table>
+<h2>Related</h2>
+<ul>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-deepseek/">Use Claude Code with DeepSeek</a></li>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-deepseek/">Use Codex with DeepSeek</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai">Main README</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai/blob/main/README_ZH.md">中文 README</a></li>
+</ul>
+
+          </article>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="mt-4 text-xl font-medium">Keep reading.</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-gemini-cli-with-agentgate/">Gemini CLI <span class="text-faint">— Use Gemini CLI with AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-opencode-with-agentgate/">OpenCode <span class="text-faint">— Use OpenCode with AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-desktop-with-third-party-api-and-plugins/">Codex Desktop <span class="text-faint">— Use Codex Desktop with third-party APIs and plugins</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— Use Codex with OpenRouter through AgentGate</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>local AI model gateway</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>让 Codex Desktop 使用第三方 API 并保留插件能力 | AgentGate</title>
+    <meta name="description" content="保留 Codex Desktop 插件和账号功能的同时，把模型请求经 AgentGate 路由到 DeepSeek、小米 MiMo、Kimi、GLM 等第三方 Provider。" />
+    <meta name="keywords" content="Codex Desktop 第三方 API, Codex Desktop 插件代理, Codex Desktop DeepSeek, AgentGate" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <meta property="og:title" content="让 Codex Desktop 使用第三方 API 并保留插件能力" />
+    <meta property="og:description" content="保留 Codex Desktop 插件和账号功能的同时，把模型请求经 AgentGate 路由到 DeepSeek、小米 MiMo、Kimi、GLM 等第三方 Provider。" />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="让 Codex Desktop 使用第三方 API 并保留插件能力" />
+    <meta name="twitter:description" content="保留 Codex Desktop 插件和账号功能的同时，把模型请求经 AgentGate 路由到 DeepSeek、小米 MiMo、Kimi、GLM 等第三方 Provider。" />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "让 Codex Desktop 使用第三方 API 并保留插件能力",
+  "description": "保留 Codex Desktop 插件和账号功能的同时，把模型请求经 AgentGate 路由到 DeepSeek、小米 MiMo、Kimi、GLM 等第三方 Provider。",
+  "datePublished": "2026-06-13",
+  "dateModified": "2026-06-13",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-desktop-with-third-party-api-and-plugins/"
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../../assets/tailwind.css" />
+    <script data-goatcounter="https://agentgate.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">下载 <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../../guides/use-codex-desktop-with-third-party-api-and-plugins/" class="hover:text-ink">English</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/use-codex-desktop-with-third-party-api-and-plugins</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">Codex Desktop</p>
+          <h1 class="zh h-display mt-5 text-ink">让 Codex Desktop 使用第三方 API 并保留插件能力</h1>
+          <p class="zh mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate 把 Codex Desktop 原本基于 OpenAI 鉴权的官方模型入口，变成一个本地 AgentGate 入口。Codex Desktop 保留它的插件和账号功能依赖的 Provider 路径，模型请求由本地接管，再路由到 DeepSeek、小米 MiMo、OpenAI、Kimi、GLM、DashScope 等上游 Provider。</p>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>下载 AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <article class="zh doc-body">
+<h2>为什么这件事重要</h2>
+<p>很多代理方案把 Codex 当成普通的 OpenAI 兼容客户端来处理。这样做普通对话够用，但 Codex Desktop 里那些依赖<strong>官方 OpenAI Provider 形态、登录态、账号能力</strong>的部分可能会失效。</p>
+<p>AgentGate 走的是另一条路：<strong>保留客户端看起来像官方的入口，把实际的模型入口搬到本地</strong>。</p>
+<pre><code class="language-text">Codex Desktop
+  -&gt; Codex 配置里的 OpenAI Provider 入口
+  -&gt; 本地 AgentGate base URL
+  -&gt; DeepSeek / 小米 MiMo / OpenAI / Kimi / GLM / DashScope / 其他 Provider
+</code></pre>
+<p>Codex Desktop 看到的还是一个 OpenAI 风格的 Provider 入口，但模型请求被 AgentGate 在本地接住，再路由到你选的上游。</p>
+<h2>什么能继续用</h2>
+<table>
+<thead>
+<tr>
+<th>方面</th>
+<th>AgentGate 保留了什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Codex Desktop 登录</td>
+<td>保留官方 <code>auth.json</code> 里的账号 token，不用本地 API Key 覆盖它。</td>
+</tr>
+<tr>
+<td>插件和账号功能</td>
+<td>保留 Codex Desktop 走 OpenAI 鉴权的 Provider 路径，插件和账号功能依赖的就是这条路径。</td>
+</tr>
+<tr>
+<td>本地模型入口</td>
+<td>模型请求先经过 AgentGate，再转换或直连到 DeepSeek、MiMo、OpenAI、Kimi、GLM、DashScope 或其他配置的 Provider。</td>
+</tr>
+<tr>
+<td>一键还原</td>
+<td>保存原 Codex 配置的快照，可以从 AgentGate 界面一键切回官方。</td>
+</tr>
+</tbody></table>
+<p>插件能不能用还取决于 Codex Desktop、你登录的账号、以及上游功能本身。AgentGate 的作用是<strong>不去破坏那条官方路径</strong>，同时让模型请求本地可控、可追踪。</p>
+<h2>快速配置</h2>
+<ol>
+<li>从 <a href="https://github.com/dengmengmian/agentgate-ai/releases">Releases</a> 下载 AgentGate 并打开应用。</li>
+<li>添加至少一个 Provider，比如 DeepSeek 或小米 MiMo。</li>
+<li>在 <strong>概览</strong> 或 <strong>网关</strong> 启动网关。默认端点是 <code>http://127.0.0.1:9090</code>。</li>
+<li>打开 <strong>客户端</strong>，在 Codex 卡片上点 <strong>应用配置</strong>。</li>
+<li>Codex Desktop 的账号保持登录状态。</li>
+<li>在 Codex Desktop 里发一条消息，看 AgentGate 的请求日志确认选用的 Provider。</li>
+</ol>
+<h2>工作原理</h2>
+<p>AgentGate 的做法是：</p>
+<ul>
+<li>Codex 配置里仍然使用 OpenAI Provider 入口。</li>
+<li><code>base_url</code> 指向本地 AgentGate 网关。</li>
+<li><code>auth.json</code> 里的 ChatGPT / OpenAI 登录态保留，不被本地 token 覆盖。</li>
+<li>本地访问 token 放在 Codex 配置里，由 AgentGate 网关校验。</li>
+<li>真正的模型请求由 AgentGate 路由到 DeepSeek、小米 MiMo 或其他 Provider。</li>
+</ul>
+<p>结果是：Codex Desktop 可以继续保持它熟悉的官方 Provider 语义，同时你可以在 AgentGate 里切换第三方 API。</p>
+<h2>跟普通代理的区别</h2>
+<table>
+<thead>
+<tr>
+<th>普通代理</th>
+<th>AgentGate</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>通常把 Codex 当成普通 OpenAI 兼容客户端。</td>
+<td>保留 Codex Desktop 的 OpenAI Provider 路径，只改本地 base URL。</td>
+</tr>
+<tr>
+<td>可能要把 auth 替换成代理的 API Key。</td>
+<td>保留官方账号 token，本地网关 token 放在配置里。</td>
+</tr>
+<tr>
+<td>通常只针对一个 Provider。</td>
+<td>支持 Route Profile、故障转移、模型映射和多 Provider。</td>
+</tr>
+<tr>
+<td>切回官方常常要手动改。</td>
+<td>一键切回官方 Codex 配置。</td>
+</tr>
+</tbody></table>
+<h2>相关教程</h2>
+<ul>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-deepseek/">让 Codex 使用 DeepSeek</a></li>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-mimo/">让 Codex 使用小米 MiMo</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai">English README</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai/blob/main/README_ZH.md">中文 README</a></li>
+</ul>
+
+          </article>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="zh mt-4 text-xl font-medium">继续看。</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— 通过 AgentGate 让 Codex 使用 OpenRouter</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— 通过本地网关让 Claude Code 使用 OpenRouter</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/trace-codex-requests/">请求追踪 <span class="text-faint">— 用 AgentGate 本地追踪 Codex 模型请求</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/local-ai-gateway/">本地 AI 网关 <span class="text-faint">— 用于模型路由、追踪和故障切换的本地 AI 网关</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>本地 AI 模型网关</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

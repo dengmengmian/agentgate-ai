@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Use Gemini CLI with AgentGate | AgentGate</title>
+    <meta name="description" content="Give Gemini CLI a local model entry with AgentGate: route requests to multiple providers, trace them locally, and restore the official config in one click." />
+    <meta name="keywords" content="Gemini CLI proxy, Gemini CLI local gateway, Gemini CLI multi provider, AgentGate" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-gemini-cli-with-agentgate/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/" />
+    <meta property="og:title" content="Use Gemini CLI with AgentGate" />
+    <meta property="og:description" content="Give Gemini CLI a local model entry with AgentGate: route requests to multiple providers, trace them locally, and restore the official config in one click." />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Use Gemini CLI with AgentGate" />
+    <meta name="twitter:description" content="Give Gemini CLI a local model entry with AgentGate: route requests to multiple providers, trace them locally, and restore the official config in one click." />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Use Gemini CLI with AgentGate",
+  "description": "Give Gemini CLI a local model entry with AgentGate: route requests to multiple providers, trace them locally, and restore the official config in one click.",
+  "datePublished": "2026-06-13",
+  "dateModified": "2026-06-13",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/"
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../assets/tailwind.css" />
+    <script data-goatcounter="https://agentgate.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">download <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../zh/guides/use-gemini-cli-with-agentgate/" class="hover:text-ink">中文</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/use-gemini-cli-with-agentgate</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">Gemini CLI</p>
+          <h1 class="h-display mt-5 text-ink">Use Gemini CLI with AgentGate</h1>
+          <p class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate gives Gemini CLI a local model entry so its requests can be routed, traced, and managed alongside Codex, Claude Code, OpenCode, and AtomCode.</p>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>Download AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <article class="doc-body">
+<h2>When to use this</h2>
+<p>Use this guide if you want:</p>
+<ul>
+<li>Gemini CLI to share the same local model entry and provider list as your other AI agent clients.</li>
+<li>Gemini-style requests routed through AgentGate with model mapping and cost tracking.</li>
+<li>One-click client configuration instead of editing CLI config files by hand.</li>
+<li>Failover from one provider to another when the primary provider rate-limits or fails.</li>
+</ul>
+<h2>Quick Setup</h2>
+<ol>
+<li>Download AgentGate from <a href="https://github.com/dengmengmian/agentgate-ai/releases">Releases</a> and open the app.</li>
+<li>Add at least one provider in <strong>Quick Setup</strong> or <strong>Providers</strong>.</li>
+<li>Start the gateway from <strong>Overview</strong> or <strong>Gateway</strong>. The default endpoint is <code>http://127.0.0.1:9090</code>.</li>
+<li>Open <strong>Clients</strong> and click <strong>Apply Config</strong> on the Gemini CLI card.</li>
+<li>Send a test prompt from Gemini CLI.</li>
+<li>Check AgentGate <strong>Logs</strong> to confirm the selected provider and route.</li>
+</ol>
+<h2>What AgentGate configures</h2>
+<table>
+<thead>
+<tr>
+<th>Gemini CLI side</th>
+<th>AgentGate side</th>
+<th>Provider side</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Gemini API style request</td>
+<td>Local gateway route</td>
+<td>Chat-compatible upstream selected by route profile</td>
+</tr>
+<tr>
+<td>Gemini model names</td>
+<td>Model Mapping or <code>agentgate</code> virtual model</td>
+<td>Provider-specific model ID</td>
+</tr>
+<tr>
+<td>Request logs</td>
+<td>Client and route attribution</td>
+<td>Token and cost estimation where available</td>
+</tr>
+</tbody></table>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Check</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Gemini CLI still uses its old provider</td>
+<td>Apply the Gemini CLI config again from <strong>Clients</strong>.</td>
+</tr>
+<tr>
+<td>Gateway is unreachable</td>
+<td>Make sure AgentGate is running on <code>127.0.0.1:9090</code>.</td>
+</tr>
+<tr>
+<td>Model name is rejected</td>
+<td>Check the provider default model and Model Mapping.</td>
+</tr>
+<tr>
+<td>Cost is missing</td>
+<td>Confirm the model has a known or custom price in <strong>Settings</strong>.</td>
+</tr>
+</tbody></table>
+<h2>Related</h2>
+<ul>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-deepseek/">Use Codex with DeepSeek</a></li>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/guides/use-opencode-with-agentgate/">Use OpenCode with AgentGate</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai">Main README</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai/blob/main/README_ZH.md">中文 README</a></li>
+</ul>
+
+          </article>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="mt-4 text-xl font-medium">Keep reading.</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-opencode-with-agentgate/">OpenCode <span class="text-faint">— Use OpenCode with AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-desktop-with-third-party-api-and-plugins/">Codex Desktop <span class="text-faint">— Use Codex Desktop with third-party APIs and plugins</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— Use Codex with OpenRouter through AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— Use Claude Code with OpenRouter through a local gateway</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>local AI model gateway</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

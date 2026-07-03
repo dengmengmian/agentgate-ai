@@ -187,3 +187,118 @@ body {
   background-position: -1px -1px;
   mask-image: radial-gradient(ellipse at center top, black 0%, transparent 70%);
 }
+
+/* guides 完整教程正文(build-seo-pages.mjs 从 docs/*.md 渲染) */
+.doc-body h2 {
+  margin-top: 3rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--color-ink);
+}
+
+.doc-body h2::before {
+  content: "## ";
+  color: var(--color-amber);
+}
+
+.doc-body h3 {
+  margin-top: 2rem;
+  font-weight: 500;
+  font-size: 1.05rem;
+  color: var(--color-ink);
+}
+
+.doc-body p {
+  margin-top: 1rem;
+  line-height: 1.75;
+  color: var(--color-ink-soft);
+  max-width: 46rem;
+}
+
+.doc-body ul,
+.doc-body ol {
+  margin-top: 1rem;
+  padding-left: 1.5rem;
+  color: var(--color-ink-soft);
+  max-width: 46rem;
+}
+
+.doc-body ul {
+  list-style: disc;
+}
+
+.doc-body ol {
+  list-style: decimal;
+}
+
+.doc-body li {
+  margin-top: 0.5rem;
+  line-height: 1.75;
+}
+
+.doc-body a {
+  color: var(--color-cyan);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-cyan) 40%, transparent);
+  text-underline-offset: 3px;
+}
+
+.doc-body a:hover {
+  text-decoration-color: var(--color-cyan);
+}
+
+.doc-body strong {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.doc-body code {
+  color: var(--color-amber);
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border-soft);
+  border-radius: 3px;
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+}
+
+.doc-body pre {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.doc-body pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-ink);
+  font-size: 0.875rem;
+}
+
+.doc-body table {
+  display: block;
+  margin-top: 1.25rem;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  overflow-x: auto;
+}
+
+.doc-body th,
+.doc-body td {
+  border: 1px solid var(--color-border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  color: var(--color-ink-soft);
+  line-height: 1.6;
+}
+
+.doc-body th {
+  color: var(--color-ink);
+  background: var(--color-bg-soft);
+  white-space: nowrap;
+}

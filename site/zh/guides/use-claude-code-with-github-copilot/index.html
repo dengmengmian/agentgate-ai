@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>用 GitHub Copilot 订阅跑 Claude Code | AgentGate</title>
+    <meta name="description" content="通过 AgentGate 把 Claude Code 请求路由到 GitHub Copilot 订阅里的 Claude 模型：token 交换、模型名归一、限制说明和服务条款注意事项。" />
+    <meta name="keywords" content="Claude Code Copilot, GitHub Copilot 跑 Claude Code, Copilot Claude 模型, AgentGate" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-github-copilot/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-github-copilot/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-github-copilot/" />
+    <meta property="og:title" content="用 GitHub Copilot 订阅跑 Claude Code" />
+    <meta property="og:description" content="通过 AgentGate 把 Claude Code 请求路由到 GitHub Copilot 订阅里的 Claude 模型：token 交换、模型名归一、限制说明和服务条款注意事项。" />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="用 GitHub Copilot 订阅跑 Claude Code" />
+    <meta name="twitter:description" content="通过 AgentGate 把 Claude Code 请求路由到 GitHub Copilot 订阅里的 Claude 模型：token 交换、模型名归一、限制说明和服务条款注意事项。" />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "用 GitHub Copilot 订阅跑 Claude Code",
+  "description": "通过 AgentGate 把 Claude Code 请求路由到 GitHub Copilot 订阅里的 Claude 模型：token 交换、模型名归一、限制说明和服务条款注意事项。",
+  "datePublished": "2026-06-13",
+  "dateModified": "2026-06-13",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-github-copilot/"
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../../assets/tailwind.css" />
+    <script data-goatcounter="https://agentgate.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">下载 <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../../guides/use-claude-code-with-github-copilot/" class="hover:text-ink">English</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/use-claude-code-with-github-copilot</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">Claude Code + Copilot</p>
+          <h1 class="zh h-display mt-5 text-ink">用 GitHub Copilot 订阅跑 Claude Code</h1>
+          <p class="zh mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate 把 Claude Code 的 Anthropic Messages 入口变成本地模型入口，再把选中的请求路由到 GitHub Copilot 订阅里包含的 Claude 模型。这是一个可选功能，仅用于个人评估；在官方客户端之外使用 Copilot 属于 GitHub 服务条款的灰色地带。</p>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>下载 AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <article class="zh doc-body">
+<h2>什么时候用这个</h2>
+<p>如果你想：</p>
+<ul>
+<li>让 Claude Code 使用 Copilot 提供的 Claude 模型，不用额外申请 Anthropic API Key。</li>
+<li>让 AgentGate 自动把你的 GitHub OAuth token 兑换成 Copilot API 凭证。</li>
+<li>把工具续写和历史压缩的请求标记成 agent 流量，<strong>不消耗</strong> premium 高级请求额度。</li>
+<li>在日志里看到每条请求的 <code>x-initiator</code> 分类。</li>
+</ul>
+<h2>风险声明</h2>
+<p>这个功能完全可选。如果你没有添加 <code>copilot</code> 类型的 Provider，AgentGate 不会走这条路径。</p>
+<p>在官方客户端之外使用 Copilot 订阅，属于服务条款的灰色地带。社区里类似行为的工具存在很久了，但<strong>账号风险无法完全排除</strong>。<strong>不要用重要的公司账号做实验。</strong></p>
+<h2>快速配置</h2>
+<ol>
+<li>确认你有一个可用的 GitHub Copilot 订阅。</li>
+<li>拿到一个 GitHub OAuth token。如果你登录过 VS Code Copilot，可以在 <code>~/.config/github-copilot/apps.json</code> 里找到 <code>oauth_token</code>。</li>
+<li>打开 AgentGate，进入 <strong>供应商</strong>，添加一个类型为 <strong>GitHub Copilot</strong> 的 Provider。</li>
+<li>把 <code>gho_</code> 或 <code>ghu_</code> 开头的 token 粘贴成 API Key。AgentGate 会自动填好 base URL 和模型列表。</li>
+<li>在 <strong>概览</strong> 或 <strong>网关</strong> 启动网关。</li>
+<li>打开 <strong>客户端</strong>，应用 Claude Code 配置。</li>
+<li>发一条测试消息，在 <strong>日志</strong> 里查 Provider 是 <code>GitHub Copilot</code>，以及 <code>x-initiator</code> 的分类。</li>
+</ol>
+<h2>AgentGate 处理了什么</h2>
+<table>
+<thead>
+<tr>
+<th>方面</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>凭证兑换</td>
+<td>GitHub OAuth token 被自动兑换成 Copilot bearer 凭证，并自动续期。</td>
+</tr>
+<tr>
+<td>存储</td>
+<td>Copilot 凭证按 hash 缓存，不以明文 token 形式存储。</td>
+</tr>
+<tr>
+<td>Premium 请求分类</td>
+<td>用户消息标成 user 流量；工具续写和历史压缩标成 agent 流量。</td>
+</tr>
+<tr>
+<td>模型名归一</td>
+<td>Claude Code 的模型名如 <code>claude-sonnet-4-6</code> 会归一成 Copilot 期望的形式。</td>
+</tr>
+</tbody></table>
+<h2>排查</h2>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>检查</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Token 兑换失败</td>
+<td>确认 token 是 <code>gho_</code> 或 <code>ghu_</code> 开头，并且属于一个有 Copilot 权限的账号。</td>
+</tr>
+<tr>
+<td>模型被拒</td>
+<td>保存 Provider 后看一下 Copilot Provider 的模型列表。</td>
+</tr>
+<tr>
+<td>Premium 请求高于预期</td>
+<td>打开请求日志，对比 <code>x-initiator: user</code> 和 <code>x-initiator: agent</code> 的数量。</td>
+</tr>
+<tr>
+<td>想停掉这条路径</td>
+<td>删除或禁用 Copilot Provider，改用 DeepSeek、MiMo、Anthropic 或其他 Provider。</td>
+</tr>
+</tbody></table>
+<h2>相关教程</h2>
+<ul>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-deepseek/">让 Claude Code 使用 DeepSeek</a></li>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-deepseek/">让 Codex 使用 DeepSeek</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai">English README</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai/blob/main/README_ZH.md">中文 README</a></li>
+</ul>
+
+          </article>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="zh mt-4 text-xl font-medium">继续看。</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-gemini-cli-with-agentgate/">Gemini CLI <span class="text-faint">— 让 Gemini CLI 使用多供应商模型</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-opencode-with-agentgate/">OpenCode <span class="text-faint">— 让 OpenCode 切换多供应商模型</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-desktop-with-third-party-api-and-plugins/">Codex Desktop <span class="text-faint">— 让 Codex Desktop 用第三方 API 并保留插件</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— 通过 AgentGate 让 Codex 使用 OpenRouter</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>本地 AI 模型网关</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

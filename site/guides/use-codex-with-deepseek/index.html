@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Use Codex with DeepSeek through a local AI gateway | AgentGate</title>
-    <meta name="description" content="Route Codex requests to DeepSeek with AgentGate, while keeping local request tracing, rollback, provider switching, and cost tracking." />
+    <title>Use Codex with DeepSeek through AgentGate | AgentGate</title>
+    <meta name="description" content="Step-by-step guide: add DeepSeek in AgentGate and route Codex Responses API requests locally, with model mapping, failover, request logs, cost tracking, and troubleshooting." />
     <meta name="keywords" content="Codex DeepSeek, use Codex with DeepSeek, Codex local gateway, OpenAI Responses API proxy, AgentGate" />
     <meta name="author" content="dengmengmian" />
     <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-deepseek/" />
@@ -14,19 +14,21 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="AgentGate" />
     <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-deepseek/" />
-    <meta property="og:title" content="Use Codex with DeepSeek through a local AI gateway" />
-    <meta property="og:description" content="Route Codex requests to DeepSeek with AgentGate, while keeping local request tracing, rollback, provider switching, and cost tracking." />
+    <meta property="og:title" content="Use Codex with DeepSeek through AgentGate" />
+    <meta property="og:description" content="Step-by-step guide: add DeepSeek in AgentGate and route Codex Responses API requests locally, with model mapping, failover, request logs, cost tracking, and troubleshooting." />
     <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Use Codex with DeepSeek through a local AI gateway" />
-    <meta name="twitter:description" content="Route Codex requests to DeepSeek with AgentGate, while keeping local request tracing, rollback, provider switching, and cost tracking." />
+    <meta name="twitter:title" content="Use Codex with DeepSeek through AgentGate" />
+    <meta name="twitter:description" content="Step-by-step guide: add DeepSeek in AgentGate and route Codex Responses API requests locally, with model mapping, failover, request logs, cost tracking, and troubleshooting." />
     <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
     <link rel="icon" type="image/svg+xml" href="../../assets/logo.svg" />
     <script type="application/ld+json">{
   "@context": "https://schema.org",
-  "@type": "Article",
-  "headline": "Use Codex with DeepSeek through a local AI gateway",
-  "description": "Route Codex requests to DeepSeek with AgentGate, while keeping local request tracing, rollback, provider switching, and cost tracking.",
+  "@type": "TechArticle",
+  "headline": "Use Codex with DeepSeek through AgentGate",
+  "description": "Step-by-step guide: add DeepSeek in AgentGate and route Codex Responses API requests locally, with model mapping, failover, request logs, cost tracking, and troubleshooting.",
+  "datePublished": "2026-06-13",
+  "dateModified": "2026-06-13",
   "author": {
     "@type": "Person",
     "name": "dengmengmian",
@@ -40,32 +42,11 @@
   },
   "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-deepseek/"
 }</script>
-    <script type="application/ld+json">{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "Can Codex use DeepSeek directly?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "It depends on the client and protocol. AgentGate is the local bridge that keeps Codex pointed at a stable local endpoint."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Can I switch back?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Yes. AgentGate keeps client config history and supports one-click restore to the original config."
-      }
-    }
-  ]
-}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="../../assets/tailwind.css" />
+    <script data-goatcounter="https://agentgate.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
   </head>
   <body class="bg-bg text-ink">
     <header class="border-b border-border-soft">
@@ -89,12 +70,8 @@
         <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
           <div class="prompt text-sm text-ink-soft">agentgate guides/use-codex-with-deepseek</div>
           <p class="mt-6 text-xs uppercase tracking-wider text-amber">Codex + DeepSeek</p>
-          <h1 class="h-display mt-5 text-ink">Use Codex with DeepSeek through AgentGate.</h1>
-          <p class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate gives Codex a local gateway endpoint, then routes requests to DeepSeek or any other provider you enable.</p>
-          <div class="mt-8 max-w-2xl border-l-2 border-amber/50 pl-4">
-            <div class="text-xs uppercase tracking-wider text-amber">direct answer</div>
-            <p class="mt-3 text-base leading-relaxed text-ink">Short answer: AgentGate gives Codex a local gateway endpoint, then routes requests to DeepSeek or any other provider you enable.</p>
-          </div>
+          <h1 class="h-display mt-5 text-ink">Use Codex with DeepSeek through AgentGate</h1>
+          <p class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate turns Codex's official Responses API entry into a local model entry you control. Codex keeps sending Responses API requests, while AgentGate routes them to DeepSeek with protocol conversion or native pass-through, model mapping, failover, request logs, and cost tracking.</p>
           <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
             <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
               <span>▸</span>
@@ -106,68 +83,91 @@
       </section>
 
       <section class="border-b border-border-soft bg-bg-soft/40">
-        <div class="mx-auto grid max-w-4xl gap-8 px-6 py-16 md:grid-cols-[1fr_260px]">
-          <article class="space-y-8">
-            <section class="frame rounded p-6">
-              <h2 class="text-xl font-medium text-ink">Best fit</h2>
-              <ul class="mt-4 list-disc space-y-2 pl-5">
-                <li class="leading-relaxed text-ink-soft">You want AI apps to keep one stable local endpoint.</li>
-<li class="leading-relaxed text-ink-soft">You need provider switching, request logs, cost visibility, or failover.</li>
-<li class="leading-relaxed text-ink-soft">You want client config changes to be reversible.</li>
-              </ul>
-            </section>
-            <section class="frame rounded p-6">
-              <h2 class="text-xl font-medium text-ink">Not ideal</h2>
-              <ul class="mt-4 list-disc space-y-2 pl-5">
-                <li class="leading-relaxed text-ink-soft">You use one client, one provider, and the setup rarely changes.</li>
-<li class="leading-relaxed text-ink-soft">You do not need logs, failover, cost tracking, or config rollback.</li>
-              </ul>
-            </section>
-            <section class="frame rounded p-6">
-              <h2 class="text-xl font-medium text-ink">Why this setup helps</h2>
-              <p class="mt-4 leading-relaxed text-ink-soft">Codex expects an OpenAI-style model entry. DeepSeek is cheaper for many coding and reasoning tasks, but switching clients by hand is fragile. AgentGate sits locally between the app and the provider, so you can route Codex traffic without giving up local visibility.</p>
-            </section>
-<section class="frame rounded p-6">
-              <h2 class="text-xl font-medium text-ink">Basic setup</h2>
-              <p class="mt-4 leading-relaxed text-ink-soft">Install AgentGate, add DeepSeek as a provider, start the local gateway, then apply the Codex client config from the AgentGate client page. Open Codex normally and verify the request in AgentGate logs.</p>
-            </section>
-<section class="frame rounded p-6">
-              <h2 class="text-xl font-medium text-ink">What to check</h2>
-              <p class="mt-4 leading-relaxed text-ink-soft">Confirm the local gateway is running, the DeepSeek key is valid, the selected route profile points to DeepSeek, and the Codex request appears in the local request log.</p>
-            </section>
-          </article>
-
-          <aside class="space-y-4 text-sm">
-            <div class="frame rounded p-5">
-              <div class="text-xs uppercase tracking-wider text-amber">search intent</div>
-              <p class="mt-3 text-ink-soft">Route Codex requests to DeepSeek with AgentGate, while keeping local request tracing, rollback, provider switching, and cost tracking.</p>
-            </div>
-            <div class="frame rounded p-5">
-              <div class="text-xs uppercase tracking-wider text-amber">quick links</div>
-              <div class="mt-3 space-y-2">
-                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai/releases/latest">Latest release <span class="text-faint">↗</span></a>
-                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">GitHub <span class="text-faint">↗</span></a>
-                <a class="hover-prompt block text-ink-soft hover:text-ink" href="../../">Home</a>
-              </div>
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      <section class="border-b border-border-soft">
         <div class="mx-auto max-w-4xl px-6 py-16">
-          <div class="prompt text-sm text-ink-soft">agentgate --faq</div>
-          <h2 class="h-section mt-4">FAQ.</h2>
-          <div class="mt-10 space-y-4">
-            <details class="frame rounded p-5">
-              <summary class="cursor-pointer text-ink">Can Codex use DeepSeek directly?</summary>
-              <p class="mt-3 leading-relaxed text-ink-soft">It depends on the client and protocol. AgentGate is the local bridge that keeps Codex pointed at a stable local endpoint.</p>
-            </details>
-<details class="frame rounded p-5">
-              <summary class="cursor-pointer text-ink">Can I switch back?</summary>
-              <p class="mt-3 leading-relaxed text-ink-soft">Yes. AgentGate keeps client config history and supports one-click restore to the original config.</p>
-            </details>
-          </div>
+          <article class="doc-body">
+<h2>When to use this</h2>
+<p>Use this guide if you want:</p>
+<ul>
+<li>Codex to call DeepSeek models while keeping a one-click path back to the official config.</li>
+<li>OpenAI Responses API requests from Codex converted to DeepSeek-compatible Chat Completions or Anthropic-compatible endpoints.</li>
+<li>One-click switching between official Codex config and AgentGate config.</li>
+<li>A local gateway that can later switch Codex from DeepSeek to MiMo, OpenAI, Kimi, GLM, DashScope, or another provider.</li>
+</ul>
+<h2>Quick Setup</h2>
+<ol>
+<li>Download AgentGate from <a href="https://github.com/dengmengmian/agentgate-ai/releases">Releases</a> and open the app.</li>
+<li>Go to <strong>Quick Setup</strong> or <strong>Providers</strong>.</li>
+<li>Add a DeepSeek provider and paste your DeepSeek API key.</li>
+<li>Start the gateway from <strong>Overview</strong> or <strong>Gateway</strong>. The default client endpoint is <code>http://127.0.0.1:9090</code>.</li>
+<li>Open <strong>Clients</strong> and click <strong>Apply Config</strong> on the Codex card.</li>
+<li>Send a test message in Codex.</li>
+</ol>
+<p>AgentGate keeps the official Codex configuration restorable, so you can switch back from the Codex card when needed.</p>
+<h2>What AgentGate configures</h2>
+<table>
+<thead>
+<tr>
+<th>Codex side</th>
+<th>AgentGate side</th>
+<th>DeepSeek side</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OpenAI Responses API</td>
+<td><code>/v1/responses</code> local gateway route</td>
+<td>DeepSeek Chat Completions or Anthropic-compatible endpoint</td>
+</tr>
+<tr>
+<td>Codex model names</td>
+<td>Model Mapping or <code>agentgate</code> virtual model</td>
+<td>DeepSeek model IDs such as <code>deepseek-v4-flash</code> or <code>deepseek-v4-pro</code></td>
+</tr>
+<tr>
+<td>Codex tools and streaming</td>
+<td>Protocol conversion and request tracing</td>
+<td>Provider-specific DeepSeek handling</td>
+</tr>
+</tbody></table>
+<h2>Chinese Notes / 中文说明</h2>
+<p>如果你搜索的是“Codex 使用 DeepSeek”“Codex 接入 DeepSeek”“DeepSeek 作为 Codex 后端”，AgentGate 的作用是把 Codex 原本发往官方的 Responses API 入口变成本地模型入口，再由本地决定转换或直连到 DeepSeek。</p>
+<p>常见路径是：</p>
+<pre><code class="language-text">Codex -&gt; http://127.0.0.1:9090/v1/responses -&gt; AgentGate -&gt; DeepSeek
+</code></pre>
+<p>你不需要长期手改 Codex 配置文件，也不需要在 DeepSeek、MiMo、OpenAI 等 Provider 之间来回改模型名。AgentGate 会通过 Provider、Route Profile、Model Mapping 和 <code>agentgate</code> 虚拟模型处理这些差异。</p>
+<h2>Troubleshooting</h2>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Check</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Codex still calls the official endpoint</td>
+<td>Re-open <strong>Clients</strong> and apply the Codex config again.</td>
+</tr>
+<tr>
+<td>DeepSeek returns a model error</td>
+<td>Check the DeepSeek provider&#39;s default model and Model Mapping.</td>
+</tr>
+<tr>
+<td>Gateway is unreachable</td>
+<td>Make sure the AgentGate gateway is running on <code>127.0.0.1:9090</code>; <code>1420</code> is only the development UI port.</td>
+</tr>
+<tr>
+<td>You want to restore official Codex</td>
+<td>Use the Codex card&#39;s switch-back action in <strong>Clients</strong>.</td>
+</tr>
+</tbody></table>
+<h2>Related</h2>
+<ul>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/">Use Codex Desktop with third-party APIs and plugins</a></li>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-mimo/">Use Codex with Xiaomi MiMo</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai">Main README</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai/blob/main/README_ZH.md">中文 README</a></li>
+</ul>
+
+          </article>
         </div>
       </section>
 
@@ -176,10 +176,10 @@
           <div class="prompt text-sm text-ink-soft">agentgate --related</div>
           <h2 class="mt-4 text-xl font-medium">Keep reading.</h2>
           <div class="mt-8 space-y-3 text-sm">
-            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-deepseek/">Claude Code + DeepSeek <span class="text-faint">— Use Claude Code with DeepSeek through AgentGate</span></a>
-<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— Use Codex with OpenRouter through AgentGate</span></a>
-<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— Use Claude Code with OpenRouter through a local gateway</span></a>
-<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../trace-codex-requests/">Request tracing <span class="text-faint">— Trace Codex model requests locally with AgentGate</span></a>
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-deepseek/">Claude Code + DeepSeek <span class="text-faint">— Use Claude Code with DeepSeek</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-with-mimo/">Codex + MiMo <span class="text-faint">— Use Codex with Xiaomi MiMo</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-github-copilot/">Claude Code + Copilot <span class="text-faint">— Use Claude Code with GitHub Copilot</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-gemini-cli-with-agentgate/">Gemini CLI <span class="text-faint">— Use Gemini CLI with AgentGate</span></a>
           </div>
         </div>
       </section>

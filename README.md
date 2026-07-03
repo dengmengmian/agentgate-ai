@@ -38,6 +38,12 @@
 | Debian / Ubuntu | [AgentGate_1.4.9_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.9/AgentGate_1.4.9_amd64.deb) |
 | Other Linux distros | [AgentGate_1.4.9_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.9/AgentGate_1.4.9_amd64.AppImage) |
 
+On macOS you can also install with Homebrew:
+
+```bash
+brew install --cask dengmengmian/tap/agentgate
+```
+
 Headless CLI (`agentgate-serve`) tarballs and older versions are on the [Releases](https://github.com/dengmengmian/agentgate-ai/releases) page.
 
 ## Why AgentGate

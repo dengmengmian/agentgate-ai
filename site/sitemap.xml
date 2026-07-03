@@ -3,6 +3,7 @@
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/" />
@@ -11,6 +12,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/zh/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/" />
@@ -19,6 +21,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-deepseek/</loc>
+    <lastmod>2026-06-13</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-deepseek/" />
@@ -27,6 +30,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-deepseek/</loc>
+    <lastmod>2026-06-13</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-deepseek/" />
@@ -35,6 +39,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-deepseek/</loc>
+    <lastmod>2026-06-16</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-deepseek/" />
@@ -43,6 +48,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-deepseek/</loc>
+    <lastmod>2026-06-16</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-deepseek/" />
@@ -50,7 +56,98 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-deepseek/" />
   </url>
   <url>
+    <loc>https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-mimo/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-mimo/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-mimo/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-mimo/" />
+  </url>
+  <url>
+    <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-mimo/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-mimo/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-mimo/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-mimo/" />
+  </url>
+  <url>
+    <loc>https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-github-copilot/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/" />
+  </url>
+  <url>
+    <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-github-copilot/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-github-copilot/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/" />
+  </url>
+  <url>
+    <loc>https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-gemini-cli-with-agentgate/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/" />
+  </url>
+  <url>
+    <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/use-gemini-cli-with-agentgate/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-gemini-cli-with-agentgate/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/" />
+  </url>
+  <url>
+    <loc>https://dengmengmian.github.io/agentgate-ai/guides/use-opencode-with-agentgate/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-opencode-with-agentgate/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-opencode-with-agentgate/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-opencode-with-agentgate/" />
+  </url>
+  <url>
+    <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/use-opencode-with-agentgate/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-opencode-with-agentgate/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-opencode-with-agentgate/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-opencode-with-agentgate/" />
+  </url>
+  <url>
+    <loc>https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+  </url>
+  <url>
+    <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-desktop-with-third-party-api-and-plugins/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <xhtml:link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+  </url>
+  <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-openrouter/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-openrouter/" />
@@ -59,6 +156,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-openrouter/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-openrouter/" />
@@ -67,6 +165,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-openrouter/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-openrouter/" />
@@ -75,6 +174,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-openrouter/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-openrouter/" />
@@ -83,6 +183,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/" />
@@ -91,6 +192,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/trace-codex-requests/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/trace-codex-requests/" />
@@ -99,6 +201,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/guides/local-ai-gateway/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/local-ai-gateway/" />
@@ -107,6 +210,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/local-ai-gateway/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/local-ai-gateway/" />
@@ -115,6 +219,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-litellm/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-litellm/" />
@@ -123,6 +228,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-litellm/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-litellm/" />
@@ -131,6 +237,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-openrouter/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-openrouter/" />
@@ -139,6 +246,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-openrouter/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-openrouter/" />
@@ -147,6 +255,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-direct-provider-config/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-direct-provider-config/" />
@@ -155,6 +264,7 @@
   </url>
   <url>
     <loc>https://dengmengmian.github.io/agentgate-ai/zh/guides/agentgate-vs-direct-provider-config/</loc>
+    <lastmod>2026-07-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
     <xhtml:link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/agentgate-vs-direct-provider-config/" />

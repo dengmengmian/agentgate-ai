@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Use Codex Desktop with third-party APIs and plugins | AgentGate</title>
+    <meta name="description" content="Keep Codex Desktop plugins and account features working while routing model requests through AgentGate to DeepSeek, MiMo, Kimi, GLM, and other providers." />
+    <meta name="keywords" content="Codex Desktop third party API, Codex Desktop plugins proxy, Codex Desktop DeepSeek, AgentGate" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/" />
+    <meta property="og:title" content="Use Codex Desktop with third-party APIs and plugins" />
+    <meta property="og:description" content="Keep Codex Desktop plugins and account features working while routing model requests through AgentGate to DeepSeek, MiMo, Kimi, GLM, and other providers." />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Use Codex Desktop with third-party APIs and plugins" />
+    <meta name="twitter:description" content="Keep Codex Desktop plugins and account features working while routing model requests through AgentGate to DeepSeek, MiMo, Kimi, GLM, and other providers." />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "Use Codex Desktop with third-party APIs and plugins",
+  "description": "Keep Codex Desktop plugins and account features working while routing model requests through AgentGate to DeepSeek, MiMo, Kimi, GLM, and other providers.",
+  "datePublished": "2026-06-13",
+  "dateModified": "2026-06-13",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/"
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../assets/tailwind.css" />
+    <script data-goatcounter="https://agentgate.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">download <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../zh/guides/use-codex-desktop-with-third-party-api-and-plugins/" class="hover:text-ink">中文</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/use-codex-desktop-with-third-party-api-and-plugins</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">Codex Desktop</p>
+          <h1 class="h-display mt-5 text-ink">Use Codex Desktop with third-party APIs and plugins</h1>
+          <p class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate turns Codex Desktop's official OpenAI-authenticated model entry into a local AgentGate entry. Codex Desktop keeps the provider path its plugins and account features expect, while model requests are handled locally and routed to upstream providers such as DeepSeek, Xiaomi MiMo, OpenAI, Kimi, GLM, DashScope, and more.</p>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>Download AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <article class="doc-body">
+<h2>Why this matters</h2>
+<p>Many proxy setups make Codex behave like a generic OpenAI-compatible client. That can be enough for plain chat, but it may break the parts of Codex Desktop that expect the official OpenAI provider shape and signed-in account state.</p>
+<p>AgentGate uses a different pattern: keep the official-looking client entry, move the actual model entry to localhost.</p>
+<pre><code class="language-text">Codex Desktop
+  -&gt; OpenAI provider entry in Codex config
+  -&gt; local AgentGate base URL
+  -&gt; DeepSeek / Xiaomi MiMo / OpenAI / Kimi / GLM / DashScope / other provider
+</code></pre>
+<p>Codex Desktop still sees an OpenAI-style provider entry, while AgentGate receives the model request locally and routes it to the selected upstream provider.</p>
+<h2>What keeps working</h2>
+<table>
+<thead>
+<tr>
+<th>Area</th>
+<th>What AgentGate preserves</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Codex Desktop sign-in</td>
+<td>Keeps the official <code>auth.json</code> account tokens instead of replacing them with a local API key.</td>
+</tr>
+<tr>
+<td>Plugin and account features</td>
+<td>Keeps Codex Desktop on the OpenAI-authenticated provider path that plugin and account features expect.</td>
+</tr>
+<tr>
+<td>Local model entry</td>
+<td>Sends model requests through AgentGate first, then converts or passes through to DeepSeek, MiMo, OpenAI, Kimi, GLM, DashScope, or another configured provider.</td>
+</tr>
+<tr>
+<td>One-click restore</td>
+<td>Saves the original Codex config so you can switch back to official behavior from the AgentGate UI.</td>
+</tr>
+</tbody></table>
+<p>Plugin availability still depends on Codex Desktop, your signed-in account, and the upstream feature itself. AgentGate&#39;s role is to avoid breaking that official path while making the model request locally controllable and traceable.</p>
+<h2>Quick Setup</h2>
+<ol>
+<li>Download AgentGate from <a href="https://github.com/dengmengmian/agentgate-ai/releases">Releases</a> and open the app.</li>
+<li>Add at least one provider, such as DeepSeek or Xiaomi MiMo.</li>
+<li>Start the gateway from <strong>Overview</strong> or <strong>Gateway</strong>. The default endpoint is <code>http://127.0.0.1:9090</code>.</li>
+<li>Open <strong>Clients</strong> and click <strong>Apply Config</strong> on the Codex card.</li>
+<li>Keep your Codex Desktop account signed in.</li>
+<li>Send a message in Codex Desktop and check AgentGate&#39;s request logs to confirm the selected provider was used.</li>
+</ol>
+<h2>Chinese Notes / 中文说明</h2>
+<p>如果你搜索的是“Codex 桌面端 第三方 API”“Codex Desktop DeepSeek 插件”“Codex 桌面端 MiMo 插件”，这个能力是 AgentGate 和普通代理最不一样的地方之一。</p>
+<p>普通代理通常只是把 Codex 请求改到一个 OpenAI-compatible 地址。这样能让模型请求跑起来，但 Codex 桌面端里依赖官方 OpenAI provider 形态、登录态、账号能力的部分可能会失效。</p>
+<p>AgentGate 的做法是：</p>
+<ul>
+<li>Codex 配置里仍然使用 OpenAI provider 入口。</li>
+<li><code>base_url</code> 指向本地 AgentGate 网关。</li>
+<li><code>auth.json</code> 里的 ChatGPT / OpenAI 登录态保留，不被本地 token 覆盖。</li>
+<li>本地访问 token 放在 Codex 配置里，由 AgentGate 网关校验。</li>
+<li>真正的模型请求由 AgentGate 路由到 DeepSeek、小米 MiMo 或其他 Provider。</li>
+</ul>
+<p>结果是：Codex 桌面端可以继续保持它熟悉的官方 provider 语义，同时你可以在 AgentGate 里切换第三方 API。</p>
+<h2>How it differs from a simple proxy</h2>
+<table>
+<thead>
+<tr>
+<th>Simple proxy</th>
+<th>AgentGate</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Usually treats Codex as a generic OpenAI-compatible client.</td>
+<td>Preserves Codex Desktop&#39;s OpenAI provider path while changing the local base URL.</td>
+</tr>
+<tr>
+<td>May require replacing auth with a proxy API key.</td>
+<td>Keeps official account tokens and stores the local gateway token in config.</td>
+</tr>
+<tr>
+<td>Often focuses on one provider.</td>
+<td>Supports route profiles, failover, model mapping, and multiple providers.</td>
+</tr>
+<tr>
+<td>Harder to switch back cleanly.</td>
+<td>Provides one-click switch back to official Codex config.</td>
+</tr>
+</tbody></table>
+<h2>Related</h2>
+<ul>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-deepseek/">Use Codex with DeepSeek</a></li>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-mimo/">Use Codex with Xiaomi MiMo</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai">Main README</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai/blob/main/README_ZH.md">中文 README</a></li>
+</ul>
+
+          </article>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="mt-4 text-xl font-medium">Keep reading.</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— Use Codex with OpenRouter through AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— Use Claude Code with OpenRouter through a local gateway</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../trace-codex-requests/">Request tracing <span class="text-faint">— Trace Codex model requests locally with AgentGate</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../local-ai-gateway/">Local AI gateway <span class="text-faint">— Local AI gateway for model routing, tracing, and failover</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>local AI model gateway</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

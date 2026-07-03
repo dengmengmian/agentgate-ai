@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>让 Gemini CLI 通过 AgentGate 使用多供应商模型 | AgentGate</title>
+    <meta name="description" content="用 AgentGate 给 Gemini CLI 一个本地模型入口：请求路由到多个 Provider、本地追踪，并支持一键恢复官方配置。" />
+    <meta name="keywords" content="Gemini CLI 代理, Gemini CLI 本地网关, Gemini CLI 多供应商, AgentGate" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-gemini-cli-with-agentgate/" />
+    <link rel="alternate" hreflang="en" href="https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/" />
+    <link rel="alternate" hreflang="zh-CN" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-gemini-cli-with-agentgate/" />
+    <link rel="alternate" hreflang="x-default" href="https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-gemini-cli-with-agentgate/" />
+    <meta property="og:title" content="让 Gemini CLI 通过 AgentGate 使用多供应商模型" />
+    <meta property="og:description" content="用 AgentGate 给 Gemini CLI 一个本地模型入口：请求路由到多个 Provider、本地追踪，并支持一键恢复官方配置。" />
+    <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="让 Gemini CLI 通过 AgentGate 使用多供应商模型" />
+    <meta name="twitter:description" content="用 AgentGate 给 Gemini CLI 一个本地模型入口：请求路由到多个 Provider、本地追踪，并支持一键恢复官方配置。" />
+    <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="../../../assets/logo.svg" />
+    <script type="application/ld+json">{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": "让 Gemini CLI 通过 AgentGate 使用多供应商模型",
+  "description": "用 AgentGate 给 Gemini CLI 一个本地模型入口：请求路由到多个 Provider、本地追踪，并支持一键恢复官方配置。",
+  "datePublished": "2026-06-13",
+  "dateModified": "2026-06-13",
+  "author": {
+    "@type": "Person",
+    "name": "dengmengmian",
+    "url": "https://github.com/dengmengmian"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AgentGate",
+    "url": "https://dengmengmian.github.io/agentgate-ai",
+    "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+  },
+  "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/zh/guides/use-gemini-cli-with-agentgate/"
+}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="../../../assets/tailwind.css" />
+    <script data-goatcounter="https://agentgate.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="hover:text-ink">下载 <span class="text-faint">↗</span></a>
+          <a href="https://github.com/dengmengmian/agentgate-ai" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="../../../guides/use-gemini-cli-with-agentgate/" class="hover:text-ink">English</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/use-gemini-cli-with-agentgate</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">Gemini CLI</p>
+          <h1 class="zh h-display mt-5 text-ink">让 Gemini CLI 通过 AgentGate 使用多供应商模型</h1>
+          <p class="zh mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate 给 Gemini CLI 一个本地模型入口，让它的请求和 Codex、Claude Code、OpenCode、AtomCode 一起被路由、追踪、统一管理。</p>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>下载 AgentGate</span>
+            </a>
+            <a href="https://github.com/dengmengmian/agentgate-ai" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <article class="zh doc-body">
+<h2>什么时候用这个</h2>
+<p>如果你想：</p>
+<ul>
+<li>让 Gemini CLI 和你其他 AI agent 客户端共享同一个本地模型入口和 Provider 列表。</li>
+<li>把 Gemini 风格的请求通过 AgentGate 路由，附带模型映射和成本统计。</li>
+<li>用一键配置代替手编 CLI 配置文件。</li>
+<li>在主 Provider 限流或失败时自动切到另一个 Provider。</li>
+</ul>
+<h2>快速配置</h2>
+<ol>
+<li>从 <a href="https://github.com/dengmengmian/agentgate-ai/releases">Releases</a> 下载 AgentGate 并打开应用。</li>
+<li>在 <strong>快速配置</strong> 或 <strong>供应商</strong> 添加至少一个 Provider。</li>
+<li>在 <strong>概览</strong> 或 <strong>网关</strong> 启动网关。默认端点是 <code>http://127.0.0.1:9090</code>。</li>
+<li>打开 <strong>客户端</strong>，在 Gemini CLI 卡片上点 <strong>应用配置</strong>。</li>
+<li>从 Gemini CLI 发一条测试 prompt。</li>
+<li>在 AgentGate 的 <strong>日志</strong> 里确认 Provider 和路由符合预期。</li>
+</ol>
+<h2>AgentGate 配置了什么</h2>
+<table>
+<thead>
+<tr>
+<th>Gemini CLI 侧</th>
+<th>AgentGate 侧</th>
+<th>Provider 侧</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Gemini API 风格的请求</td>
+<td>本地网关路由</td>
+<td>由 Route Profile 选中的 Chat 兼容上游</td>
+</tr>
+<tr>
+<td>Gemini 模型名</td>
+<td>Model Mapping 或 <code>agentgate</code> 虚拟模型</td>
+<td>Provider 对应的模型 ID</td>
+</tr>
+<tr>
+<td>请求日志</td>
+<td>按客户端和路由归因</td>
+<td>在可用时附带 Token 和成本估算</td>
+</tr>
+</tbody></table>
+<h2>排查</h2>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>检查</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Gemini CLI 还在用原来的 Provider</td>
+<td>在 <strong>客户端</strong> 重新应用一次 Gemini CLI 配置。</td>
+</tr>
+<tr>
+<td>网关无法连接</td>
+<td>确认 AgentGate 在 <code>127.0.0.1:9090</code> 上运行。</td>
+</tr>
+<tr>
+<td>模型名被拒</td>
+<td>检查 Provider 的默认模型和 Model Mapping。</td>
+</tr>
+<tr>
+<td>成本缺失</td>
+<td>确认模型在 <strong>设置</strong> 里有内置或自定义的价格。</td>
+</tr>
+</tbody></table>
+<h2>相关教程</h2>
+<ul>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-deepseek/">让 Codex 使用 DeepSeek</a></li>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-opencode-with-agentgate/">让 OpenCode 通过 AgentGate 切换多供应商模型</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai">English README</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai/blob/main/README_ZH.md">中文 README</a></li>
+</ul>
+
+          </article>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="zh mt-4 text-xl font-medium">继续看。</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-opencode-with-agentgate/">OpenCode <span class="text-faint">— 让 OpenCode 切换多供应商模型</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-desktop-with-third-party-api-and-plugins/">Codex Desktop <span class="text-faint">— 让 Codex Desktop 用第三方 API 并保留插件</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— 通过 AgentGate 让 Codex 使用 OpenRouter</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— 通过本地网关让 Claude Code 使用 OpenRouter</span></a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>本地 AI 模型网关</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

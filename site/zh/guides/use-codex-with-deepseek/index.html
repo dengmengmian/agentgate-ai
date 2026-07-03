@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>通过本地 AI 网关让 Codex 使用 DeepSeek | AgentGate</title>
-    <meta name="description" content="用 AgentGate 把 Codex 请求路由到 DeepSeek，同时保留本地请求追踪、配置回滚、Provider 切换和成本统计。" />
+    <title>用 AgentGate 让 Codex 使用 DeepSeek | AgentGate</title>
+    <meta name="description" content="手把手教程：在 AgentGate 添加 DeepSeek，把 Codex 的 Responses API 请求在本地路由到 DeepSeek，含模型映射、故障转移、请求日志、成本统计和故障排查。" />
     <meta name="keywords" content="Codex DeepSeek, Codex 使用 DeepSeek, Codex 本地网关, OpenAI Responses API 代理, AgentGate" />
     <meta name="author" content="dengmengmian" />
     <link rel="canonical" href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-deepseek/" />
@@ -14,19 +14,21 @@
     <meta property="og:type" content="article" />
     <meta property="og:site_name" content="AgentGate" />
     <meta property="og:url" content="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-deepseek/" />
-    <meta property="og:title" content="通过本地 AI 网关让 Codex 使用 DeepSeek" />
-    <meta property="og:description" content="用 AgentGate 把 Codex 请求路由到 DeepSeek，同时保留本地请求追踪、配置回滚、Provider 切换和成本统计。" />
+    <meta property="og:title" content="用 AgentGate 让 Codex 使用 DeepSeek" />
+    <meta property="og:description" content="手把手教程：在 AgentGate 添加 DeepSeek，把 Codex 的 Responses API 请求在本地路由到 DeepSeek，含模型映射、故障转移、请求日志、成本统计和故障排查。" />
     <meta property="og:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="通过本地 AI 网关让 Codex 使用 DeepSeek" />
-    <meta name="twitter:description" content="用 AgentGate 把 Codex 请求路由到 DeepSeek，同时保留本地请求追踪、配置回滚、Provider 切换和成本统计。" />
+    <meta name="twitter:title" content="用 AgentGate 让 Codex 使用 DeepSeek" />
+    <meta name="twitter:description" content="手把手教程：在 AgentGate 添加 DeepSeek，把 Codex 的 Responses API 请求在本地路由到 DeepSeek，含模型映射、故障转移、请求日志、成本统计和故障排查。" />
     <meta name="twitter:image" content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif" />
     <link rel="icon" type="image/svg+xml" href="../../../assets/logo.svg" />
     <script type="application/ld+json">{
   "@context": "https://schema.org",
-  "@type": "Article",
-  "headline": "通过本地 AI 网关让 Codex 使用 DeepSeek",
-  "description": "用 AgentGate 把 Codex 请求路由到 DeepSeek，同时保留本地请求追踪、配置回滚、Provider 切换和成本统计。",
+  "@type": "TechArticle",
+  "headline": "用 AgentGate 让 Codex 使用 DeepSeek",
+  "description": "手把手教程：在 AgentGate 添加 DeepSeek，把 Codex 的 Responses API 请求在本地路由到 DeepSeek，含模型映射、故障转移、请求日志、成本统计和故障排查。",
+  "datePublished": "2026-06-13",
+  "dateModified": "2026-06-13",
   "author": {
     "@type": "Person",
     "name": "dengmengmian",
@@ -40,32 +42,11 @@
   },
   "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-deepseek/"
 }</script>
-    <script type="application/ld+json">{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "Codex 能直接用 DeepSeek 吗？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "取决于客户端和协议。AgentGate 的作用是提供稳定的本地入口，并在本地完成路由。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "可以恢复官方配置吗？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "可以。AgentGate 会保留客户端配置历史，支持一键恢复。"
-      }
-    }
-  ]
-}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="../../../assets/tailwind.css" />
+    <script data-goatcounter="https://agentgate.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
   </head>
   <body class="bg-bg text-ink">
     <header class="border-b border-border-soft">
@@ -89,12 +70,8 @@
         <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
           <div class="prompt text-sm text-ink-soft">agentgate guides/use-codex-with-deepseek</div>
           <p class="mt-6 text-xs uppercase tracking-wider text-amber">Codex + DeepSeek</p>
-          <h1 class="zh h-display mt-5 text-ink">通过 AgentGate 让 Codex 使用 DeepSeek。</h1>
-          <p class="zh mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate 给 Codex 一个本地网关入口，再把请求路由到 DeepSeek 或你启用的其他 Provider。</p>
-          <div class="mt-8 max-w-2xl border-l-2 border-amber/50 pl-4">
-            <div class="text-xs uppercase tracking-wider text-amber">直接答案</div>
-            <p class="zh mt-3 text-base leading-relaxed text-ink">简短答案：AgentGate 给 Codex 一个本地网关入口，再把请求路由到 DeepSeek 或你启用的其他 Provider。</p>
-          </div>
+          <h1 class="zh h-display mt-5 text-ink">用 AgentGate 让 Codex 使用 DeepSeek</h1>
+          <p class="zh mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">AgentGate 把 Codex 原本发往官方 Responses API 的入口，变成你本地可控的模型入口。Codex 继续发 Responses API 请求，AgentGate 在本地决定转换协议或直连 DeepSeek，附带模型映射、故障转移、请求日志和成本统计。</p>
           <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
             <a href="https://github.com/dengmengmian/agentgate-ai/releases/latest" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
               <span>▸</span>
@@ -106,68 +83,91 @@
       </section>
 
       <section class="border-b border-border-soft bg-bg-soft/40">
-        <div class="mx-auto grid max-w-4xl gap-8 px-6 py-16 md:grid-cols-[1fr_260px]">
-          <article class="space-y-8">
-            <section class="frame rounded p-6">
-              <h2 class="zh text-xl font-medium text-ink">适合场景</h2>
-              <ul class="zh mt-4 list-disc space-y-2 pl-5">
-                <li class="leading-relaxed text-ink-soft">你想让 AI 应用保持一个稳定的本地入口。</li>
-<li class="leading-relaxed text-ink-soft">你需要切换 Provider、查看请求日志或统计成本。</li>
-<li class="leading-relaxed text-ink-soft">你希望客户端配置可以安全恢复。</li>
-              </ul>
-            </section>
-            <section class="frame rounded p-6">
-              <h2 class="zh text-xl font-medium text-ink">不适合场景</h2>
-              <ul class="zh mt-4 list-disc space-y-2 pl-5">
-                <li class="leading-relaxed text-ink-soft">你只用一个客户端、一个 Provider，且配置长期不变。</li>
-<li class="leading-relaxed text-ink-soft">你不需要日志、故障转移、成本统计或配置回滚。</li>
-              </ul>
-            </section>
-            <section class="frame rounded p-6">
-              <h2 class="zh text-xl font-medium text-ink">为什么需要这样接</h2>
-              <p class="zh mt-4 leading-relaxed text-ink-soft">Codex 需要一个稳定的模型入口。DeepSeek 在很多编程和推理任务上成本更低，但手动改客户端配置容易乱。AgentGate 在本地接住请求，再转给 DeepSeek，同时保留本地可观测性。</p>
-            </section>
-<section class="frame rounded p-6">
-              <h2 class="zh text-xl font-medium text-ink">基础步骤</h2>
-              <p class="zh mt-4 leading-relaxed text-ink-soft">安装 AgentGate，添加 DeepSeek Provider，启动本地网关，然后在客户端页对 Codex 执行 apply。正常打开 Codex，在 AgentGate 日志里确认请求已经进来。</p>
-            </section>
-<section class="frame rounded p-6">
-              <h2 class="zh text-xl font-medium text-ink">重点检查</h2>
-              <p class="zh mt-4 leading-relaxed text-ink-soft">确认本地网关已运行、DeepSeek key 有效、当前路由指向 DeepSeek，并且 Codex 请求出现在本地日志里。</p>
-            </section>
-          </article>
-
-          <aside class="space-y-4 text-sm">
-            <div class="frame rounded p-5">
-              <div class="text-xs uppercase tracking-wider text-amber">适合搜索</div>
-              <p class="zh mt-3 text-ink-soft">用 AgentGate 把 Codex 请求路由到 DeepSeek，同时保留本地请求追踪、配置回滚、Provider 切换和成本统计。</p>
-            </div>
-            <div class="frame rounded p-5">
-              <div class="text-xs uppercase tracking-wider text-amber">快速入口</div>
-              <div class="mt-3 space-y-2">
-                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai/releases/latest">下载最新版 <span class="text-faint">↗</span></a>
-                <a class="hover-prompt block text-ink-soft hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai">GitHub <span class="text-faint">↗</span></a>
-                <a class="hover-prompt block text-ink-soft hover:text-ink" href="../../">回到首页</a>
-              </div>
-            </div>
-          </aside>
-        </div>
-      </section>
-
-      <section class="border-b border-border-soft">
         <div class="mx-auto max-w-4xl px-6 py-16">
-          <div class="prompt text-sm text-ink-soft">agentgate --faq</div>
-          <h2 class="zh h-section mt-4">常见问题。</h2>
-          <div class="mt-10 space-y-4">
-            <details class="frame rounded p-5">
-              <summary class="zh cursor-pointer text-ink">Codex 能直接用 DeepSeek 吗？</summary>
-              <p class="zh mt-3 leading-relaxed text-ink-soft">取决于客户端和协议。AgentGate 的作用是提供稳定的本地入口，并在本地完成路由。</p>
-            </details>
-<details class="frame rounded p-5">
-              <summary class="zh cursor-pointer text-ink">可以恢复官方配置吗？</summary>
-              <p class="zh mt-3 leading-relaxed text-ink-soft">可以。AgentGate 会保留客户端配置历史，支持一键恢复。</p>
-            </details>
-          </div>
+          <article class="zh doc-body">
+<h2>什么时候用这个</h2>
+<p>如果你想：</p>
+<ul>
+<li>让 Codex 调用 DeepSeek 模型，同时保留一键回退到官方配置的能力。</li>
+<li>让 Codex 的 OpenAI Responses API 请求被转换成 DeepSeek 兼容的 Chat Completions，或 Anthropic 兼容 endpoint。</li>
+<li>在官方 Codex 配置和 AgentGate 配置之间一键切换。</li>
+<li>用一个本地网关，以后随时把 Codex 从 DeepSeek 切到 MiMo、OpenAI、Kimi、GLM、DashScope 或其他 Provider。</li>
+</ul>
+<h2>快速配置</h2>
+<ol>
+<li>从 <a href="https://github.com/dengmengmian/agentgate-ai/releases">Releases</a> 下载 AgentGate 并打开应用。</li>
+<li>进入 <strong>快速配置</strong> 或 <strong>供应商</strong>。</li>
+<li>添加 DeepSeek Provider，粘贴你的 DeepSeek API Key。</li>
+<li>在 <strong>概览</strong> 或 <strong>网关</strong> 启动网关。默认客户端端点是 <code>http://127.0.0.1:9090</code>。</li>
+<li>打开 <strong>客户端</strong>，在 Codex 卡片上点 <strong>应用配置</strong>。</li>
+<li>在 Codex 里发一条测试消息。</li>
+</ol>
+<p>AgentGate 保留了原 Codex 配置的可恢复状态，你可以随时从 Codex 卡片切回官方。</p>
+<h2>AgentGate 配置了什么</h2>
+<table>
+<thead>
+<tr>
+<th>Codex 侧</th>
+<th>AgentGate 侧</th>
+<th>DeepSeek 侧</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OpenAI Responses API</td>
+<td><code>/v1/responses</code> 本地网关路由</td>
+<td>DeepSeek Chat Completions 或 Anthropic 兼容 endpoint</td>
+</tr>
+<tr>
+<td>Codex 模型名</td>
+<td>Model Mapping 或 <code>agentgate</code> 虚拟模型</td>
+<td>DeepSeek 模型 ID，如 <code>deepseek-v4-flash</code> 或 <code>deepseek-v4-pro</code></td>
+</tr>
+<tr>
+<td>Codex 的工具和流式输出</td>
+<td>协议转换和请求追踪</td>
+<td>DeepSeek 专属处理</td>
+</tr>
+</tbody></table>
+<h2>工作原理</h2>
+<p>AgentGate 的作用，是把 Codex 原本发往官方的 Responses API 入口变成本地模型入口，再由本地决定转换或直连到 DeepSeek。</p>
+<p>常见路径是：</p>
+<pre><code class="language-text">Codex -&gt; http://127.0.0.1:9090/v1/responses -&gt; AgentGate -&gt; DeepSeek
+</code></pre>
+<p>你不需要长期手改 Codex 配置文件，也不需要在 DeepSeek、MiMo、OpenAI 等 Provider 之间来回改模型名。AgentGate 会通过 Provider、Route Profile、Model Mapping 和 <code>agentgate</code> 虚拟模型处理这些差异。</p>
+<h2>排查</h2>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>检查</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Codex 还在调用官方 endpoint</td>
+<td>回到 <strong>客户端</strong>，重新应用一次 Codex 配置。</td>
+</tr>
+<tr>
+<td>DeepSeek 返回模型错误</td>
+<td>检查 DeepSeek Provider 的默认模型和 Model Mapping。</td>
+</tr>
+<tr>
+<td>网关无法连接</td>
+<td>确认 AgentGate 网关在 <code>127.0.0.1:9090</code> 上运行；<code>1420</code> 只是开发用的 UI 端口。</td>
+</tr>
+<tr>
+<td>想恢复官方 Codex</td>
+<td>在 <strong>客户端</strong> 页用 Codex 卡片上的切回官方动作。</td>
+</tr>
+</tbody></table>
+<h2>相关教程</h2>
+<ul>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-desktop-with-third-party-api-and-plugins/">让 Codex Desktop 使用第三方 API 并保留插件能力</a></li>
+<li><a href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-mimo/">让 Codex 使用小米 MiMo</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai">English README</a></li>
+<li><a href="https://github.com/dengmengmian/agentgate-ai/blob/main/README_ZH.md">中文 README</a></li>
+</ul>
+
+          </article>
         </div>
       </section>
 
@@ -176,10 +176,10 @@
           <div class="prompt text-sm text-ink-soft">agentgate --related</div>
           <h2 class="zh mt-4 text-xl font-medium">继续看。</h2>
           <div class="mt-8 space-y-3 text-sm">
-            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-claude-code-with-deepseek/">Claude Code + DeepSeek <span class="text-faint">— 通过 AgentGate 让 Claude Code 使用 DeepSeek</span></a>
-<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-with-openrouter/">Codex + OpenRouter <span class="text-faint">— 通过 AgentGate 让 Codex 使用 OpenRouter</span></a>
-<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-claude-code-with-openrouter/">Claude Code + OpenRouter <span class="text-faint">— 通过本地网关让 Claude Code 使用 OpenRouter</span></a>
-<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/trace-codex-requests/">请求追踪 <span class="text-faint">— 用 AgentGate 本地追踪 Codex 模型请求</span></a>
+            <a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-claude-code-with-deepseek/">Claude Code + DeepSeek <span class="text-faint">— 让 Claude Code 使用 DeepSeek</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-codex-with-mimo/">Codex + 小米 MiMo <span class="text-faint">— 让 Codex 使用小米 MiMo</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-claude-code-with-github-copilot/">Claude Code + Copilot <span class="text-faint">— 用 GitHub Copilot 订阅跑 Claude Code</span></a>
+<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="../../guides/use-gemini-cli-with-agentgate/">Gemini CLI <span class="text-faint">— 让 Gemini CLI 使用多供应商模型</span></a>
           </div>
         </div>
       </section>

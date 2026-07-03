@@ -1,136 +1,20 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { marked } from "marked";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const siteDir = path.resolve(__dirname, "..");
+const docsDir = path.resolve(siteDir, "..", "docs");
 const baseUrl = "https://dengmengmian.github.io/agentgate-ai";
 const repoUrl = "https://github.com/dengmengmian/agentgate-ai";
 const releaseUrl = `${repoUrl}/releases/latest`;
+// 手工维护的日期,只在对应内容真实变化时更新,不用构建时间冒充更新
+const thinPageDates = { published: "2026-06-16", modified: "2026-07-03" };
+const goatcounterSnippet =
+  '<script data-goatcounter="https://agentgate.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>';
 
 const pagePairs = [
-  {
-    slug: "use-codex-with-deepseek",
-    en: {
-      title: "Use Codex with DeepSeek through a local AI gateway",
-      description:
-        "Route Codex requests to DeepSeek with AgentGate, while keeping local request tracing, rollback, provider switching, and cost tracking.",
-      eyebrow: "Codex + DeepSeek",
-      h1: "Use Codex with DeepSeek through AgentGate.",
-      summary:
-        "AgentGate gives Codex a local gateway endpoint, then routes requests to DeepSeek or any other provider you enable.",
-      keywords:
-        "Codex DeepSeek, use Codex with DeepSeek, Codex local gateway, OpenAI Responses API proxy, AgentGate",
-      sections: [
-        {
-          heading: "Why this setup helps",
-          body: "Codex expects an OpenAI-style model entry. DeepSeek is cheaper for many coding and reasoning tasks, but switching clients by hand is fragile. AgentGate sits locally between the app and the provider, so you can route Codex traffic without giving up local visibility.",
-        },
-        {
-          heading: "Basic setup",
-          body: "Install AgentGate, add DeepSeek as a provider, start the local gateway, then apply the Codex client config from the AgentGate client page. Open Codex normally and verify the request in AgentGate logs.",
-        },
-        {
-          heading: "What to check",
-          body: "Confirm the local gateway is running, the DeepSeek key is valid, the selected route profile points to DeepSeek, and the Codex request appears in the local request log.",
-        },
-      ],
-      faq: [
-        ["Can Codex use DeepSeek directly?", "It depends on the client and protocol. AgentGate is the local bridge that keeps Codex pointed at a stable local endpoint."],
-        ["Can I switch back?", "Yes. AgentGate keeps client config history and supports one-click restore to the original config."],
-      ],
-    },
-    zh: {
-      title: "通过本地 AI 网关让 Codex 使用 DeepSeek",
-      description:
-        "用 AgentGate 把 Codex 请求路由到 DeepSeek，同时保留本地请求追踪、配置回滚、Provider 切换和成本统计。",
-      eyebrow: "Codex + DeepSeek",
-      h1: "通过 AgentGate 让 Codex 使用 DeepSeek。",
-      summary:
-        "AgentGate 给 Codex 一个本地网关入口，再把请求路由到 DeepSeek 或你启用的其他 Provider。",
-      keywords:
-        "Codex DeepSeek, Codex 使用 DeepSeek, Codex 本地网关, OpenAI Responses API 代理, AgentGate",
-      sections: [
-        {
-          heading: "为什么需要这样接",
-          body: "Codex 需要一个稳定的模型入口。DeepSeek 在很多编程和推理任务上成本更低，但手动改客户端配置容易乱。AgentGate 在本地接住请求，再转给 DeepSeek，同时保留本地可观测性。",
-        },
-        {
-          heading: "基础步骤",
-          body: "安装 AgentGate，添加 DeepSeek Provider，启动本地网关，然后在客户端页对 Codex 执行 apply。正常打开 Codex，在 AgentGate 日志里确认请求已经进来。",
-        },
-        {
-          heading: "重点检查",
-          body: "确认本地网关已运行、DeepSeek key 有效、当前路由指向 DeepSeek，并且 Codex 请求出现在本地日志里。",
-        },
-      ],
-      faq: [
-        ["Codex 能直接用 DeepSeek 吗？", "取决于客户端和协议。AgentGate 的作用是提供稳定的本地入口，并在本地完成路由。"],
-        ["可以恢复官方配置吗？", "可以。AgentGate 会保留客户端配置历史，支持一键恢复。"],
-      ],
-    },
-  },
-  {
-    slug: "use-claude-code-with-deepseek",
-    en: {
-      title: "Use Claude Code with DeepSeek through AgentGate",
-      description:
-        "Connect Claude Code to DeepSeek through AgentGate with local routing, model mapping, request logs, and rollback.",
-      eyebrow: "Claude Code + DeepSeek",
-      h1: "Use Claude Code with DeepSeek through AgentGate.",
-      summary:
-        "AgentGate can keep Claude Code pointed at a local endpoint, then route compatible traffic to DeepSeek with local logs.",
-      keywords:
-        "Claude Code DeepSeek, use Claude Code with DeepSeek, Claude Code proxy, Anthropic compatible gateway",
-      sections: [
-        {
-          heading: "The goal",
-          body: "Keep Claude Code's familiar workflow, but move model traffic through a local gateway so the upstream provider can be changed without repeatedly editing client config.",
-        },
-        {
-          heading: "Setup path",
-          body: "Add DeepSeek as a provider, choose the route profile you want, start AgentGate, then apply the Claude Code config from the client page. Use the logs page to confirm the provider and model selected for each request.",
-        },
-        {
-          heading: "When to use it",
-          body: "This is useful when you want cheaper model runs, local request history, or quick fallback between providers while still using Claude Code as the front-end client.",
-        },
-      ],
-      faq: [
-        ["Does this replace Claude Code?", "No. Claude Code stays the client. AgentGate only manages the local request path."],
-        ["Can I see costs?", "Yes. AgentGate records token and cost information locally when the provider response exposes enough usage data."],
-      ],
-    },
-    zh: {
-      title: "通过 AgentGate 让 Claude Code 使用 DeepSeek",
-      description:
-        "用 AgentGate 连接 Claude Code 和 DeepSeek，保留本地路由、模型映射、请求日志和配置回滚。",
-      eyebrow: "Claude Code + DeepSeek",
-      h1: "通过 AgentGate 让 Claude Code 使用 DeepSeek。",
-      summary:
-        "AgentGate 让 Claude Code 指向本地入口，再把兼容请求路由到 DeepSeek，并在本地记录日志。",
-      keywords:
-        "Claude Code DeepSeek, Claude Code 使用 DeepSeek, Claude Code 代理, Anthropic 兼容网关",
-      sections: [
-        {
-          heading: "目标",
-          body: "保留 Claude Code 原来的使用方式，但让模型请求经过本地网关，这样切换上游 Provider 时不需要反复手改客户端配置。",
-        },
-        {
-          heading: "接入路径",
-          body: "添加 DeepSeek Provider，选择路由策略，启动 AgentGate，然后在客户端页对 Claude Code 执行 apply。到日志页确认每次请求实际使用的 Provider 和模型。",
-        },
-        {
-          heading: "适合什么场景",
-          body: "当你想降低模型成本、保留本地请求历史，或在多个 Provider 之间快速故障切换时，这种接法最有价值。",
-        },
-      ],
-      faq: [
-        ["这是替代 Claude Code 吗？", "不是。Claude Code 仍然是客户端，AgentGate 只管理本地请求链路。"],
-        ["能看到成本吗？", "可以。只要上游返回足够的 usage 信息，AgentGate 会在本地记录 token 和成本。"],
-      ],
-    },
-  },
   {
     slug: "use-codex-with-openrouter",
     en: {
@@ -560,6 +444,172 @@ const pagePairs = [
   },
 ];
 
+// 完整教程页:正文来自 docs/<slug>.md 与 docs/<slug>-zh.md,标题和首段摘要从 md 提取。
+// lastmod 手工同步 docs 文件的最后实质修改日期。
+const docPages = [
+  {
+    slug: "use-codex-with-deepseek",
+    published: "2026-06-13",
+    lastmod: "2026-06-13",
+    en: {
+      eyebrow: "Codex + DeepSeek",
+      navTitle: "Use Codex with DeepSeek",
+      description:
+        "Step-by-step guide: add DeepSeek in AgentGate and route Codex Responses API requests locally, with model mapping, failover, request logs, cost tracking, and troubleshooting.",
+      keywords:
+        "Codex DeepSeek, use Codex with DeepSeek, Codex local gateway, OpenAI Responses API proxy, AgentGate",
+    },
+    zh: {
+      eyebrow: "Codex + DeepSeek",
+      navTitle: "让 Codex 使用 DeepSeek",
+      description:
+        "手把手教程：在 AgentGate 添加 DeepSeek，把 Codex 的 Responses API 请求在本地路由到 DeepSeek，含模型映射、故障转移、请求日志、成本统计和故障排查。",
+      keywords:
+        "Codex DeepSeek, Codex 使用 DeepSeek, Codex 本地网关, OpenAI Responses API 代理, AgentGate",
+    },
+  },
+  {
+    slug: "use-claude-code-with-deepseek",
+    published: "2026-06-13",
+    lastmod: "2026-06-16",
+    en: {
+      eyebrow: "Claude Code + DeepSeek",
+      navTitle: "Use Claude Code with DeepSeek",
+      description:
+        "Step-by-step guide: connect Claude Code to DeepSeek through AgentGate with Anthropic-compatible pass-through or conversion, model mapping, request logs, and rollback.",
+      keywords:
+        "Claude Code DeepSeek, use Claude Code with DeepSeek, Claude Code proxy, Anthropic compatible gateway",
+    },
+    zh: {
+      eyebrow: "Claude Code + DeepSeek",
+      navTitle: "让 Claude Code 使用 DeepSeek",
+      description:
+        "手把手教程：用 AgentGate 连接 Claude Code 和 DeepSeek，支持 Anthropic 兼容直连或协议转换、模型映射、请求日志和配置回滚。",
+      keywords:
+        "Claude Code DeepSeek, Claude Code 使用 DeepSeek, Claude Code 代理, Anthropic 兼容网关",
+    },
+  },
+  {
+    slug: "use-codex-with-mimo",
+    published: "2026-06-13",
+    lastmod: "2026-06-13",
+    en: {
+      eyebrow: "Codex + MiMo",
+      navTitle: "Use Codex with Xiaomi MiMo",
+      description:
+        "Route Codex Responses API traffic to Xiaomi MiMo through AgentGate: reasoning round-trip, web search handling, Open API and Token Plan keys, model mapping, troubleshooting.",
+      keywords:
+        "Codex MiMo, use Codex with Xiaomi MiMo, MiMo Codex proxy, mimo2codex alternative, AgentGate",
+    },
+    zh: {
+      eyebrow: "Codex + 小米 MiMo",
+      navTitle: "让 Codex 使用小米 MiMo",
+      description:
+        "把 Codex 的 Responses API 请求通过 AgentGate 路由到小米 MiMo：reasoning 保留、web search 处理、Open API / Token Plan Key 差异、模型映射和故障排查。",
+      keywords:
+        "Codex MiMo, Codex 使用小米 MiMo, Codex 接入 MiMo, mimo2codex 替代, AgentGate",
+    },
+  },
+  {
+    slug: "use-claude-code-with-github-copilot",
+    published: "2026-06-13",
+    lastmod: "2026-06-13",
+    en: {
+      eyebrow: "Claude Code + Copilot",
+      navTitle: "Use Claude Code with GitHub Copilot",
+      description:
+        "Route Claude Code requests to Claude models in a GitHub Copilot subscription through AgentGate: token exchange, model normalization, limits, and terms-of-service notes.",
+      keywords:
+        "Claude Code GitHub Copilot, use Claude Code with Copilot, Copilot Claude models, AgentGate",
+    },
+    zh: {
+      eyebrow: "Claude Code + Copilot",
+      navTitle: "用 GitHub Copilot 订阅跑 Claude Code",
+      description:
+        "通过 AgentGate 把 Claude Code 请求路由到 GitHub Copilot 订阅里的 Claude 模型：token 交换、模型名归一、限制说明和服务条款注意事项。",
+      keywords:
+        "Claude Code Copilot, GitHub Copilot 跑 Claude Code, Copilot Claude 模型, AgentGate",
+    },
+  },
+  {
+    slug: "use-gemini-cli-with-agentgate",
+    published: "2026-06-13",
+    lastmod: "2026-06-13",
+    en: {
+      eyebrow: "Gemini CLI",
+      navTitle: "Use Gemini CLI with AgentGate",
+      description:
+        "Give Gemini CLI a local model entry with AgentGate: route requests to multiple providers, trace them locally, and restore the official config in one click.",
+      keywords:
+        "Gemini CLI proxy, Gemini CLI local gateway, Gemini CLI multi provider, AgentGate",
+    },
+    zh: {
+      eyebrow: "Gemini CLI",
+      navTitle: "让 Gemini CLI 使用多供应商模型",
+      description:
+        "用 AgentGate 给 Gemini CLI 一个本地模型入口：请求路由到多个 Provider、本地追踪，并支持一键恢复官方配置。",
+      keywords:
+        "Gemini CLI 代理, Gemini CLI 本地网关, Gemini CLI 多供应商, AgentGate",
+    },
+  },
+  {
+    slug: "use-opencode-with-agentgate",
+    published: "2026-06-13",
+    lastmod: "2026-06-13",
+    en: {
+      eyebrow: "OpenCode",
+      navTitle: "Use OpenCode with AgentGate",
+      description:
+        "Point OpenCode at a local AgentGate endpoint and switch providers freely, with model mapping, failover, diagnostics, request tracing, and cost tracking.",
+      keywords:
+        "OpenCode proxy, OpenCode local gateway, OpenCode provider switching, AgentGate",
+    },
+    zh: {
+      eyebrow: "OpenCode",
+      navTitle: "让 OpenCode 切换多供应商模型",
+      description:
+        "让 OpenCode 指向 AgentGate 本地入口，自由切换 Provider，含模型映射、故障转移、诊断、请求追踪和成本统计。",
+      keywords:
+        "OpenCode 代理, OpenCode 本地网关, OpenCode 切换供应商, AgentGate",
+    },
+  },
+  {
+    slug: "use-codex-desktop-with-third-party-api-and-plugins",
+    published: "2026-06-13",
+    lastmod: "2026-06-13",
+    en: {
+      eyebrow: "Codex Desktop",
+      navTitle: "Use Codex Desktop with third-party APIs and plugins",
+      description:
+        "Keep Codex Desktop plugins and account features working while routing model requests through AgentGate to DeepSeek, MiMo, Kimi, GLM, and other providers.",
+      keywords:
+        "Codex Desktop third party API, Codex Desktop plugins proxy, Codex Desktop DeepSeek, AgentGate",
+    },
+    zh: {
+      eyebrow: "Codex Desktop",
+      navTitle: "让 Codex Desktop 用第三方 API 并保留插件",
+      description:
+        "保留 Codex Desktop 插件和账号功能的同时，把模型请求经 AgentGate 路由到 DeepSeek、小米 MiMo、Kimi、GLM 等第三方 Provider。",
+      keywords:
+        "Codex Desktop 第三方 API, Codex Desktop 插件代理, Codex Desktop DeepSeek, AgentGate",
+    },
+  },
+];
+
+// 站内互链统一从这里取,完整教程排在前面
+const navEntries = [
+  ...docPages.map((page) => ({
+    slug: page.slug,
+    en: { eyebrow: page.en.eyebrow, title: page.en.navTitle },
+    zh: { eyebrow: page.zh.eyebrow, title: page.zh.navTitle },
+  })),
+  ...pagePairs.map((pair) => ({
+    slug: pair.slug,
+    en: { eyebrow: pair.en.eyebrow, title: pair.en.title },
+    zh: { eyebrow: pair.zh.eyebrow, title: pair.zh.title },
+  })),
+];
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -591,18 +641,184 @@ function oppositeHref(lang, slug) {
 }
 
 function relatedLinks(lang, currentSlug) {
-  return pagePairs
-    .filter((page) => page.slug !== currentSlug)
+  // 从当前页在列表中的位置起环形取 4 个,让内链分布到所有页面而不是永远前 4 个
+  const idx = navEntries.findIndex((entry) => entry.slug === currentSlug);
+  const others = navEntries.filter((entry) => entry.slug !== currentSlug);
+  const start = idx === -1 ? 0 : idx % others.length;
+  return [...others.slice(start), ...others.slice(0, start)]
     .slice(0, 4)
-    .map((page) => {
-      const copy = page[lang];
+    .map((entry) => {
+      const copy = entry[lang];
       const href =
         lang === "zh"
-          ? `../../guides/${page.slug}/`
-          : `../${page.slug}/`;
+          ? `../../guides/${entry.slug}/`
+          : `../${entry.slug}/`;
       return `<a class="hover-prompt block py-1 text-ink-soft hover:text-ink" href="${href}">${escapeHtml(copy.eyebrow)} <span class="text-faint">— ${escapeHtml(copy.title)}</span></a>`;
     })
     .join("\n");
+}
+
+function rewriteDocLinks(md) {
+  // docs 里的相对链接改写成站内 / GitHub 绝对链接(先处理 -zh 后缀再处理其余 .md)
+  return md
+    .replaceAll(/\]\(\.\/([a-z0-9-]+?)-zh\.md\)/g, (_m, slug) => `](${baseUrl}/zh/guides/${slug}/)`)
+    .replaceAll(/\]\(\.\/([a-z0-9-]+?)\.md\)/g, (_m, slug) => `](${baseUrl}/guides/${slug}/)`)
+    .replaceAll("](../README.md)", `](${repoUrl})`)
+    .replaceAll("](../README_ZH.md)", `](${repoUrl}/blob/main/README_ZH.md)`)
+    .replaceAll("](../../releases)", `](${repoUrl}/releases)`);
+}
+
+async function loadDoc(page, lang) {
+  const file = lang === "zh" ? `${page.slug}-zh.md` : `${page.slug}.md`;
+  const raw = await readFile(path.join(docsDir, file), "utf8");
+  const lines = raw.split("\n");
+  if (!lines[0].startsWith("# ")) {
+    throw new Error(`docs/${file}: expected first line to be an H1 title`);
+  }
+  const title = lines[0].slice(2).trim();
+  let rest = lines.slice(1).join("\n").trim();
+  // 语言切换链接由页头统一提供,去掉正文里的那行
+  rest = rest.replace(/^(中文|English)[：:].*$/m, "").trim();
+  const paraEnd = rest.indexOf("\n\n");
+  if (paraEnd === -1) {
+    throw new Error(`docs/${file}: expected an intro paragraph before sections`);
+  }
+  const summary = rest.slice(0, paraEnd).trim().replace(/\s*\n\s*/g, " ");
+  const body = rest.slice(paraEnd).trim();
+  const html = marked.parse(rewriteDocLinks(body), { async: false });
+  return { title, summary, html };
+}
+
+function renderDocPage(page, lang, doc) {
+  const copy = page[lang];
+  const alternateLang = lang === "zh" ? "en" : "zh";
+  const prefix = assetPrefix(lang);
+  const canonical = pageUrl(lang, page.slug);
+  const alternates = {
+    en: pageUrl("en", page.slug),
+    zh: pageUrl("zh", page.slug),
+  };
+  const zhClass = lang === "zh" ? "zh " : "";
+  const articleJson = {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: doc.title,
+    description: copy.description,
+    datePublished: page.published,
+    dateModified: page.lastmod,
+    author: {
+      "@type": "Person",
+      name: "dengmengmian",
+      url: "https://github.com/dengmengmian",
+    },
+    publisher: {
+      "@type": "Organization",
+      name: "AgentGate",
+      url: baseUrl,
+      logo: `${baseUrl}/assets/logo.svg`,
+    },
+    mainEntityOfPage: canonical,
+  };
+
+  return `<!doctype html>
+<html lang="${lang === "zh" ? "zh-CN" : "en"}">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${escapeHtml(doc.title)} | AgentGate</title>
+    <meta name="description" content="${escapeHtml(copy.description)}" />
+    <meta name="keywords" content="${escapeHtml(copy.keywords)}" />
+    <meta name="author" content="dengmengmian" />
+    <link rel="canonical" href="${canonical}" />
+    <link rel="alternate" hreflang="en" href="${alternates.en}" />
+    <link rel="alternate" hreflang="zh-CN" href="${alternates.zh}" />
+    <link rel="alternate" hreflang="x-default" href="${alternates.en}" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta property="og:url" content="${canonical}" />
+    <meta property="og:title" content="${escapeHtml(doc.title)}" />
+    <meta property="og:description" content="${escapeHtml(copy.description)}" />
+    <meta property="og:image" content="${baseUrl}/assets/demo-header.gif" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${escapeHtml(doc.title)}" />
+    <meta name="twitter:description" content="${escapeHtml(copy.description)}" />
+    <meta name="twitter:image" content="${baseUrl}/assets/demo-header.gif" />
+    <link rel="icon" type="image/svg+xml" href="${prefix}assets/logo.svg" />
+    <script type="application/ld+json">${renderJson(articleJson)}</script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="${prefix}assets/tailwind.css" />
+    ${goatcounterSnippet}
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm">
+        <a href="${homeHref(lang)}" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a href="${releaseUrl}" class="hover:text-ink">${lang === "zh" ? "下载" : "download"} <span class="text-faint">↗</span></a>
+          <a href="${repoUrl}" class="hover:text-ink">github <span class="text-faint">↗</span></a>
+          <span class="text-faint">·</span>
+          <a href="${oppositeHref(lang, page.slug)}" class="hover:text-ink">${alternateLang === "zh" ? "中文" : "English"}</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">agentgate guides/${escapeHtml(page.slug)}</div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">${escapeHtml(copy.eyebrow)}</p>
+          <h1 class="${zhClass}h-display mt-5 text-ink">${escapeHtml(doc.title)}</h1>
+          <p class="${zhClass}mt-8 max-w-2xl text-base leading-relaxed text-ink-soft">${escapeHtml(doc.summary)}</p>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a href="${releaseUrl}" class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg">
+              <span>▸</span>
+              <span>${lang === "zh" ? "下载 AgentGate" : "Download AgentGate"}</span>
+            </a>
+            <a href="${repoUrl}" class="hover-prompt text-ink-soft hover:text-ink">dengmengmian/agentgate-ai <span class="text-faint">↗</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <article class="${zhClass}doc-body">
+${doc.html}
+          </article>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="${zhClass}mt-4 text-xl font-medium">${lang === "zh" ? "继续看。" : "Keep reading."}</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            ${relatedLinks(lang, page.slug)}
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center">
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>${lang === "zh" ? "本地 AI 模型网关" : "local AI model gateway"}</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="${repoUrl}">dengmengmian/agentgate-ai</a>
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
+`;
 }
 
 function answerText(copy, lang) {
@@ -693,6 +909,8 @@ function renderPage(pair, lang) {
     "@type": "Article",
     headline: copy.title,
     description: copy.description,
+    datePublished: thinPageDates.published,
+    dateModified: thinPageDates.modified,
     author: {
       "@type": "Person",
       name: "dengmengmian",
@@ -737,6 +955,7 @@ function renderPage(pair, lang) {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="${prefix}assets/tailwind.css" />
+    ${goatcounterSnippet}
   </head>
   <body class="bg-bg text-ink">
     <header class="border-b border-border-soft">
@@ -864,10 +1083,29 @@ function renderPage(pair, lang) {
 }
 
 function renderSitemap() {
+  const guidePair = (slug, lastmod) => [
+    {
+      loc: pageUrl("en", slug),
+      priority: "0.8",
+      lastmod,
+      en: pageUrl("en", slug),
+      zh: pageUrl("zh", slug),
+      defaultUrl: pageUrl("en", slug),
+    },
+    {
+      loc: pageUrl("zh", slug),
+      priority: "0.8",
+      lastmod,
+      en: pageUrl("en", slug),
+      zh: pageUrl("zh", slug),
+      defaultUrl: pageUrl("en", slug),
+    },
+  ];
   const urls = [
     {
       loc: `${baseUrl}/`,
       priority: "1.0",
+      lastmod: thinPageDates.modified,
       en: `${baseUrl}/`,
       zh: `${baseUrl}/zh/`,
       defaultUrl: `${baseUrl}/`,
@@ -875,26 +1113,13 @@ function renderSitemap() {
     {
       loc: `${baseUrl}/zh/`,
       priority: "1.0",
+      lastmod: thinPageDates.modified,
       en: `${baseUrl}/`,
       zh: `${baseUrl}/zh/`,
       defaultUrl: `${baseUrl}/`,
     },
-    ...pagePairs.flatMap((pair) => [
-      {
-        loc: pageUrl("en", pair.slug),
-        priority: "0.8",
-        en: pageUrl("en", pair.slug),
-        zh: pageUrl("zh", pair.slug),
-        defaultUrl: pageUrl("en", pair.slug),
-      },
-      {
-        loc: pageUrl("zh", pair.slug),
-        priority: "0.8",
-        en: pageUrl("en", pair.slug),
-        zh: pageUrl("zh", pair.slug),
-        defaultUrl: pageUrl("en", pair.slug),
-      },
-    ]),
+    ...docPages.flatMap((page) => guidePair(page.slug, page.lastmod)),
+    ...pagePairs.flatMap((pair) => guidePair(pair.slug, thinPageDates.modified)),
   ];
 
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -904,6 +1129,7 @@ ${urls
   .map(
     (url) => `  <url>
     <loc>${url.loc}</loc>
+    <lastmod>${url.lastmod}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>${url.priority}</priority>
     <xhtml:link rel="alternate" hreflang="en" href="${url.en}" />
@@ -924,6 +1150,21 @@ async function main() {
     await mkdir(zhDir, { recursive: true });
     await writeFile(path.join(enDir, "index.html"), renderPage(pair, "en"));
     await writeFile(path.join(zhDir, "index.html"), renderPage(pair, "zh"));
+  }
+
+  for (const page of docPages) {
+    const enDir = path.join(siteDir, "guides", page.slug);
+    const zhDir = path.join(siteDir, "zh", "guides", page.slug);
+    await mkdir(enDir, { recursive: true });
+    await mkdir(zhDir, { recursive: true });
+    await writeFile(
+      path.join(enDir, "index.html"),
+      renderDocPage(page, "en", await loadDoc(page, "en")),
+    );
+    await writeFile(
+      path.join(zhDir, "index.html"),
+      renderDocPage(page, "zh", await loadDoc(page, "zh")),
+    );
   }
 
   await writeFile(path.join(siteDir, "sitemap.xml"), renderSitemap());
