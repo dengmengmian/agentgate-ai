@@ -1,0 +1,7 @@
+[advisories]
+# quick-xml 重复属性检查二次方复杂度(DoS 类,2026-07-03 记录):
+# 唯一残留链路是 plist 1.9.0(tauri 核心依赖)→ quick-xml 0.39,plist 尚无适配 0.41 的版本,
+# 上游发版后应删除本豁免并 cargo update -p plist。
+# 实际暴露面低:plist 只解析本机 tauri 打包产物/系统配置,不接收攻击者可控 XML。
+# (另一条链 tauri-winrt-notification 已升 0.7.3 修复。)
+ignore = ["RUSTSEC-2026-0194", "RUSTSEC-2026-0195"]
