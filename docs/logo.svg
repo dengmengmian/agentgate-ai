@@ -17,12 +17,10 @@
       <stop offset="0" stop-color="#FFFFFF"/>
       <stop offset="1" stop-color="#DBE4FF"/>
     </linearGradient>
-    <radialGradient id="hub" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(256 256) scale(106)">
+    <radialGradient id="hub" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(256 256) scale(46)">
       <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="0.26" stop-color="#FFFFFF"/>
-      <stop offset="0.5" stop-color="#E0E7FF" stop-opacity="0.82"/>
-      <stop offset="0.78" stop-color="#A5B4FC" stop-opacity="0.30"/>
-      <stop offset="1" stop-color="#818CF8" stop-opacity="0"/>
+      <stop offset="0.62" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#C7D2FE" stop-opacity="0"/>
     </radialGradient>
     <clipPath id="round"><rect x="12" y="12" width="488" height="488" rx="116"/></clipPath>
     <filter id="sh" x="-25%" y="-25%" width="150%" height="150%">
@@ -40,6 +38,6 @@
   <g filter="url(#sh)">
     <path d="M256 128 a128 128 0 1 0 128 128 h-106" stroke="url(#g)" stroke-width="44" stroke-linecap="round" fill="none"/>
   </g>
-  <circle cx="256" cy="256" r="106" fill="url(#hub)"/>
-  <circle cx="256" cy="256" r="30" fill="#FFFFFF"/>
+  <circle cx="256" cy="256" r="44" fill="url(#hub)"/>
+  <circle cx="256" cy="256" r="29" fill="#FFFFFF"/>
 </svg>

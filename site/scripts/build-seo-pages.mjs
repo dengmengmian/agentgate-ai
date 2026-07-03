@@ -743,7 +743,9 @@ function renderDocPage(page, lang, doc) {
     <meta name="twitter:title" content="${escapeHtml(doc.title)}" />
     <meta name="twitter:description" content="${escapeHtml(copy.description)}" />
     <meta name="twitter:image" content="${baseUrl}/assets/demo-header.gif" />
-    <link rel="icon" type="image/svg+xml" href="${prefix}assets/logo.svg" />
+    <link rel="icon" type="image/svg+xml" href="${prefix}assets/logo.svg?v=2" />
+    <link rel="icon" type="image/png" sizes="32x32" href="${prefix}assets/favicon-32.png" />
+    <link rel="apple-touch-icon" href="${prefix}assets/apple-touch-icon.png" />
     <script type="application/ld+json">${renderJson(articleJson)}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -948,7 +950,9 @@ function renderPage(pair, lang) {
     <meta name="twitter:title" content="${escapeHtml(copy.title)}" />
     <meta name="twitter:description" content="${escapeHtml(copy.description)}" />
     <meta name="twitter:image" content="${baseUrl}/assets/demo-header.gif" />
-    <link rel="icon" type="image/svg+xml" href="${prefix}assets/logo.svg" />
+    <link rel="icon" type="image/svg+xml" href="${prefix}assets/logo.svg?v=2" />
+    <link rel="icon" type="image/png" sizes="32x32" href="${prefix}assets/favicon-32.png" />
+    <link rel="apple-touch-icon" href="${prefix}assets/apple-touch-icon.png" />
     <script type="application/ld+json">${renderJson(articleJson)}</script>
     <script type="application/ld+json">${renderJson(faqJson)}</script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
