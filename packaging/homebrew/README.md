@@ -17,16 +17,9 @@ brew install --cask agentgate
 
 ## 每次发版更新
 
-发布新版本后更新 `version` 和两个 `sha256`，同步到 tap 仓库：
-
-```bash
-VERSION=1.5.0
-curl -sLO "https://github.com/dengmengmian/agentgate-ai/releases/download/v${VERSION}/AgentGate_${VERSION}_aarch64.dmg"
-curl -sLO "https://github.com/dengmengmian/agentgate-ai/releases/download/v${VERSION}/AgentGate_${VERSION}_x64.dmg"
-shasum -a 256 AgentGate_${VERSION}_*.dmg
-```
-
-后续可在 release.yml 里加一步：发版时自动改写 tap 仓库的 cask（用 PAT push），当前先手动。
+release.yml 的 `homebrew-cask` job 会在发版后自动更新 tap 仓库的 cask（version + 两个 dmg 的 sha256），
+需要仓库 Secret `HOMEBREW_TAP_TOKEN`（对 dengmengmian/homebrew-tap 有 contents:write 的 fine-grained PAT）。
+本目录的 `agentgate.rb` 是模板/参考副本，结构改动时需与 tap 仓库同步。
 
 ## 本地验证
 

@@ -258,3 +258,40 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ github.ref_name }}" "dist/${{ matrix.archive }}" --clobber
+
+  # 发布成功后自动更新 Homebrew tap 的 cask(version + 两个 dmg 的 sha256)。
+  # 需要仓库 Secret HOMEBREW_TAP_TOKEN:对 dengmengmian/homebrew-tap 有 contents:write 的 PAT。
+  homebrew-cask:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Update tap cask
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::error::HOMEBREW_TAP_TOKEN secret is required to update dengmengmian/homebrew-tap"
+            exit 1
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          curl -fsSLO "$BASE/AgentGate_${VERSION}_aarch64.dmg"
+          curl -fsSLO "$BASE/AgentGate_${VERSION}_x64.dmg"
+          ARM_SHA=$(sha256sum "AgentGate_${VERSION}_aarch64.dmg" | cut -d' ' -f1)
+          X64_SHA=$(sha256sum "AgentGate_${VERSION}_x64.dmg" | cut -d' ' -f1)
+
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/dengmengmian/homebrew-tap.git" tap
+          CASK=tap/Casks/agentgate.rb
+          sed -E -i "s/^  version \"[0-9.]+\"/  version \"${VERSION}\"/" "$CASK"
+          sed -E -i "s/(arm:   \")[0-9a-f]{64}/\1${ARM_SHA}/" "$CASK"
+          sed -E -i "s/(intel: \")[0-9a-f]{64}/\1${X64_SHA}/" "$CASK"
+          # 三处必须都替换成功,否则宁可失败也不推错误的 cask
+          grep -q "version \"${VERSION}\"" "$CASK"
+          grep -q "$ARM_SHA" "$CASK"
+          grep -q "$X64_SHA" "$CASK"
+
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "agentgate ${VERSION}"
+          git push
