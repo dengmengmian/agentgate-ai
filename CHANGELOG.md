@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## [1.4.10] - 2026-07-03
+
+### Improvements / 改进
+
+- **Dependency security cleanup / 依赖安全清理** —— Upgraded `tauri-winrt-notification` to 0.7.3 to drop the vulnerable `quick-xml` 0.37 chain flagged by `cargo audit`; the remaining `plist` advisory has no fixed upstream release yet and is exempted by ID with a recorded recall condition. 升级 `tauri-winrt-notification` 至 0.7.3,消除 `cargo audit` 标记的 `quick-xml` 0.37 依赖链;`plist` 告警上游暂无修复版本,按 ID 豁免并注明回收条件。
+- **Release automation / 发版自动化** —— Publishing a release now automatically updates the Homebrew tap cask, so `brew install --cask agentgate` always gets the latest version. 发布 release 后自动更新 Homebrew tap 的 cask,`brew install --cask agentgate` 始终安装最新版。
+
 ## [1.4.9] - 2026-07-01
 
 ### Added / 新增
