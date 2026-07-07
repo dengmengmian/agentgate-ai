@@ -87,7 +87,10 @@ export interface AmbientCtx {
 }
 
 /// 主动搭话指令:结合时间/状态/今日数据/最近话题,冒一句应景评论。
-export function buildAmbientInstruction(locale: Locale, ctx: AmbientCtx): string {
+export function buildAmbientInstruction(
+  locale: Locale,
+  ctx: AmbientCtx
+): string {
   const facts: string[] = [`现在${period(ctx.hour)}`, `网关「${ctx.gwState}」`];
   if (ctx.today?.requests) facts.push(`今日${ctx.today.requests}个请求`);
   if (ctx.today?.errors) facts.push(`${ctx.today.errors}个错误`);

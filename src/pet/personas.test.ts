@@ -87,6 +87,8 @@ describe("angry / sulk reactions", () => {
 
   it("angry lines differ from normal poke lines", () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
-    expect(pickAngryReaction("ox", "zh")).not.toBe(pickPokeReaction("ox", "zh"));
+    expect(pickAngryReaction("ox", "zh")).not.toBe(
+      pickPokeReaction("ox", "zh")
+    );
   });
 });

@@ -66,9 +66,7 @@ export function recentContext(
   history: ChatMessage[],
   limit = MAX_CHAT_CONTEXT
 ): Array<{ role: string; content: string }> {
-  return history
-    .slice(-limit)
-    .map(({ role, content }) => ({ role, content }));
+  return history.slice(-limit).map(({ role, content }) => ({ role, content }));
 }
 
 /// 从用户消息里抽取 name / topic 写入记忆,变了就持久化。返回是否更新过。
@@ -117,7 +115,10 @@ export async function sendPetMessage(params: {
   await savePetChatHistory(JSON.stringify(withUser)).catch(() => {});
 
   const messages = [
-    { role: "system", content: buildSystemPrompt(petType, locale, buildMemoryString(memory)) },
+    {
+      role: "system",
+      content: buildSystemPrompt(petType, locale, buildMemoryString(memory)),
+    },
     ...recentContext(withUser),
   ];
 

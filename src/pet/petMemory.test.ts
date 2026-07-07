@@ -20,10 +20,10 @@ describe("visibleEntries", () => {
 
 describe("mergeMemory", () => {
   it("保留内部字段,写入编辑项", () => {
-    const out = mergeMemory(
-      { name: "旧名", _topic_at: "2026-07-07" },
-      [{ key: "name", value: "新名" }, { key: "mood", value: "开心" }]
-    );
+    const out = mergeMemory({ name: "旧名", _topic_at: "2026-07-07" }, [
+      { key: "name", value: "新名" },
+      { key: "mood", value: "开心" },
+    ]);
     expect(out).toEqual({
       _topic_at: "2026-07-07",
       name: "新名",

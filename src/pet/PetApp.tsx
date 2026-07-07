@@ -33,11 +33,7 @@ import {
   topicGreeting,
   type PokeMood,
 } from "./petLogic";
-import {
-  sendPetMessage,
-  parseHistory,
-  type ChatMessage,
-} from "./chatCore";
+import { sendPetMessage, parseHistory, type ChatMessage } from "./chatCore";
 import {
   petGenerate,
   buildGreetingInstruction,
@@ -100,9 +96,9 @@ export function PetApp() {
   const [isPoked, setIsPoked] = useState(false);
   const [clickThrough, setClickThroughLocal] = useState<boolean>(false);
   // ── 趣味行为 state ──
-  const [ccBadge, setCcBadge] = useState<
-    "working" | "waiting" | "done" | null
-  >(null);
+  const [ccBadge, setCcBadge] = useState<"working" | "waiting" | "done" | null>(
+    null
+  );
   const [celebrate, setCelebrate] = useState(false);
   const [activeTier, setActiveTier] = useState<1 | 2 | 3>(1);
   const [mood, setMood] = useState<PokeMood>("normal");
@@ -336,7 +332,10 @@ export function PetApp() {
                 buildErrorInstruction(locale, p, rawMsg),
                 memoryRef.current
               ).then((diag) => {
-                if (diag && lastErrorTsRef.current === info.last_error!.timestamp)
+                if (
+                  diag &&
+                  lastErrorTsRef.current === info.last_error!.timestamp
+                )
                   showBubble(diag, "error");
               });
             }

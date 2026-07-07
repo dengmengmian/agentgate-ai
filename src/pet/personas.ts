@@ -113,7 +113,11 @@ export function pickPokeReaction(
 /// 连戳 3 下的生气反应——比普通反应火气大一档。
 const ANGRY_REACTIONS: Record<PetType, { en: string[]; zh: string[] }> = {
   robot: {
-    en: ["[WARN] Poke overload! 💢", "System integrity at risk!", "Beep beep STOP."],
+    en: [
+      "[WARN] Poke overload! 💢",
+      "System integrity at risk!",
+      "Beep beep STOP.",
+    ],
     zh: ["[警告] 戳击过载!💢", "再戳要蓝屏了!", "滴滴滴——停!"],
   },
   "pixel-cat": {
@@ -121,31 +125,63 @@ const ANGRY_REACTIONS: Record<PetType, { en: string[]; zh: string[] }> = {
     zh: ["哈——!😾", "爪子要出来了", "别摸肚子!"],
   },
   slime: {
-    en: ["Gonna splat you! 💢", "Wobble wobble ANGRY!", "I'll stick to your mouse!"],
+    en: [
+      "Gonna splat you! 💢",
+      "Wobble wobble ANGRY!",
+      "I'll stick to your mouse!",
+    ],
     zh: ["要溅你一身了!💢", "抖抖抖生气了!", "我糊你鼠标上哦!"],
   },
   fox: {
-    en: ["This is NOT aligned. 💢", "I'll loop in HR.", "My KPI is not 'being poked'."],
-    zh: ["这个动作我们没对齐。💢", "我要拉 HR 进群了。", "戳我不在我的 KPI 里。"],
+    en: [
+      "This is NOT aligned. 💢",
+      "I'll loop in HR.",
+      "My KPI is not 'being poked'.",
+    ],
+    zh: [
+      "这个动作我们没对齐。💢",
+      "我要拉 HR 进群了。",
+      "戳我不在我的 KPI 里。",
+    ],
   },
   octopus: {
-    en: ["All 8 arms are annoyed! 💢", "Ink warning!", "Stop, I'm juggling here!"],
+    en: [
+      "All 8 arms are annoyed! 💢",
+      "Ink warning!",
+      "Stop, I'm juggling here!",
+    ],
     zh: ["八条触手都被惹毛了!💢", "喷墨预警!", "别闹,我八线程忙着呢!"],
   },
   ghost: {
-    en: ["Even ghosts have limits... 💢", "I'll haunt your build.", "Boo. Meant it."],
+    en: [
+      "Even ghosts have limits... 💢",
+      "I'll haunt your build.",
+      "Boo. Meant it.",
+    ],
     zh: ["幽灵也是有脾气的……💢", "小心我半夜进你构建日志。", "呜!这次是凶的。"],
   },
   ox: {
-    en: ["I work 996 AND get poked?! 💢", "Deduct my pay, not my patience!", "Mooo!! One more poke and I quit!"],
+    en: [
+      "I work 996 AND get poked?! 💢",
+      "Deduct my pay, not my patience!",
+      "Mooo!! One more poke and I quit!",
+    ],
     zh: ["996 还要被戳?!💢", "扣钱可以,别扣尊严!", "哞!!再戳我提离职!"],
   },
   soldier: {
-    en: ["Hostile action detected. 💢", "Stand down. NOW.", "That's insubordination."],
+    en: [
+      "Hostile action detected. 💢",
+      "Stand down. NOW.",
+      "That's insubordination.",
+    ],
     zh: ["检测到敌意行为。💢", "立刻停止。这是命令。", "你这是以下犯上。"],
   },
   coder: {
-    en: ["segfault (core dumped) 💢", "You're causing a panic()!", "rm -rf your poking hand"],
+    en: [
+      "segfault (core dumped) 💢",
+      "You're causing a panic()!",
+      "rm -rf your poking hand",
+    ],
     zh: ["段错误(核心已转储)💢", "你把我戳 panic 了!", "再戳我 revert 你"],
   },
 };
@@ -156,7 +192,10 @@ const SULK_REACTIONS: Record<PetType, { en: string[]; zh: string[] }> = {
   "pixel-cat": { en: ["*turns tail*"], zh: ["*甩尾巴背对你*"] },
   slime: { en: ["*flattens into a sad puddle*"], zh: ["*瘫成一滩不理你*"] },
   fox: { en: ["Meeting adjourned."], zh: ["本次会议到此结束。"] },
-  octopus: { en: ["*wraps up in own tentacles*"], zh: ["*用触手把自己裹起来*"] },
+  octopus: {
+    en: ["*wraps up in own tentacles*"],
+    zh: ["*用触手把自己裹起来*"],
+  },
   ghost: { en: ["*fades away quietly*"], zh: ["*默默变透明*"] },
   ox: { en: ["*keeps working, back turned*"], zh: ["*背对你继续加班*"] },
   soldier: { en: ["Comms off."], zh: ["通讯关闭。"] },
