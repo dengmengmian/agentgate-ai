@@ -21,7 +21,13 @@ const translations: Record<string, Record<Locale, string>> = {
   "nav.instructions": { en: "Instructions", zh: "全局指令" },
   "nav.mcp": { en: "MCP", zh: "MCP" },
   "nav.skills": { en: "Skills", zh: "技能" },
+  "nav.pet_chat": { en: "Pet Chat", zh: "宠物聊天" },
   "nav.settings": { en: "Settings", zh: "设置" },
+  "nav.group.overview": { en: "Overview", zh: "总览" },
+  "nav.group.models": { en: "Models", zh: "模型" },
+  "nav.group.gateway": { en: "Gateway", zh: "网关" },
+  "nav.group.tools": { en: "Tools", zh: "工具" },
+  "nav.group.system": { en: "System", zh: "系统" },
   "nav.collapse": { en: "Collapse sidebar", zh: "折叠侧边栏" },
   "nav.expand": { en: "Expand sidebar", zh: "展开侧边栏" },
 
@@ -93,10 +99,15 @@ const translations: Record<string, Record<Locale, string>> = {
     zh: "配置客户端",
   },
   "dashboard.gateway": { en: "Gateway", zh: "网关" },
+  "dashboard.control_console": {
+    en: "Control Console",
+    zh: "控制台",
+  },
   "dashboard.provider": { en: "Provider", zh: "供应商" },
   "dashboard.input": { en: "Input", zh: "输入" },
   "dashboard.output": { en: "Output", zh: "输出" },
   "dashboard.recent_requests": { en: "Recent Requests", zh: "最近请求" },
+  "dashboard.request_stream": { en: "Request Stream", zh: "请求流" },
   "dashboard.tool_status": { en: "Tool Status", zh: "工具状态" },
   "dashboard.copy_codex_config": {
     en: "Copy Codex Config",
@@ -162,6 +173,29 @@ const translations: Record<string, Record<Locale, string>> = {
   "providers.health_no_recent": {
     en: "No gateway traffic in the last 24h",
     zh: "最近 24h 无网关请求",
+  },
+  "providers.card_health_status": { en: "Health status", zh: "健康状态" },
+  "providers.primary_actions": { en: "Primary actions", zh: "主要操作" },
+  "providers.recent_failure": { en: "Recent failure", zh: "最近失败" },
+  "providers.error_pass_through_stream_failed": {
+    en: "Stream forwarding failed",
+    zh: "流式转发失败",
+  },
+  "providers.error_auth_failed": {
+    en: "Authentication failed",
+    zh: "认证失败",
+  },
+  "providers.error_rate_limited": {
+    en: "Rate limited",
+    zh: "请求被限流",
+  },
+  "providers.error_quota": {
+    en: "Quota or balance issue",
+    zh: "额度或余额异常",
+  },
+  "providers.error_request_failed": {
+    en: "Provider request failed",
+    zh: "供应商请求失败",
   },
   "providers.operational_status": { en: "Status", zh: "运行状态" },
   "providers.probe": { en: "Probe", zh: "探测" },
@@ -387,9 +421,12 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Provider not found",
     zh: "未找到供应商",
   },
+  "providers.detail.console": { en: "Provider Console", zh: "供应商控制台" },
+  "providers.detail.health_strip": { en: "Health Strip", zh: "健康状态条" },
   "providers.detail.requests_24h": { en: "24h Requests", zh: "24h 请求" },
   "providers.detail.cost_7d": { en: "7d Cost", zh: "7 天成本" },
   "providers.detail.latency_trend": { en: "Latency Trend", zh: "延迟趋势" },
+  "providers.detail.latency_monitor": { en: "Latency Monitor", zh: "延迟监控" },
   "providers.detail.empty_latency": {
     en: "No gateway latency data yet.",
     zh: "暂无网关延迟数据。",
@@ -409,6 +446,7 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ── Gateway ──
   "gateway.local_gateway": { en: "Local Gateway", zh: "本地网关" },
+  "gateway.service_console": { en: "Service Console", zh: "服务控制台" },
   "gateway.protocol_conversion": {
     en: "Protocol conversion and request forwarding",
     zh: "协议转换和请求转发",
@@ -457,6 +495,7 @@ const translations: Record<string, Record<Locale, string>> = {
     zh: "保留天数无效",
   },
   "gateway.route_modes": { en: "Route Modes", zh: "路由模式" },
+  "gateway.route_matrix": { en: "Route Matrix", zh: "路由矩阵" },
   "gateway.codex_compat": { en: "Codex compatibility", zh: "Codex 兼容" },
   "gateway.tool_call_streaming": {
     en: "Tool call streaming",
@@ -470,6 +509,11 @@ const translations: Record<string, Record<Locale, string>> = {
   "gateway.none": { en: "None", zh: "无" },
 
   // ── Logs ──
+  "logs.console": { en: "Log Console", zh: "日志控制台" },
+  "logs.console_hint": {
+    en: "Inspect gateway traffic, imported client sessions, and request failures in one place.",
+    zh: "集中查看网关流量、导入的客户端会话和请求失败。",
+  },
   "logs.requests": { en: "requests", zh: "条请求" },
   "logs.clear": { en: "Clear Logs", zh: "清除日志" },
   "logs.clear_title": { en: "Clear All Logs", zh: "清除所有日志" },
@@ -555,6 +599,16 @@ const translations: Record<string, Record<Locale, string>> = {
   "logs.fallback_backup": { en: "backup", zh: "备用" },
 
   // ── Tools ──
+  "tools.console": { en: "Client Console", zh: "客户端控制台" },
+  "tools.console_hint": {
+    en: "Connect local AI clients to AgentGate and verify the gateway path.",
+    zh: "把本地 AI 客户端接入 AgentGate，并验证网关链路。",
+  },
+  "tools.connection_path": { en: "Connection Path", zh: "连接链路" },
+  "tools.connection_path_hint": {
+    en: "Check config, gateway, and provider availability before testing clients.",
+    zh: "先检查配置、网关和供应商可用性，再测试客户端。",
+  },
   "tools.codex": { en: "Codex", zh: "Codex" },
   "tools.codex_desc": {
     en: "OpenAI's CLI coding agent",
@@ -766,6 +820,22 @@ const translations: Record<string, Record<Locale, string>> = {
   "tools.history.delete_done": { en: "Deleted", zh: "已删除" },
 
   // ── Global Instructions ──
+  "instructions.console": {
+    en: "Instruction Console",
+    zh: "指令控制台",
+  },
+  "instructions.target_matrix": {
+    en: "Target Matrix",
+    zh: "目标矩阵",
+  },
+  "instructions.target_matrix_hint": {
+    en: "Choose which global instruction file you are editing.",
+    zh: "选择当前要编辑的全局指令文件。",
+  },
+  "instructions.editor": {
+    en: "Editor",
+    zh: "编辑器",
+  },
   "instructions.title": { en: "Global instructions", zh: "全局指令" },
   "instructions.subtitle": {
     en: "Manage the user-level CLAUDE.md / AGENTS.md files that every project sees.",
@@ -843,6 +913,12 @@ const translations: Record<string, Record<Locale, string>> = {
   "instructions.tpl_category.docs": { en: "Docs", zh: "文档" },
 
   // ── Local Skills ──
+  "skills.console": { en: "Skills Console", zh: "技能控制台" },
+  "skills.source_matrix": { en: "Source Matrix", zh: "来源矩阵" },
+  "skills.source_matrix_hint": {
+    en: "Filter local skills by client source and check distribution.",
+    zh: "按客户端来源筛选本地技能，并查看分布。",
+  },
   "skills.title": { en: "Skills", zh: "本地技能" },
   "skills.subtitle": {
     en: "Manage local Claude Code skills under ~/.claude/skills. Toggle, import or back up.",
@@ -904,10 +980,69 @@ const translations: Record<string, Record<Locale, string>> = {
   "routes.switch_manual": { en: "Switch to Fixed", zh: "切换到固定主供应商" },
   "routes.set_default": { en: "Set Default", zh: "设为默认" },
   "routes.provider_chain": { en: "Provider Chain", zh: "供应商链" },
-  "routes.provider_order": { en: "Provider Order", zh: "供应商顺序" },
+  "routes.provider_order": { en: "Priority Order", zh: "优先使用顺序" },
   "routes.provider_order_hint": {
-    en: "Drag by priority with the arrow buttons. The first provider is the primary candidate.",
-    zh: "用上下箭头调整优先级。第一个供应商是主候选。",
+    en: "The first available provider is used first. Move items up or down to change the order.",
+    zh: "第一个可用供应商会先被使用。用上下箭头调整顺序。",
+  },
+  "routes.current_rule": { en: "Current Rule", zh: "当前规则" },
+  "routes.request_flow": { en: "Request Flow", zh: "请求流向" },
+  "routes.flow_entry": { en: "Client entry", zh: "客户端入口" },
+  "routes.flow_provider": { en: "Selected provider", zh: "选择供应商" },
+  "routes.flow_mode": { en: "Failure handling", zh: "失败处理" },
+  "routes.mode_plain_manual": {
+    en: "Only use this provider",
+    zh: "只用这个供应商",
+  },
+  "routes.mode_plain_failover": {
+    en: "Try the next provider when one fails",
+    zh: "失败时自动切换下一个供应商",
+  },
+  "routes.availability": { en: "Candidate availability", zh: "候选可用性" },
+  "routes.availability_hint": {
+    en: "Shows how many providers in this route can be selected right now.",
+    zh: "显示这条路由当前有多少供应商可被选中。",
+  },
+  "routes.all_candidates_available": {
+    en: "All route candidates are available.",
+    zh: "所有路由候选当前可用。",
+  },
+  "routes.reason_route_disabled": {
+    en: "Route entry disabled",
+    zh: "路由项已禁用",
+  },
+  "routes.reason_provider_missing": {
+    en: "Provider missing",
+    zh: "供应商不存在",
+  },
+  "routes.reason_provider_disabled": {
+    en: "Provider disabled",
+    zh: "供应商已禁用",
+  },
+  "routes.reason_runtime_unavailable": {
+    en: "Runtime unavailable",
+    zh: "运行时不可用",
+  },
+  "routes.reason_cooldown": { en: "In cooldown", zh: "冷却中" },
+  "routes.current_provider": {
+    en: "Current",
+    zh: "当前",
+  },
+  "routes.route_result": {
+    en: "Route Result",
+    zh: "当前路由结果",
+  },
+  "routes.match_settings": {
+    en: "Matching",
+    zh: "匹配规则",
+  },
+  "routes.edit_route": {
+    en: "Edit Route",
+    zh: "编辑路由",
+  },
+  "routes.route_metrics": {
+    en: "Runtime Metrics",
+    zh: "运行数据",
   },
   "routes.overview_protocol": { en: "Applies To", zh: "适用入口" },
   "routes.overview_mode": { en: "Mode", zh: "模式" },
@@ -1108,6 +1243,13 @@ const translations: Record<string, Record<Locale, string>> = {
     zh: "令牌已重新生成。请重新应用 Claude Code 配置（Codex 使用命令认证会自动更新）。",
   },
   "settings.general": { en: "General", zh: "通用" },
+  "settings.general.basic": { en: "Basics", zh: "基础" },
+  "settings.general.appearance": { en: "Appearance", zh: "外观" },
+  "settings.general.advanced": { en: "Advanced", zh: "高级" },
+  "settings.general.advanced_desc": {
+    en: "Low-frequency gateway behavior and diagnostic switches",
+    zh: "低频网关行为和诊断开关",
+  },
   "settings.auto_start_gateway": {
     en: "Auto-start gateway",
     zh: "自动启动网关",
@@ -1173,6 +1315,15 @@ const translations: Record<string, Record<Locale, string>> = {
   "stats.per_request": { en: "per request", zh: "每次请求" },
   "stats.requests": { en: "Requests", zh: "请求" },
   "stats.realtime": { en: "auto-refresh", zh: "实时刷新" },
+  "stats.today_realtime": { en: "Today / Realtime", zh: "今日 / 实时" },
+  "stats.traffic_monitor": {
+    en: "Traffic Monitor",
+    zh: "流量监控",
+  },
+  "stats.analytics_panel": {
+    en: "Analytics Panel",
+    zh: "分析面板",
+  },
   "stats.tokens_today": { en: "Tokens", zh: "Tokens" },
   "stats.cost_today": { en: "Cost", zh: "费用" },
   "stats.cost_breakdown": { en: "Cost Breakdown", zh: "成本分解" },
@@ -1208,12 +1359,17 @@ const translations: Record<string, Record<Locale, string>> = {
   "stats.uptime": { en: "Uptime", zh: "运行时间" },
   "stats.stopped": { en: "Stopped", zh: "已停止" },
   "stats.success_rate_lifetime": { en: "Success rate", zh: "累计成功率" },
+  "stats.runtime_strip": { en: "Runtime Strip", zh: "运行状态条" },
 
   // ── Diagnostics ──
   "diag.run_self_test": { en: "Run Self Test", zh: "运行自检" },
   "diag.export_bundle": { en: "Export Diagnostics", zh: "导出诊断包" },
   "diag.open_data_dir": { en: "Open Data Dir", zh: "打开数据目录" },
   "diag.self_test": { en: "Self Test Report", zh: "自检报告" },
+  "diag.diagnostic_console": {
+    en: "Diagnostic Console",
+    zh: "诊断控制台",
+  },
   "diag.no_report": { en: "No report yet", zh: "暂无报告" },
   "diag.run_prompt": {
     en: "Click 'Run Self Test' to check system health",
@@ -1339,6 +1495,53 @@ const translations: Record<string, Record<Locale, string>> = {
     zh: "一头永不停歇的牛马打工人",
   },
 
+  // ── Pet Chat 页面 ──
+  "petchat.console": { en: "Pet Chat Console", zh: "宠物聊天控制台" },
+  "petchat.memory_matrix": { en: "Memory Matrix", zh: "记忆矩阵" },
+  "petchat.conversation_stream": {
+    en: "Conversation Stream",
+    zh: "会话流",
+  },
+  "petchat.conversation_stream_hint": {
+    en: "Messages are shared with the desktop pet and refreshed in real time.",
+    zh: "消息与桌宠共享，并实时同步刷新。",
+  },
+  "petchat.title": { en: "Pet Chat", zh: "宠物聊天" },
+  "petchat.desc": {
+    en: "Chat history with your desktop pet, synced with the floating pet.",
+    zh: "和桌面宠物的聊天记录，与悬浮宠物实时同步。",
+  },
+  "petchat.empty": {
+    en: "No messages yet. Say hi to your pet below!",
+    zh: "还没有聊天记录，在下面跟宠物打个招呼吧！",
+  },
+  "petchat.placeholder": { en: "Chat with your pet…", zh: "跟宠物聊天…" },
+  "petchat.send": { en: "Send", zh: "发送" },
+  "petchat.clear": { en: "Clear", zh: "清空" },
+  "petchat.clear_confirm": {
+    en: "Clear all chat history?",
+    zh: "确定清空全部聊天记录？",
+  },
+  "petchat.you": { en: "You", zh: "你" },
+  "petchat.gateway_off": {
+    en: "Gateway is stopped — start it to chat.",
+    zh: "网关未启动，启动后才能聊天。",
+  },
+  "petchat.memory": { en: "Memory", zh: "记忆" },
+  "petchat.memory_desc": {
+    en: "What the pet remembers about you. Edit freely.",
+    zh: "宠物记住的关于你的信息，可自由编辑。",
+  },
+  "petchat.memory_empty": {
+    en: "Nothing remembered yet.",
+    zh: "还没有记住任何信息。",
+  },
+  "petchat.memory_key": { en: "Field", zh: "字段" },
+  "petchat.memory_value": { en: "Value", zh: "内容" },
+  "petchat.memory_add": { en: "Add field", zh: "添加字段" },
+  "petchat.memory_save": { en: "Save memory", zh: "保存记忆" },
+  "petchat.memory_saved": { en: "Memory saved", zh: "记忆已保存" },
+
   // ── Pet FAQ ──
   "settings.pet.faq.title": { en: "FAQ", zh: "常见问题" },
   "settings.pet.faq.q_windows_bg": {
@@ -1424,6 +1627,12 @@ const translations: Record<string, Record<Locale, string>> = {
   "settings.license": { en: "License", zh: "开源协议" },
 
   // ── MCP page ──
+  "mcp.console": { en: "MCP Console", zh: "MCP 控制台" },
+  "mcp.server_matrix": { en: "Server Matrix", zh: "服务器矩阵" },
+  "mcp.server_matrix_hint": {
+    en: "Filter servers by validation state and client config source.",
+    zh: "按校验状态和客户端配置来源筛选服务器。",
+  },
   "mcp.title": { en: "MCP Servers", zh: "MCP 服务器" },
   "mcp.subtitle_before": { en: "Read from Codex ", zh: "读自 Codex " },
   "mcp.subtitle_mid": { en: " / Claude Code ", zh: " / Claude Code " },
@@ -1534,6 +1743,16 @@ const translations: Record<string, Record<Locale, string>> = {
   "mcp.imported_to": { en: "Imported to {target}", zh: "已导入到 {target}" },
 
   // ── Logs page & subviews ──
+  "logs.traffic_snapshot": { en: "Traffic Snapshot", zh: "流量快照" },
+  "logs.traffic_snapshot_hint": {
+    en: "Current query totals and page-level health metrics.",
+    zh: "当前查询命中数和本页健康指标。",
+  },
+  "logs.query_builder": { en: "Query Builder", zh: "查询构建器" },
+  "logs.query_builder_hint": {
+    en: "Narrow logs by status, provider, model, route, client, source, or session.",
+    zh: "按状态、供应商、模型、路由、客户端、来源或会话缩小范围。",
+  },
   "logs.summary_matched": { en: "Matched", zh: "筛选命中" },
   "logs.summary_page_errors": { en: "Page errors", zh: "本页错误" },
   "logs.summary_page_success_rate": {

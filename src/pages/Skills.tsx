@@ -188,94 +188,112 @@ export function Skills() {
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-            <BookOpen className="h-4 w-4" />
-            {t("skills.title")}
-          </h2>
-          <p className="mt-0.5 text-xs text-text-muted">
-            {t("skills.subtitle")}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {/* 导入 zip 的目标客户端 */}
-          <select
-            value={importSource}
-            onChange={(e) => setImportSource(e.target.value)}
-            className="rounded-md border border-border bg-card-secondary px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
-            title={t("skills.import_zip")}
-          >
-            {SOURCES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".zip"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleImportZip(file);
-            }}
-          />
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={transferring}
-            className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-card-secondary disabled:opacity-60"
-          >
-            {transferring ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
+      <header className="relative overflow-hidden rounded-xl border border-accent/20 bg-card p-5 shadow-sm">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-accent/10 to-transparent" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">
+              {t("skills.console")}
+            </p>
+            <h2 className="mt-2 flex items-center gap-2 text-lg font-semibold text-text-primary">
+              <BookOpen className="h-4 w-4" />
+              {t("skills.title")}
+            </h2>
+            <p className="mt-1 max-w-2xl text-xs text-text-muted">
+              {t("skills.subtitle")}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {/* 导入 zip 的目标客户端 */}
+            <select
+              value={importSource}
+              onChange={(e) => setImportSource(e.target.value)}
+              className="rounded-md border border-border bg-card-secondary px-2 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+              title={t("skills.import_zip")}
+            >
+              {SOURCES.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".zip"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleImportZip(file);
+              }}
+            />
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={transferring}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card-secondary px-2.5 py-1.5 text-xs text-text-secondary hover:border-accent/40 hover:text-text-primary disabled:opacity-60"
+            >
+              {transferring ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Upload className="h-3.5 w-3.5" />
+              )}
+              {t("skills.import_zip")}
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={transferring}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card-secondary px-2.5 py-1.5 text-xs text-text-secondary hover:border-accent/40 hover:text-text-primary disabled:opacity-60"
+            >
+              <Download className="h-3.5 w-3.5" />
+              {t("skills.export")}
+            </button>
+            <button
+              onClick={() =>
+                setTransferMode((mode) => (mode === "import" ? null : "import"))
+              }
+              className="flex items-center gap-1.5 rounded-md border border-border bg-card-secondary px-2.5 py-1.5 text-xs text-text-secondary hover:border-accent/40 hover:text-text-primary"
+            >
               <Upload className="h-3.5 w-3.5" />
-            )}
-            {t("skills.import_zip")}
-          </button>
-          <button
-            onClick={handleExport}
-            disabled={transferring}
-            className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-card-secondary disabled:opacity-60"
-          >
-            <Download className="h-3.5 w-3.5" />
-            {t("skills.export")}
-          </button>
-          <button
-            onClick={() =>
-              setTransferMode((mode) => (mode === "import" ? null : "import"))
-            }
-            className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-text-secondary hover:bg-card-secondary"
-          >
-            <Upload className="h-3.5 w-3.5" />
-            {t("skills.import_backup")}
-          </button>
+              {t("skills.import_backup")}
+            </button>
+          </div>
         </div>
       </header>
 
       {/* 来源筛选 */}
       {skills.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <FilterButton
-            active={filter === "all"}
-            label={t("nav.skills")}
-            count={counts.all}
-            onClick={() => setFilter("all")}
-          />
-          <FilterButton
-            active={filter === "claude"}
-            label="Claude Code"
-            count={counts.claude}
-            onClick={() => setFilter("claude")}
-          />
-          <FilterButton
-            active={filter === "codex"}
-            label="Codex"
-            count={counts.codex}
-            onClick={() => setFilter("codex")}
-          />
-        </div>
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">
+                {t("skills.source_matrix")}
+              </h3>
+              <p className="mt-0.5 text-xs text-text-muted">
+                {t("skills.source_matrix_hint")}
+              </p>
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <FilterButton
+              active={filter === "all"}
+              label={t("nav.skills")}
+              count={counts.all}
+              onClick={() => setFilter("all")}
+            />
+            <FilterButton
+              active={filter === "claude"}
+              label="Claude Code"
+              count={counts.claude}
+              onClick={() => setFilter("claude")}
+            />
+            <FilterButton
+              active={filter === "codex"}
+              label="Codex"
+              count={counts.codex}
+              onClick={() => setFilter("codex")}
+            />
+          </div>
+        </section>
       )}
 
       {transferMode && (
@@ -343,7 +361,7 @@ export function Skills() {
           description={t("skills.empty")}
         />
       ) : (
-        <div className="overflow-hidden rounded-lg border border-border bg-card divide-y divide-border">
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm divide-y divide-border">
           {visibleSkills.map((skill) => (
             <div
               key={skillKey(skill)}
@@ -423,14 +441,18 @@ function FilterButton({
   return (
     <button
       onClick={onClick}
-      className={`rounded-md px-2.5 py-1.5 text-xs ${
+      className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs transition-colors ${
         active
-          ? "bg-accent text-white"
-          : "text-text-secondary hover:bg-card-secondary"
+          ? "border-accent/40 bg-accent-soft text-accent"
+          : "border-border bg-card-secondary/45 text-text-secondary hover:border-accent/30 hover:text-text-primary"
       }`}
     >
-      {label}
-      <span className={active ? "ml-1 text-white/80" : "ml-1 text-text-muted"}>
+      <span className="font-medium">{label}</span>
+      <span
+        className={
+          active ? "font-mono text-accent" : "font-mono text-text-muted"
+        }
+      >
         {count}
       </span>
     </button>

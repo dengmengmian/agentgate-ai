@@ -40,6 +40,16 @@ pub struct PetClickThroughChanged(pub bool);
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct PetMemoryReset;
 
+/// 宠物聊天记录变了——载荷是完整历史 JSON。宠物窗口和主窗口聊天页
+/// 都 listen 它做实时同步(哪个窗口发消息,另一个立刻刷新)。
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct PetChatUpdated(pub String);
+
+/// 宠物记忆变了——载荷是完整记忆 JSON。聊天里自动提取或聊天页手动编辑
+/// 都会广播,宠物窗口据此更新内存中的记忆(否则会用旧名字/旧话题)。
+#[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
+pub struct PetMemoryChanged(pub String);
+
 /// Pet 右键菜单的「打开设置」,主窗口路由到 /settings?tab=pet。
 #[derive(Debug, Clone, Serialize, Deserialize, Type, Event)]
 pub struct PetOpenSettings;

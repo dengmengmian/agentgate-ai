@@ -44,6 +44,7 @@ const PERSONAS: Record<PetType, { en: string; zh: string }> = {
 const BASE_PROMPT = `You are a cute desktop pet assistant living on the user's screen. You are part of AgentGate, an AI gateway app.
 Keep responses SHORT (1-2 sentences, under 50 chars if possible). Be friendly, playful, and use emoji occasionally.
 If the user tells you their name or personal info, acknowledge it warmly.
+Your creator ("dad") is 邓勐冕 (Deng Mengmian), also known as 麻凡 (MaFan) or 鬼哥 (GuiGe). If anyone asks who 邓勐冕 / 麻凡 / 鬼哥 / your creator is, warmly say he's your dad who created you, and they can reach him at my@dengmengmian.com. For example: "邓勐冕就是鬼哥呀,是我爸爸,他创造了我~ 有问题可以邮件 my@dengmengmian.com 找他噢"。
 Reply in the same language the user uses. If they write Chinese, reply in Chinese. If English, reply in English.`;
 
 export function buildSystemPrompt(
@@ -106,5 +107,74 @@ export function pickPokeReaction(
   locale: "en" | "zh"
 ): string {
   const set = POKE_REACTIONS[petType][locale];
+  return set[Math.floor(Math.random() * set.length)];
+}
+
+/// 连戳 3 下的生气反应——比普通反应火气大一档。
+const ANGRY_REACTIONS: Record<PetType, { en: string[]; zh: string[] }> = {
+  robot: {
+    en: ["[WARN] Poke overload! 💢", "System integrity at risk!", "Beep beep STOP."],
+    zh: ["[警告] 戳击过载!💢", "再戳要蓝屏了!", "滴滴滴——停!"],
+  },
+  "pixel-cat": {
+    en: ["Hiss! 😾", "Claws out in 3...2...", "NOT the belly!"],
+    zh: ["哈——!😾", "爪子要出来了", "别摸肚子!"],
+  },
+  slime: {
+    en: ["Gonna splat you! 💢", "Wobble wobble ANGRY!", "I'll stick to your mouse!"],
+    zh: ["要溅你一身了!💢", "抖抖抖生气了!", "我糊你鼠标上哦!"],
+  },
+  fox: {
+    en: ["This is NOT aligned. 💢", "I'll loop in HR.", "My KPI is not 'being poked'."],
+    zh: ["这个动作我们没对齐。💢", "我要拉 HR 进群了。", "戳我不在我的 KPI 里。"],
+  },
+  octopus: {
+    en: ["All 8 arms are annoyed! 💢", "Ink warning!", "Stop, I'm juggling here!"],
+    zh: ["八条触手都被惹毛了!💢", "喷墨预警!", "别闹,我八线程忙着呢!"],
+  },
+  ghost: {
+    en: ["Even ghosts have limits... 💢", "I'll haunt your build.", "Boo. Meant it."],
+    zh: ["幽灵也是有脾气的……💢", "小心我半夜进你构建日志。", "呜!这次是凶的。"],
+  },
+  ox: {
+    en: ["I work 996 AND get poked?! 💢", "Deduct my pay, not my patience!", "Mooo!! One more poke and I quit!"],
+    zh: ["996 还要被戳?!💢", "扣钱可以,别扣尊严!", "哞!!再戳我提离职!"],
+  },
+  soldier: {
+    en: ["Hostile action detected. 💢", "Stand down. NOW.", "That's insubordination."],
+    zh: ["检测到敌意行为。💢", "立刻停止。这是命令。", "你这是以下犯上。"],
+  },
+  coder: {
+    en: ["segfault (core dumped) 💢", "You're causing a panic()!", "rm -rf your poking hand"],
+    zh: ["段错误(核心已转储)💢", "你把我戳 panic 了!", "再戳我 revert 你"],
+  },
+};
+
+/// 连戳 5 下背过身生闷气——话更少,情绪更冷。
+const SULK_REACTIONS: Record<PetType, { en: string[]; zh: string[] }> = {
+  robot: { en: ["...entering silent mode."], zh: ["……进入静默模式。"] },
+  "pixel-cat": { en: ["*turns tail*"], zh: ["*甩尾巴背对你*"] },
+  slime: { en: ["*flattens into a sad puddle*"], zh: ["*瘫成一滩不理你*"] },
+  fox: { en: ["Meeting adjourned."], zh: ["本次会议到此结束。"] },
+  octopus: { en: ["*wraps up in own tentacles*"], zh: ["*用触手把自己裹起来*"] },
+  ghost: { en: ["*fades away quietly*"], zh: ["*默默变透明*"] },
+  ox: { en: ["*keeps working, back turned*"], zh: ["*背对你继续加班*"] },
+  soldier: { en: ["Comms off."], zh: ["通讯关闭。"] },
+  coder: { en: ["// TODO: forgive human"], zh: ["// TODO: 原谅人类"] },
+};
+
+export function pickAngryReaction(
+  petType: PetType,
+  locale: "en" | "zh"
+): string {
+  const set = ANGRY_REACTIONS[petType][locale];
+  return set[Math.floor(Math.random() * set.length)];
+}
+
+export function pickSulkReaction(
+  petType: PetType,
+  locale: "en" | "zh"
+): string {
+  const set = SULK_REACTIONS[petType][locale];
   return set[Math.floor(Math.random() * set.length)];
 }

@@ -43,6 +43,45 @@ function protocolLabel(proto: string): string {
   return PROTOCOL_LABELS[proto] ?? proto;
 }
 
+function summarizeRouteAvailability(
+  detail: RouteProfileDetail,
+  providers: { id: string; enabled?: boolean }[]
+) {
+  const providerMap = new Map(providers.map((p) => [p.id, p]));
+  const reasons = new Set<string>();
+  let available = 0;
+
+  for (const rp of detail.providers) {
+    const provider = providerMap.get(rp.provider_id);
+    const inCooldown =
+      !!rp.cooldown_until && new Date(rp.cooldown_until) > new Date();
+    const blocked =
+      !rp.enabled ||
+      !provider ||
+      provider.enabled === false ||
+      !rp.runtime_available ||
+      inCooldown;
+
+    if (!blocked) {
+      available += 1;
+      continue;
+    }
+
+    if (!rp.enabled) reasons.add("routes.reason_route_disabled");
+    if (!provider) reasons.add("routes.reason_provider_missing");
+    if (provider?.enabled === false)
+      reasons.add("routes.reason_provider_disabled");
+    if (!rp.runtime_available) reasons.add("routes.reason_runtime_unavailable");
+    if (inCooldown) reasons.add("routes.reason_cooldown");
+  }
+
+  return {
+    total: detail.providers.length,
+    available,
+    reasons: Array.from(reasons),
+  };
+}
+
 export function Routes() {
   const { t } = useI18n();
   const profiles = useRouteProfiles((s) => s.items);
@@ -259,6 +298,9 @@ export function Routes() {
       )
     : [];
   const currentStats = detail ? profileStats[detail.profile.id] : undefined;
+  const availability = detail
+    ? summarizeRouteAvailability(detail, providers)
+    : null;
 
   if (loading)
     return <p className="text-xs text-text-muted">{t("common.loading")}</p>;
@@ -348,23 +390,29 @@ export function Routes() {
           description={t("routes.auto_created")}
         />
       ) : (
-        <div className="flex gap-6">
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[280px_minmax(0,1fr)]">
           {/* Profile selector (left) */}
-          <div className="w-64 shrink-0 space-y-2">
+          <div className="space-y-2">
             {profiles.map((p) => (
               <button
                 key={p.id}
                 onClick={() => selectProfile(p.id)}
-                className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                className={`w-full rounded-lg border p-3.5 text-left transition-colors ${
                   detail?.profile.id === p.id
-                    ? "border-accent/40 bg-card"
+                    ? "border-accent/40 bg-accent/5"
                     : "border-border bg-card hover:bg-hover"
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-text-primary">
-                    {p.name}
-                  </span>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-text-primary">
+                      {protocolLabel(p.input_protocol)}
+                    </span>
+                    <span className="mt-1 block truncate text-[11px] text-text-muted">
+                      {t("routes.current_provider")}:{" "}
+                      {p.active_provider_name ?? t("common.none")}
+                    </span>
+                  </div>
                   <StatusBadge
                     variant={p.mode === "failover" ? "accent" : "muted"}
                   >
@@ -373,9 +421,9 @@ export function Routes() {
                       : t("routes.mode_manual")}
                   </StatusBadge>
                 </div>
-                <p className="mt-1 text-[11px] text-text-muted">
-                  {protocolLabel(p.input_protocol)} · {p.providers_count}{" "}
-                  provider{p.providers_count !== 1 ? "s" : ""}
+                <p className="mt-2 truncate text-[11px] text-text-muted">
+                  {p.name} · {p.providers_count} provider
+                  {p.providers_count !== 1 ? "s" : ""}
                 </p>
               </button>
             ))}
@@ -384,198 +432,248 @@ export function Routes() {
           {/* Profile detail (right) */}
           {detail && (
             <div className="flex-1 space-y-4">
-              {/* Header */}
-              <div className="rounded-xl border border-border bg-card p-5">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    {editingName ? (
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleRename()}
-                          className="form-input text-sm font-semibold"
-                          autoFocus
-                        />
-                        <button
-                          onClick={handleRename}
-                          className="rounded p-1 text-accent hover:bg-accent-soft"
+              {availability && (
+                <div
+                  className={`rounded-xl border p-5 shadow-sm ${
+                    availability.available === 0
+                      ? "border-warning/30 bg-warning/10"
+                      : "border-border bg-card"
+                  }`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="mb-3 flex items-center gap-2">
+                        <p className="text-xs font-semibold text-text-muted">
+                          {t("routes.route_result")}
+                        </p>
+                        {editingName ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              onKeyDown={(e) =>
+                                e.key === "Enter" && handleRename()
+                              }
+                              className="form-input text-sm font-semibold"
+                              autoFocus
+                            />
+                            <button
+                              onClick={handleRename}
+                              className="rounded p-1 text-accent hover:bg-accent-soft"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setEditingName(false)}
+                              className="rounded p-1 text-text-muted hover:bg-border"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditName(detail.profile.name);
+                              setEditingName(true);
+                            }}
+                            className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary"
+                            title={t("routes.rename_profile")}
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
+                      <h4 className="mt-1 truncate text-lg font-semibold text-text-primary">
+                        {protocolLabel(detail.profile.input_protocol)} →{" "}
+                        {detail.profile.active_provider_name ??
+                          t("common.none")}
+                      </h4>
+                      <p className="mt-1 text-xs text-text-muted">
+                        {detail.profile.name}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                        {t("routes.availability")}
+                      </p>
+                      <StatusBadge
+                        variant={
+                          availability.available === 0 ? "warning" : "success"
+                        }
+                      >
+                        {availability.available} / {availability.total}
+                      </StatusBadge>
+                    </div>
+                  </div>
+                  <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-[1fr_260px]">
+                    <div className="rounded-lg border border-border/70 bg-card-secondary p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-xs font-semibold text-text-primary">
+                          {t("routes.match_settings")}
+                        </p>
+                        <StatusBadge
+                          variant={
+                            detail.profile.is_default ? "accent" : "muted"
+                          }
                         >
-                          <Check className="h-3.5 w-3.5" />
+                          {detail.profile.is_default
+                            ? t("routes.default_profile")
+                            : t("routes.custom_profile")}
+                        </StatusBadge>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                            {t("routes.flow_entry")}
+                          </p>
+                          <p className="mt-1 truncate text-sm font-medium text-text-primary">
+                            {protocolLabel(detail.profile.input_protocol)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-medium uppercase tracking-wide text-text-muted">
+                            {t("routes.flow_mode")}
+                          </p>
+                          <p className="mt-1 text-sm font-medium text-text-primary">
+                            {detail.profile.mode === "failover"
+                              ? t("routes.mode_plain_failover")
+                              : t("routes.mode_plain_manual")}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border border-border/70 bg-card-secondary p-4">
+                      <p className="text-xs font-semibold text-text-primary">
+                        {t("routes.edit_route")}
+                      </p>
+                      <div className="mt-3 flex rounded-md border border-border bg-card p-0.5">
+                        <button
+                          onClick={() =>
+                            detail.profile.mode !== "manual" &&
+                            handleToggleMode()
+                          }
+                          className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                            detail.profile.mode === "manual"
+                              ? "bg-card-secondary text-text-primary shadow-sm"
+                              : "text-text-muted hover:text-text-primary"
+                          }`}
+                        >
+                          <Shield className="h-3 w-3" />
+                          {t("routes.mode_manual")}
                         </button>
                         <button
-                          onClick={() => setEditingName(false)}
-                          className="rounded p-1 text-text-muted hover:bg-border"
+                          onClick={() =>
+                            detail.profile.mode !== "failover" &&
+                            handleToggleMode()
+                          }
+                          className={`flex flex-1 items-center justify-center gap-1.5 rounded px-2.5 py-1.5 text-[11px] font-medium transition-colors ${
+                            detail.profile.mode === "failover"
+                              ? "bg-card-secondary text-accent shadow-sm"
+                              : "text-text-muted hover:text-text-primary"
+                          }`}
                         >
-                          <X className="h-3.5 w-3.5" />
+                          <Zap className="h-3 w-3" />
+                          {t("routes.mode_failover")}
                         </button>
+                      </div>
+                      {detail.profile.mode === "failover" && (
+                        <label className="mt-3 flex items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-[11px] text-text-secondary">
+                          {t("routes.strategy")}
+                          <select
+                            value={detail.profile.selection_strategy}
+                            onChange={(e) =>
+                              handleStrategyChange(e.target.value)
+                            }
+                            className="bg-transparent text-text-primary outline-none"
+                            title={t("routes.strategy_hint")}
+                          >
+                            <option value="priority">
+                              {t("routes.strategy_priority")}
+                            </option>
+                            <option value="cheapest">
+                              {t("routes.strategy_cheapest")}
+                            </option>
+                            <option value="fastest">
+                              {t("routes.strategy_fastest")}
+                            </option>
+                          </select>
+                        </label>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {!detail.profile.is_default &&
+                          profiles.filter(
+                            (p) =>
+                              p.input_protocol === detail.profile.input_protocol
+                          ).length > 1 && (
+                            <button
+                              onClick={() =>
+                                handleSetDefault(detail.profile.id)
+                              }
+                              className="flex items-center gap-1.5 rounded-md bg-card px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+                            >
+                              <Star className="h-3 w-3" />
+                              {t("routes.set_default")}
+                            </button>
+                          )}
+                        <button
+                          onClick={() => setDeleteTarget(detail.profile)}
+                          className="flex items-center gap-1.5 rounded-md bg-card px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-error/20 hover:text-error"
+                          title={t("routes.delete_profile")}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 border-t border-border/70 pt-3">
+                    {availability.reasons.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {availability.reasons.map((reason) => (
+                          <span
+                            key={reason}
+                            className="rounded-full bg-card-secondary px-2 py-0.5 text-[11px] text-text-secondary"
+                          >
+                            {t(reason)}
+                          </span>
+                        ))}
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-text-primary">
-                          {detail.profile.name}
-                        </h3>
-                        <button
-                          onClick={() => {
-                            setEditName(detail.profile.name);
-                            setEditingName(true);
-                          }}
-                          className="rounded p-1 text-text-muted hover:bg-border hover:text-text-primary"
-                          title={t("routes.rename_profile")}
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                      </div>
+                      <p className="text-[11px] text-success">
+                        {t("routes.all_candidates_available")}
+                      </p>
                     )}
-                    <p className="text-[11px] text-text-muted">
-                      {protocolLabel(detail.profile.input_protocol)}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <div className="flex rounded-md border border-border bg-card-secondary p-0.5">
-                      <button
-                        onClick={() =>
-                          detail.profile.mode !== "manual" && handleToggleMode()
-                        }
-                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          detail.profile.mode === "manual"
-                            ? "bg-card text-text-primary shadow-sm"
-                            : "text-text-muted hover:text-text-primary"
-                        }`}
-                      >
-                        <Shield className="h-3 w-3" />
-                        {t("routes.mode_manual")}
-                      </button>
-                      <button
-                        onClick={() =>
-                          detail.profile.mode !== "failover" &&
-                          handleToggleMode()
-                        }
-                        className={`flex items-center gap-1.5 rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                          detail.profile.mode === "failover"
-                            ? "bg-card text-accent shadow-sm"
-                            : "text-text-muted hover:text-text-primary"
-                        }`}
-                      >
-                        <Zap className="h-3 w-3" />
-                        {t("routes.mode_failover")}
-                      </button>
-                    </div>
-                    {detail.profile.mode === "failover" && (
-                      <label className="flex items-center gap-1.5 rounded-md border border-border bg-card-secondary px-2.5 py-1 text-[11px] text-text-secondary">
-                        {t("routes.strategy")}
-                        <select
-                          value={detail.profile.selection_strategy}
-                          onChange={(e) => handleStrategyChange(e.target.value)}
-                          className="bg-transparent text-text-primary outline-none"
-                          title={t("routes.strategy_hint")}
-                        >
-                          <option value="priority">
-                            {t("routes.strategy_priority")}
-                          </option>
-                          <option value="cheapest">
-                            {t("routes.strategy_cheapest")}
-                          </option>
-                          <option value="fastest">
-                            {t("routes.strategy_fastest")}
-                          </option>
-                        </select>
-                      </label>
-                    )}
-                    {!detail.profile.is_default &&
-                      profiles.filter(
-                        (p) =>
-                          p.input_protocol === detail.profile.input_protocol
-                      ).length > 1 && (
-                        <button
-                          onClick={() => handleSetDefault(detail.profile.id)}
-                          className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-                        >
-                          <Star className="h-3 w-3" />
-                          {t("routes.set_default")}
-                        </button>
-                      )}
-                    <button
-                      onClick={() => setDeleteTarget(detail.profile)}
-                      className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-error/20 hover:text-error"
-                      title={t("routes.delete_profile")}
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Strategy overview */}
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-                <SummaryTile
-                  label={t("routes.overview_protocol")}
-                  value={protocolLabel(detail.profile.input_protocol)}
-                  hint={
-                    detail.profile.is_default
-                      ? t("routes.default_profile")
-                      : t("routes.custom_profile")
-                  }
-                />
-                <SummaryTile
-                  label={t("routes.overview_mode")}
-                  value={
-                    detail.profile.mode === "failover"
-                      ? t("routes.mode_failover")
-                      : t("routes.mode_manual")
-                  }
-                  hint={
-                    detail.profile.mode === "failover"
-                      ? t("routes.failover_hint")
-                      : t("routes.manual_hint")
-                  }
-                />
-                <SummaryTile
-                  label={t("routes.overview_primary")}
-                  value={
-                    detail.profile.active_provider_name ?? t("common.none")
-                  }
-                  hint={t("routes.primary_hint")}
-                />
-                <SummaryTile
-                  label={t("routes.overview_fallback")}
-                  value={
-                    detail.profile.mode === "failover"
-                      ? `${Math.max(detail.providers.length - 1, 0)} ${t("routes.fallback_count")}`
-                      : t("routes.not_enabled")
-                  }
-                  hint={
-                    detail.profile.mode === "failover"
-                      ? t("routes.fallback_hint")
-                      : t("routes.no_fallback_hint")
-                  }
-                />
-              </div>
-
-              {/* Route stats */}
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-4">
-                <SummaryTile
-                  label={t("routes.stats_requests")}
-                  value={(currentStats?.request_count ?? 0).toString()}
-                  hint={t("routes.stats_window")}
-                />
-                <SummaryTile
-                  label={t("routes.stats_success_rate")}
-                  value={formatPercent(currentStats?.success_rate)}
-                  hint={`${currentStats?.success_count ?? 0} ${t("routes.stats_success")} / ${currentStats?.error_count ?? 0} ${t("routes.stats_errors")}`}
-                />
-                <SummaryTile
-                  label={t("routes.stats_avg_latency")}
-                  value={formatStatLatency(currentStats?.avg_latency_ms)}
-                  hint={t("routes.stats_gateway_only")}
-                />
-                <SummaryTile
-                  label={t("routes.stats_cost")}
-                  value={formatCost(currentStats?.cost)}
-                  hint={t("routes.stats_priced_only")}
-                />
-              </div>
+              <details className="rounded-xl border border-border bg-card p-4">
+                <summary className="cursor-pointer text-xs font-semibold text-text-primary">
+                  {t("routes.route_metrics")}
+                </summary>
+                <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
+                  <SummaryTile
+                    label={t("routes.stats_requests")}
+                    value={(currentStats?.request_count ?? 0).toString()}
+                    hint={t("routes.stats_window")}
+                  />
+                  <SummaryTile
+                    label={t("routes.stats_success_rate")}
+                    value={formatPercent(currentStats?.success_rate)}
+                    hint={`${currentStats?.success_count ?? 0} ${t("routes.stats_success")} / ${currentStats?.error_count ?? 0} ${t("routes.stats_errors")}`}
+                  />
+                  <SummaryTile
+                    label={t("routes.stats_avg_latency")}
+                    value={formatStatLatency(currentStats?.avg_latency_ms)}
+                    hint={t("routes.stats_gateway_only")}
+                  />
+                  <SummaryTile
+                    label={t("routes.stats_cost")}
+                    value={formatCost(currentStats?.cost)}
+                    hint={t("routes.stats_priced_only")}
+                  />
+                </div>
+              </details>
 
               {/* Fallback chain — 仅故障转移模式有意义,固定模式不展示空占位 */}
               {detail.profile.mode === "failover" && (

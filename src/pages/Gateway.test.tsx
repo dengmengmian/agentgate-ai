@@ -70,6 +70,8 @@ describe("Gateway", () => {
       expect(api.getGatewaySettings).toHaveBeenCalled();
     });
 
+    expect(screen.getByText("gateway.service_console")).toBeInTheDocument();
+    expect(screen.getByText("gateway.route_matrix")).toBeInTheDocument();
     expect(screen.getByText("gateway.stop")).toBeInTheDocument();
   });
 

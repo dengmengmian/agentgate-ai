@@ -321,25 +321,36 @@ export function Dashboard() {
               host:port + running badge live in the global Topbar; we don't
               repeat them here. ── */}
       <div
-        className="rounded-xl border border-border bg-card px-5 py-3"
-        style={{ boxShadow: "var(--shadow-sm)" }}
+        className="relative overflow-hidden rounded-xl border border-accent/20 bg-card px-5 py-3"
+        style={{
+          boxShadow: "0 10px 30px rgba(194, 112, 43, 0.10)",
+          background:
+            "linear-gradient(135deg, var(--color-card) 0%, rgba(194,112,43,0.07) 100%)",
+        }}
       >
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent" />
         <div className="flex items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft">
+            <div className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft">
+              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-success shadow-[0_0_12px_rgba(56,161,105,0.55)]" />
               <Radio className="h-4 w-4 text-accent" />
             </div>
-            <div className="flex min-w-0 items-baseline gap-3">
-              <span className="text-sm font-semibold text-text-primary">
-                {t("dashboard.gateway")}
+            <div className="min-w-0">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                {t("dashboard.control_console")}
               </span>
-              <span className="truncate text-xs text-text-secondary">
-                {status.active_provider ?? t("common.none")}
-              </span>
-              <span className="hidden text-text-muted/40 md:inline">·</span>
-              <span className="hidden truncate font-mono text-[11px] text-text-muted md:inline">
-                {status.input_protocol} → {status.output_protocol}
-              </span>
+              <div className="mt-1 flex min-w-0 items-baseline gap-3">
+                <span className="text-sm font-semibold text-text-primary">
+                  {t("dashboard.gateway")}
+                </span>
+                <span className="truncate text-xs text-text-secondary">
+                  {status.active_provider ?? t("common.none")}
+                </span>
+                <span className="hidden text-text-muted/40 md:inline">·</span>
+                <span className="hidden truncate font-mono text-[11px] text-text-muted md:inline">
+                  {status.input_protocol} → {status.output_protocol}
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -438,15 +449,25 @@ export function Dashboard() {
       {/* ── 2. Today card — 5 primary metrics + cache inline footer when present ── */}
       {hasProviders && stats && stats.total > 0 && (
         <div
-          className="rounded-xl border border-border bg-card px-6 py-4"
-          style={{ boxShadow: "var(--shadow-sm)" }}
+          className="relative overflow-hidden rounded-xl border border-accent/15 bg-card px-6 py-4"
+          style={{
+            boxShadow: "0 12px 30px rgba(17, 24, 39, 0.06)",
+            background:
+              "linear-gradient(180deg, rgba(194,112,43,0.06) 0%, var(--color-card) 42%)",
+          }}
         >
+          <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-gradient-to-r from-accent/0 via-accent/45 to-accent/0" />
           <div className="mb-3 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
-              {t("stats.today")}
-            </span>
-            <span className="text-[11px] text-text-muted">
-              {t("stats.realtime") || "实时刷新"}
+            <div>
+              <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
+                {t("stats.today_realtime")}
+              </span>
+              <p className="mt-0.5 text-[11px] text-text-muted">
+                {t("stats.realtime") || "实时刷新"}
+              </p>
+            </div>
+            <span className="rounded-full border border-success/20 bg-success/10 px-2 py-0.5 text-[10px] font-medium text-success">
+              LIVE
             </span>
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
@@ -532,16 +553,23 @@ export function Dashboard() {
               chart header (they only affect the chart, not today's strip). ── */}
       {hasProviders && stats && stats.total > 0 && (
         <>
-          <div className="rounded-xl border border-border bg-card p-5">
+          <div
+            className="rounded-xl border border-border bg-card p-5"
+            style={{ boxShadow: "0 12px 30px rgba(17, 24, 39, 0.05)" }}
+          >
             <div className="mb-4 flex items-center justify-between gap-2">
               <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-                <BarChart3 className="h-4 w-4 text-text-muted" />
-                {t("stats.daily_chart")}
-                <span className="text-text-muted">
-                  ·{" "}
-                  {rangeDays === 1
-                    ? t("stats.range_today")
-                    : `${rangeDays} ${t("stats.days_suffix")}`}
+                <span className="flex h-7 w-7 items-center justify-center rounded-md bg-card-secondary">
+                  <BarChart3 className="h-4 w-4 text-accent" />
+                </span>
+                <span>
+                  {t("stats.traffic_monitor")}
+                  <span className="ml-2 text-text-muted">
+                    ·{" "}
+                    {rangeDays === 1
+                      ? t("stats.range_today")
+                      : `${rangeDays} ${t("stats.days_suffix")}`}
+                  </span>
                 </span>
               </h3>
               <div className="flex items-center gap-3">
@@ -744,11 +772,13 @@ export function Dashboard() {
       {(costByModel.length > 0 || costByClient.length > 0) && (
         <div
           className="rounded-xl border border-border bg-card p-5"
-          style={{ boxShadow: "var(--shadow-sm)" }}
+          style={{ boxShadow: "0 12px 30px rgba(17, 24, 39, 0.05)" }}
         >
           <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary">
-            <Coins className="h-4 w-4 text-text-muted" />
-            {t("stats.cost_breakdown")}
+            <span className="flex h-7 w-7 items-center justify-center rounded-md bg-card-secondary">
+              <Coins className="h-4 w-4 text-accent" />
+            </span>
+            {t("stats.analytics_panel")}
           </h3>
           <div
             className={`grid gap-6 sm:grid-cols-2${costByStrategy.length > 0 ? " lg:grid-cols-3" : ""}`}

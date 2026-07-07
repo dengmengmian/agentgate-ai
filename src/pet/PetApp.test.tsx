@@ -3,6 +3,13 @@ import { render, waitFor, cleanup } from "@testing-library/react";
 import * as api from "@/lib/api";
 
 vi.mock("@tauri-apps/api/window", () => ({
+  currentMonitor: vi.fn(() =>
+    Promise.resolve({
+      position: { x: 0, y: 0 },
+      size: { width: 1920, height: 1080 },
+      scaleFactor: 1,
+    })
+  ),
   getCurrentWindow: vi.fn(() => ({
     startDragging: vi.fn(),
     setIgnoreCursorEvents: vi.fn(() => Promise.resolve()),
@@ -36,6 +43,8 @@ vi.mock("@/lib/api", () => ({
   getPetGatewayStateLite: vi.fn(() => Promise.resolve({ state: "stopped" })),
   getPetMemory: vi.fn(() => Promise.resolve("{}")),
   savePetMemory: vi.fn(() => Promise.resolve(true)),
+  getPetChatHistory: vi.fn(() => Promise.resolve("[]")),
+  savePetChatHistory: vi.fn((h: string) => Promise.resolve(h)),
   petChat: vi.fn(() => Promise.resolve("hello")),
   getPetClickThrough: vi.fn(() => Promise.resolve(false)),
   showPetContextMenu: vi.fn(() => Promise.resolve(null)),
@@ -48,6 +57,8 @@ vi.mock("@/lib/bindings", () => ({
       "petBubble",
       "petGatewayStateChanged",
       "petMemoryReset",
+      "petChatUpdated",
+      "petMemoryChanged",
       "petClickThroughChanged",
     ].map((key) => [key, { listen: vi.fn(() => Promise.resolve(() => {})) }])
   ),

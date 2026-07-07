@@ -70,7 +70,9 @@ describe("Tools", () => {
       expect(api.getGatewayStatus).toHaveBeenCalled();
     });
 
-    expect(screen.getByText("tools.clients")).toBeInTheDocument();
+    expect(screen.getAllByText("tools.clients").length).toBeGreaterThan(0);
+    expect(screen.getByText("tools.console")).toBeInTheDocument();
+    expect(screen.getByText("tools.connection_path")).toBeInTheDocument();
   });
 
   it("runs connection test", async () => {

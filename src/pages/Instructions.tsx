@@ -200,52 +200,68 @@ export function Instructions() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="flex items-center gap-2 text-lg font-semibold text-text-primary">
+      <div className="relative overflow-hidden rounded-xl border border-accent/20 bg-card p-5 shadow-sm">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-accent/10 to-transparent" />
+        <div className="relative">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">
+            {t("instructions.console")}
+          </p>
+          <h2 className="mt-2 flex items-center gap-2 text-lg font-semibold text-text-primary">
             <FileText className="h-4 w-4" />
             {t("instructions.title")}
           </h2>
-          <p className="mt-1 text-xs text-text-muted">
+          <p className="mt-1 max-w-2xl text-xs text-text-muted">
             {t("instructions.subtitle")}
           </p>
         </div>
       </div>
 
       {/* Scope tabs */}
-      <div className="inline-flex rounded-lg border border-border bg-card p-1">
-        {(
-          [
-            { id: "claude_global", labelKey: "instructions.scope.claude" },
-            { id: "codex_global", labelKey: "instructions.scope.codex" },
-          ] as const
-        ).map((it) => (
-          <button
-            key={it.id}
-            onClick={() => setScope(it.id)}
-            className={
-              "rounded-md px-3 py-1.5 text-xs font-medium transition-colors " +
-              (scope === it.id
-                ? "bg-accent-soft text-accent"
-                : "text-text-secondary hover:bg-hover hover:text-text-primary")
-            }
-          >
-            {t(it.labelKey)}
-          </button>
-        ))}
-      </div>
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold text-text-primary">
+            {t("instructions.target_matrix")}
+          </h3>
+          <p className="mt-0.5 text-xs text-text-muted">
+            {t("instructions.target_matrix_hint")}
+          </p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(
+            [
+              { id: "claude_global", labelKey: "instructions.scope.claude" },
+              { id: "codex_global", labelKey: "instructions.scope.codex" },
+            ] as const
+          ).map((it) => (
+            <button
+              key={it.id}
+              onClick={() => setScope(it.id)}
+              className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                scope === it.id
+                  ? "border-accent/40 bg-accent-soft text-accent"
+                  : "border-border bg-card-secondary/45 text-text-secondary hover:border-accent/30 hover:text-text-primary"
+              }`}
+            >
+              <span className="font-medium">{t(it.labelKey)}</span>
+            </button>
+          ))}
+        </div>
+      </section>
 
       {/* Editor card — full width, content first.
           高度用 calc(100vh - …)：因为外层 AppShell 的 `animate-fade-in` 不是
           flex column，flex-1 / min-h-0 不生效。视口减去 header + tabs + 工具栏
           + 页面 padding 的预算大概 240px，留一点 buffer 取 260px。 */}
       <section
-        className="flex flex-col rounded-xl border border-border bg-card"
-        style={{ height: "calc(100vh - 260px)" }}
+        className="flex flex-col rounded-xl border border-border bg-card shadow-sm"
+        style={{ height: "calc(100vh - 360px)", minHeight: "360px" }}
       >
         {/* Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2.5">
           <div className="min-w-0 flex-1">
+            <h3 className="mb-1 text-sm font-semibold text-text-primary">
+              {t("instructions.editor")}
+            </h3>
             <div className="truncate font-mono text-[11px] text-text-secondary">
               {status?.path ?? "—"}
             </div>

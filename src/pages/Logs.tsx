@@ -281,31 +281,65 @@ export function Logs() {
 
   return (
     <div ref={topRef} className="space-y-4">
-      <div className="space-y-3">
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-          <LogSummaryItem
-            label={t("logs.summary_matched")}
-            value={total.toLocaleString()}
-            hint={t("logs.requests")}
-          />
-          <LogSummaryItem
-            label={t("logs.summary_page_errors")}
-            value={pageErrorCount.toLocaleString()}
-            hint={`${knownStatusLogs.length.toLocaleString()} ${t("logs.summary_with_status")}`}
-          />
-          <LogSummaryItem
-            label={t("logs.summary_page_success_rate")}
-            value={pageSuccessRate}
-            hint={`${pageSuccessCount.toLocaleString()} ${t("logs.summary_succeeded")}`}
-          />
-          <LogSummaryItem
-            label={t("logs.summary_page_avg_latency")}
-            value={formatOptionalLatency(pageAvgLatency)}
-            hint={`${pageRecordedLatencies.length.toLocaleString()} ${t("logs.summary_recorded")}`}
-          />
+      <div className="relative overflow-hidden rounded-xl border border-accent/20 bg-card p-5 shadow-sm">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-accent/10 to-transparent" />
+        <div className="relative">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">
+            {t("logs.console")}
+          </p>
+          <h2 className="mt-2 flex items-center gap-2 text-lg font-semibold text-text-primary">
+            <ScrollText className="h-4 w-4" />
+            {t("nav.logs")}
+          </h2>
+          <p className="mt-1 max-w-2xl text-xs text-text-muted">
+            {t("logs.console_hint")}
+          </p>
         </div>
+      </div>
 
-        <div className="rounded-xl border border-border bg-card p-3">
+      <div className="space-y-3">
+        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold text-text-primary">
+              {t("logs.traffic_snapshot")}
+            </h3>
+            <p className="mt-0.5 text-xs text-text-muted">
+              {t("logs.traffic_snapshot_hint")}
+            </p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+            <LogSummaryItem
+              label={t("logs.summary_matched")}
+              value={total.toLocaleString()}
+              hint={t("logs.requests")}
+            />
+            <LogSummaryItem
+              label={t("logs.summary_page_errors")}
+              value={pageErrorCount.toLocaleString()}
+              hint={`${knownStatusLogs.length.toLocaleString()} ${t("logs.summary_with_status")}`}
+            />
+            <LogSummaryItem
+              label={t("logs.summary_page_success_rate")}
+              value={pageSuccessRate}
+              hint={`${pageSuccessCount.toLocaleString()} ${t("logs.summary_succeeded")}`}
+            />
+            <LogSummaryItem
+              label={t("logs.summary_page_avg_latency")}
+              value={formatOptionalLatency(pageAvgLatency)}
+              hint={`${pageRecordedLatencies.length.toLocaleString()} ${t("logs.summary_recorded")}`}
+            />
+          </div>
+        </section>
+
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+          <div className="mb-3">
+            <h3 className="text-sm font-semibold text-text-primary">
+              {t("logs.query_builder")}
+            </h3>
+            <p className="mt-0.5 text-xs text-text-muted">
+              {t("logs.query_builder_hint")}
+            </p>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
@@ -456,52 +490,52 @@ export function Logs() {
               )}
             </div>
           )}
-        </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 列表/会话两种视图切换——列表按时间逐条，会话按 session_id 聚合 */}
-          <div className="flex shrink-0 items-center rounded-md bg-card-secondary p-0.5">
+          <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+            {/* 列表/会话两种视图切换——列表按时间逐条，会话按 session_id 聚合 */}
+            <div className="flex shrink-0 items-center rounded-md bg-card-secondary p-0.5">
+              <button
+                onClick={() => setViewMode("list")}
+                className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+                title={t("logs.view_list_hint")}
+              >
+                <LayoutList className="h-3 w-3" />
+                {t("logs.view_list")}
+              </button>
+              <button
+                onClick={() => setViewMode("session")}
+                className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "session" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
+                title={t("logs.view_session_hint")}
+              >
+                <Layers className="h-3 w-3" />
+                {t("logs.view_session")}
+              </button>
+            </div>
             <button
-              onClick={() => setViewMode("list")}
-              className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "list" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
-              title={t("logs.view_list_hint")}
+              onClick={loadLogs}
+              disabled={loading}
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
             >
-              <LayoutList className="h-3 w-3" />
-              {t("logs.view_list")}
+              <RefreshCcw
+                className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
+              />
+              {t("common.refresh")}
             </button>
             <button
-              onClick={() => setViewMode("session")}
-              className={`flex items-center gap-1 rounded px-2.5 py-1 text-xs font-medium transition-colors ${viewMode === "session" ? "bg-card text-text-primary" : "text-text-muted hover:text-text-primary"}`}
-              title={t("logs.view_session_hint")}
+              type="button"
+              onClick={() => setShowSyncActions((v) => !v)}
+              className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${showSyncActions ? "bg-card-secondary text-text-primary" : "text-text-muted hover:bg-card-secondary hover:text-text-primary"}`}
             >
-              <Layers className="h-3 w-3" />
-              {t("logs.view_session")}
+              <Download className="h-3 w-3" />
+              {t("logs.sync_logs")}
+            </button>
+            <button
+              onClick={() => setConfirmClear(true)}
+              className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-card-secondary hover:text-text-primary"
+            >
+              {t("logs.clear")}
             </button>
           </div>
-          <button
-            onClick={loadLogs}
-            disabled={loading}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-          >
-            <RefreshCcw
-              className={`h-3 w-3 ${loading ? "animate-spin" : ""}`}
-            />
-            {t("common.refresh")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowSyncActions((v) => !v)}
-            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${showSyncActions ? "bg-card-secondary text-text-primary" : "text-text-muted hover:bg-card-secondary hover:text-text-primary"}`}
-          >
-            <Download className="h-3 w-3" />
-            {t("logs.sync_logs")}
-          </button>
-          <button
-            onClick={() => setConfirmClear(true)}
-            className="shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-card-secondary hover:text-text-primary"
-          >
-            {t("logs.clear")}
-          </button>
         </div>
 
         {showSyncActions && (
@@ -634,7 +668,7 @@ function LogSummaryItem({
   hint: string;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card px-4 py-3">
+    <div className="rounded-lg border border-border/70 bg-card-secondary/45 px-4 py-3">
       <div className="text-[11px] font-medium text-text-muted">{label}</div>
       <div className="mt-1 flex items-baseline gap-2">
         <span className="font-mono text-lg font-semibold text-text-primary">

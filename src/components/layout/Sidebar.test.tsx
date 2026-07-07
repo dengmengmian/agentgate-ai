@@ -39,10 +39,26 @@ describe("Sidebar", () => {
 
     renderWithProviders(<Sidebar />);
 
-    expect(screen.getByText("Overview")).toBeInTheDocument();
-    expect(screen.getByText("Providers")).toBeInTheDocument();
-    expect(screen.getByText("Clients")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Providers" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Clients" })).toBeInTheDocument();
     expect(await screen.findByText("v1.4.4")).toBeInTheDocument();
+  });
+
+  it("groups navigation links by purpose", () => {
+    useProviders.setState({
+      items: [sampleProvider],
+      loading: false,
+      error: null,
+    });
+
+    renderWithProviders(<Sidebar />);
+
+    expect(screen.getAllByText("Overview").length).toBeGreaterThan(0);
+    expect(screen.getByText("Models")).toBeInTheDocument();
+    expect(screen.getByText("Gateway")).toBeInTheDocument();
+    expect(screen.getByText("Tools")).toBeInTheDocument();
+    expect(screen.getByText("System")).toBeInTheDocument();
   });
 
   it("toggles collapsed state", async () => {
@@ -60,6 +76,7 @@ describe("Sidebar", () => {
     });
 
     expect(screen.queryByText("Overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Models")).not.toBeInTheDocument();
     expect(screen.getByTitle(/Expand sidebar/i)).toBeInTheDocument();
     expect(localStorage.getItem("agentgate_sidebar_collapsed")).toBe("1");
 
@@ -68,7 +85,7 @@ describe("Sidebar", () => {
       fireEvent.click(expandBtn);
     });
 
-    expect(screen.getByText("Overview")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument();
     expect(screen.getByTitle(/Collapse sidebar/i)).toBeInTheDocument();
     expect(localStorage.getItem("agentgate_sidebar_collapsed")).toBe("0");
   });

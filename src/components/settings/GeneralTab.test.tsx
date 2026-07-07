@@ -66,9 +66,24 @@ function setup(over: Record<string, unknown> = {}) {
   return { handleUpdateCostAlert, handleUpdateRequestBodyLimit };
 }
 
+function openAdvanced() {
+  fireEvent.click(screen.getByText("settings.general.advanced"));
+}
+
 describe("GeneralTab 成本预警", () => {
+  it("按基础 / 外观 / 高级分组，高级默认折叠", () => {
+    setup();
+
+    expect(screen.getByText("settings.general.basic")).toBeInTheDocument();
+    expect(screen.getByText("settings.general.appearance")).toBeInTheDocument();
+    expect(screen.getByText("settings.general.advanced")).toBeInTheDocument();
+    expect(screen.getByTestId("theme-picker")).toBeInTheDocument();
+    expect(screen.queryByText("settings.body_filter")).toBeNull();
+  });
+
   it("开启开关 → 保存 cost_alert_enabled:true(cost_alert 是最后一个 toggle)", () => {
     const { handleUpdateCostAlert } = setup();
+    openAdvanced();
     const boxes = screen.getAllByRole("checkbox");
     fireEvent.click(boxes[boxes.length - 1]);
     expect(handleUpdateCostAlert).toHaveBeenCalledWith({
@@ -78,11 +93,13 @@ describe("GeneralTab 成本预警", () => {
 
   it("未开启时不显示阈值输入", () => {
     setup({ cost_alert_enabled: false });
+    openAdvanced();
     expect(screen.queryByPlaceholderText("10")).toBeNull();
   });
 
   it("开启时有效阈值 onBlur 保存", () => {
     const { handleUpdateCostAlert } = setup({ cost_alert_enabled: true });
+    openAdvanced();
     fireEvent.blur(screen.getByPlaceholderText("10"), {
       target: { value: "20" },
     });
@@ -96,6 +113,7 @@ describe("GeneralTab 成本预警", () => {
       cost_alert_enabled: true,
       cost_alert_threshold: 5,
     });
+    openAdvanced();
     const input = screen.getByPlaceholderText("10");
     fireEvent.blur(input, { target: { value: "0" } }); // <=0
     fireEvent.blur(input, { target: { value: "abc" } }); // NaN

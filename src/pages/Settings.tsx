@@ -269,28 +269,26 @@ export function Settings() {
 
   if (!settings)
     return (
-      <div className="flex gap-6">
-        <div className="w-44 shrink-0 space-y-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="skeleton h-9 rounded-lg" />
+      <div className="space-y-5">
+        <div className="flex gap-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="skeleton h-9 w-24 rounded-lg" />
           ))}
         </div>
-        <div className="flex-1 space-y-4">
-          <div className="skeleton h-48 rounded-xl" />
-        </div>
+        <div className="skeleton mx-auto h-80 max-w-[860px] rounded-lg" />
       </div>
     );
 
   return (
-    <div className="flex gap-6 min-h-0">
-      {/* Left Tab Navigation */}
-      <nav className="w-44 shrink-0">
-        <div className="space-y-1">
+    <div className="min-h-0 space-y-5">
+      {/* Tab Navigation */}
+      <nav className="overflow-x-auto">
+        <div className="inline-flex rounded-lg border border-border bg-card-secondary p-1">
           {TABS.map(({ id, icon: Icon }) => (
             <button
               key={id}
               onClick={() => setTab(id)}
-              className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+              className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm transition-colors ${
                 tab === id
                   ? "bg-accent-soft text-accent font-medium"
                   : "text-text-secondary hover:bg-hover hover:text-text-primary"
@@ -303,8 +301,8 @@ export function Settings() {
         </div>
       </nav>
 
-      {/* Right Content */}
-      <div className="flex-1 min-w-0 space-y-6">
+      {/* Content */}
+      <div className="min-w-0 space-y-6">
         {tab === "general" && (
           <GeneralTab
             settings={settings}
@@ -1060,7 +1058,7 @@ function ThemePicker({
   onChange: (id: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {THEME_SWATCHES.map((s) => {
         const selected = value === s.id;
         return (
@@ -1068,7 +1066,7 @@ function ThemePicker({
             key={s.id}
             type="button"
             onClick={() => onChange(s.id)}
-            className={`group flex flex-col gap-2 rounded-lg border p-2.5 text-left transition-all ${
+            className={`group rounded-lg border p-2 text-left transition-all ${
               selected
                 ? "border-accent ring-2 ring-accent/40"
                 : "border-border hover:border-text-muted"
@@ -1078,11 +1076,11 @@ function ThemePicker({
           >
             {/* Mini preview: a faux card with accent dot + text bars */}
             <div
-              className="flex items-center gap-2 rounded-md border px-2 py-2"
+              className="mb-1.5 flex items-center gap-2 rounded-md border px-2 py-1.5"
               style={{ backgroundColor: s.card, borderColor: s.border }}
             >
               <span
-                className="h-3 w-3 shrink-0 rounded-full"
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ backgroundColor: s.accent }}
               />
               <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -1098,7 +1096,7 @@ function ThemePicker({
             </div>
             <div className="flex items-baseline justify-between gap-2">
               <span
-                className="text-xs font-medium"
+                className="text-[11px] font-medium"
                 style={{ color: s.textPrimary }}
               >
                 {s.labelZh}

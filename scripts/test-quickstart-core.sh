@@ -88,6 +88,12 @@ if [[ "$USE_REAL" != "1" ]]; then
   SMOKE_BASE_URL="http://127.0.0.1:${mock_port}/v1"
   SMOKE_API_KEY="mock-upstream-key"
 
+  # Local smoke must hit the in-process mock directly. Some developer
+  # environments inject a system HTTP proxy that reqwest honors even when the
+  # shell does not show HTTP_PROXY, so make localhost bypass explicit.
+  export NO_PROXY="${NO_PROXY:+${NO_PROXY},}127.0.0.1,localhost"
+  export no_proxy="${no_proxy:+${no_proxy},}127.0.0.1,localhost"
+
   cat >"$tmp_dir/mock-openai-compatible.mjs" <<'EOF'
 import http from "node:http";
 

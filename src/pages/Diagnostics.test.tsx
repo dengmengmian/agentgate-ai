@@ -42,7 +42,8 @@ describe("Diagnostics", () => {
     await act(async () => run.click());
 
     await waitFor(() => expect(api.runFullSelfTest).toHaveBeenCalled());
-    expect(screen.getByText("All checks passed")).toBeInTheDocument();
+    expect(screen.getByText("diag.diagnostic_console")).toBeInTheDocument();
+    expect(screen.getAllByText("All checks passed").length).toBeGreaterThan(0);
   });
 
   it("exports diagnostic bundle", async () => {

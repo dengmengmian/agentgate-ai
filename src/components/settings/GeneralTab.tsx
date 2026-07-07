@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { ChevronDown } from "lucide-react";
 import type { Locale } from "@/lib/i18n";
 import type { GatewaySettings as GatewaySettingsType } from "@/types/gateway";
 import { toast } from "@/components/common/Toast";
@@ -50,6 +51,7 @@ export function GeneralTab({
   ThemePicker,
 }: Props) {
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => {
     isEnabled()
@@ -68,243 +70,283 @@ export function GeneralTab({
   };
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5">
-      <h3 className="mb-4 text-sm font-semibold text-text-primary">
-        {t("settings.general")}
-      </h3>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-text-primary">
-              {t("settings.auto_start_gateway")}
-            </p>
-            <p className="text-xs text-text-muted">
-              {t("settings.auto_start_desc")}
-            </p>
-          </div>
-          <ToggleSwitch
-            checked={settings.auto_start}
-            onChange={handleUpdateAutoStart}
-          />
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-text-primary">
-              {t("settings.launch_at_login")}
-            </p>
-            <p className="text-xs text-text-muted">
-              {t("settings.launch_at_login_desc")}
-            </p>
-          </div>
-          <ToggleSwitch
-            checked={launchAtLogin}
-            onChange={handleToggleLaunchAtLogin}
-          />
-        </div>
-        <div className="flex items-center justify-between">
-          <div className="flex-1 pr-4">
-            <p className="text-sm text-text-primary">
-              {t("settings.request_body_limit")}
-            </p>
-            <p className="text-xs text-text-muted">
-              {t("settings.request_body_limit_desc")}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min="1"
-              max="128"
-              step="1"
-              defaultValue={settings.request_body_limit_mb}
-              onBlur={(e) => {
-                const v = Math.floor(Number(e.target.value));
-                if (
-                  Number.isFinite(v) &&
-                  v > 0 &&
-                  v <= 128 &&
-                  v !== settings.request_body_limit_mb
-                ) {
-                  handleUpdateRequestBodyLimit(v);
-                }
-              }}
-              className="form-input w-24"
-            />
-            <span className="text-sm text-text-muted">MB</span>
-          </div>
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-text-primary">
-              {t("settings.language")}
-            </p>
-            <p className="text-xs text-text-muted">{t("settings.lang_desc")}</p>
-          </div>
-          <select
-            value={locale}
-            onChange={(e) => setLocale(e.target.value as Locale)}
-            className="rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
-          >
-            <option value="en">English</option>
-            <option value="zh">中文</option>
-          </select>
-        </div>
-        <div>
-          <p className="text-sm text-text-primary">{t("settings.theme")}</p>
-          <p className="mb-3 text-xs text-text-muted">
-            {t("settings.theme_desc")}
-          </p>
-          <ThemePicker value={theme} onChange={setTheme} />
-        </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-text-primary">
-              {t("settings.show_quick_setup")}
-            </p>
-            <p className="text-xs text-text-muted">
-              {t("settings.show_quick_setup_desc")}
-            </p>
-          </div>
-          <ToggleSwitch
-            checked={localStorage.getItem("agentgate_show_quick_setup") === "1"}
-            onChange={(val) => {
-              if (val) {
-                localStorage.setItem("agentgate_show_quick_setup", "1");
-                localStorage.removeItem("agentgate_hide_quick_setup");
-              } else {
-                localStorage.removeItem("agentgate_show_quick_setup");
-                localStorage.setItem("agentgate_hide_quick_setup", "1");
-              }
-              window.location.reload();
-            }}
-          />
-        </div>
+    <section className="w-full rounded-lg border border-border bg-card">
+      <div className="border-b border-border px-5 py-4">
+        <h3 className="text-sm font-semibold text-text-primary">
+          {t("settings.general")}
+        </h3>
+      </div>
 
-        {/* 网关精炼层全局总闸——默认全关 = 字节级透明 pass-through */}
-        <div className="border-t border-border pt-4">
-          <p className="text-sm font-medium text-text-primary">
-            {t("settings.refiner")}
-          </p>
-          <p className="mb-3 text-xs text-text-muted">
-            {t("settings.refiner_desc")}
-          </p>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex-1 pr-4">
-                <p className="text-sm text-text-primary">
-                  {t("settings.body_filter")}
-                </p>
-                <p className="text-xs text-text-muted">
-                  {t("settings.body_filter_desc")}
-                </p>
-              </div>
+      <div className="divide-y divide-border">
+        <SettingsGroup title={t("settings.general.basic")}>
+          <SettingRow
+            title={t("settings.auto_start_gateway")}
+            description={t("settings.auto_start_desc")}
+            control={
               <ToggleSwitch
-                checked={settings.body_filter_global}
-                onChange={(v) =>
-                  handleUpdateRefinerGlobal("body_filter_global", v)
+                checked={settings.auto_start}
+                onChange={handleUpdateAutoStart}
+              />
+            }
+          />
+          <SettingRow
+            title={t("settings.launch_at_login")}
+            description={t("settings.launch_at_login_desc")}
+            control={
+              <ToggleSwitch
+                checked={launchAtLogin}
+                onChange={handleToggleLaunchAtLogin}
+              />
+            }
+          />
+          <SettingRow
+            title={t("settings.request_body_limit")}
+            description={t("settings.request_body_limit_desc")}
+            control={
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="128"
+                  step="1"
+                  defaultValue={settings.request_body_limit_mb}
+                  onBlur={(e) => {
+                    const v = Math.floor(Number(e.target.value));
+                    if (
+                      Number.isFinite(v) &&
+                      v > 0 &&
+                      v <= 128 &&
+                      v !== settings.request_body_limit_mb
+                    ) {
+                      handleUpdateRequestBodyLimit(v);
+                    }
+                  }}
+                  className="form-input w-20"
+                />
+                <span className="text-sm text-text-muted">MB</span>
+              </div>
+            }
+          />
+          <SettingRow
+            title={t("settings.language")}
+            description={t("settings.lang_desc")}
+            control={
+              <select
+                value={locale}
+                onChange={(e) => setLocale(e.target.value as Locale)}
+                className="rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs text-text-primary outline-none focus:border-accent"
+              >
+                <option value="en">English</option>
+                <option value="zh">中文</option>
+              </select>
+            }
+          />
+        </SettingsGroup>
+
+        <SettingsGroup title={t("settings.general.appearance")}>
+          <div>
+            <div className="mb-3">
+              <p className="text-sm text-text-primary">{t("settings.theme")}</p>
+              <p className="text-xs text-text-muted">
+                {t("settings.theme_desc")}
+              </p>
+            </div>
+            <ThemePicker value={theme} onChange={setTheme} />
+          </div>
+        </SettingsGroup>
+
+        <div>
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen((v) => !v)}
+            className="flex w-full items-center justify-between px-5 py-4 text-left"
+          >
+            <div>
+              <p className="text-sm font-medium text-text-primary">
+                {t("settings.general.advanced")}
+              </p>
+              <p className="text-xs text-text-muted">
+                {t("settings.general.advanced_desc")}
+              </p>
+            </div>
+            <ChevronDown
+              className={`h-4 w-4 text-text-muted transition-transform ${
+                advancedOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {advancedOpen && (
+            <div className="space-y-5 border-t border-border px-5 py-4">
+              <SettingRow
+                title={t("settings.show_quick_setup")}
+                description={t("settings.show_quick_setup_desc")}
+                control={
+                  <ToggleSwitch
+                    checked={
+                      localStorage.getItem("agentgate_show_quick_setup") === "1"
+                    }
+                    onChange={(val) => {
+                      if (val) {
+                        localStorage.setItem("agentgate_show_quick_setup", "1");
+                        localStorage.removeItem("agentgate_hide_quick_setup");
+                      } else {
+                        localStorage.removeItem("agentgate_show_quick_setup");
+                        localStorage.setItem("agentgate_hide_quick_setup", "1");
+                      }
+                      window.location.reload();
+                    }}
+                  />
                 }
               />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex-1 pr-4">
-                <p className="text-sm text-text-primary">
-                  {t("settings.thinking_rectifier")}
-                </p>
-                <p className="text-xs text-text-muted">
-                  {t("settings.thinking_rectifier_desc")}
-                </p>
-              </div>
-              <ToggleSwitch
-                checked={settings.thinking_rectifier_global}
-                onChange={(v) =>
-                  handleUpdateRefinerGlobal("thinking_rectifier_global", v)
-                }
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex-1 pr-4">
-                <p className="text-sm text-text-primary">
-                  {t("settings.error_mapper")}
-                </p>
-                <p className="text-xs text-text-muted">
-                  {t("settings.error_mapper_desc")}
-                </p>
-              </div>
-              <ToggleSwitch
-                checked={settings.error_mapper_global}
-                onChange={(v) =>
-                  handleUpdateRefinerGlobal("error_mapper_global", v)
-                }
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex-1 pr-4">
-                <p className="text-sm text-text-primary">
-                  {t("settings.health_probe")}
-                </p>
-                <p className="text-xs text-text-muted">
-                  {t("settings.health_probe_desc")}
-                </p>
-              </div>
-              <ToggleSwitch
-                checked={settings.health_probe_enabled}
-                onChange={(v) =>
-                  handleUpdateRefinerGlobal("health_probe_enabled", v)
-                }
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex-1 pr-4">
-                <p className="text-sm text-text-primary">
-                  {t("settings.cost_alert")}
-                </p>
-                <p className="text-xs text-text-muted">
-                  {t("settings.cost_alert_desc")}
-                </p>
-              </div>
-              <ToggleSwitch
-                checked={settings.cost_alert_enabled}
-                onChange={(v) =>
-                  handleUpdateCostAlert({ cost_alert_enabled: v })
-                }
-              />
-            </div>
-            {settings.cost_alert_enabled && (
-              <div className="flex items-center justify-between">
-                <div className="flex-1 pr-4">
-                  <p className="text-sm text-text-primary">
-                    {t("settings.cost_alert_threshold")}
+
+              <div>
+                <div className="mb-3">
+                  <p className="text-sm font-medium text-text-primary">
+                    {t("settings.refiner")}
                   </p>
                   <p className="text-xs text-text-muted">
-                    {t("settings.cost_alert_threshold_desc")}
+                    {t("settings.refiner_desc")}
                   </p>
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-sm text-text-muted">$</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    defaultValue={settings.cost_alert_threshold ?? ""}
-                    onBlur={(e) => {
-                      const v = parseFloat(e.target.value);
-                      if (
-                        !Number.isNaN(v) &&
-                        v > 0 &&
-                        v !== settings.cost_alert_threshold
-                      ) {
-                        handleUpdateCostAlert({ cost_alert_threshold: v });
-                      }
-                    }}
-                    placeholder="10"
-                    className="form-input w-24"
+                <div className="space-y-3">
+                  <SettingRow
+                    title={t("settings.body_filter")}
+                    description={t("settings.body_filter_desc")}
+                    control={
+                      <ToggleSwitch
+                        checked={settings.body_filter_global}
+                        onChange={(v) =>
+                          handleUpdateRefinerGlobal("body_filter_global", v)
+                        }
+                      />
+                    }
                   />
+                  <SettingRow
+                    title={t("settings.thinking_rectifier")}
+                    description={t("settings.thinking_rectifier_desc")}
+                    control={
+                      <ToggleSwitch
+                        checked={settings.thinking_rectifier_global}
+                        onChange={(v) =>
+                          handleUpdateRefinerGlobal(
+                            "thinking_rectifier_global",
+                            v
+                          )
+                        }
+                      />
+                    }
+                  />
+                  <SettingRow
+                    title={t("settings.error_mapper")}
+                    description={t("settings.error_mapper_desc")}
+                    control={
+                      <ToggleSwitch
+                        checked={settings.error_mapper_global}
+                        onChange={(v) =>
+                          handleUpdateRefinerGlobal("error_mapper_global", v)
+                        }
+                      />
+                    }
+                  />
+                  <SettingRow
+                    title={t("settings.health_probe")}
+                    description={t("settings.health_probe_desc")}
+                    control={
+                      <ToggleSwitch
+                        checked={settings.health_probe_enabled}
+                        onChange={(v) =>
+                          handleUpdateRefinerGlobal("health_probe_enabled", v)
+                        }
+                      />
+                    }
+                  />
+                  <SettingRow
+                    title={t("settings.cost_alert")}
+                    description={t("settings.cost_alert_desc")}
+                    control={
+                      <ToggleSwitch
+                        checked={settings.cost_alert_enabled}
+                        onChange={(v) =>
+                          handleUpdateCostAlert({ cost_alert_enabled: v })
+                        }
+                      />
+                    }
+                  />
+                  {settings.cost_alert_enabled && (
+                    <SettingRow
+                      title={t("settings.cost_alert_threshold")}
+                      description={t("settings.cost_alert_threshold_desc")}
+                      control={
+                        <div className="flex items-center gap-1">
+                          <span className="text-sm text-text-muted">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.5"
+                            defaultValue={settings.cost_alert_threshold ?? ""}
+                            onBlur={(e) => {
+                              const v = parseFloat(e.target.value);
+                              if (
+                                !Number.isNaN(v) &&
+                                v > 0 &&
+                                v !== settings.cost_alert_threshold
+                              ) {
+                                handleUpdateCostAlert({
+                                  cost_alert_threshold: v,
+                                });
+                              }
+                            }}
+                            placeholder="10"
+                            className="form-input w-20"
+                          />
+                        </div>
+                      }
+                    />
+                  )}
                 </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </section>
+  );
+}
+
+function SettingsGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-4 px-5 py-4">
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+        {title}
+      </h4>
+      {children}
+    </div>
+  );
+}
+
+function SettingRow({
+  title,
+  description,
+  control,
+}: {
+  title: string;
+  description: string;
+  control: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-6">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm text-text-primary">{title}</p>
+        <p className="text-xs leading-5 text-text-muted">{description}</p>
+      </div>
+      <div className="shrink-0">{control}</div>
+    </div>
   );
 }

@@ -25,6 +25,10 @@ export type UpdatePetSettingsInput = {
 
 export interface PetGatewayInfo {
   state: "running" | "stopped" | "active";
+  /** 并发请求数(lite 接口返回),活跃强度分级用 */
+  active_count?: number;
+  /** 用户的花费预警配置,宠物"吃撑"判定用 */
+  cost_alert?: { enabled?: boolean; threshold?: number | null } | null;
   running?: boolean;
   host?: string;
   port?: number;

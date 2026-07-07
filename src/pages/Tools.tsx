@@ -476,8 +476,32 @@ export function Tools() {
 
   return (
     <div className="space-y-5">
+      <header className="relative overflow-hidden rounded-xl border border-accent/20 bg-card p-5 shadow-sm">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-accent/10 to-transparent" />
+        <div className="relative">
+          <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">
+            {t("tools.console")}
+          </p>
+          <h2 className="mt-2 flex items-center gap-2 text-lg font-semibold text-text-primary">
+            <Monitor className="h-4 w-4" />
+            {t("tools.clients")}
+          </h2>
+          <p className="mt-1 max-w-2xl text-xs text-text-muted">
+            {t("tools.console_hint")}
+          </p>
+        </div>
+      </header>
+
       {/* Connection Status Bar */}
-      <div className="rounded-xl border border-border bg-card p-4">
+      <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold text-text-primary">
+            {t("tools.connection_path")}
+          </h3>
+          <p className="mt-0.5 text-xs text-text-muted">
+            {t("tools.connection_path_hint")}
+          </p>
+        </div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-6">
             <ConnectionStep

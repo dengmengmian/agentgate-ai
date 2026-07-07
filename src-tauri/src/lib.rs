@@ -128,6 +128,8 @@ fn build_specta() -> tauri_specta::Builder<tauri::Wry> {
             PetSettingsChanged,
             PetClickThroughChanged,
             PetMemoryReset,
+            PetChatUpdated,
+            PetMemoryChanged,
             PetOpenSettings,
             PetOpenGateway,
             PetOpenLogs,
@@ -274,6 +276,8 @@ fn build_specta() -> tauri_specta::Builder<tauri::Wry> {
             commands::get_pet_gateway_state_lite,
             commands::get_pet_memory,
             commands::save_pet_memory,
+            commands::get_pet_chat_history,
+            commands::save_pet_chat_history,
             commands::pet_chat,
             commands::pet_open_settings,
             commands::get_pet_click_through,
@@ -463,7 +467,7 @@ pub fn run() {
                 }
                 "pet_reset_memory" => {
                     let state: tauri::State<'_, AppState> = app.state();
-                    let _ = commands::save_pet_memory("{}".into(), state);
+                    let _ = commands::save_pet_memory("{}".into(), app.clone(), state);
                     let _ = PetMemoryReset.emit(app);
                 }
                 "pet_hide" => {
@@ -804,6 +808,8 @@ pub fn run() {
             commands::get_pet_gateway_state_lite,
             commands::get_pet_memory,
             commands::save_pet_memory,
+            commands::get_pet_chat_history,
+            commands::save_pet_chat_history,
             commands::pet_chat,
             commands::pet_open_settings,
             commands::get_pet_click_through,

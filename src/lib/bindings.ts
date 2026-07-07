@@ -1116,6 +1116,26 @@ async savePetMemory(memory: string) : Promise<Result<boolean, AppError>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getPetChatHistory() : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_pet_chat_history") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+/**
+ * 保存聊天历史(封顶后)+ 全窗口广播 PetChatUpdated。
+ * 宠物窗口 / 主窗口聊天页任一方发消息后调它,另一方 listen 到即时刷新。
+ */
+async savePetChatHistory(history: string) : Promise<Result<string, AppError>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("save_pet_chat_history", { history }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async petChat(messages: JsonValue[]) : Promise<Result<string, AppError>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("pet_chat", { messages }) };
@@ -1343,8 +1363,10 @@ async importSkills(payload: string) : Promise<Result<Skill[], AppError>> {
 
 export const events = __makeEvents__<{
 petBubble: PetBubble,
+petChatUpdated: PetChatUpdated,
 petClickThroughChanged: PetClickThroughChanged,
 petGatewayStateChanged: PetGatewayStateChanged,
+petMemoryChanged: PetMemoryChanged,
 petMemoryReset: PetMemoryReset,
 petOpenGateway: PetOpenGateway,
 petOpenLogs: PetOpenLogs,
@@ -1352,8 +1374,10 @@ petOpenSettings: PetOpenSettings,
 petSettingsChanged: PetSettingsChanged
 }>({
 petBubble: "pet-bubble",
+petChatUpdated: "pet-chat-updated",
 petClickThroughChanged: "pet-click-through-changed",
 petGatewayStateChanged: "pet-gateway-state-changed",
+petMemoryChanged: "pet-memory-changed",
 petMemoryReset: "pet-memory-reset",
 petOpenGateway: "pet-open-gateway",
 petOpenLogs: "pet-open-logs",
@@ -1483,7 +1507,7 @@ codex_compact_summary_max_tokens: number;
 /**
  * 网关接收单次请求体的上限(MB)。可被 AGENTGATE_REQUEST_BODY_LIMIT_MB 覆盖。
  */
-request_body_limit_mb: number;
+request_body_limit_mb: number; 
 /**
  * 今日花费预警开关(默认关)。
  */
@@ -1578,6 +1602,11 @@ export type OpenCodeConfigStatus = { config_path: string; exists: boolean; has_a
  */
 export type PetBubble = { text: string; text_zh: string | null; type: string }
 /**
+ * 宠物聊天记录变了——载荷是完整历史 JSON。宠物窗口和主窗口聊天页
+ * 都 listen 它做实时同步(哪个窗口发消息,另一个立刻刷新)。
+ */
+export type PetChatUpdated = string
+/**
  * 鼠标穿透开关变了——三个入口(右键菜单 / tray / Settings)共用这一个事件。
  */
 export type PetClickThroughChanged = boolean
@@ -1585,6 +1614,11 @@ export type PetClickThroughChanged = boolean
  * 网关运行态切换(running / stopped / active)。让前端 polling 立即刷一次。
  */
 export type PetGatewayStateChanged = string
+/**
+ * 宠物记忆变了——载荷是完整记忆 JSON。聊天里自动提取或聊天页手动编辑
+ * 都会广播,宠物窗口据此更新内存中的记忆(否则会用旧名字/旧话题)。
+ */
+export type PetMemoryChanged = string
 /**
  * 「清空记忆」触发,Pet 前端清本地缓存 + 弹气泡。
  */

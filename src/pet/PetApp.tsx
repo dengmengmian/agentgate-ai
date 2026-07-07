@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useCallback, memo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   getCurrentWindow,
+  currentMonitor,
   LogicalPosition,
   LogicalSize,
 } from "@tauri-apps/api/window";
@@ -11,24 +12,39 @@ import {
   getPetGatewayState,
   getPetGatewayStateLite,
   getPetMemory,
-  savePetMemory,
-  petChat,
+  getPetChatHistory,
   getPetClickThrough,
   showPetContextMenu,
 } from "@/lib/api";
 import type { PetType, PetState } from "@/types/pet";
-import { RobotPet } from "./pets/RobotPet";
-import { PixelCat } from "./pets/PixelCat";
-import { SlimePet } from "./pets/SlimePet";
-import { FoxPet } from "./pets/FoxPet";
-import { OctopusPet } from "./pets/OctopusPet";
-import { GhostPet } from "./pets/GhostPet";
-import { OxPet } from "./pets/OxPet";
-import { SuperSoldierPet } from "./pets/SuperSoldierPet";
-import { CoderPet } from "./pets/CoderPet";
+import { PET_COMPONENTS } from "./petComponents";
 import { Bubble, type BubbleType } from "./Bubble";
 import { getGreeting } from "./greetings";
-import { buildSystemPrompt, pickPokeReaction } from "./personas";
+import {
+  pickPokeReaction,
+  pickAngryReaction,
+  pickSulkReaction,
+} from "./personas";
+import {
+  activityTier,
+  pokeMood,
+  getDateBadge,
+  isOverBudget,
+  topicGreeting,
+  type PokeMood,
+} from "./petLogic";
+import {
+  sendPetMessage,
+  parseHistory,
+  type ChatMessage,
+} from "./chatCore";
+import {
+  petGenerate,
+  buildGreetingInstruction,
+  buildStatsInstruction,
+  buildErrorInstruction,
+  buildAmbientInstruction,
+} from "./petGenerate";
 import "./pet.css";
 
 const SLEEP_TIMEOUT = 5 * 60 * 1000;
@@ -36,29 +52,26 @@ const SLEEP_TIMEOUT = 5 * 60 * 1000;
 // 让前端立即更新,这个轮询只为兜住偶发漏掉的 + 跟踪 active 状态(请求路径不发事件)。
 const POLL_INTERVAL = 10000;
 const ERROR_COOLDOWN = 10000;
-const MAX_HISTORY = 10;
 const STATS_INTERVAL = 30 * 60 * 1000; // show stats every 30 min
 const DRAG_THRESHOLD = 4; // px before mousedown promotes to drag
 const POKE_DURATION = 400; // matches pet.css @keyframes poke
 // 气泡显示时窗口往上扩展,容下多行内容;消失还原。idle 时窗口保持小尺寸不挡底层。
 const BUBBLE_EXPAND = 60;
-
-// memo 一次拿 9 个版本——bubble / chatMode / clickThrough 等无关 state 变化时,
-// 只要 state prop(idle/active/sleep/error/poke)没变就跳过 SVG reconcile。
-const PET_COMPONENTS: Record<
-  PetType,
-  React.ComponentType<{ state: PetState }>
-> = {
-  robot: memo(RobotPet),
-  "pixel-cat": memo(PixelCat),
-  slime: memo(SlimePet),
-  fox: memo(FoxPet),
-  octopus: memo(OctopusPet),
-  ghost: memo(GhostPet),
-  ox: memo(OxPet),
-  soldier: memo(SuperSoldierPet),
-  coder: memo(CoderPet),
-};
+// ── 趣味行为参数 ──
+const POKE_STREAK_WINDOW = 4000; // 两次戳间隔小于这个才算"连戳"
+const ANGRY_DURATION = 1500;
+const SULK_DURATION = 3000;
+const CC_WORKING_TIMEOUT = 3 * 60 * 1000; // hook 漏发 done 时徽章兜底自动消失
+const CC_DONE_LINGER = 6000;
+const CELEBRATE_DURATION = 1200; // 对应 pet.css celebrate-jump 0.55s × 2
+const DATE_BADGE_REFRESH = 30 * 60 * 1000;
+// 贴边挂靠:窗口拖到距屏幕左右边缘 DOCK_TRIGGER 逻辑 px 内时吸附,只露 DOCK_PEEK 宽。
+const DOCK_TRIGGER = 14;
+const DOCK_PEEK = 70;
+const PET_WIN_WIDTH = 140; // 与 Rust 侧 PET_WIDTH 一致
+// 主动搭话:每 AMBIENT_TICK 检查一次,满足条件且距上次搭话 > AMBIENT_MIN_GAP 才说。
+const AMBIENT_TICK = 2 * 60 * 1000;
+const AMBIENT_MIN_GAP = 8 * 60 * 1000;
 
 interface BubbleData {
   text: string;
@@ -86,6 +99,17 @@ export function PetApp() {
   const [chatLoading, setChatLoading] = useState(false);
   const [isPoked, setIsPoked] = useState(false);
   const [clickThrough, setClickThroughLocal] = useState<boolean>(false);
+  // ── 趣味行为 state ──
+  const [ccBadge, setCcBadge] = useState<
+    "working" | "waiting" | "done" | null
+  >(null);
+  const [celebrate, setCelebrate] = useState(false);
+  const [activeTier, setActiveTier] = useState<1 | 2 | 3>(1);
+  const [mood, setMood] = useState<PokeMood>("normal");
+  const [chubby, setChubby] = useState(false);
+  const [dateBadge, setDateBadge] = useState<string | null>(() =>
+    getDateBadge(new Date())
+  );
   const petTypeRef = useRef<PetType>("robot");
   const dragRef = useRef<{ x: number; y: number; dragging: boolean } | null>(
     null
@@ -97,7 +121,7 @@ export function PetApp() {
   const sleepTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const lastErrorTsRef = useRef("");
   const bubbleKeyRef = useRef(0);
-  const chatHistoryRef = useRef<Array<{ role: string; content: string }>>([]);
+  const chatHistoryRef = useRef<ChatMessage[]>([]);
   const memoryRef = useRef<Record<string, string>>({});
   const inputRef = useRef<HTMLInputElement>(null);
   const chatInputRef = useRef("");
@@ -106,6 +130,18 @@ export function PetApp() {
   const petRef = useRef<HTMLDivElement>(null);
   const petStateRef = useRef<PetState>("idle");
   const chatModeRef = useRef(false);
+  // ── 趣味行为 refs ──
+  const moodRef = useRef<PokeMood>("normal");
+  const moodTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const pokeStreakRef = useRef(0);
+  const lastPokeTsRef = useRef(0);
+  const ccBadgeTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const celebrateTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const dockedRef = useRef<"left" | "right" | null>(null);
+  // ── 主动搭话 refs ──(interval 闭包读 ref,避免陈旧 state)
+  const bubbleActiveRef = useRef(false);
+  const clickThroughRef = useRef(false);
+  const lastAmbientAtRef = useRef(0);
 
   const locale = navigator.language.startsWith("zh")
     ? ("zh" as const)
@@ -115,6 +151,8 @@ export function PetApp() {
 
   const showBubble = useCallback(
     (text: string, type: BubbleType, isCc = false) => {
+      // 挂靠半隐时气泡会被屏幕边缘裁掉,不弹
+      if (dockedRef.current) return;
       setBubble((prev) => {
         // CC 提醒优先:正在显示的 CC 气泡不被普通气泡顶掉(它会自己到点消失)。
         if (!isCc && prev?.isCc) return prev;
@@ -138,6 +176,13 @@ export function PetApp() {
       .then((s) => setPetType(s.pet_type as PetType))
       .catch(() => {});
 
+    // 载入持久化的聊天历史,重启后气泡聊天仍带上下文,也和主窗口聊天页共享
+    getPetChatHistory()
+      .then((raw) => {
+        chatHistoryRef.current = parseHistory(raw);
+      })
+      .catch(() => {});
+
     getPetMemory()
       .then((raw) => {
         try {
@@ -146,18 +191,35 @@ export function PetApp() {
           memoryRef.current = {};
         }
         // Startup greeting (delayed so window renders first)
-        setTimeout(() => {
+        setTimeout(async () => {
           const name = memoryRef.current.name;
-          if (name) {
-            showBubble(
-              locale === "zh"
-                ? `${name}，${getGreeting("stopped", "zh")}`
-                : `Hey ${name}! ${getGreeting("stopped", "en")}`,
-              "chat"
-            );
-          } else {
-            showBubble(getGreeting("stopped", locale), "chat");
-          }
+          const topic = memoryRef.current.topic;
+          const topicAt = Date.parse(memoryRef.current._topic_at ?? "");
+          const topicFresh =
+            !Number.isNaN(topicAt) &&
+            Date.now() - topicAt < 7 * 24 * 60 * 60 * 1000;
+          // 本地兜底问候:LLM 不可用(网关没开等)时用它。
+          const base =
+            topic && topicFresh && Math.random() < 0.6
+              ? topicGreeting(topic, locale)
+              : getGreeting(gatewayStateRef.current, locale);
+          const fallback = name
+            ? locale === "zh"
+              ? `${name}，${base}`
+              : `Hey ${name}! ${base}`
+            : base;
+          // 优先用 LLM 生成结合记忆/时间/状态的问候,失败回落本地文案
+          const llm = await petGenerate(
+            petTypeRef.current,
+            locale,
+            buildGreetingInstruction(
+              locale,
+              new Date().getHours(),
+              gatewayStateRef.current
+            ),
+            memoryRef.current
+          );
+          showBubble(llm ?? fallback, "chat");
         }, 1500);
       })
       .catch(() => {});
@@ -174,6 +236,37 @@ export function PetApp() {
     };
   }, []);
 
+  // CC 状态 → 头顶徽章:working 转齿轮,waiting 跳动,done 庆祝 + 徽章停留几秒。
+  const applyCcStatus = useCallback((ccType: string) => {
+    if (ccBadgeTimerRef.current) clearTimeout(ccBadgeTimerRef.current);
+    if (ccType === "cc-working") {
+      setCcBadge("working");
+      // hook 漏发 done 时兜底,别让齿轮永远转
+      ccBadgeTimerRef.current = setTimeout(
+        () => setCcBadge(null),
+        CC_WORKING_TIMEOUT
+      );
+    } else if (ccType === "cc-waiting") {
+      setCcBadge("waiting");
+      ccBadgeTimerRef.current = setTimeout(
+        () => setCcBadge(null),
+        CC_WORKING_TIMEOUT
+      );
+    } else if (ccType === "cc-done") {
+      setCcBadge("done");
+      setCelebrate(true);
+      if (celebrateTimerRef.current) clearTimeout(celebrateTimerRef.current);
+      celebrateTimerRef.current = setTimeout(
+        () => setCelebrate(false),
+        CELEBRATE_DURATION
+      );
+      ccBadgeTimerRef.current = setTimeout(
+        () => setCcBadge(null),
+        CC_DONE_LINGER
+      );
+    }
+  }, []);
+
   useEffect(() => {
     const unlisten = events.petBubble.listen((e) => {
       const text =
@@ -181,10 +274,11 @@ export function PetApp() {
           ? e.payload.text_zh
           : e.payload.text;
       // CC 提醒用 type="cc" 作来源标记:映射成 info 样式显示,并标记 isCc 走优先级保护。
+      const isCc = e.payload.type.startsWith("cc");
+      if (isCc) applyCcStatus(e.payload.type);
       if (e.payload.type === "cc-working") {
         return;
-      } // working 太频繁,不弹气泡(留给动画)
-      const isCc = e.payload.type.startsWith("cc");
+      } // working 太频繁,不弹气泡(徽章动画已表达)
       showBubble(
         text,
         isCc
@@ -196,7 +290,7 @@ export function PetApp() {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, [locale, showBubble]);
+  }, [locale, showBubble, applyCcStatus]);
 
   // ── Poll gateway state + errors (10s, lite) ──
   // 只取 state + last_error,不读全表 stats(那个走单独的 30 分钟 timer)。
@@ -217,6 +311,7 @@ export function PetApp() {
             return info.state;
           });
           gatewayStateRef.current = info.state;
+          setActiveTier(activityTier(info.active_count ?? 0));
 
           if (
             info.last_error &&
@@ -227,13 +322,23 @@ export function PetApp() {
             if (age < ERROR_COOLDOWN) {
               lastErrorTsRef.current = info.last_error.timestamp;
               const p = info.last_error.provider || "";
-              const m =
-                info.last_error.message.length > 40
-                  ? info.last_error.message.slice(0, 40) + "..."
-                  : info.last_error.message;
-              showBubble(p ? `${p}: ${m}` : m, "error");
+              const rawMsg = info.last_error.message;
+              const fallback =
+                (p ? `${p}: ` : "") +
+                (rawMsg.length > 40 ? rawMsg.slice(0, 40) + "..." : rawMsg);
               setIsError(true);
               setTimeout(() => setIsError(false), 3000);
+              // 先弹本地兜底(即时),LLM 诊断返回后换成人话+建议
+              showBubble(fallback, "error");
+              petGenerate(
+                petTypeRef.current,
+                locale,
+                buildErrorInstruction(locale, p, rawMsg),
+                memoryRef.current
+              ).then((diag) => {
+                if (diag && lastErrorTsRef.current === info.last_error!.timestamp)
+                  showBubble(diag, "error");
+              });
             }
           }
         })
@@ -261,7 +366,7 @@ export function PetApp() {
       if (gatewayStateRef.current === "stopped") return;
       if (Date.now() - lastStatsRef.current < STATS_INTERVAL) return;
       getPetGatewayState()
-        .then((info) => {
+        .then(async (info) => {
           if (!info.today || info.today.requests <= 0) return;
           lastStatsRef.current = Date.now();
           const tokens =
@@ -280,12 +385,31 @@ export function PetApp() {
                 ? ` | ${compactNumber(tokens)} tokens`
                 : ` | ${compactNumber(tokens)} tok`
               : "";
-          showBubble(
+          // 花费拟人化:超过预警阈值(没配置就 $10)宠物吃撑变圆,统计变成打嗝吐槽
+          const over = isOverBudget(info.today.cost ?? 0, info.cost_alert);
+          setChubby(over);
+          const burp = over
+            ? locale === "zh"
+              ? "饱嗝~ 吃撑了 🫃 "
+              : "Burp~ so full 🫃 "
+            : "";
+          const fallback =
             locale === "zh"
-              ? `今日: ${info.today.requests} 请求${tokenText}${cost}${errorText}`
-              : `Today: ${info.today.requests} req${tokenText}${cost}${errorText}`,
-            "info"
+              ? `${burp}今日: ${info.today.requests} 请求${tokenText}${cost}${errorText}`
+              : `${burp}Today: ${info.today.requests} req${tokenText}${cost}${errorText}`;
+          // LLM 把数据说成有态度的一句话,失败回落上面的模板文案
+          const llm = await petGenerate(
+            petTypeRef.current,
+            locale,
+            buildStatsInstruction(locale, {
+              requests: info.today.requests,
+              errors: info.today.errors,
+              cost: info.today.cost,
+              tokens,
+            }),
+            memoryRef.current
           );
+          showBubble(llm ? `${burp}${llm}` : fallback, "info");
         })
         .catch(() => {});
     };
@@ -323,15 +447,105 @@ export function PetApp() {
           ? "sleep"
           : "idle";
 
-  // ── Poke ──
+  // ── Poke(连戳有脾气)──
+
+  const setMoodTimed = useCallback((m: PokeMood, duration: number) => {
+    setMood(m);
+    moodRef.current = m;
+    if (moodTimerRef.current) clearTimeout(moodTimerRef.current);
+    moodTimerRef.current = setTimeout(() => {
+      setMood("normal");
+      moodRef.current = "normal";
+      pokeStreakRef.current = 0;
+    }, duration);
+  }, []);
 
   const triggerPoke = useCallback(() => {
+    const now = Date.now();
+    pokeStreakRef.current =
+      now - lastPokeTsRef.current < POKE_STREAK_WINDOW
+        ? pokeStreakRef.current + 1
+        : 1;
+    lastPokeTsRef.current = now;
+    const m = pokeMood(pokeStreakRef.current);
+
     if (pokeTimerRef.current) clearTimeout(pokeTimerRef.current);
     setIsPoked(true);
     pokeTimerRef.current = setTimeout(() => setIsPoked(false), POKE_DURATION);
-    showBubble(pickPokeReaction(petTypeRef.current, locale), "chat");
+
+    if (m === "sulk") {
+      // 背过身:进入时冷冷丢一句,之后再戳不理人,只刷新生闷气时长
+      if (moodRef.current !== "sulk") {
+        showBubble(pickSulkReaction(petTypeRef.current, locale), "chat");
+      }
+      setMoodTimed("sulk", SULK_DURATION);
+    } else if (m === "angry") {
+      showBubble(pickAngryReaction(petTypeRef.current, locale), "chat");
+      setMoodTimed("angry", ANGRY_DURATION);
+    } else {
+      showBubble(pickPokeReaction(petTypeRef.current, locale), "chat");
+    }
     resetSleepTimer();
-  }, [locale, resetSleepTimer, showBubble]);
+  }, [locale, resetSleepTimer, showBubble, setMoodTimed]);
+
+  // ── 贴边挂靠 ──
+  // 拖到屏幕左右边缘附近 → 窗口吸附到只露 DOCK_PEEK 宽(半个宠物探出);
+  // 单击弹回屏幕内。挂靠状态不持久化,重启由 Rust 越界校正拉回可见区。
+
+  const undock = useCallback(async () => {
+    const side = dockedRef.current;
+    if (!side) return;
+    dockedRef.current = null;
+    try {
+      const win = getCurrentWindow();
+      const mon = await currentMonitor();
+      if (!mon) return;
+      const scale = mon.scaleFactor;
+      const pos = await win.outerPosition();
+      const x =
+        side === "left"
+          ? mon.position.x / scale + 8
+          : (mon.position.x + mon.size.width) / scale - PET_WIN_WIDTH - 8;
+      await win.setPosition(new LogicalPosition(x, pos.y / scale));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const snapToEdgeIfNear = useCallback(async (physX: number, physY: number) => {
+    try {
+      const mon = await currentMonitor();
+      if (!mon) return;
+      const scale = mon.scaleFactor;
+      const left = mon.position.x;
+      const right = mon.position.x + mon.size.width;
+      const winW = PET_WIN_WIDTH * scale;
+      if (dockedRef.current) {
+        // 已挂靠:被拖离边缘就解除标记(位置已是用户拖的新位置)
+        if (physX > left + 4 && physX + winW < right - 4) {
+          dockedRef.current = null;
+        }
+        return;
+      }
+      const win = getCurrentWindow();
+      if (physX <= left + DOCK_TRIGGER * scale) {
+        dockedRef.current = "left";
+        await win.setPosition(
+          new LogicalPosition(
+            left / scale - (PET_WIN_WIDTH - DOCK_PEEK),
+            physY / scale
+          )
+        );
+      } else if (physX + winW >= right - DOCK_TRIGGER * scale) {
+        dockedRef.current = "right";
+        await win.setPosition(
+          new LogicalPosition(right / scale - DOCK_PEEK, physY / scale)
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // ── Drag (threshold) + click → poke ──
 
@@ -366,8 +580,13 @@ export function PetApp() {
         }
       }
 
-      // eye-follow: 仅 idle / 非聊天状态。rAF 节流 + 直写 transform。
-      if (petStateRef.current === "idle" && !chatModeRef.current) {
+      // eye-follow: 仅 idle / 非聊天 / 心情正常时。rAF 节流 + 直写 transform。
+      // (sulk 用 class transform 背过身,inline transform 会把它顶掉,必须让位)
+      if (
+        petStateRef.current === "idle" &&
+        !chatModeRef.current &&
+        moodRef.current === "normal"
+      ) {
         pendingX = e.clientX;
         pendingY = e.clientY;
         if (!rafScheduled) {
@@ -387,7 +606,11 @@ export function PetApp() {
 
     const handleUp = () => {
       const s = dragRef.current;
-      if (s && !s.dragging) triggerPoke();
+      // 挂靠时单击是"钻出来",不是戳
+      if (s && !s.dragging) {
+        if (dockedRef.current) undock();
+        else triggerPoke();
+      }
       dragRef.current = null;
     };
 
@@ -397,7 +620,7 @@ export function PetApp() {
       window.removeEventListener("mousemove", handleMove);
       window.removeEventListener("mouseup", handleUp);
     };
-  }, [triggerPoke]);
+  }, [triggerPoke, undock]);
 
   // 同步 ref(供合并的 mousemove handler 用 — 不依赖 React state closure)
   useEffect(() => {
@@ -407,17 +630,17 @@ export function PetApp() {
     chatModeRef.current = chatMode;
   }, [chatMode]);
 
-  // 非 idle / 聊天时清掉 inline transform,让 CSS class 动画接管
+  // 非 idle / 聊天 / 有心情时清掉 inline transform,让 CSS class 动画接管
   useEffect(() => {
-    if (petState !== "idle" || chatMode) {
+    if (petState !== "idle" || chatMode || mood !== "normal") {
       if (petRef.current) petRef.current.style.transform = "";
     }
-  }, [petState, chatMode]);
+  }, [petState, chatMode, mood]);
 
   // ── Double-click: open chat ──
 
   const handleDoubleClick = useCallback(() => {
-    if (chatMode) return;
+    if (chatMode || dockedRef.current) return;
     if (pokeTimerRef.current) {
       clearTimeout(pokeTimerRef.current);
       setIsPoked(false);
@@ -437,11 +660,38 @@ export function PetApp() {
     showPetContextMenu().catch(() => {});
   }, []);
 
+  // 聊天历史跨窗口同步:任一窗口发消息 → Rust 落库 + 广播 → 这里刷新 ref,
+  // 让气泡聊天的上下文始终等于 DB 真值(避免用陈旧 ref 覆盖掉对方的消息)。
+  useEffect(() => {
+    const un = events.petChatUpdated.listen((e) => {
+      chatHistoryRef.current = parseHistory(e.payload);
+    });
+    return () => {
+      un.then((fn) => fn());
+    };
+  }, []);
+
+  // 记忆跨窗口同步:聊天页手动编辑 / 聊天里自动提取都会广播,
+  // 这里更新 memoryRef,否则宠物聊天还会用旧名字/旧话题。
+  useEffect(() => {
+    const un = events.petMemoryChanged.listen((e) => {
+      try {
+        const parsed = JSON.parse(e.payload);
+        if (parsed && typeof parsed === "object") memoryRef.current = parsed;
+      } catch {
+        /* ignore bad payload */
+      }
+    });
+    return () => {
+      un.then((fn) => fn());
+    };
+  }, []);
+
   // 「清空记忆」由原生菜单触发,Rust 写 DB + emit。前端清本地缓存 + 提示气泡。
+  // 只清记忆,不动聊天历史(两者独立清空)。
   useEffect(() => {
     const un = events.petMemoryReset.listen(() => {
       memoryRef.current = {};
-      chatHistoryRef.current = [];
       showBubble(
         locale === "zh" ? "记忆已清空 ✨" : "Memory cleared ✨",
         "info"
@@ -488,72 +738,21 @@ export function PetApp() {
     setChatLoading(true);
     setBubble(null);
 
-    // Memory extraction (do before sending so AI also gets it)
-    const namePatterns = [
-      /my name is\s+(\S+)/i,
-      /i'?m\s+(\S+)/i,
-      /call me\s+(\S+)/i,
-      /我叫(.{1,10})/,
-      /我是(.{1,10})/,
-      /叫我(.{1,10})/,
-    ];
-    for (const pat of namePatterns) {
-      const m = msg.match(pat);
-      if (m) {
-        memoryRef.current.name = m[1].trim();
-        savePetMemory(JSON.stringify(memoryRef.current)).catch(() => {});
-        break;
-      }
-    }
-
-    // Build messages
-    const memStr = Object.entries(memoryRef.current)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join("; ");
-    const sysContent = buildSystemPrompt(petTypeRef.current, locale, memStr);
-
-    chatHistoryRef.current.push({ role: "user", content: msg });
-    if (chatHistoryRef.current.length > MAX_HISTORY) {
-      chatHistoryRef.current = chatHistoryRef.current.slice(-MAX_HISTORY);
-    }
-
-    const messages = [
-      { role: "system", content: sysContent },
-      ...chatHistoryRef.current,
-    ];
-
-    try {
-      const reply = await petChat(messages);
-      chatHistoryRef.current.push({ role: "assistant", content: reply });
-      setChatLoading(false);
-      setChatMode(false);
-      showBubble(reply, "chat");
-    } catch (err) {
-      setChatLoading(false);
-      setChatMode(false);
-      const e = err as { code?: string; message?: string };
-      let msg: string;
-      if (e?.code === "GATEWAY_NOT_RUNNING") {
-        msg = locale === "zh" ? "先启动网关哦" : "Start the gateway first";
-      } else if (e?.code === "ACTIVE_PROVIDER_NOT_FOUND") {
-        msg =
-          locale === "zh"
-            ? "先选个可用供应商"
-            : "Pick an active provider first";
-      } else if (e?.code === "PROVIDER_API_KEY_MISSING") {
-        msg =
-          locale === "zh" ? "供应商缺 API Key" : "Provider API key is missing";
-      } else if (
-        e?.code === "GATEWAY_AUTH_INVALID" ||
-        e?.code === "GATEWAY_AUTH_MISSING"
-      ) {
-        msg =
-          locale === "zh" ? "网关 token 不对" : "Gateway token needs attention";
-      } else {
-        const short = (e?.message || "request failed").slice(0, 60);
-        msg = locale === "zh" ? `调不通: ${short}` : `Call failed: ${short}`;
-      }
-      showBubble(msg, "error");
+    // 走共享聊天核心:记忆抽取 + 落库 + LLM 调用 + 错误映射都在里面。
+    // 落库会广播 PetChatUpdated,chatHistoryRef 由下面的 listener 统一同步。
+    const result = await sendPetMessage({
+      userMsg: msg,
+      petType: petTypeRef.current,
+      locale,
+      history: chatHistoryRef.current,
+      memory: memoryRef.current,
+    });
+    setChatLoading(false);
+    setChatMode(false);
+    if (result.ok) {
+      showBubble(result.reply, "chat");
+    } else {
+      showBubble(result.errorText, "error");
     }
   }, [showBubble, locale]);
 
@@ -586,14 +785,17 @@ export function PetApp() {
     const win = getCurrentWindow();
     let timer: ReturnType<typeof setTimeout> | undefined;
     let pending: { x: number; y: number } | null = null;
+    let rawY = 0; // 物理坐标原值,贴边判定用(pending.y 混了 expansion 偏移)
     const unlisten = win.onMoved(({ payload }) => {
       pending = { x: payload.x, y: payload.y + expansionRef.current };
+      rawY = payload.y;
       if (timer) clearTimeout(timer);
       timer = setTimeout(() => {
         if (!pending) return;
         updatePetSettings({ pos_x: pending.x, pos_y: pending.y }).catch(
           () => {}
         );
+        snapToEdgeIfNear(pending.x, rawY);
         pending = null;
       }, 300);
     });
@@ -601,7 +803,78 @@ export function PetApp() {
       if (timer) clearTimeout(timer);
       unlisten.then((fn) => fn());
     };
+  }, [snapToEdgeIfNear]);
+
+  // 日期彩蛋:跨零点/跨节日时半小时内刷新
+  useEffect(() => {
+    const id = setInterval(
+      () => setDateBadge(getDateBadge(new Date())),
+      DATE_BADGE_REFRESH
+    );
+    return () => clearInterval(id);
   }, []);
+
+  // 趣味行为定时器统一清理
+  useEffect(() => {
+    return () => {
+      if (moodTimerRef.current) clearTimeout(moodTimerRef.current);
+      if (ccBadgeTimerRef.current) clearTimeout(ccBadgeTimerRef.current);
+      if (celebrateTimerRef.current) clearTimeout(celebrateTimerRef.current);
+    };
+  }, []);
+
+  // 镜像 state 到 ref,供主动搭话的 interval 闭包读取(避免陈旧闭包)
+  useEffect(() => {
+    bubbleActiveRef.current = bubble !== null || chatLoading;
+  }, [bubble, chatLoading]);
+  useEffect(() => {
+    clickThroughRef.current = clickThrough;
+  }, [clickThrough]);
+
+  // ── 主动搭话:低频 tick,情境合适时用 LLM 冒一句应景评论 ──
+  // 条件严格(空闲/无气泡/网关在跑/非穿透/间隔够久),避免打扰 + 控制 token。
+  useEffect(() => {
+    const tick = async () => {
+      if (document.hidden) return;
+      if (bubbleActiveRef.current || chatModeRef.current) return;
+      if (dockedRef.current || clickThroughRef.current) return;
+      if (gatewayStateRef.current === "stopped") return;
+      if (moodRef.current !== "normal") return;
+      if (petStateRef.current !== "idle" && petStateRef.current !== "active")
+        return;
+      if (Date.now() - lastAmbientAtRef.current < AMBIENT_MIN_GAP) return;
+      lastAmbientAtRef.current = Date.now();
+      const info = await getPetGatewayState().catch(() => null);
+      const line = await petGenerate(
+        petTypeRef.current,
+        locale,
+        buildAmbientInstruction(locale, {
+          hour: new Date().getHours(),
+          gwState: gatewayStateRef.current,
+          today: info?.today
+            ? {
+                requests: info.today.requests,
+                errors: info.today.errors,
+                cost: info.today.cost,
+              }
+            : undefined,
+          topic: memoryRef.current.topic,
+        }),
+        memoryRef.current
+      );
+      // 生成期间用户可能开始交互了,再确认一次条件才弹
+      if (
+        line &&
+        !bubbleActiveRef.current &&
+        !chatModeRef.current &&
+        !dockedRef.current
+      ) {
+        showBubble(line, "chat");
+      }
+    };
+    const id = setInterval(tick, AMBIENT_TICK);
+    return () => clearInterval(id);
+  }, [locale, showBubble]);
 
   // 气泡显示 → 窗口往上撑 BUBBLE_EXPAND;气泡消失 → 还原。
   // 聊天 loading 三个点也是气泡形态,合并到同一开关,避免回复来时窗口"咯噔"一下。
@@ -634,6 +907,27 @@ export function PetApp() {
 
   const PetComponent = PET_COMPONENTS[petType];
 
+  // 基础动画类互斥,优先级:庆祝 > 生闷气 > 生气 > 常规状态。
+  // 修饰类(强度档位/吃撑)叠加在基础类之上。
+  const baseClass = celebrate
+    ? "pet-celebrate"
+    : mood === "sulk"
+      ? "pet-sulk"
+      : mood === "angry"
+        ? "pet-angry"
+        : `pet-${petState}`;
+  const wrapperClass = chatMode
+    ? ""
+    : [
+        baseClass,
+        petState === "active" && mood === "normal" && activeTier > 1
+          ? `pet-active-${activeTier}`
+          : "",
+        chubby ? "pet-chubby" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+
   return (
     <div
       className="pet-container"
@@ -643,11 +937,12 @@ export function PetApp() {
     >
       <div
         ref={petRef}
-        className={chatMode ? "" : `pet-${petState}`}
+        className={wrapperClass}
         style={{
           position: "relative",
           transition: "transform 0.3s ease-out, opacity 0.2s",
-          opacity: clickThrough ? 0.45 : 1,
+          // 内联 opacity 优先级高于 class,生闷气的变暗也在这里合并
+          opacity: clickThrough ? 0.45 : mood === "sulk" ? 0.7 : 1,
         }}
       >
         {bubble && (
@@ -680,6 +975,21 @@ export function PetApp() {
 
         <PetComponent state={petState} />
         {petState === "sleep" && !chatMode && <span className="zzz">z</span>}
+        {!chatMode && ccBadge && (
+          <span className={`cc-badge cc-badge-${ccBadge}`}>
+            {ccBadge === "working" ? "⚙️" : ccBadge === "waiting" ? "⏳" : "✅"}
+          </span>
+        )}
+        {!chatMode &&
+          petState === "active" &&
+          mood === "normal" &&
+          activeTier === 3 && <span className="sweat">💦</span>}
+        {!chatMode && mood === "angry" && (
+          <span className="angry-mark">💢</span>
+        )}
+        {!chatMode && dateBadge && (
+          <span className="date-badge">{dateBadge}</span>
+        )}
 
         {chatMode && (
           <div className="chat-input-wrap" onClick={(e) => e.stopPropagation()}>

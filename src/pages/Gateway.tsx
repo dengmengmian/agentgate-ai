@@ -130,46 +130,62 @@ export function Gateway() {
               Topbar already shows running/stopped + host:port. Status badge
               + decorative big icon dropped. ── */}
       <div
-        className="rounded-xl border border-border bg-card px-5 py-4"
-        style={{ boxShadow: "var(--shadow-sm)" }}
+        className="relative overflow-hidden rounded-xl border border-accent/20 bg-card px-5 py-4"
+        style={{
+          boxShadow: "0 10px 30px rgba(194, 112, 43, 0.10)",
+          background:
+            "linear-gradient(135deg, var(--color-card) 0%, rgba(194,112,43,0.07) 100%)",
+        }}
       >
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/50 to-transparent" />
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
-            <span className="flex items-center gap-2 text-text-primary">
-              <Radio className="h-3.5 w-3.5 text-accent" />
-              <span className="font-medium">{t("gateway.local_gateway")}</span>
-            </span>
-            <span className="text-text-muted/40">·</span>
-            <a
-              href={listenUrl}
-              className="font-mono text-accent hover:underline"
-              target="_blank"
-              rel="noreferrer"
-            >
-              {listenUrl}
-            </a>
-            <span className="text-text-muted/40">·</span>
-            <span className="text-text-secondary">
-              <span className="text-text-muted">
-                {t("gateway.active_provider")}{" "}
-              </span>
-              <span className="text-text-primary">
-                {status.active_provider ?? t("common.none")}
-              </span>
-            </span>
-            {startedAt && (
-              <>
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft">
+              <span
+                className={`absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ${status.running ? "bg-success shadow-[0_0_12px_rgba(56,161,105,0.55)]" : "bg-text-muted/50"}`}
+              />
+              <Radio className="h-4 w-4 text-accent" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-accent">
+                {t("gateway.service_console")}
+              </p>
+              <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                <span className="font-medium text-text-primary">
+                  {t("gateway.local_gateway")}
+                </span>
+                <a
+                  href={listenUrl}
+                  className="font-mono text-accent hover:underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {listenUrl}
+                </a>
                 <span className="text-text-muted/40">·</span>
                 <span className="text-text-secondary">
                   <span className="text-text-muted">
-                    {t("gateway.started_at")}{" "}
+                    {t("gateway.active_provider")}{" "}
                   </span>
-                  <span className="font-mono text-text-primary">
-                    {startedAt}
+                  <span className="text-text-primary">
+                    {status.active_provider ?? t("common.none")}
                   </span>
                 </span>
-              </>
-            )}
+                {startedAt && (
+                  <>
+                    <span className="text-text-muted/40">·</span>
+                    <span className="text-text-secondary">
+                      <span className="text-text-muted">
+                        {t("gateway.started_at")}{" "}
+                      </span>
+                      <span className="font-mono text-text-primary">
+                        {startedAt}
+                      </span>
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {status.running ? (
@@ -282,7 +298,7 @@ export function Gateway() {
       {/* ── 2. Configuration — the editable settings ── */}
       <div
         className="rounded-xl border border-border bg-card p-5"
-        style={{ boxShadow: "var(--shadow-sm)" }}
+        style={{ boxShadow: "0 12px 30px rgba(17, 24, 39, 0.05)" }}
       >
         <div className="mb-4 flex items-center justify-between">
           <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
@@ -387,10 +403,11 @@ export function Gateway() {
       {/* ── 3. Route reference — what the gateway exposes ── */}
       <div
         className="rounded-xl border border-border bg-card p-5"
-        style={{ boxShadow: "var(--shadow-sm)" }}
+        style={{ boxShadow: "0 12px 30px rgba(17, 24, 39, 0.05)" }}
       >
-        <h3 className="mb-3 text-sm font-semibold text-text-primary">
-          {t("gateway.route_modes")}
+        <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text-primary">
+          <span className="h-2 w-2 rounded-full bg-accent shadow-[0_0_10px_rgba(194,112,43,0.45)]" />
+          {t("gateway.route_matrix")}
         </h3>
         <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
           {ROUTE_REFERENCE.map((r) => (

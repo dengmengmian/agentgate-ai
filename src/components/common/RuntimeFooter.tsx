@@ -61,10 +61,7 @@ function Metric({ icon, label, value, tone = "default" }: MetricProps) {
     muted: "text-text-muted",
   };
   return (
-    <div
-      className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-2.5"
-      style={{ boxShadow: "var(--shadow-sm)" }}
-    >
+    <div className="flex min-w-0 items-center gap-2 border-l border-border/70 pl-4 first:border-l-0 first:pl-0">
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent">
         {icon}
       </div>
@@ -106,47 +103,58 @@ export function RuntimeFooter() {
     kpis.total_requests > 0 ? `${kpis.success_rate_lifetime.toFixed(0)}%` : "—";
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      <Metric
-        icon={<Activity className="h-3.5 w-3.5" />}
-        label={t("stats.active_connections")}
-        value={String(kpis.active_requests)}
-      />
-      <Metric
-        icon={<Clock className="h-3.5 w-3.5" />}
-        label={t("stats.uptime")}
-        value={
-          kpis.gateway_running
-            ? formatUptime(kpis.uptime_seconds)
-            : t("stats.stopped")
-        }
-        tone={kpis.gateway_running ? "default" : "muted"}
-      />
-      <Metric
-        icon={<TrendingUp className="h-3.5 w-3.5" />}
-        label={t("stats.total_requests")}
-        value={kpis.total_requests.toLocaleString()}
-      />
-      <Metric
-        icon={<Database className="h-3.5 w-3.5" />}
-        label={t("stats.total_tokens")}
-        value={formatTokens(kpis.total_tokens)}
-      />
-      <Metric
-        icon={<DollarSign className="h-3.5 w-3.5" />}
-        label={t("stats.total_cost")}
-        value={formatCost(kpis.total_cost)}
-      />
-      <Metric
-        icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-        label={t("stats.success_rate_lifetime")}
-        value={rateStr}
-        tone={
-          kpis.total_requests > 0 && kpis.success_rate_lifetime < 90
-            ? "default"
-            : "accent"
-        }
-      />
+    <div
+      className="rounded-xl border border-border bg-card px-5 py-3"
+      style={{ boxShadow: "0 12px 30px rgba(17, 24, 39, 0.05)" }}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
+          <span className="h-2 w-2 rounded-full bg-accent shadow-[0_0_10px_rgba(194,112,43,0.45)]" />
+          {t("stats.runtime_strip")}
+        </h3>
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
+        <Metric
+          icon={<Activity className="h-3.5 w-3.5" />}
+          label={t("stats.active_connections")}
+          value={String(kpis.active_requests)}
+        />
+        <Metric
+          icon={<Clock className="h-3.5 w-3.5" />}
+          label={t("stats.uptime")}
+          value={
+            kpis.gateway_running
+              ? formatUptime(kpis.uptime_seconds)
+              : t("stats.stopped")
+          }
+          tone={kpis.gateway_running ? "default" : "muted"}
+        />
+        <Metric
+          icon={<TrendingUp className="h-3.5 w-3.5" />}
+          label={t("stats.total_requests")}
+          value={kpis.total_requests.toLocaleString()}
+        />
+        <Metric
+          icon={<Database className="h-3.5 w-3.5" />}
+          label={t("stats.total_tokens")}
+          value={formatTokens(kpis.total_tokens)}
+        />
+        <Metric
+          icon={<DollarSign className="h-3.5 w-3.5" />}
+          label={t("stats.total_cost")}
+          value={formatCost(kpis.total_cost)}
+        />
+        <Metric
+          icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+          label={t("stats.success_rate_lifetime")}
+          value={rateStr}
+          tone={
+            kpis.total_requests > 0 && kpis.success_rate_lifetime < 90
+              ? "default"
+              : "accent"
+          }
+        />
+      </div>
     </div>
   );
 }

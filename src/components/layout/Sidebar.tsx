@@ -15,6 +15,7 @@ import {
   FileText,
   Plug,
   BookOpen,
+  MessageCircle,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import logo from "@/assets/logo.png";
@@ -22,21 +23,40 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { useProviders } from "@/store/global";
 
-// 顺序按新用户配置任务流：
-// 看运行情况（概览） → 配上游（供应商） → 接客户端（客户端） →
-// 启停服务（服务） → 高级失败转移（路由策略） → 用了之后看日志和诊断 → 设置
-const navItems = [
-  { to: "/", labelKey: "nav.overview", icon: LayoutDashboard },
-  { to: "/providers", labelKey: "nav.providers", icon: Cloud },
-  { to: "/tools", labelKey: "nav.clients", icon: Monitor },
-  { to: "/gateway", labelKey: "nav.gateway", icon: Radio },
-  { to: "/routes", labelKey: "nav.routes", icon: GitBranch },
-  { to: "/logs", labelKey: "nav.logs", icon: ScrollText },
-  { to: "/diagnostics", labelKey: "nav.diagnostics", icon: Stethoscope },
-  { to: "/instructions", labelKey: "nav.instructions", icon: FileText },
-  { to: "/mcp", labelKey: "nav.mcp", icon: Plug },
-  { to: "/skills", labelKey: "nav.skills", icon: BookOpen },
-  { to: "/settings", labelKey: "nav.settings", icon: Settings },
+const navGroups = [
+  {
+    labelKey: "nav.group.overview",
+    items: [{ to: "/", labelKey: "nav.overview", icon: LayoutDashboard }],
+  },
+  {
+    labelKey: "nav.group.models",
+    items: [
+      { to: "/providers", labelKey: "nav.providers", icon: Cloud },
+      { to: "/routes", labelKey: "nav.routes", icon: GitBranch },
+    ],
+  },
+  {
+    labelKey: "nav.group.gateway",
+    items: [
+      { to: "/gateway", labelKey: "nav.gateway", icon: Radio },
+      { to: "/logs", labelKey: "nav.logs", icon: ScrollText },
+      { to: "/diagnostics", labelKey: "nav.diagnostics", icon: Stethoscope },
+    ],
+  },
+  {
+    labelKey: "nav.group.tools",
+    items: [
+      { to: "/tools", labelKey: "nav.clients", icon: Monitor },
+      { to: "/instructions", labelKey: "nav.instructions", icon: FileText },
+      { to: "/mcp", labelKey: "nav.mcp", icon: Plug },
+      { to: "/skills", labelKey: "nav.skills", icon: BookOpen },
+      { to: "/pet-chat", labelKey: "nav.pet_chat", icon: MessageCircle },
+    ],
+  },
+  {
+    labelKey: "nav.group.system",
+    items: [{ to: "/settings", labelKey: "nav.settings", icon: Settings }],
+  },
 ];
 
 export function Sidebar() {
@@ -167,32 +187,48 @@ export function Sidebar() {
             )}
           </NavLink>
         )}
-        {navItems.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.to === "/"}
-            title={collapsed ? t(item.labelKey) : undefined}
-            className={({ isActive }) =>
-              cn(
-                "group relative flex items-center rounded-lg text-[13px] font-medium transition-all duration-150",
-                collapsed ? "justify-center px-2 py-2" : "gap-3 px-3 py-2",
-                isActive
-                  ? "bg-accent-soft text-accent"
-                  : "text-text-secondary hover:bg-hover hover:text-text-primary"
-              )
-            }
+        {navGroups.map((group, groupIndex) => (
+          <div
+            key={group.labelKey}
+            className={cn(groupIndex > 0 && (collapsed ? "mt-2" : "mt-3"))}
           >
-            {({ isActive }) => (
-              <>
-                {isActive && !collapsed && (
-                  <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />
-                )}
-                <item.icon className="h-4 w-4 shrink-0" />
-                {!collapsed && t(item.labelKey)}
-              </>
+            {!collapsed && (
+              <div className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-wide text-text-muted/70">
+                {t(group.labelKey)}
+              </div>
             )}
-          </NavLink>
+            <div className="space-y-0.5">
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={item.to === "/"}
+                  title={collapsed ? t(item.labelKey) : undefined}
+                  className={({ isActive }) =>
+                    cn(
+                      "group relative flex items-center rounded-lg text-[13px] font-medium transition-all duration-150",
+                      collapsed
+                        ? "justify-center px-2 py-2"
+                        : "gap-3 px-3 py-2",
+                      isActive
+                        ? "bg-accent-soft text-accent"
+                        : "text-text-secondary hover:bg-hover hover:text-text-primary"
+                    )
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      {isActive && !collapsed && (
+                        <span className="absolute left-0 top-1/2 h-4 w-[3px] -translate-y-1/2 rounded-r-full bg-accent" />
+                      )}
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      {!collapsed && t(item.labelKey)}
+                    </>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 

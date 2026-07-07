@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { buildSystemPrompt, pickPokeReaction } from "./personas";
+import {
+  buildSystemPrompt,
+  pickPokeReaction,
+  pickAngryReaction,
+  pickSulkReaction,
+} from "./personas";
 import type { PetType } from "@/types/pet";
 
 const PET_TYPES: PetType[] = [
@@ -36,6 +41,17 @@ describe("buildSystemPrompt", () => {
     const prompt = buildSystemPrompt("robot", "en", "");
     expect(prompt).not.toContain("You remember about the user");
   });
+
+  it("每个角色都带上创造者身份与联系邮箱", () => {
+    for (const type of PET_TYPES) {
+      for (const locale of ["en", "zh"] as const) {
+        const prompt = buildSystemPrompt(type, locale, "");
+        expect(prompt).toContain("邓勐冕");
+        expect(prompt).toContain("鬼哥");
+        expect(prompt).toContain("my@dengmengmian.com");
+      }
+    }
+  });
 });
 
 describe("pickPokeReaction", () => {
@@ -56,5 +72,21 @@ describe("pickPokeReaction", () => {
     const en = pickPokeReaction("robot", "en");
     const zh = pickPokeReaction("robot", "zh");
     expect(en).not.toBe(zh);
+  });
+});
+
+describe("angry / sulk reactions", () => {
+  it("every pet type has non-empty angry and sulk lines in both locales", () => {
+    for (const type of PET_TYPES) {
+      for (const locale of ["en", "zh"] as const) {
+        expect(pickAngryReaction(type, locale).length).toBeGreaterThan(0);
+        expect(pickSulkReaction(type, locale).length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("angry lines differ from normal poke lines", () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    expect(pickAngryReaction("ox", "zh")).not.toBe(pickPokeReaction("ox", "zh"));
   });
 });

@@ -76,22 +76,22 @@ pub fn set_pet_visible(
 pub fn get_pet_gateway_state_lite(
     state: State<'_, AppState>,
 ) -> Result<serde_json::Value, AppError> {
-    let (running, active) = {
+    let (running, active_count) = {
         let runtime = state
             .gateway_runtime
             .lock()
             .map_err(|_| AppError::internal("Runtime lock failed"))?;
-        let active = runtime
+        let count = runtime
             .active_requests
             .as_ref()
-            .map(|c| c.load(std::sync::atomic::Ordering::Relaxed) > 0)
-            .unwrap_or(false);
-        (runtime.running, active)
+            .map(|c| c.load(std::sync::atomic::Ordering::Relaxed))
+            .unwrap_or(0);
+        (runtime.running, count)
     };
 
     let gw_state = if !running {
         "stopped"
-    } else if active {
+    } else if active_count > 0 {
         "active"
     } else {
         "running"
@@ -121,6 +121,8 @@ pub fn get_pet_gateway_state_lite(
 
     Ok(serde_json::json!({
         "state": gw_state,
+        // 并发请求数——前端按档位放大弹跳强度(活跃强度分级)。
+        "active_count": active_count,
         "last_error": last_error,
     }))
 }
@@ -230,6 +232,11 @@ pub fn get_pet_gateway_state(state: State<'_, AppState>) -> Result<serde_json::V
         "latest_model": latest_model,
         "last_error": last_error,
         "today": today_stats,
+        // 花费拟人化:前端拿用户配置的花费预警阈值判断"吃撑",未配置用前端默认值。
+        "cost_alert": {
+            "enabled": settings.cost_alert_enabled,
+            "threshold": settings.cost_alert_threshold,
+        },
     }))
 }
 
@@ -524,13 +531,71 @@ pub fn pet_open_settings(app_handle: tauri::AppHandle) -> Result<bool, AppError>
 
 #[tauri::command]
 #[specta::specta]
-pub fn save_pet_memory(memory: String, state: State<'_, AppState>) -> Result<bool, AppError> {
+pub fn save_pet_memory(
+    memory: String,
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<bool, AppError> {
+    {
+        let conn = state
+            .db
+            .get()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::app_settings::set(&conn, "pet_memory", &memory)?;
+    }
+    // 广播给两个窗口:宠物窗口更新内存记忆,聊天页刷新编辑区
+    let _ = crate::app::events::PetMemoryChanged(memory).emit(&app_handle);
+    Ok(true)
+}
+
+/// 聊天记录封顶条数——超出保留最近的,防止 app_settings 无限膨胀。
+const PET_CHAT_HISTORY_CAP: usize = 50;
+
+/// 校验 + 封顶聊天历史 JSON。非法 JSON / 非数组一律拒绝(返回 Err),
+/// 不静默吞成空数组——上游写坏了要能暴露出来。
+fn normalize_chat_history(raw: &str) -> Result<String, AppError> {
+    let parsed: serde_json::Value = serde_json::from_str(raw)
+        .map_err(|e| AppError::validation(format!("chat history is not valid JSON: {e}")))?;
+    let arr = parsed
+        .as_array()
+        .ok_or_else(|| AppError::validation("chat history must be a JSON array"))?;
+    let capped: Vec<&serde_json::Value> = if arr.len() > PET_CHAT_HISTORY_CAP {
+        arr[arr.len() - PET_CHAT_HISTORY_CAP..].iter().collect()
+    } else {
+        arr.iter().collect()
+    };
+    serde_json::to_string(&capped).map_err(|e| AppError::internal(e.to_string()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_pet_chat_history(state: State<'_, AppState>) -> Result<String, AppError> {
     let conn = state
         .db
         .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
-    storage::app_settings::set(&conn, "pet_memory", &memory)?;
-    Ok(true)
+    Ok(storage::app_settings::get(&conn, "pet_chat_history")?.unwrap_or_else(|| "[]".to_string()))
+}
+
+/// 保存聊天历史(封顶后)+ 全窗口广播 PetChatUpdated。
+/// 宠物窗口 / 主窗口聊天页任一方发消息后调它,另一方 listen 到即时刷新。
+#[tauri::command]
+#[specta::specta]
+pub fn save_pet_chat_history(
+    history: String,
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let normalized = normalize_chat_history(&history)?;
+    {
+        let conn = state
+            .db
+            .get()
+            .map_err(|_| AppError::internal("DB lock failed"))?;
+        storage::app_settings::set(&conn, "pet_chat_history", &normalized)?;
+    }
+    let _ = crate::app::events::PetChatUpdated(normalized.clone()).emit(&app_handle);
+    Ok(normalized)
 }
 
 #[tauri::command]
@@ -562,17 +627,9 @@ pub async fn pet_chat(
         port
     );
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(120))
-        .build()
-        .map_err(|e| AppError::internal(format!("HTTP client error: {e}")))?;
+    let client = local_http_client(std::time::Duration::from_secs(120))?;
 
-    let body = serde_json::json!({
-        "model": "agentgate",
-        "messages": messages,
-        "max_tokens": 200,
-        "temperature": 0.8,
-    });
+    let body = pet_chat_body(messages);
 
     let resp = client
         .post(&url)
@@ -594,12 +651,41 @@ pub async fn pet_chat(
         .await
         .map_err(|e| AppError::internal(format!("Parse error: {e}")))?;
 
+    Ok(extract_chat_content(&json))
+}
+
+fn extract_chat_content(json: &serde_json::Value) -> String {
+    // 空内容必须兜底为非空:推理模型可能把 max_tokens 全烧在 reasoning_content
+    // 上返回空 content,空 assistant 消息进聊天历史会被 Kimi 等供应商 400 拒掉。
     let content = json["choices"][0]["message"]["content"]
         .as_str()
-        .unwrap_or("...")
-        .to_string();
+        .unwrap_or("")
+        .trim();
+    if content.is_empty() {
+        "...".to_string()
+    } else {
+        content.to_string()
+    }
+}
 
-    Ok(content)
+fn pet_chat_body(messages: Vec<serde_json::Value>) -> serde_json::Value {
+    // 不带 temperature:部分模型只接受固定值(如 kimi-for-coding 仅允许 1),
+    // 交给供应商默认值最稳。
+    serde_json::json!({
+        "model": "agentgate",
+        "messages": messages,
+        "max_tokens": 200,
+    })
+}
+
+fn local_http_client(timeout: std::time::Duration) -> Result<reqwest::Client, AppError> {
+    // 回环请求绝不走系统/环境代理:本机代理(如 Clash)通常连不回宿主端口,
+    // 会返回空 502,表现为宠物聊天"Gateway chat failed with HTTP 502"。
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .no_proxy()
+        .build()
+        .map_err(|e| AppError::internal(format!("HTTP client error: {e}")))
 }
 
 fn gateway_client_host(host: &str) -> String {
@@ -661,6 +747,101 @@ fn pet_gateway_error(status: u16, body: &str) -> AppError {
 #[cfg(test)]
 mod pet_chat_tests {
     use super::*;
+
+    #[test]
+    fn extract_chat_content_never_returns_empty() {
+        // 推理模型可能把 max_tokens 烧完在 reasoning_content 上,content 为空串;
+        // 空串进聊天历史,下一轮会被 Kimi 等供应商 400 拒掉
+        // ("message with role 'assistant' must not be empty")。
+        let reasoning_only = serde_json::json!({
+            "choices": [{"message": {"content": "", "reasoning_content": "thinking..."}}]
+        });
+        assert!(!extract_chat_content(&reasoning_only).trim().is_empty());
+
+        let whitespace = serde_json::json!({
+            "choices": [{"message": {"content": "  \n"}}]
+        });
+        assert!(!extract_chat_content(&whitespace).trim().is_empty());
+
+        let missing = serde_json::json!({"choices": []});
+        assert_eq!(extract_chat_content(&missing), "...");
+
+        let normal = serde_json::json!({
+            "choices": [{"message": {"content": "你好!"}}]
+        });
+        assert_eq!(extract_chat_content(&normal), "你好!");
+    }
+
+    #[test]
+    fn normalize_chat_history_rejects_bad_json() {
+        assert!(normalize_chat_history("not json").is_err());
+        assert!(normalize_chat_history("{\"a\":1}").is_err()); // 对象不是数组
+    }
+
+    #[test]
+    fn normalize_chat_history_keeps_valid_array() {
+        let raw = r#"[{"role":"user","content":"hi"},{"role":"assistant","content":"yo"}]"#;
+        let out = normalize_chat_history(raw).unwrap();
+        let arr: Vec<serde_json::Value> = serde_json::from_str(&out).unwrap();
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["content"], "hi");
+    }
+
+    #[test]
+    fn normalize_chat_history_caps_to_last_n() {
+        let msgs: Vec<serde_json::Value> = (0..80)
+            .map(|i| serde_json::json!({"role":"user","content":i}))
+            .collect();
+        let raw = serde_json::to_string(&msgs).unwrap();
+        let out = normalize_chat_history(&raw).unwrap();
+        let arr: Vec<serde_json::Value> = serde_json::from_str(&out).unwrap();
+        assert_eq!(arr.len(), PET_CHAT_HISTORY_CAP);
+        // 保留的是最近的:第一条应是 index 30(80 - 50)
+        assert_eq!(arr[0]["content"], 30);
+        assert_eq!(arr[PET_CHAT_HISTORY_CAP - 1]["content"], 79);
+    }
+
+    #[test]
+    fn pet_chat_body_omits_temperature() {
+        // kimi-for-coding 只接受 temperature=1,带 0.8 会被 400 拒掉;
+        // 请求体不带 temperature,交给供应商默认值。
+        let body = pet_chat_body(vec![serde_json::json!({"role":"user","content":"hi"})]);
+        assert_eq!(body["model"], "agentgate");
+        assert_eq!(body["max_tokens"], 200);
+        assert_eq!(body["messages"][0]["content"], "hi");
+        assert!(
+            body.get("temperature").is_none(),
+            "不应携带 temperature: {body}"
+        );
+    }
+
+    #[tokio::test]
+    #[serial_test::serial(env)]
+    async fn local_http_client_ignores_proxy_env() {
+        // 系统代理(如 Clash)通常连不回宿主回环端口,会吐空 502;
+        // 宠物 → 网关的回环请求必须绕过代理。
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut buf = [0u8; 1024];
+                let _ = stream.read(&mut buf);
+                let _ = stream.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\n\r\nok");
+            }
+        });
+
+        // 指向一个必然拒绝连接的地址,模拟"代理劫持回环请求"
+        std::env::set_var("http_proxy", "http://127.0.0.1:1");
+        std::env::set_var("HTTP_PROXY", "http://127.0.0.1:1");
+        let client = local_http_client(std::time::Duration::from_secs(5)).unwrap();
+        let resp = client.get(format!("http://{addr}/")).send().await;
+        std::env::remove_var("http_proxy");
+        std::env::remove_var("HTTP_PROXY");
+
+        let resp = resp.expect("回环请求不应被代理劫持");
+        assert_eq!(resp.status(), 200);
+    }
 
     #[test]
     fn gateway_client_host_uses_loopback_for_wildcard_bind() {

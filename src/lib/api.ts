@@ -564,14 +564,18 @@ export const getPetGatewayState = (): Promise<PetGatewayInfo> =>
   unwrap(bindings.getPetGatewayState()) as unknown as Promise<PetGatewayInfo>;
 /// 轻量版:只 state + last_error(走索引)。10s 轮询用。
 export const getPetGatewayStateLite = (): Promise<
-  Pick<PetGatewayInfo, "state" | "last_error">
+  Pick<PetGatewayInfo, "state" | "last_error" | "active_count">
 > =>
   unwrap(bindings.getPetGatewayStateLite()) as unknown as Promise<
-    Pick<PetGatewayInfo, "state" | "last_error">
+    Pick<PetGatewayInfo, "state" | "last_error" | "active_count">
   >;
 export const getPetMemory = () => unwrap(bindings.getPetMemory());
 export const savePetMemory = (memory: string) =>
   unwrap(bindings.savePetMemory(memory));
+export const getPetChatHistory = () => unwrap(bindings.getPetChatHistory());
+/// 保存聊天历史(Rust 侧封顶 + 广播 PetChatUpdated),返回封顶后的历史 JSON。
+export const savePetChatHistory = (history: string) =>
+  unwrap(bindings.savePetChatHistory(history));
 export const petChat = (messages: Array<{ role: string; content: string }>) =>
   unwrap(bindings.petChat(messages as never));
 export const petOpenSettings = () => unwrap(bindings.petOpenSettings());

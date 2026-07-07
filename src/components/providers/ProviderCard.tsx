@@ -37,6 +37,28 @@ interface ProviderCardProps {
   onResetRuntime?: (providerId: string) => void;
 }
 
+function humanizeProviderIssue(
+  t: (key: string) => string,
+  code?: string | null,
+  message?: string | null
+) {
+  const raw = `${code ?? ""} ${message ?? ""}`.trim();
+  if (!raw) return "";
+  if (raw.includes("PASS_THROUGH_STREAM_FAILED")) {
+    return t("providers.error_pass_through_stream_failed");
+  }
+  if (raw.includes("AUTH") || raw.includes("401") || raw.includes("403")) {
+    return t("providers.error_auth_failed");
+  }
+  if (raw.includes("RATE_LIMIT") || raw.includes("429")) {
+    return t("providers.error_rate_limited");
+  }
+  if (raw.includes("QUOTA") || raw.includes("INSUFFICIENT")) {
+    return t("providers.error_quota");
+  }
+  return t("providers.error_request_failed");
+}
+
 export function ProviderCard({
   provider,
   onEdit,
@@ -124,6 +146,11 @@ export function ProviderCard({
     health?.recent_errors ?? []
   );
   const signalSummary = getProviderSignalSummary(runtime, health);
+  const recentFailure = humanizeProviderIssue(
+    t,
+    runtime?.last_error_code,
+    runtime?.last_error ?? latestError?.message
+  );
   const errorStatusVariant: Record<
     ProviderErrorStatus,
     "error" | "warning" | "muted"
@@ -137,11 +164,11 @@ export function ProviderCard({
 
   return (
     <div
-      className={`rounded-xl border bg-card p-5 ${provider.is_active ? "border-accent/40 border-l-2 border-l-accent" : "border-border"}`}
+      className={`rounded-xl border bg-card p-4 ${provider.is_active ? "border-accent/40 border-l-2 border-l-accent" : "border-border"}`}
       style={{ boxShadow: "var(--shadow-sm)" }}
     >
       {/* ── Header: icon + name + url ; status dot + capability icons ── */}
-      <div className="mb-3 flex items-start justify-between gap-3">
+      <div className="mb-4 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft">
             <Cloud className="h-4 w-4 text-accent" />
@@ -191,23 +218,30 @@ export function ProviderCard({
       </div>
 
       {/* ── Essentials: model · key · timeout · 直连 chips ── */}
-      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-        <span className="font-mono text-text-primary">
-          {provider.default_model}
-        </span>
-        {provider.masked_api_key && (
-          <span className="flex items-center gap-1 text-text-muted">
-            <Key className="h-3 w-3" />
-            <span className="font-mono text-[11px]">
-              {provider.masked_api_key}
+      <div className="mb-3 rounded-lg border border-border/60 bg-card-secondary/30 p-3">
+        <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+          <div className="min-w-0">
+            <span className="text-[10px] uppercase tracking-wide text-text-muted">
+              {t("providers.default_model")}
             </span>
+            <p className="truncate font-mono text-text-primary">
+              {provider.default_model}
+            </p>
+          </div>
+          <div className="min-w-0">
+            <span className="text-[10px] uppercase tracking-wide text-text-muted">
+              {t("providers.api_key")}
+            </span>
+            <p className="flex items-center gap-1 truncate font-mono text-[11px] text-text-secondary">
+              <Key className="h-3 w-3 shrink-0" />
+              {provider.masked_api_key ?? "—"}
+            </p>
+          </div>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] text-text-muted">
+            {provider.timeout_seconds}s
           </span>
-        )}
-        <span className="text-text-muted">{provider.timeout_seconds}s</span>
-      </div>
-      {/* 上游原生支持的协议入口——勾掉的客户端协议靠网关协议转换 */}
-      {passThroughChips.length > 0 && (
-        <div className="mb-3 flex flex-wrap items-center gap-1">
           {passThroughChips.map((c) => (
             <span
               key={c.key}
@@ -218,15 +252,28 @@ export function ProviderCard({
             </span>
           ))}
         </div>
-      )}
+      </div>
 
       {/* ── Operational status: runtime + probe + real traffic in one vocabulary ── */}
       {(runtime || health) && (
-        <div className="mb-3 space-y-1.5 rounded-md border border-border/50 bg-card-secondary/40 px-3 py-2 text-[11px] text-text-muted">
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="font-medium text-text-secondary">
-              {t("providers.operational_status")}
+        <div className="mb-4 space-y-2 rounded-lg border border-border/60 bg-card-secondary/30 p-3 text-[11px] text-text-muted">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs font-semibold text-text-primary">
+              {t("providers.card_health_status")}
             </span>
+            {onResetRuntime &&
+              runtime &&
+              signalSummary.runtime.status !== "available" &&
+              signalSummary.runtime.status !== "unknown" && (
+                <button
+                  onClick={() => onResetRuntime(provider.id)}
+                  className="text-accent transition-colors hover:underline"
+                >
+                  {t("providers.runtime_reset")}
+                </button>
+              )}
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <StatusBadge
               variant={signalSummary.runtime.variant}
               className="px-1.5 py-0 text-[10px]"
@@ -273,17 +320,6 @@ export function ProviderCard({
                 {t(`providers.error_status.${status}`)}
               </StatusBadge>
             ))}
-            {onResetRuntime &&
-              runtime &&
-              signalSummary.runtime.status !== "available" &&
-              signalSummary.runtime.status !== "unknown" && (
-                <button
-                  onClick={() => onResetRuntime(provider.id)}
-                  className="text-accent transition-colors hover:underline"
-                >
-                  {t("providers.runtime_reset")}
-                </button>
-              )}
           </div>
           {cooldownSummary && (
             <div
@@ -311,13 +347,9 @@ export function ProviderCard({
               {t("providers.probe")}: {signalSummary.probe.error}
             </div>
           )}
-          {runtime?.last_error && (
-            <div
-              className="truncate"
-              title={`${runtime.last_error_code ?? ""} ${runtime.last_error}`.trim()}
-            >
-              {t("providers.runtime_reason")}:{" "}
-              {runtime.last_error_code ?? runtime.last_error}
+          {recentFailure && (
+            <div className="truncate">
+              {t("providers.recent_failure")}: {recentFailure}
             </div>
           )}
           {latestError && (
@@ -366,19 +398,17 @@ export function ProviderCard({
       )}
 
       {/* ── Actions ── */}
-      <div className="flex items-center justify-between">
+      <div className="border-t border-border/70 pt-3">
+        <div className="mb-2 text-xs font-semibold text-text-primary">
+          {t("providers.primary_actions")}
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-3">
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => onEdit(provider)}
-            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-          >
-            <Pencil className="h-3 w-3" />
-            {t("common.edit")}
-          </button>
           <button
             onClick={() => onTest(provider)}
             disabled={testing}
-            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
           >
             {testing ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -386,6 +416,13 @@ export function ProviderCard({
               <ExternalLink className="h-3 w-3" />
             )}
             {t("providers.test")}
+          </button>
+          <button
+            onClick={() => onEdit(provider)}
+            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+          >
+            <Pencil className="h-3 w-3" />
+            {t("common.edit")}
           </button>
           {onDetails && (
             <button
@@ -405,25 +442,27 @@ export function ProviderCard({
               {t("providers.set_active")}
             </button>
           )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            onClick={() => setShowDetails((v) => !v)}
+            className="flex items-center gap-1 text-[11px] text-text-muted transition-colors hover:text-text-primary"
+          >
+            {showDetails ? (
+              <ChevronUp className="h-3 w-3" />
+            ) : (
+              <ChevronDown className="h-3 w-3" />
+            )}
+            {t("providers.details")}
+          </button>
           <button
             onClick={() => onDelete(provider)}
-            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-error/20 hover:text-error"
+            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-2 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-error/20 hover:text-error"
           >
             <Trash2 className="h-3 w-3" />
             {t("common.delete")}
           </button>
         </div>
-        <button
-          onClick={() => setShowDetails((v) => !v)}
-          className="flex items-center gap-1 text-[11px] text-text-muted transition-colors hover:text-text-primary"
-        >
-          {showDetails ? (
-            <ChevronUp className="h-3 w-3" />
-          ) : (
-            <ChevronDown className="h-3 w-3" />
-          )}
-          {t("providers.details")}
-        </button>
       </div>
     </div>
   );

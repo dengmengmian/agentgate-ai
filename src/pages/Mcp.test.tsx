@@ -48,6 +48,8 @@ describe("Mcp", () => {
     );
 
     await waitFor(() => expect(api.listMcpServers).toHaveBeenCalled());
+    expect(screen.getByText("mcp.console")).toBeInTheDocument();
+    expect(screen.getByText("mcp.server_matrix")).toBeInTheDocument();
     expect(screen.getByText("filesystem")).toBeInTheDocument();
   });
 

@@ -92,6 +92,10 @@ describe("Logs", () => {
       </MemoryRouter>
     );
 
+    expect(screen.getByText("logs.console")).toBeInTheDocument();
+    expect(screen.getByText("logs.traffic_snapshot")).toBeInTheDocument();
+    expect(screen.getByText("logs.query_builder")).toBeInTheDocument();
+
     await waitFor(() => expect(resolvers.length).toBe(1));
 
     const statusSelect = container.querySelector("select")!;

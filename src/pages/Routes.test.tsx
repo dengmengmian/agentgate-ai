@@ -41,12 +41,14 @@ function profileDetail(id: string): any {
         provider_type: "openai",
         provider_protocol: JSON.stringify(["openai_responses"]),
         priority: 1,
+        enabled: true,
         model_override: null,
         routing_conditions: null,
         supports_vision: false,
         supports_cache: null,
         model_capabilities: null,
         has_anthropic_url: false,
+        runtime_available: true,
         consecutive_failures: 0,
         cooldown_until: null,
       },
@@ -96,6 +98,9 @@ describe("Routes", () => {
 
   it("loads first profile detail and toggles mode", async () => {
     vi.mocked(api.listRouteProfiles).mockResolvedValue([profile("r1")]);
+    vi.mocked(api.listProviders).mockResolvedValue([
+      { id: "p1", name: "OpenAI", enabled: true },
+    ] as any);
 
     render(
       <MemoryRouter>
@@ -107,6 +112,14 @@ describe("Routes", () => {
     expect(screen.getAllByText("Default Route").length).toBeGreaterThanOrEqual(
       1
     );
+    expect(screen.getByText(/routes\.current_provider/)).toBeInTheDocument();
+    expect(screen.getByText("routes.route_result")).toBeInTheDocument();
+    expect(screen.getByText("routes.match_settings")).toBeInTheDocument();
+    expect(screen.getByText("routes.route_metrics")).toBeInTheDocument();
+    expect(
+      screen.getByText("OpenAI Responses (Codex) → OpenAI")
+    ).toBeInTheDocument();
+    expect(screen.getByText("routes.mode_plain_manual")).toBeInTheDocument();
 
     const failover = screen.getByText("routes.mode_failover");
     await act(async () => failover.click());
@@ -114,6 +127,25 @@ describe("Routes", () => {
     await waitFor(() =>
       expect(api.setRouteProfileMode).toHaveBeenCalledWith("r1", "failover")
     );
+  });
+
+  it("summarizes route availability and disabled providers", async () => {
+    vi.mocked(api.listRouteProfiles).mockResolvedValue([profile("r1")]);
+    vi.mocked(api.listProviders).mockResolvedValue([
+      { id: "p1", name: "OpenAI", enabled: false },
+    ] as any);
+
+    render(
+      <MemoryRouter>
+        <Routes />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText("routes.availability")).toBeInTheDocument();
+    expect(screen.getByText("0 / 1")).toBeInTheDocument();
+    expect(
+      screen.getByText("routes.reason_provider_disabled")
+    ).toBeInTheDocument();
   });
 
   it("creates and renames a route profile", async () => {

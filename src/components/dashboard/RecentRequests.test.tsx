@@ -47,7 +47,7 @@ describe("RecentRequests", () => {
 
     renderWithProviders(<RecentRequests requests={requests} tools={tools} />);
 
-    expect(screen.getByText("Recent Requests")).toBeInTheDocument();
+    expect(screen.getByText("Request Stream")).toBeInTheDocument();
     expect(screen.getAllByText("DeepSeek")).toHaveLength(2);
     expect(screen.getAllByText("codex")).toHaveLength(2);
     expect(screen.getByText("Codex")).toBeInTheDocument();

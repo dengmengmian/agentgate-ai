@@ -297,70 +297,98 @@ export function Mcp() {
 
   return (
     <div className="space-y-4">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-text-primary">
-            {t("mcp.title")}
-          </h2>
-          <p className="mt-0.5 text-xs text-text-muted">
-            {t("mcp.subtitle_before")}
-            <code className="font-mono">config.toml</code>
-            {t("mcp.subtitle_mid")}
-            <code className="font-mono">.claude.json</code>
-            {t("mcp.subtitle_after")}
-          </p>
-        </div>
-        <div className="relative flex shrink-0 items-center gap-2">
-          <button
-            onClick={openCreate}
-            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            {t("mcp.add_server")}
-          </button>
-          <button
-            onClick={() => setMoreOpen((open) => !open)}
-            className="rounded-md border border-border p-1.5 text-text-secondary hover:bg-card-secondary"
-            title={t("mcp.more")}
-          >
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-          {moreOpen && (
-            <div className="absolute right-0 top-9 z-20 w-52 rounded-lg border border-border bg-card p-2 shadow-lg">
-              <label className="mb-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-text-muted">
-                <input
-                  type="checkbox"
-                  checked={includeSecrets}
-                  onChange={(event) => setIncludeSecrets(event.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-border"
-                />
-                {t("mcp.export_include_secrets")}
-              </label>
-              <button
-                onClick={handleExport}
-                disabled={transferring}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-card-secondary disabled:opacity-60"
-              >
-                {transferring ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Download className="h-3.5 w-3.5" />
-                )}
-                {t("mcp.export_json")}
-              </button>
-              <button
-                onClick={openImport}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-card-secondary"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                {t("mcp.import_json")}
-              </button>
-            </div>
-          )}
+      <header className="relative overflow-hidden rounded-xl border border-accent/20 bg-card p-5 shadow-sm">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-accent/10 to-transparent" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">
+              {t("mcp.console")}
+            </p>
+            <h2 className="mt-2 flex items-center gap-2 text-lg font-semibold text-text-primary">
+              <Plug className="h-4 w-4" />
+              {t("mcp.title")}
+            </h2>
+            <p className="mt-1 max-w-2xl text-xs text-text-muted">
+              {t("mcp.subtitle_before")}
+              <code className="font-mono">config.toml</code>
+              {t("mcp.subtitle_mid")}
+              <code className="font-mono">.claude.json</code>
+              {t("mcp.subtitle_after")}
+            </p>
+          </div>
+          <div className="relative flex shrink-0 items-center gap-2">
+            <button
+              onClick={openCreate}
+              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent-hover"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t("mcp.add_server")}
+            </button>
+            <button
+              onClick={() => setMoreOpen((open) => !open)}
+              className="rounded-md border border-border bg-card-secondary p-1.5 text-text-secondary hover:border-accent/40 hover:text-text-primary"
+              title={t("mcp.more")}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {moreOpen && (
+              <div className="absolute right-0 top-9 z-20 w-52 rounded-lg border border-border bg-card p-2 shadow-lg">
+                <label className="mb-1 flex items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-text-muted">
+                  <input
+                    type="checkbox"
+                    checked={includeSecrets}
+                    onChange={(event) =>
+                      setIncludeSecrets(event.target.checked)
+                    }
+                    className="h-3.5 w-3.5 rounded border-border"
+                  />
+                  {t("mcp.export_include_secrets")}
+                </label>
+                <button
+                  onClick={handleExport}
+                  disabled={transferring}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-card-secondary disabled:opacity-60"
+                >
+                  {transferring ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5" />
+                  )}
+                  {t("mcp.export_json")}
+                </button>
+                <button
+                  onClick={openImport}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-card-secondary"
+                >
+                  <Upload className="h-3.5 w-3.5" />
+                  {t("mcp.import_json")}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary">
+              {t("mcp.server_matrix")}
+            </h3>
+            <p className="mt-0.5 text-xs text-text-muted">
+              {t("mcp.server_matrix_hint")}
+            </p>
+          </div>
+          <label className="flex min-w-[240px] items-center gap-2 rounded-md border border-border bg-card-secondary px-2.5 py-1.5 text-xs text-text-muted">
+            <Search className="h-3.5 w-3.5" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              className="w-full bg-transparent text-text-primary outline-none placeholder:text-text-muted"
+              placeholder={t("mcp.search_placeholder")}
+            />
+          </label>
+        </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <FilterButton
             active={filter === "all"}
@@ -387,16 +415,7 @@ export function Mcp() {
             onClick={() => setFilter("claude_code")}
           />
         </div>
-        <label className="flex min-w-[240px] items-center gap-2 rounded-md border border-border bg-card-secondary px-2.5 py-1.5 text-xs text-text-muted">
-          <Search className="h-3.5 w-3.5" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className="w-full bg-transparent text-text-primary outline-none placeholder:text-text-muted"
-            placeholder={t("mcp.search_placeholder")}
-          />
-        </label>
-      </div>
+      </section>
 
       {transferMode && (
         <section className="rounded-lg border border-border bg-card p-4">

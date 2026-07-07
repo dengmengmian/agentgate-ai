@@ -87,69 +87,87 @@ export function ProviderDetail() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <button
-            onClick={() => navigate("/providers")}
-            className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            {t("providers.detail.back")}
-          </button>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-xl font-semibold text-text-primary">
-              {provider.name}
-            </h1>
-            {provider.is_active && (
-              <StatusBadge variant="accent">
-                {t("providers.active")}
-              </StatusBadge>
-            )}
-            {runtime?.quota_exhausted && (
-              <StatusBadge variant="error">
-                {t("providers.runtime_quota")}
-              </StatusBadge>
-            )}
+      <div className="relative overflow-hidden rounded-xl border border-accent/20 bg-card p-5 shadow-sm">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-accent/10 to-transparent" />
+        <div className="relative flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-3">
+            <button
+              onClick={() => navigate("/providers")}
+              className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              {t("providers.detail.back")}
+            </button>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-accent">
+                {t("providers.detail.console")}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-semibold text-text-primary">
+                  {provider.name}
+                </h1>
+                {provider.is_active && (
+                  <StatusBadge variant="accent">
+                    {t("providers.active")}
+                  </StatusBadge>
+                )}
+                {runtime?.quota_exhausted && (
+                  <StatusBadge variant="error">
+                    {t("providers.runtime_quota")}
+                  </StatusBadge>
+                )}
+              </div>
+              <p className="mt-1 font-mono text-xs text-text-muted">
+                {provider.base_url}
+              </p>
+            </div>
           </div>
-          <p className="font-mono text-xs text-text-muted">
-            {provider.base_url}
-          </p>
+          <button
+            onClick={load}
+            className="rounded-md border border-border bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-accent/40 hover:text-text-primary"
+          >
+            {t("common.refresh")}
+          </button>
         </div>
-        <button
-          onClick={load}
-          className="rounded-md bg-card-secondary px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
-        >
-          {t("common.refresh")}
-        </button>
       </div>
 
-      <div className="grid grid-cols-4 gap-3">
-        <MetricCard
-          label={t("providers.detail.requests_24h")}
-          value={(health?.h24_total ?? 0).toLocaleString()}
-        />
-        <MetricCard
-          label={t("providers.health_success")}
-          value={`${health?.h24_success_rate ?? 0}%`}
-        />
-        <MetricCard
-          label={t("providers.health_avg_latency")}
-          value={formatLatency(health?.h24_avg_latency_ms ?? 0)}
-        />
-        <MetricCard
-          label={t("providers.detail.cost_7d")}
-          value={formatCost(
-            stats?.model_stats.reduce((sum, row) => sum + row.cost, 0) ?? 0
-          )}
-        />
-      </div>
+      <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold text-text-primary">
+            {t("providers.detail.health_strip")}
+          </h2>
+          <span className="font-mono text-[11px] text-text-muted">
+            {provider.id}
+          </span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            label={t("providers.detail.requests_24h")}
+            value={(health?.h24_total ?? 0).toLocaleString()}
+          />
+          <MetricCard
+            label={t("providers.health_success")}
+            value={`${health?.h24_success_rate ?? 0}%`}
+          />
+          <MetricCard
+            label={t("providers.health_avg_latency")}
+            value={formatLatency(health?.h24_avg_latency_ms ?? 0)}
+          />
+          <MetricCard
+            label={t("providers.detail.cost_7d")}
+            value={formatCost(
+              stats?.model_stats.reduce((sum, row) => sum + row.cost, 0) ?? 0
+            )}
+          />
+        </div>
+      </section>
 
-      <section className="space-y-2">
+      <section className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <Activity className="h-4 w-4 text-accent" />
-          {t("providers.detail.latency_trend")}
+          {t("providers.detail.latency_monitor")}
         </h2>
-        <div className="rounded-md border border-border bg-card p-3">
+        <div className="rounded-lg border border-border/70 bg-card-secondary/45 p-3">
           {stats && stats.latency_points.length > 0 ? (
             <div className="flex h-36 items-end gap-1">
               {stats.latency_points.map((point) => (
@@ -175,12 +193,12 @@ export function ProviderDetail() {
         </div>
       </section>
 
-      <section className="space-y-2">
+      <section className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <Boxes className="h-4 w-4 text-accent" />
           {t("providers.detail.model_stats")}
         </h2>
-        <div className="overflow-hidden rounded-md border border-border bg-card">
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
           <table className="w-full text-left text-xs">
             <thead className="bg-card-secondary text-text-muted">
               <tr>
@@ -234,12 +252,12 @@ export function ProviderDetail() {
         </div>
       </section>
 
-      <section className="space-y-2">
+      <section className="space-y-2 rounded-xl border border-border bg-card p-4 shadow-sm">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
           <AlertTriangle className="h-4 w-4 text-warning" />
           {t("providers.health_recent_errors")}
         </h2>
-        <div className="rounded-md border border-border bg-card">
+        <div className="rounded-lg border border-border bg-card-secondary/45">
           {health && health.recent_errors.length > 0 ? (
             health.recent_errors.map((item) => (
               <div
@@ -273,7 +291,7 @@ export function ProviderDetail() {
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-border bg-card p-3">
+    <div className="rounded-lg border border-border/70 bg-card-secondary/45 p-3">
       <p className="text-[11px] text-text-muted">{label}</p>
       <p className="mt-1 text-lg font-semibold text-text-primary">{value}</p>
     </div>

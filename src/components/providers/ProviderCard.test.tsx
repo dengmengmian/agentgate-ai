@@ -126,6 +126,43 @@ describe("ProviderCard", () => {
     expect(testBtn).toBeDisabled();
   });
 
+  it("shows health sections and humanizes recent failures", () => {
+    const provider = makeProvider();
+    renderWithProviders(
+      <ProviderCard
+        provider={provider}
+        runtime={
+          {
+            provider_id: provider.id,
+            available: true,
+            consecutive_failures: 0,
+            last_error: "PASS_THROUGH_STREAM_FAILED",
+            last_error_code: "PASS_THROUGH_STREAM_FAILED",
+            last_error_at: new Date().toISOString(),
+            cooldown_until: null,
+            quota_exhausted: false,
+            last_probe_ok: true,
+            last_probe_at: new Date().toISOString(),
+            last_probe_latency_ms: 90,
+            last_probe_error: null,
+            updated_at: new Date().toISOString(),
+          } as any
+        }
+        onEdit={() => {}}
+        onDelete={() => {}}
+        onSetActive={() => {}}
+        onTest={() => {}}
+      />
+    );
+
+    expect(screen.getByText("Health status")).toBeInTheDocument();
+    expect(screen.getByText("Primary actions")).toBeInTheDocument();
+    expect(screen.getByText(/Stream forwarding failed/i)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/PASS_THROUGH_STREAM_FAILED/)
+    ).not.toBeInTheDocument();
+  });
+
   it("toggles detail section", async () => {
     const provider = makeProvider();
     renderWithProviders(

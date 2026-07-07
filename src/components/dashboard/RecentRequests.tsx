@@ -15,10 +15,14 @@ export function RecentRequests({ requests, tools }: RecentRequestsProps) {
   if (requests.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-border bg-card">
+    <div
+      className="rounded-xl border border-border bg-card"
+      style={{ boxShadow: "0 12px 30px rgba(17, 24, 39, 0.05)" }}
+    >
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border px-5 py-3">
-        <h3 className="text-sm font-semibold text-text-primary">
-          {t("dashboard.recent_requests")}
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+          <span className="h-2 w-2 rounded-full bg-success shadow-[0_0_10px_rgba(56,161,105,0.45)]" />
+          {t("dashboard.request_stream")}
         </h3>
         {tools && tools.length > 0 && (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
@@ -49,7 +53,7 @@ export function RecentRequests({ requests, tools }: RecentRequestsProps) {
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead>
-            <tr className="border-b border-border text-text-muted">
+            <tr className="border-b border-border bg-card-secondary/30 text-[10px] uppercase tracking-wide text-text-muted">
               <th className="px-5 py-2.5 font-medium">{t("logs.time")}</th>
               <th className="px-5 py-2.5 font-medium">{t("logs.client")}</th>
               <th className="px-5 py-2.5 font-medium">{t("logs.provider")}</th>
@@ -68,7 +72,7 @@ export function RecentRequests({ requests, tools }: RecentRequestsProps) {
               return (
                 <tr
                   key={req.id}
-                  className="border-b border-border/50 transition-colors hover:bg-hover"
+                  className="border-b border-border/50 transition-colors hover:bg-accent/5"
                 >
                   <td className="px-5 py-2.5 font-mono text-text-muted">
                     {formatTimestamp(req.timestamp)}

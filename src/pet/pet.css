@@ -163,6 +163,20 @@ body,
   border-radius: 10px;
   padding: 6px 12px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  /* 窗口写死 140×200,气泡头顶只有约 64px:长回复限高滚动,
+     否则超出窗口顶部被静默裁掉。悬停气泡不消失,正好配合滚动阅读。 */
+  max-height: 56px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.bubble-content::-webkit-scrollbar {
+  width: 3px;
+}
+
+.bubble-content::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 2px;
 }
 
 .bubble-text {
@@ -272,6 +286,102 @@ body,
     opacity: 1;
     transform: scale(1.2);
   }
+}
+
+/* ── 活跃强度分级:并发越高跳得越欢,三档冒汗 ── */
+
+.pet-active-2 {
+  animation: bounce 0.35s ease-in-out infinite;
+}
+
+.pet-active-3 {
+  animation: bounce 0.24s ease-in-out infinite;
+}
+
+.sweat {
+  position: absolute;
+  top: 8px;
+  left: 2px;
+  font-size: 13px;
+  pointer-events: none;
+  z-index: 2;
+  animation: sweat-drip 0.9s ease-in infinite;
+}
+
+@keyframes sweat-drip {
+  0% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  40% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* ── 戳出脾气 ── */
+
+.pet-angry {
+  animation: shake 0.18s ease-in-out 8;
+}
+
+.angry-mark {
+  position: absolute;
+  top: -4px;
+  left: 4px;
+  font-size: 15px;
+  pointer-events: none;
+  z-index: 2;
+  animation: cc-badge-pop 0.4s ease-in-out 4;
+}
+
+/* 变暗效果在 PetApp 内联 opacity 里合并(内联优先级更高),这里只负责转身 */
+.pet-sulk {
+  transform: scaleX(-1);
+}
+
+/* ── CC done 庆祝跳 ── */
+
+.pet-celebrate {
+  animation: celebrate-jump 0.55s ease-in-out 2;
+}
+
+@keyframes celebrate-jump {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  30% {
+    transform: translateY(-14px) rotate(-6deg);
+  }
+  60% {
+    transform: translateY(0) rotate(0);
+  }
+  80% {
+    transform: translateY(-7px) rotate(5deg);
+  }
+}
+
+/* ── 花费拟人化:吃撑变圆(作用在 svg 上,不和 wrapper 的动画 transform 打架)── */
+
+.pet-chubby svg {
+  transform: scale(1.14, 1.04);
+  transform-origin: bottom center;
+  transition: transform 0.6s ease-out;
+}
+
+/* ── 日期彩蛋挂件 ── */
+
+.date-badge {
+  position: absolute;
+  top: -6px;
+  left: -2px;
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 2;
 }
 
 /* ── CC 状态徽章(宠物头顶冒图标,增强可读性 + 传播力)── */

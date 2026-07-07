@@ -182,6 +182,9 @@ fn build_candidates(
 
         // Model resolution: condition_model_override → model_override → model_mapping → supported_models → default_model
         let provider_info = storage::providers::get_by_id(conn, &rpp.provider_id).ok();
+        if provider_info.as_ref().is_some_and(|p| !p.enabled) {
+            continue;
+        }
 
         let model = condition_model_override
             .or_else(|| rpp.model_override.clone())
@@ -1123,6 +1126,75 @@ mod tests {
             candidates.is_empty(),
             "invalid routing_conditions must not widen the provider match"
         );
+    }
+
+    #[test]
+    fn build_candidates_skips_disabled_provider() {
+        let temp = std::env::temp_dir().join(format!(
+            "agentgate_provider_selector_{}",
+            uuid::Uuid::new_v4()
+        ));
+        let pool = crate::storage::db::init_database(&temp).unwrap();
+        let conn = pool.get().unwrap();
+        let provider = crate::storage::providers::create(
+            &conn,
+            crate::models::provider::CreateProviderInput {
+                name: "DisabledProvider".to_string(),
+                provider_type: "openai".to_string(),
+                base_url: "https://api.openai.com".to_string(),
+                api_key: Some("sk-test".to_string()),
+                default_model: "gpt-4".to_string(),
+                reasoning_model: None,
+                supported_models: None,
+                model_mapping: None,
+                extra_headers: None,
+                anthropic_base_url: None,
+                responses_base_url: None,
+                protocol: "openai_chat_completions".to_string(),
+                timeout_seconds: Some(120),
+                auto_cache_control: None,
+                model_capabilities: None,
+                provider_quirks: None,
+                body_filter_enabled: None,
+                thinking_rectifier_enabled: None,
+                error_mapper_enabled: None,
+                model_degradation_chain: None,
+                model_context_windows: None,
+                enabled: Some(false),
+            },
+        )
+        .unwrap();
+        let route_provider = RouteProfileProviderView {
+            id: "rpp1".to_string(),
+            provider_id: provider.id,
+            provider_name: "DisabledProvider".to_string(),
+            provider_type: "openai".to_string(),
+            provider_protocol: "openai_chat_completions".to_string(),
+            has_anthropic_url: false,
+            supports_vision: None,
+            model_capabilities: None,
+            priority: 1,
+            enabled: true,
+            model_override: None,
+            cooldown_seconds: 600,
+            failover_on_status_codes: None,
+            failover_on_error_keywords: None,
+            routing_conditions: None,
+            runtime_available: true,
+            cooldown_until: None,
+            consecutive_failures: 0,
+        };
+
+        let candidates =
+            build_candidates(&conn, &[route_provider], Some("agentgate"), None).unwrap();
+
+        assert!(
+            candidates.is_empty(),
+            "disabled providers must not remain routable through route profiles"
+        );
+        drop(conn);
+        drop(pool);
+        let _ = std::fs::remove_dir_all(temp);
     }
 
     #[test]
