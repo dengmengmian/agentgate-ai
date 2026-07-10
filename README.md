@@ -38,6 +38,8 @@
 | Debian / Ubuntu | [AgentGate_1.4.12_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.12/AgentGate_1.4.12_amd64.deb) |
 | Other Linux distros | [AgentGate_1.4.12_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.4.12/AgentGate_1.4.12_amd64.AppImage) |
 
+**Windows install note:** Edge/Chrome may say the file is “usually not downloaded,” and SmartScreen may show **Windows protected your PC**. That is expected for an open-source installer that is not Microsoft-signed — not a virus report. Download only from [GitHub Releases](https://github.com/dengmengmian/agentgate-ai/releases). In the browser choose **Keep** / **Keep anyway**, then when SmartScreen appears click **More info** → **Run anyway**.
+
 On macOS you can also install with Homebrew:
 
 ```bash

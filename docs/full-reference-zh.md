@@ -38,6 +38,8 @@ English: [Main Reference](./full-reference.md)
 
 > 无界面 CLI（`agentgate-serve`）的 tarball 包和所有历史版本：[Releases](https://github.com/dengmengmian/agentgate-ai/releases)
 
+**Windows 安装提示：** Edge/Chrome 可能提示「通常不会下载」，SmartScreen 可能提示「Windows 已保护你的电脑」。这是未做微软代码签名的开源安装包常见拦截，不是病毒结论。请只从官方 Releases 下载；浏览器选 **保留**，运行时点 **更多信息** → **仍要运行**。
+
 ## 为什么用 AgentGate
 
 | 不破坏官方体验 | 模型路由归你 | 每一条请求都看得到 |
@@ -302,13 +304,14 @@ xattr -d com.apple.quarantine /Applications/AgentGate.app
 </details>
 
 <details>
-<summary><b>Windows SmartScreen 警告?</b>（点击展开）</summary>
+<summary><b>Windows SmartScreen / 浏览器「通常不会下载」?</b>（点击展开）</summary>
 
-首次运行 SmartScreen 可能弹警告：
-1. 点 **更多信息**
-2. 点 **仍要运行**
+安装包未做微软代码签名，首次下载和运行常会遇到两层提示：
 
-> 只需要做一次。
+1. **浏览器（Edge/Chrome）：**「通常不会下载」→ 点 ⋯ → **保留** / **仍要保留**。
+2. **SmartScreen：**「Windows 已保护你的电脑」→ **更多信息** → **仍要运行**。
+
+请只从 [官方 GitHub Releases](https://github.com/dengmengmian/agentgate-ai/releases) 下载。这是签名/信誉拦截，不是已确认的病毒结论。同一台机器通常只需确认一次。
 
 </details>
 
