@@ -13,8 +13,18 @@ pub fn redact_value(val: &str) -> String {
         4
     };
     let suffix_len = 4;
-    let prefix = &val[..prefix_len.min(val.len())];
-    let suffix = &val[val.len().saturating_sub(suffix_len)..];
+    // 值可能混入多字节字符(如中文被误捕进 key 值),固定字节偏移会切在
+    // 字符中间 panic。收敛到 char 边界,方向都朝"少暴露":前缀向下、后缀向上。
+    let mut prefix_end = prefix_len.min(val.len());
+    while !val.is_char_boundary(prefix_end) {
+        prefix_end -= 1;
+    }
+    let mut suffix_start = val.len().saturating_sub(suffix_len);
+    while !val.is_char_boundary(suffix_start) {
+        suffix_start += 1;
+    }
+    let prefix = &val[..prefix_end];
+    let suffix = &val[suffix_start..];
     format!("{prefix}••••••••{suffix}")
 }
 
@@ -175,6 +185,24 @@ mod tests {
         assert!(redacted.starts_with("ag_local_"));
         assert!(redacted.contains("••••••••"));
         assert!(redacted.ends_with("1234"));
+    }
+
+    #[test]
+    fn test_redact_value_multibyte_no_panic() {
+        // 值里混入多字节字符时,len-4 / prefix_len 可能落在字符中间——
+        // 之前按字节切片直接 panic(生产日志:redaction.rs:17 char boundary)。
+        let redacted = redact_value("sk-abcdefgh中文测试。");
+        assert!(redacted.starts_with("sk-"));
+        assert!(redacted.contains("••••••••"));
+        // 前后缀任意组合都不允许 panic
+        for val in [
+            "中文中文中文。",
+            "sk-中文中文中文",
+            "abcd中文本",
+            "ag_local_中文中文中文",
+        ] {
+            let _ = redact_value(val);
+        }
     }
 
     #[test]

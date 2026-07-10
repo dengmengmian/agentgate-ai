@@ -6,7 +6,7 @@ use tokio::sync::mpsc;
 use crate::protocol::chat_completions::ChatCompletionChunk;
 use crate::protocol::responses_events as ev;
 use crate::transform::reasoning_store;
-use crate::transform::responses_to_chat::ThinkSplitter;
+use crate::transform::responses_to_chat::{CommentaryStripper, ThinkSplitter};
 
 const MAX_EVENTS_LOG_SIZE: usize = 1_000_000; // 1MB
 /// Accumulated tool call from streaming deltas.
@@ -58,6 +58,9 @@ pub struct SseAccumulator {
     /// Inline `<think>` 切分器（跨 chunk carry 半截标签）。
     /// 无 inline-think 上游也可安全用——content 透明透传。
     think_splitter: ThinkSplitter,
+    /// `<commentary>` 标签剥离器。Codex prompt 让模型走 commentary channel，
+    /// 第三方模型在正文里模仿输出字面标签——删标签保正文。无标签上游透传。
+    commentary_stripper: CommentaryStripper,
     /// Streaming 期间累积的 finalized output items（reasoning / message /
     /// function_call 各自 done 时的 final JSON）。最后塞进
     /// `response.completed` envelope.output 字段。
@@ -87,6 +90,7 @@ impl SseAccumulator {
             reasoning_item_id,
             finish_reason: None,
             think_splitter: ThinkSplitter::new(),
+            commentary_stripper: CommentaryStripper::new(),
             output_items: Vec::new(),
             tool_call_resolution: Default::default(),
         }
@@ -290,6 +294,9 @@ async fn process_choices(
                     acc.reasoning_content.push_str(tk);
                     stream_reasoning_delta(tx, acc, tk).await;
                 }
+                // Codex prompt 让模型走 commentary channel，第三方模型只能在
+                // 正文里模仿输出字面 <commentary> 标签——删标签保正文。
+                let text = acc.commentary_stripper.process_chunk(&text);
                 if !text.is_empty() {
                     if !*message_item_emitted {
                         start_message_item(tx, acc).await;
@@ -515,7 +522,10 @@ async fn finalize(
         acc.reasoning_content.push_str(&tk);
         stream_reasoning_delta(&tx, acc, &tk).await;
     }
-    // flush_text 极少数情况（chunk 末尾的 `<thi` 等假阳性 carry），按 text 流出去
+    // flush_text 极少数情况（chunk 末尾的 `<thi` 等假阳性 carry），按 text 流出去。
+    // commentary stripper 同样可能有 carry 残留，一并 flush。
+    let mut flush_text = acc.commentary_stripper.process_chunk(&flush_text);
+    flush_text.push_str(&acc.commentary_stripper.flush());
     let extra_text = if !flush_text.is_empty() {
         acc.full_text.push_str(&flush_text);
         Some(flush_text)
@@ -1183,6 +1193,27 @@ mod tests {
         assert!(!events[annotation_added].contains("\"summary\""));
         assert_eq!(acc.msg_output_index, Some(0));
         assert_eq!(acc.annotations[0]["snippet"], "S");
+    }
+
+    #[tokio::test]
+    async fn commentary_tags_stripped_from_streamed_text() {
+        // Codex prompt 让模型走 commentary channel,第三方模型只能在正文里
+        // 模仿输出字面 <commentary> 标签,且 chunk 边界可能切在标签中间。
+        let prefix = concat!(
+            "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mimo-v2.5-pro\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"<commen\"},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mimo-v2.5-pro\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"tary>正在检查工作区</comm\"},\"finish_reason\":null}]}\n\n",
+            "data: {\"id\":\"chatcmpl_1\",\"object\":\"chat.completion.chunk\",\"created\":0,\"model\":\"mimo-v2.5-pro\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"entary>好了\"},\"finish_reason\":\"stop\"}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+
+        let (events, acc) = collect_stream_events(prefix).await;
+        assert_eq!(acc.full_text, "正在检查工作区好了");
+        for event in &events {
+            assert!(
+                !event.contains("commentary"),
+                "commentary tag leaked into event: {event}"
+            );
+        }
     }
 
     #[tokio::test]

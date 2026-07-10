@@ -501,7 +501,9 @@ pub(crate) fn sanitize_body(body: &str) -> String {
     // 统一走 security::redaction(sk- / ag_local_ / Bearer / x-api-key /
     // api_key 字段 / ?key= 查询参数等)。之前只认 sk- 前缀,serve 模式下
     // 其他形态的密钥会原文落进 request_logs。
-    truncate_str(&crate::security::redaction::redact_text(body), 50000)
+    // 上限与 request_logs write.rs 的 MAX_LOG_FIELD_BYTES(1MB)对齐:
+    // 之前 50KB 会把 Codex gpt-5.6+ 的大 tools 定义切掉,排查时误导。
+    truncate_str(&crate::security::redaction::redact_text(body), 1_000_000)
 }
 
 pub(crate) fn truncate_str(s: &str, max: usize) -> String {
@@ -1228,10 +1230,20 @@ mod tests {
     }
 
     #[test]
-    fn sanitize_body_truncates_long_bodies() {
-        let body = "a".repeat(60_000);
+    fn sanitize_body_keeps_bodies_up_to_1mb() {
+        // Codex gpt-5.6+ 的 tools 定义就超过 50KB,50KB 截断会让日志里的
+        // raw_request 缺失关键排查信息(工具"看起来不存在"其实是被切了)。
+        // 与 request_logs write.rs 的 1MB 上限对齐。
+        let body = "a".repeat(200_000);
         let sanitized = sanitize_body(&body);
-        assert!(sanitized.len() <= 50_000);
+        assert_eq!(sanitized.len(), 200_000);
+    }
+
+    #[test]
+    fn sanitize_body_truncates_beyond_1mb() {
+        let body = "a".repeat(1_100_000);
+        let sanitized = sanitize_body(&body);
+        assert!(sanitized.len() <= 1_000_000);
     }
 
     // ── native_model_override ──

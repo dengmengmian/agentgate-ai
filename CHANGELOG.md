@@ -1,5 +1,19 @@
 # Changelog / 更新日志
 
+## [1.4.12] - 2026-07-10
+
+### Added / 新增
+
+- **ChatGPT+Codex merged client support / 新增支持 ChatGPT+Codex 合并后的新版客户端** —— The merged ChatGPT+Codex desktop app (gpt-5.6 protocol) declares tools inside the `input` array as `additional_tools` items instead of the top-level `tools` field. The gateway now hoists them into `tools` before conversion, so tool calling keeps working on Chat Completions / Anthropic / Gemini upstreams; without this, third-party models received no tools and could only emit fake `<tool_call>` text. ChatGPT+Codex 合并后的新版桌面端(gpt-5.6 协议)把工具定义放在 `input` 数组的 `additional_tools` 项里,不再放顶层 `tools` 字段。网关现在会在转换前把它们提升合并进 `tools`,Chat Completions / Anthropic / Gemini 三条上游链路的工具调用全部恢复;此前第三方模型收不到任何工具,只能在正文里输出假 `<tool_call>` 文本。
+- **gpt-5.6 model family / gpt-5.6 模型家族** —— Added `gpt-5.6`, `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna` to the built-in OpenAI catalog with pricing, bumped the default model to `gpt-5.6-terra`, and covered the family in Codex recommended mappings (`-luna` maps to the mini-tier model). 内置 OpenAI 目录补齐 `gpt-5.6` / `gpt-5.6-sol` / `gpt-5.6-terra` / `gpt-5.6-luna`(含价格),默认模型升级到 `gpt-5.6-terra`,Codex 推荐映射覆盖全家族(`-luna` 映射到 mini 档模型)。
+- **Merged desktop app restart / 合并版桌面端重启适配** —— The Codex client restart tool now handles the merged desktop app (main process "ChatGPT") and still falls back to the legacy standalone Codex.app. Codex 客户端重启工具适配合并后的桌面端(主进程名 "ChatGPT"),同时兼容旧的独立 Codex.app。
+
+### Fixes / 修复
+
+- **Fake channel tags in replies / 回复里出现假 channel 标签** —— Third-party models imitating Codex's channel system emit literal `<commentary>` / `<context_addition>` tags in text; the gateway now strips the tags (streaming-safe across chunk boundaries) while keeping the inner text visible. 第三方模型模仿 Codex channel 机制时会在正文输出字面 `<commentary>` / `<context_addition>` 标签;网关现在剥离标签、保留正文,流式下跨 chunk 半截标签也能正确处理。
+- **Redaction panic on multibyte values / 日志脱敏遇多字节字符崩溃** —— Key redaction sliced values at fixed byte offsets and panicked when the boundary fell inside a CJK character; slicing is now char-boundary safe. 密钥脱敏按固定字节偏移切片,边界落在中文等多字节字符中间会 panic;现已收敛到字符边界。
+- **Request log truncation / 请求日志截断放宽** —— `raw_request` was truncated at 50KB before storage, which cut off large tool definitions (gpt-5.6 requests) and misled debugging; the limit now aligns with the 1MB per-field cap. `raw_request` 落库前 50KB 截断会把大体积工具定义(gpt-5.6 请求)切掉、误导排查;上限放宽到与单字段 1MB 上限对齐。
+
 ## [1.4.11] - 2026-07-07
 
 ### Added / 新增

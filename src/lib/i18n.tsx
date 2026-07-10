@@ -758,20 +758,20 @@ const translations: Record<string, Record<Locale, string>> = {
     zh: "已复制 kill 命令",
   },
   "tools.post_apply.restart_codex": {
-    en: "Restart Codex Desktop",
-    zh: "重启 Codex 桌面应用",
+    en: "Restart Codex / ChatGPT Desktop",
+    zh: "重启 Codex / ChatGPT 桌面应用",
   },
   "tools.post_apply.restart_done": {
-    en: "Codex Desktop restarted",
-    zh: "Codex 桌面应用已重启",
+    en: "Codex / ChatGPT Desktop restarted",
+    zh: "Codex / ChatGPT 桌面应用已重启",
   },
   "tools.post_apply.restart_launched": {
     en: "Codex Desktop launched",
     zh: "Codex 桌面应用已启动",
   },
   "tools.post_apply.restart_failed": {
-    en: "Failed to restart Codex Desktop",
-    zh: "重启 Codex 桌面应用失败",
+    en: "Failed to restart Codex / ChatGPT Desktop",
+    zh: "重启 Codex / ChatGPT 桌面应用失败",
   },
   "tools.post_apply.restart_unsupported": {
     en: "Auto-restart isn't supported on this platform yet — restart Codex manually.",

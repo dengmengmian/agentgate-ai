@@ -157,7 +157,14 @@ pub(super) async fn handle_non_stream_response(
                 }
                 for choice in choices {
                     if let Some(msg) = &choice.message {
-                        let text_content = msg.content.clone().unwrap_or_default();
+                        // 剥离模型模仿 Codex commentary channel 输出的字面
+                        // <commentary> 标签（与 sse.rs 流式路径对称）。剥离后
+                        // 的文本同时作为 reasoning_store 的 key——Codex 下轮
+                        // 回传的就是剥离后的文本，key 必须一致才能命中。
+                        let text_content =
+                            crate::transform::responses_to_chat::strip_commentary_tags(
+                                &msg.content.clone().unwrap_or_default(),
+                            );
 
                         // Store reasoning_content for future multi-turn requests
                         if let Some(ref rc) = msg.reasoning_content {

@@ -1,5 +1,8 @@
 //! 重启 Codex Desktop 让新写的 config.toml / auth.json 生效。
 //!
+//! 2026-07 起 Codex 桌面端并入 ChatGPT 桌面应用（主进程名 "ChatGPT"，
+//! 内嵌 codex 二进制），旧独立 Codex.app 仍可能存在，两个名字都要处理。
+//!
 //! "重启" = 杀掉桌面 App → 等一会 → 重新拉起。如果本来没在跑，就直接拉起。
 //! 只针对 **桌面 App**，不会动小写 `codex` CLI 二进制（pkill -x 精确匹配
 //! basename，大小写敏感）。
@@ -55,32 +58,48 @@ pub fn restart() -> Result<CodexRestartResult, AppError> {
 fn restart_macos() -> CodexRestartResult {
     use std::process::Command;
 
-    let mut was_running = false;
-    let mut killed = 0u32;
-
-    // pkill -x 严格按 basename 精确匹配，大写 "Codex" 只匹到桌面 App，
-    // 不会动小写 "codex" CLI 二进制。退码 0 = 至少杀掉一个；1 = 没匹到；
-    // 其他 = pkill 不存在或权限不足，都按"本来就没跑"处理。
-    if let Ok(status) = Command::new("pkill").args(["-x", "Codex"]).status() {
-        if status.success() {
-            was_running = true;
-            killed = 1;
-            // 给 Codex 关窗口、写盘的时间。1000ms 是实测值。
-            thread::sleep(Duration::from_millis(1000));
+    // pkill -x 严格按 basename 精确匹配：大写 "Codex"/"ChatGPT" 只匹到
+    // 桌面 App 主进程，不会动小写 "codex" CLI，也不会匹到 "ChatGPT Classic"。
+    // 退码 0 = 至少杀掉一个；1 = 没匹到；其他 = pkill 不存在或权限不足，
+    // 都按"本来就没跑"处理。
+    let mut killed_apps: Vec<&str> = Vec::new();
+    for name in DESKTOP_APP_NAMES {
+        if let Ok(status) = Command::new("pkill").args(["-x", name]).status() {
+            if status.success() {
+                killed_apps.push(name);
+            }
         }
     }
+    let was_running = !killed_apps.is_empty();
+    if was_running {
+        // 给桌面 App 关窗口、写盘的时间。1000ms 是实测值。
+        thread::sleep(Duration::from_millis(1000));
+    }
 
-    let relaunched = Command::new("open")
-        .args(["-a", "Codex"])
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
+    let open_app = |app: &str| {
+        Command::new("open")
+            .args(["-a", app])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    };
+    let relaunched = if was_running {
+        // 杀掉的都要拉回来
+        relaunch_targets(&killed_apps)
+            .iter()
+            .all(|app| open_app(app))
+    } else {
+        // 本来没跑：装了哪个就拉起哪个
+        relaunch_targets(&killed_apps)
+            .iter()
+            .any(|app| open_app(app))
+    };
 
     CodexRestartResult {
         supported: true,
         platform: "macos".to_string(),
         was_running,
-        killed,
+        killed: killed_apps.len() as u32,
         relaunched,
     }
 }
@@ -97,16 +116,20 @@ fn restart_windows() -> CodexRestartResult {
 
     // /IM 按映像名匹配，/F 强杀。退码 0 = 至少杀掉一个；128 = 没匹到；
     // 其他 = taskkill 缺失或权限不足，都按「本来就没跑」处理（同 macOS pkill）。
-    if let Ok(status) = Command::new("taskkill")
-        .args(["/IM", "Codex.exe", "/F"])
-        .status()
-    {
-        if taskkill_killed(status.code()) {
-            was_running = true;
-            killed = 1;
-            // 给 Codex 释放文件句柄、写盘的时间，与 macOS 路径一致。
-            thread::sleep(Duration::from_millis(1000));
+    for name in DESKTOP_APP_NAMES {
+        if let Ok(status) = Command::new("taskkill")
+            .args(["/IM", &format!("{name}.exe"), "/F"])
+            .status()
+        {
+            if taskkill_killed(status.code()) {
+                was_running = true;
+                killed += 1;
+            }
         }
+    }
+    if was_running {
+        // 给桌面 App 释放文件句柄、写盘的时间，与 macOS 路径一致。
+        thread::sleep(Duration::from_millis(1000));
     }
 
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
@@ -122,6 +145,23 @@ fn restart_windows() -> CodexRestartResult {
         was_running,
         killed,
         relaunched,
+    }
+}
+
+/// 桌面 App 进程/应用名，按优先级：旧 Codex 独立 App 在前，
+/// 2026-07 合并后 Codex 并入 ChatGPT 桌面应用（主进程名 "ChatGPT"）。
+/// 注意 pkill -x / open -a 都是精确名匹配，不会误伤 "ChatGPT Classic"。
+#[cfg(any(target_os = "macos", target_os = "windows", test))]
+const DESKTOP_APP_NAMES: &[&str] = &["Codex", "ChatGPT"];
+
+/// 决定 kill 之后要重新拉起哪些 App：优先只拉起刚杀掉的；
+/// 一个都没杀到（本来没在跑）就按已知 App 名依次尝试。
+#[cfg(any(target_os = "macos", test))]
+fn relaunch_targets<'a>(killed_apps: &[&'a str]) -> Vec<&'a str> {
+    if killed_apps.is_empty() {
+        DESKTOP_APP_NAMES.to_vec()
+    } else {
+        killed_apps.to_vec()
     }
 }
 
@@ -144,12 +184,15 @@ fn windows_codex_exe_candidates(local_app_data: &str) -> Vec<std::path::PathBuf>
         return Vec::new();
     }
     let base = PathBuf::from(base);
-    vec![
+    let mut candidates = Vec::new();
+    for name in DESKTOP_APP_NAMES {
+        let exe = format!("{name}.exe");
         // NSIS 风格安装目录（Claude Desktop 等同类 App 的常见位置）
-        base.join("Programs").join("Codex").join("Codex.exe"),
+        candidates.push(base.join("Programs").join(name).join(&exe));
         // Squirrel 风格安装目录
-        base.join("Codex").join("Codex.exe"),
-    ]
+        candidates.push(base.join(name).join(&exe));
+    }
+    candidates
 }
 
 // macOS / Windows 路径会真的 kill + 拉起 Codex Desktop，跑测试会误伤开发者
@@ -191,11 +234,30 @@ mod windows_logic_tests {
     #[test]
     fn codex_exe_candidates_under_local_app_data() {
         let c = windows_codex_exe_candidates(r"C:\Users\me\AppData\Local");
-        assert_eq!(c.len(), 2);
-        // NSIS 风格安装目录优先，其次 Squirrel 风格
+        assert_eq!(c.len(), 4);
+        // 旧 Codex 独立安装优先，其次合并后的 ChatGPT 桌面应用
         assert!(c[0].ends_with("Programs/Codex/Codex.exe"));
         assert!(c[1].ends_with("Codex/Codex.exe"));
+        assert!(c[2].ends_with("Programs/ChatGPT/ChatGPT.exe"));
+        assert!(c[3].ends_with("ChatGPT/ChatGPT.exe"));
         assert!(c[0].starts_with(r"C:\Users\me\AppData\Local"));
+    }
+
+    #[test]
+    fn relaunch_targets_prefer_killed_apps() {
+        // 只重新拉起刚才真的杀掉的那个 App
+        assert_eq!(relaunch_targets(&["ChatGPT"]), vec!["ChatGPT"]);
+        assert_eq!(relaunch_targets(&["Codex"]), vec!["Codex"]);
+        assert_eq!(
+            relaunch_targets(&["Codex", "ChatGPT"]),
+            vec!["Codex", "ChatGPT"]
+        );
+    }
+
+    #[test]
+    fn relaunch_targets_fall_back_to_all_known_apps_when_none_killed() {
+        // 本来没在跑：依次尝试旧 Codex.app、合并后的 ChatGPT.app
+        assert_eq!(relaunch_targets(&[]), DESKTOP_APP_NAMES.to_vec());
     }
 
     #[test]

@@ -360,8 +360,17 @@ export const GENERATED_PROVIDER_CATALOG = {
       baseUrl: "https://api.openai.com",
       responsesBaseUrl: "https://api.openai.com",
     },
-    defaultModel: "gpt-5.5",
-    supportedModels: ["gpt-4o", "gpt-4o-mini", "gpt-5.5", "o3", "o4-mini"],
+    defaultModel: "gpt-5.6-terra",
+    supportedModels: [
+      "gpt-4o",
+      "gpt-4o-mini",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      "gpt-5.5",
+      "o3",
+      "o4-mini",
+    ],
     models: [
       {
         id: "gpt-4o",
@@ -375,6 +384,34 @@ export const GENERATED_PROVIDER_CATALOG = {
         pricing: {
           inputPerMillion: 0.15,
           outputPerMillion: 0.6,
+        },
+      },
+      {
+        id: "gpt-5.6",
+        pricing: {
+          inputPerMillion: 5,
+          outputPerMillion: 30,
+        },
+      },
+      {
+        id: "gpt-5.6-sol",
+        pricing: {
+          inputPerMillion: 5,
+          outputPerMillion: 30,
+        },
+      },
+      {
+        id: "gpt-5.6-terra",
+        pricing: {
+          inputPerMillion: 2.5,
+          outputPerMillion: 15,
+        },
+      },
+      {
+        id: "gpt-5.6-luna",
+        pricing: {
+          inputPerMillion: 1,
+          outputPerMillion: 6,
         },
       },
       {
@@ -1120,7 +1157,7 @@ export const GENERATED_PROVIDER_PRESETS = {
   openai: {
     baseUrl: "https://api.openai.com",
     protocols: ["openai_chat_completions", "openai_responses"],
-    defaultModel: "gpt-5.5",
+    defaultModel: "gpt-5.6-terra",
     responsesBaseUrl: "https://api.openai.com",
   },
   google_gemini: {

@@ -64,7 +64,7 @@ pub async fn handle_responses(
     })?;
 
     // 1. Parse request
-    let req: ResponsesRequest = serde_json::from_str(&body).map_err(|e| {
+    let mut req: ResponsesRequest = serde_json::from_str(&body).map_err(|e| {
         let err = AppError::new(
             crate::errors::codes::RESPONSES_PARSE_ERROR,
             format!("Failed to parse request: {e}"),
@@ -82,6 +82,9 @@ pub async fn handle_responses(
         );
         err
     })?;
+    // Codex gpt-5.6+ 把工具放在 input 的 additional_tools 项里,提升到顶层
+    // tools,让下游 chat/anthropic/gemini 转换无感支持(否则工具整批丢失)。
+    req.hoist_additional_tools();
 
     // 2. Select provider via route profile (with failover candidates)
     let selection = crate::gateway::provider_selector::select_for_failover(
