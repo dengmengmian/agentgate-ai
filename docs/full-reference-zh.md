@@ -38,7 +38,7 @@ English: [Main Reference](./full-reference.md)
 
 > 无界面 CLI（`agentgate-serve`）的 tarball 包和所有历史版本：[Releases](https://github.com/dengmengmian/agentgate-ai/releases)
 
-**Windows 安装提示：** Edge/Chrome 可能提示「通常不会下载」，SmartScreen 可能提示「Windows 已保护你的电脑」。这是未做微软代码签名的开源安装包常见拦截，不是病毒结论。请只从官方 Releases 下载；浏览器选 **保留**，运行时点 **更多信息** → **仍要运行**。
+**Windows 安装提示：** Edge/Chrome 可能提示「通常不会下载」，SmartScreen 可能提示「Windows 已保护你的电脑」。这是预期行为：安装包未做 Authenticode 代码签名。没有「免费且被 Windows 默认信任」的代码签名证书（Let’s Encrypt 只签网站 HTTPS，不能签 `.exe`），开源项目常先发未签名包——不是病毒结论。请只从官方 Releases 下载；浏览器选 **保留**，运行时点 **更多信息** → **仍要运行**。
 
 ## 为什么用 AgentGate
 
@@ -306,10 +306,12 @@ xattr -d com.apple.quarantine /Applications/AgentGate.app
 <details>
 <summary><b>Windows SmartScreen / 浏览器「通常不会下载」?</b>（点击展开）</summary>
 
-安装包未做微软代码签名，首次下载和运行常会遇到两层提示：
+安装包未做 Authenticode 代码签名，首次下载和运行常会遇到两层提示：
 
 1. **浏览器（Edge/Chrome）：**「通常不会下载」→ 点 ⋯ → **保留** / **仍要保留**。
 2. **SmartScreen：**「Windows 已保护你的电脑」→ **更多信息** → **仍要运行**。
+
+**为什么未签名？** 商用 Windows 代码签名证书需要付费；不存在像 Let’s Encrypt 那样免费且被系统默认信任的代码签名（Let’s Encrypt 只覆盖网站 HTTPS，不能签安装包）。AgentGate 目前选择未签名发布，并在文档中说明如何通过上述提示。
 
 请只从 [官方 GitHub Releases](https://github.com/dengmengmian/agentgate-ai/releases) 下载。这是签名/信誉拦截，不是已确认的病毒结论。同一台机器通常只需确认一次。
 

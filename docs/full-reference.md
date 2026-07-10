@@ -36,7 +36,7 @@
 
 > Headless CLI (`agentgate-serve`) tarballs and all versions: [Releases](https://github.com/dengmengmian/agentgate-ai/releases)
 
-**Windows install note:** Edge/Chrome may warn that the file is “usually not downloaded,” and SmartScreen may show **Windows protected your PC**. Expected for an open-source, non–Microsoft-signed installer — not a malware verdict. Download only from official Releases; **Keep** the file in the browser, then **More info** → **Run anyway** on SmartScreen.
+**Windows install note:** Edge/Chrome may warn that the file is “usually not downloaded,” and SmartScreen may show **Windows protected your PC**. Expected: the installer is not Authenticode-signed. There is no free, widely trusted Windows code-signing certificate (Let’s Encrypt is for HTTPS only, not `.exe`), so many open-source projects ship unsigned — not a malware verdict. Download only from official Releases; **Keep** the file in the browser, then **More info** → **Run anyway** on SmartScreen.
 
 ## Why AgentGate
 
@@ -304,10 +304,12 @@ xattr -d com.apple.quarantine /Applications/AgentGate.app
 <details>
 <summary><b>Windows SmartScreen / browser “won’t download”?</b> (click to expand)</summary>
 
-The NSIS installer is not Microsoft code-signed, so first-time download and launch often trigger two warnings:
+The NSIS installer is not Authenticode-signed, so first-time download and launch often trigger two warnings:
 
 1. **Browser (Edge/Chrome):** “Usually won’t download” / “Make sure you trust …” → open the ⋯ menu → **Keep** / **Keep anyway**.
 2. **SmartScreen:** “Windows protected your PC” → **More info** → **Run anyway**.
+
+**Why unsigned?** Commercial Windows code-signing certificates cost money. There is no free equivalent that Windows trusts by default (Let’s Encrypt covers HTTPS sites, not desktop installers). AgentGate ships unsigned for now and documents this path instead.
 
 Download only from [official GitHub Releases](https://github.com/dengmengmian/agentgate-ai/releases). These prompts are reputation/signature checks, not a confirmed malware scan result. You typically only need to confirm once per machine.
 
