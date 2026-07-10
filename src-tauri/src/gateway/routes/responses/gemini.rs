@@ -33,7 +33,7 @@ pub(super) async fn handle_gemini_non_stream_response(
                 .and_then(|c| c.as_array())
                 .and_then(|a| a.first())
             {
-                let msg_id = format!("msg_{}", &resp_id.replace("resp_", ""));
+                let msg_id = format!("msg_{}", resp_id.replace("resp_", ""));
                 let mut text_parts = Vec::new();
 
                 if let Some(parts) = candidate

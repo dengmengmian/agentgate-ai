@@ -70,8 +70,8 @@ pub struct SseAccumulator {
 
 impl SseAccumulator {
     pub fn new(response_id: String, model: String) -> Self {
-        let msg_item_id = format!("msg_{}", &response_id.replace("resp_", ""));
-        let reasoning_item_id = format!("rs_{}", &response_id.replace("resp_", ""));
+        let msg_item_id = format!("msg_{}", response_id.replace("resp_", ""));
+        let reasoning_item_id = format!("rs_{}", response_id.replace("resp_", ""));
         Self {
             response_id,
             msg_item_id,

@@ -26,7 +26,7 @@ pub(super) async fn handle_anthropic_non_stream_response(
             let tool_calls_json = String::new();
 
             if let Some(content) = upstream_json.get("content").and_then(|c| c.as_array()) {
-                let msg_id = format!("msg_{}", &resp_id.replace("resp_", ""));
+                let msg_id = format!("msg_{}", resp_id.replace("resp_", ""));
                 let mut text_parts = Vec::new();
 
                 for block in content {

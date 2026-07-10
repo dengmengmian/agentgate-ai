@@ -149,7 +149,7 @@ pub(super) async fn handle_non_stream_response(
             if let Some(choices) = &chat_resp.choices {
                 if choices.is_empty() {
                     // Empty choices — emit a placeholder message so Codex doesn't hang
-                    let msg_id = format!("msg_{}", &resp_id.replace("resp_", ""));
+                    let msg_id = format!("msg_{}", resp_id.replace("resp_", ""));
                     output.push(json!({
                         "id": msg_id, "type": "message", "status": "completed",
                         "role": "assistant", "content": [{"type": "output_text", "text": ""}]
@@ -184,7 +184,7 @@ pub(super) async fn handle_non_stream_response(
 
                         // Text content
                         if !text_content.is_empty() {
-                            let msg_id = format!("msg_{}", &resp_id.replace("resp_", ""));
+                            let msg_id = format!("msg_{}", resp_id.replace("resp_", ""));
                             // Pull web-search annotations from the raw upstream message
                             // (ChatCompletionResponse struct doesn't model them; the
                             // shape is provider-defined and we pass through verbatim).
