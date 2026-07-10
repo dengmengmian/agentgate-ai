@@ -192,16 +192,14 @@ pub async fn process_anthropic_stream(
                     let block_type = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
 
                     match block_type {
-                        "text" => {
-                            if !acc.text_item_emitted {
-                                let oi = acc.next_output_index;
-                                acc.next_output_index += 1;
-                                send(&tx, &ev::output_item_added_message(&acc.msg_item_id, oi))
-                                    .await;
-                                send(&tx, &ev::content_part_added(&acc.msg_item_id, oi, 0)).await;
-                                acc.text_item_emitted = true;
-                            }
+                        "text" if !acc.text_item_emitted => {
+                            let oi = acc.next_output_index;
+                            acc.next_output_index += 1;
+                            send(&tx, &ev::output_item_added_message(&acc.msg_item_id, oi)).await;
+                            send(&tx, &ev::content_part_added(&acc.msg_item_id, oi, 0)).await;
+                            acc.text_item_emitted = true;
                         }
+                        "text" => {}
                         "tool_use" => {
                             let id = block.get("id").and_then(|i| i.as_str()).unwrap_or("");
                             let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
