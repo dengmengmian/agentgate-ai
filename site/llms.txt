@@ -17,6 +17,7 @@ Sitemap: https://dengmengmian.github.io/agentgate-ai/sitemap.xml
 - [Use Claude Code with GitHub Copilot](https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-github-copilot/): Full guide: route Claude Code to Claude models in a GitHub Copilot subscription.
 - [Use Gemini CLI with AgentGate](https://dengmengmian.github.io/agentgate-ai/guides/use-gemini-cli-with-agentgate/): Full guide: give Gemini CLI a local model entry with multi-provider routing.
 - [Use OpenCode with AgentGate](https://dengmengmian.github.io/agentgate-ai/guides/use-opencode-with-agentgate/): Full guide: point OpenCode at AgentGate and switch providers freely.
+- [Use ChatGPT+Codex with third-party models](https://dengmengmian.github.io/agentgate-ai/guides/use-chatgpt-codex-with-third-party-models/): 1.4.12 guide: after the ChatGPT+Codex merge, hoist additional_tools so DeepSeek / MiMo / others get real tool calling.
 - [Use Codex Desktop with third-party APIs and plugins](https://dengmengmian.github.io/agentgate-ai/guides/use-codex-desktop-with-third-party-api-and-plugins/): Full guide: keep Codex Desktop plugins working while routing model requests to third-party providers.
 - [Use Codex with OpenRouter](https://dengmengmian.github.io/agentgate-ai/guides/use-codex-with-openrouter/): Use AgentGate as the local endpoint for Codex and OpenRouter.
 - [Use Claude Code with OpenRouter](https://dengmengmian.github.io/agentgate-ai/guides/use-claude-code-with-openrouter/): Use AgentGate as the local endpoint for Claude Code and OpenRouter.
@@ -37,6 +38,7 @@ Sitemap: https://dengmengmian.github.io/agentgate-ai/sitemap.xml
 - [用 GitHub Copilot 订阅跑 Claude Code](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-github-copilot/)
 - [让 Gemini CLI 通过 AgentGate 使用多供应商模型](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-gemini-cli-with-agentgate/)
 - [让 OpenCode 通过 AgentGate 切换多供应商模型](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-opencode-with-agentgate/)
+- [ChatGPT+Codex 合并版用第三方模型](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-chatgpt-codex-with-third-party-models/)
 - [让 Codex Desktop 使用第三方 API 并保留插件能力](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-desktop-with-third-party-api-and-plugins/)
 - [通过 AgentGate 让 Codex 使用 OpenRouter](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-codex-with-openrouter/)
 - [通过 AgentGate 让 Claude Code 使用 OpenRouter](https://dengmengmian.github.io/agentgate-ai/zh/guides/use-claude-code-with-openrouter/)

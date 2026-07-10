@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      ChatGPT+Codex 合并版用 DeepSeek / MiMo 等第三方模型 | AgentGate 1.4.12
+    </title>
+    <meta
+      name="description"
+      content="ChatGPT+Codex 合并桌面端(gpt-5.6)把工具放在 additional_tools 里。AgentGate 1.4.12 会在转换前提升进 tools，DeepSeek、小米 MiMo、Kimi、GLM 等上游能真正调工具，而不是输出假 &lt;tool_call&gt; 文本。"
+    />
+    <meta
+      name="keywords"
+      content="ChatGPT Codex 合并, gpt-5.6 工具, Codex DeepSeek, Codex MiMo, additional_tools, 第三方模型 Codex, AgentGate 1.4.12"
+    />
+    <meta name="author" content="dengmengmian" />
+    <link
+      rel="canonical"
+      href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-chatgpt-codex-with-third-party-models/"
+    />
+    <link
+      rel="alternate"
+      hreflang="en"
+      href="https://dengmengmian.github.io/agentgate-ai/guides/use-chatgpt-codex-with-third-party-models/"
+    />
+    <link
+      rel="alternate"
+      hreflang="zh-CN"
+      href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-chatgpt-codex-with-third-party-models/"
+    />
+    <link
+      rel="alternate"
+      hreflang="x-default"
+      href="https://dengmengmian.github.io/agentgate-ai/guides/use-chatgpt-codex-with-third-party-models/"
+    />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta
+      property="og:url"
+      content="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-chatgpt-codex-with-third-party-models/"
+    />
+    <meta
+      property="og:title"
+      content="ChatGPT+Codex 合并版用第三方模型（AgentGate 1.4.12）"
+    />
+    <meta
+      property="og:description"
+      content="保留合并版桌面端体验，把模型路由到 DeepSeek / MiMo 等上游，并在 gpt-5.6 协议变更后恢复真实工具调用。"
+    />
+    <meta
+      property="og:image"
+      content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="ChatGPT+Codex 合并版用第三方模型（AgentGate 1.4.12）"
+    />
+    <meta
+      name="twitter:description"
+      content="保留合并版桌面端体验，把模型路由到 DeepSeek / MiMo 等上游，并在 gpt-5.6 协议变更后恢复真实工具调用。"
+    />
+    <meta
+      name="twitter:image"
+      content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif"
+    />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="../../../assets/logo.svg?v=2"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="../../../assets/favicon-32.png"
+    />
+    <link rel="apple-touch-icon" href="../../../assets/apple-touch-icon.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "ChatGPT+Codex 合并版使用 DeepSeek、MiMo 等第三方模型",
+        "description": "ChatGPT+Codex 合并桌面端(gpt-5.6)把工具放在 additional_tools 里。AgentGate 1.4.12 提升进 tools，第三方上游恢复真实工具调用。",
+        "datePublished": "2026-07-10",
+        "dateModified": "2026-07-10",
+        "author": {
+          "@type": "Person",
+          "name": "dengmengmian",
+          "url": "https://github.com/dengmengmian"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "AgentGate",
+          "url": "https://dengmengmian.github.io/agentgate-ai",
+          "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+        },
+        "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/zh/guides/use-chatgpt-codex-with-third-party-models/"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "ChatGPT+Codex 合并后为什么工具突然坏了？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "合并版桌面端(gpt-5.6 协议)把工具定义放在 input 数组的 additional_tools 项里，而不再只在顶层 tools。只转发 tools 的代理会让上游收不到工具 schema，模型只能在正文输出假 tool_call 文本。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "AgentGate 1.4.12 修了什么？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "转换前把 additional_tools 提升合并进 tools，Chat Completions / Anthropic / Gemini 三条上游都能收到真实工具定义；并补齐 gpt-5.6 模型目录，剥离回复里的假 channel 标签。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Apply 之后还要改桌面端吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "通常不用。客户端指向 AgentGate 一次即可；需要插件时保持官方登录，切换上游在 AgentGate 面板完成。"
+            }
+          }
+        ]
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../../../assets/tailwind.css" />
+    <script
+      data-goatcounter="https://agentgate.goatcounter.com/count"
+      async
+      src="//gc.zgo.at/count.js"
+    ></script>
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div
+        class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm"
+      >
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a
+            href="https://github.com/dengmengmian/agentgate-ai/releases/latest"
+            class="hover:text-ink"
+            >下载 <span class="text-faint">↗</span></a
+          >
+          <a
+            href="https://github.com/dengmengmian/agentgate-ai"
+            class="hover:text-ink"
+            >github <span class="text-faint">↗</span></a
+          >
+          <span class="text-faint">·</span>
+          <a
+            href="../../../guides/use-chatgpt-codex-with-third-party-models/"
+            class="hover:text-ink"
+            >English</a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">
+            agentgate guides/use-chatgpt-codex-with-third-party-models
+          </div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">
+            1.4.12 新能力 · ChatGPT+Codex
+          </p>
+          <h1 class="zh h-display mt-5 text-ink">
+            合并版 ChatGPT+Codex，照样跑 DeepSeek / MiMo，工具还能真调。
+          </h1>
+          <p
+            class="zh mt-8 max-w-2xl text-base leading-relaxed text-ink-soft"
+          >
+            OpenAI 把 ChatGPT 和 Codex 合成一个桌面端。gpt-5.6 协议把工具定义藏进
+            <code class="text-ink">additional_tools</code
+            >。不在本地做提升，第三方模型就收不到工具 schema，只能编假
+            <code class="text-ink">&lt;tool_call&gt;</code
+            >。AgentGate 1.4.12 在你自己的机器上把这件事修好——不是云上黑盒。
+          </p>
+          <div class="mt-8 max-w-2xl border-l-2 border-amber/50 pl-4">
+            <div class="text-xs uppercase tracking-wider text-amber">一句话</div>
+            <p class="zh mt-2 text-sm leading-relaxed text-ink-soft">
+              合并版客户端只配一次本地入口；插件需要时保留官方登录；DeepSeek /
+              MiMo / Kimi / GLM / OpenRouter
+              等上游在 AgentGate 里切换，工具调用走真实 schema。
+            </p>
+          </div>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a
+              href="https://github.com/dengmengmian/agentgate-ai/releases/tag/v1.4.12"
+              class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg"
+            >
+              <span>▸</span>
+              <span>下载 1.4.12</span>
+            </a>
+            <a
+              href="https://github.com/dengmengmian/agentgate-ai"
+              class="hover-prompt text-ink-soft hover:text-ink"
+              >dengmengmian/agentgate-ai <span class="text-faint">↗</span></a
+            >
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <article class="zh doc-body">
+            <h2>合并之后哪里断了</h2>
+            <p>
+              新桌面端仍然走大家熟悉的 OpenAI Responses 路径，但工具定义不再总是顶层
+              <code>tools</code>。它们会出现在
+              <code>input</code> 数组里，类型是
+              <code>additional_tools</code>。
+            </p>
+            <pre><code class="language-text">合并版 ChatGPT+Codex (gpt-5.6)
+  -&gt; Responses 请求
+  -&gt; 工具在 input[].type = "additional_tools"   ← 很容易被忽略
+  -&gt; 朴素代理只转发空 tools
+  -&gt; DeepSeek / MiMo / … 用假 &lt;tool_call&gt; 文本应付
+</code></pre>
+            <p>
+              这不是模型变笨，是模型根本没拿到工具 schema。升级客户端后“工具全坏了”，密钥往往没问题，坏在协议形态。
+            </p>
+
+            <h2>AgentGate 1.4.12 做了什么</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>问题</th>
+                  <th>本地网关怎么修</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>工具只在 <code>additional_tools</code></td>
+                  <td>
+                    转换前提升合并进 <code>tools</code>，覆盖 Chat / Anthropic /
+                    Gemini 上游
+                  </td>
+                </tr>
+                <tr>
+                  <td>gpt-5.6 模型名对不上</td>
+                  <td>
+                    目录与价格补齐
+                    <code>gpt-5.6</code> /
+                    <code>-sol</code> /
+                    <code>-terra</code> /
+                    <code>-luna</code>，Codex 推荐映射同步
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    假
+                    <code>&lt;commentary&gt;</code> /
+                    <code>&lt;context_addition&gt;</code> 标签
+                  </td>
+                  <td>流式跨 chunk 剥离标签，保留可读正文</td>
+                </tr>
+                <tr>
+                  <td>合并版进程名变了</td>
+                  <td>
+                    客户端重启工具识别主进程 “ChatGPT”，并兼容旧 Codex.app
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>本地链路</h2>
+            <pre><code class="language-text">ChatGPT+Codex 桌面端
+  -&gt; OpenAI 风格 Provider 入口（需要时保留插件 / 账号路径）
+  -&gt; http://127.0.0.1:9090  (AgentGate)
+  -&gt; DeepSeek / 小米 MiMo / OpenAI / Kimi / GLM / DashScope / OpenRouter / …
+</code></pre>
+            <p>
+              AgentGate 不是托管转售。Key 在你机器上。日志能看到路由、转换后的请求、token、费用和 failover——挂了能看见挂在哪，不是黑盒。
+            </p>
+
+            <h2>五分钟上手</h2>
+            <ol>
+              <li>
+                安装
+                <a
+                  href="https://github.com/dengmengmian/agentgate-ai/releases/tag/v1.4.12"
+                  >AgentGate 1.4.12</a
+                >
+                （macOS / Windows / Linux）。
+              </li>
+              <li>添加 Provider（DeepSeek、MiMo …），粘贴 API key。</li>
+              <li>
+                启动网关，默认
+                <code>http://127.0.0.1:9090</code>。
+              </li>
+              <li>
+                在 <strong>客户端</strong> 对 Codex / ChatGPT+Codex 点
+                <strong>应用配置</strong>。
+              </li>
+              <li>
+                发一条会触发工具的消息，在
+                <strong>日志</strong> 里确认上游和 tools 存在——不是只有纯文本。
+              </li>
+            </ol>
+            <p>
+              还要插件和官方账号能力？保持桌面端登录；AgentGate 保留 OpenAI 鉴权那条
+              Provider 路径，只把模型 base URL 指到本机。细节见
+              <a href="../use-codex-desktop-with-third-party-api-and-plugins/"
+                >Codex Desktop + 插件</a
+              >。
+            </p>
+
+            <h2>适合谁</h2>
+            <ul>
+              <li>
+                升了合并版客户端，第三方模型突然“不会用工具”。
+              </li>
+              <li>
+                希望 Codex / Claude Code / Gemini CLI / OpenCode 共用一个本地入口，而不是每个 App 改一套代理。
+              </li>
+              <li>
+                需要 failover、费用追踪、一键切回官方配置。
+              </li>
+            </ul>
+
+            <h2>常见问题</h2>
+            <h3>合并后为什么工具突然坏了？</h3>
+            <p>
+              工具定义挪进了
+              <code>input</code> 里的
+              <code>additional_tools</code>。只读顶层
+              <code>tools</code> 的代理会把空 schema 发给上游。
+            </p>
+            <h3>这是云端代理吗？</h3>
+            <p>
+              不是，跑在本机，自带 key。要多租户计费的服务端方案，看 LiteLLM /
+              new-api 一类——对比见
+              <a href="../agentgate-vs-litellm/">AgentGate vs LiteLLM</a>。
+            </p>
+            <h3>要哪个版本？</h3>
+            <p>
+              <strong>1.4.12 及以上</strong> 才有
+              <code>additional_tools</code> 提升和 gpt-5.6 目录。更早版本仍可当通用网关，但修不了这种协议形态。
+            </p>
+
+            <h2>相关阅读</h2>
+            <ul>
+              <li>
+                <a
+                  href="../use-codex-desktop-with-third-party-api-and-plugins/"
+                  >Codex Desktop 第三方 API 与插件</a
+                >
+              </li>
+              <li>
+                <a href="../use-codex-with-deepseek/">Codex + DeepSeek</a>
+              </li>
+              <li>
+                <a href="../use-codex-with-mimo/">Codex + 小米 MiMo</a>
+              </li>
+              <li>
+                <a href="../trace-codex-requests/">本地追踪请求</a>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/dengmengmian/agentgate-ai/releases/tag/v1.4.12"
+                  >Release v1.4.12</a
+                >
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="zh mt-4 text-xl font-medium">继续读</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a
+              class="hover-prompt block py-1 text-ink-soft hover:text-ink"
+              href="../use-codex-desktop-with-third-party-api-and-plugins/"
+              >Codex Desktop + 插件
+              <span class="text-faint">— 第三方 API，插件尽量保留</span></a
+            >
+            <a
+              class="hover-prompt block py-1 text-ink-soft hover:text-ink"
+              href="../use-codex-with-deepseek/"
+              >Codex + DeepSeek
+              <span class="text-faint">— 本地网关路由 Codex</span></a
+            >
+            <a
+              class="hover-prompt block py-1 text-ink-soft hover:text-ink"
+              href="../local-ai-gateway/"
+              >本地 AI 网关
+              <span class="text-faint">— 路由、追踪、故障转移、回滚</span></a
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div
+        class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center"
+      >
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>本地 AI 模型网关</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai"
+            >dengmengmian/agentgate-ai</a
+          >
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>

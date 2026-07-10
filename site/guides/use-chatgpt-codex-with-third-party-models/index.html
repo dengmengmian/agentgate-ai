@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>
+      Use ChatGPT+Codex with DeepSeek, MiMo &amp; third-party models |
+      AgentGate 1.4.12
+    </title>
+    <meta
+      name="description"
+      content="The merged ChatGPT+Codex desktop app (gpt-5.6) puts tools in additional_tools. AgentGate 1.4.12 hoists them so DeepSeek, Xiaomi MiMo, Kimi, GLM and other providers get real tool calling—not fake &lt;tool_call&gt; text."
+    />
+    <meta
+      name="keywords"
+      content="ChatGPT Codex merge, gpt-5.6 tools, Codex DeepSeek, Codex MiMo, additional_tools, third-party models Codex, AgentGate 1.4.12"
+    />
+    <meta name="author" content="dengmengmian" />
+    <link
+      rel="canonical"
+      href="https://dengmengmian.github.io/agentgate-ai/guides/use-chatgpt-codex-with-third-party-models/"
+    />
+    <link
+      rel="alternate"
+      hreflang="en"
+      href="https://dengmengmian.github.io/agentgate-ai/guides/use-chatgpt-codex-with-third-party-models/"
+    />
+    <link
+      rel="alternate"
+      hreflang="zh-CN"
+      href="https://dengmengmian.github.io/agentgate-ai/zh/guides/use-chatgpt-codex-with-third-party-models/"
+    />
+    <link
+      rel="alternate"
+      hreflang="x-default"
+      href="https://dengmengmian.github.io/agentgate-ai/guides/use-chatgpt-codex-with-third-party-models/"
+    />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="AgentGate" />
+    <meta
+      property="og:url"
+      content="https://dengmengmian.github.io/agentgate-ai/guides/use-chatgpt-codex-with-third-party-models/"
+    />
+    <meta
+      property="og:title"
+      content="Use ChatGPT+Codex with third-party models (AgentGate 1.4.12)"
+    />
+    <meta
+      property="og:description"
+      content="Keep the merged ChatGPT+Codex desktop app, route models to DeepSeek / MiMo / others, and restore real tool calling after the gpt-5.6 protocol change."
+    />
+    <meta
+      property="og:image"
+      content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Use ChatGPT+Codex with third-party models (AgentGate 1.4.12)"
+    />
+    <meta
+      name="twitter:description"
+      content="Keep the merged ChatGPT+Codex desktop app, route models to DeepSeek / MiMo / others, and restore real tool calling after the gpt-5.6 protocol change."
+    />
+    <meta
+      name="twitter:image"
+      content="https://dengmengmian.github.io/agentgate-ai/assets/demo-header.gif"
+    />
+    <link rel="icon" type="image/svg+xml" href="../../assets/logo.svg?v=2" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="../../assets/favicon-32.png"
+    />
+    <link rel="apple-touch-icon" href="../../assets/apple-touch-icon.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": "Use ChatGPT+Codex with DeepSeek, MiMo and third-party models",
+        "description": "The merged ChatGPT+Codex desktop app (gpt-5.6) puts tools in additional_tools. AgentGate 1.4.12 hoists them so third-party providers get real tool calling.",
+        "datePublished": "2026-07-10",
+        "dateModified": "2026-07-10",
+        "author": {
+          "@type": "Person",
+          "name": "dengmengmian",
+          "url": "https://github.com/dengmengmian"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "AgentGate",
+          "url": "https://dengmengmian.github.io/agentgate-ai",
+          "logo": "https://dengmengmian.github.io/agentgate-ai/assets/logo.svg"
+        },
+        "mainEntityOfPage": "https://dengmengmian.github.io/agentgate-ai/guides/use-chatgpt-codex-with-third-party-models/"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Why did tools stop working after the ChatGPT+Codex merge?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The merged desktop app (gpt-5.6 protocol) places tool definitions inside the input array as additional_tools items instead of the top-level tools field. Proxies that only forward tools miss them, so third-party models never see tools and invent fake tool_call text."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What does AgentGate 1.4.12 fix?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "AgentGate hoists additional_tools into tools before conversion, so Chat Completions, Anthropic, and Gemini upstreams receive real tool definitions. It also maps the gpt-5.6 model family and strips fake channel tags like commentary from replies."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Do I need to change ChatGPT/Codex after applying AgentGate?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Usually no. Point the client at AgentGate once, keep your official account signed in if you use plugins, and switch providers inside the AgentGate dashboard."
+            }
+          }
+        ]
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../../assets/tailwind.css" />
+    <script
+      data-goatcounter="https://agentgate.goatcounter.com/count"
+      async
+      src="//gc.zgo.at/count.js"
+    ></script>
+  </head>
+  <body class="bg-bg text-ink">
+    <header class="border-b border-border-soft">
+      <div
+        class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4 text-sm"
+      >
+        <a href="../../" class="flex items-center gap-2 text-ink">
+          <span class="text-amber">▲</span>
+          <span class="font-medium">agentgate</span>
+        </a>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a
+            href="https://github.com/dengmengmian/agentgate-ai/releases/latest"
+            class="hover:text-ink"
+            >download <span class="text-faint">↗</span></a
+          >
+          <a
+            href="https://github.com/dengmengmian/agentgate-ai"
+            class="hover:text-ink"
+            >github <span class="text-faint">↗</span></a
+          >
+          <span class="text-faint">·</span>
+          <a
+            href="../../zh/guides/use-chatgpt-codex-with-third-party-models/"
+            class="hover:text-ink"
+            >中文</a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="relative overflow-hidden border-b border-border-soft">
+        <div class="absolute inset-0 grid-bg opacity-50"></div>
+        <div class="relative mx-auto max-w-4xl px-6 pt-20 pb-16">
+          <div class="prompt text-sm text-ink-soft">
+            agentgate guides/use-chatgpt-codex-with-third-party-models
+          </div>
+          <p class="mt-6 text-xs uppercase tracking-wider text-amber">
+            New in 1.4.12 · ChatGPT+Codex
+          </p>
+          <h1 class="h-display mt-5 text-ink">
+            Keep ChatGPT+Codex. Run DeepSeek, MiMo, and friends with real tools.
+          </h1>
+          <p
+            class="mt-8 max-w-2xl text-base leading-relaxed text-ink-soft"
+          >
+            OpenAI merged ChatGPT and Codex into one desktop app. The gpt-5.6
+            protocol hid tool definitions inside
+            <code class="text-ink">additional_tools</code>. Without a local
+            hoist, third-party models never see tools—and invent fake
+            <code class="text-ink">&lt;tool_call&gt;</code> text. AgentGate
+            1.4.12 fixes that on your machine, not in the cloud.
+          </p>
+          <div class="mt-8 max-w-2xl border-l-2 border-amber/50 pl-4">
+            <div class="text-xs uppercase tracking-wider text-amber">
+              one sentence
+            </div>
+            <p class="mt-2 text-sm leading-relaxed text-ink-soft">
+              Point the merged desktop client at AgentGate once; switch
+              upstream providers, keep plugins when you need them, and get real
+              tool calling on DeepSeek / MiMo / Kimi / GLM / OpenRouter and more.
+            </p>
+          </div>
+          <div class="mt-10 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+            <a
+              href="https://github.com/dengmengmian/agentgate-ai/releases/tag/v1.4.12"
+              class="inline-flex items-center gap-2 rounded border border-amber bg-amber/10 px-4 py-2 font-medium text-amber transition-colors hover:bg-amber hover:text-bg"
+            >
+              <span>▸</span>
+              <span>Download 1.4.12</span>
+            </a>
+            <a
+              href="https://github.com/dengmengmian/agentgate-ai"
+              class="hover-prompt text-ink-soft hover:text-ink"
+              >dengmengmian/agentgate-ai <span class="text-faint">↗</span></a
+            >
+          </div>
+        </div>
+      </section>
+
+      <section class="border-b border-border-soft bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <article class="doc-body">
+            <h2>What broke after the merge</h2>
+            <p>
+              The new desktop client still speaks the OpenAI Responses path that
+              Codex users know—but tool definitions no longer always sit on the
+              top-level <code>tools</code> field. They arrive as
+              <code>additional_tools</code> items inside the
+              <code>input</code> array.
+            </p>
+            <pre><code class="language-text">Merged ChatGPT+Codex (gpt-5.6)
+  -&gt; Responses request
+  -&gt; tools live in input[].type = "additional_tools"   ← easy to miss
+  -&gt; naive proxy forwards empty tools
+  -&gt; DeepSeek / MiMo / … reply with fake &lt;tool_call&gt; text
+</code></pre>
+            <p>
+              That is not a model quality issue. The model never received the
+              tool schema. Users see “tools broken” after updating the client
+              even when their API keys are fine.
+            </p>
+
+            <h2>What AgentGate 1.4.12 does</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Problem</th>
+                  <th>AgentGate fix</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    Tools only in
+                    <code>additional_tools</code>
+                  </td>
+                  <td>
+                    Hoist into <code>tools</code> before Chat / Anthropic /
+                    Gemini conversion
+                  </td>
+                </tr>
+                <tr>
+                  <td>gpt-5.6 model names unknown</td>
+                  <td>
+                    Catalog + pricing for
+                    <code>gpt-5.6</code>,
+                    <code>-sol</code>,
+                    <code>-terra</code>,
+                    <code>-luna</code>; Codex mappings included
+                  </td>
+                </tr>
+                <tr>
+                  <td>
+                    Fake
+                    <code>&lt;commentary&gt;</code> /
+                    <code>&lt;context_addition&gt;</code> tags
+                  </td>
+                  <td>
+                    Strip tags across SSE chunk boundaries, keep the readable
+                    text
+                  </td>
+                </tr>
+                <tr>
+                  <td>Merged app process renamed</td>
+                  <td>
+                    Client restart helper recognizes main process
+                    “ChatGPT” and still falls back to Codex.app
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <h2>The local path</h2>
+            <pre><code class="language-text">ChatGPT+Codex desktop
+  -&gt; OpenAI-style provider entry (plugins / account path kept when you need it)
+  -&gt; http://127.0.0.1:9090  (AgentGate)
+  -&gt; DeepSeek / Xiaomi MiMo / OpenAI / Kimi / GLM / DashScope / OpenRouter / …
+</code></pre>
+            <p>
+              AgentGate is not a hosted reseller. Keys stay on your machine.
+              Logs show route decisions, converted payloads, tokens, cost, and
+              failover—so when something fails, you see
+              <em>where</em>, not a black box.
+            </p>
+
+            <h2>Five-minute setup</h2>
+            <ol>
+              <li>
+                Install
+                <a
+                  href="https://github.com/dengmengmian/agentgate-ai/releases/tag/v1.4.12"
+                  >AgentGate 1.4.12</a
+                >
+                (macOS / Windows / Linux).
+              </li>
+              <li>
+                Add a provider (DeepSeek, MiMo, …) and paste your API key.
+              </li>
+              <li>
+                Start the gateway — default
+                <code>http://127.0.0.1:9090</code>.
+              </li>
+              <li>
+                On <strong>Clients</strong>, click
+                <strong>Apply Config</strong> for Codex / ChatGPT+Codex.
+              </li>
+              <li>
+                Send a message that should call a tool. In
+                <strong>Logs</strong>, confirm the upstream and that tools were
+                present—not only plain text.
+              </li>
+            </ol>
+            <p>
+              Need plugins and official account features? Keep the desktop app
+              signed in; AgentGate preserves the OpenAI-authenticated provider
+              path while moving the model base URL to localhost. Details:
+              <a href="../use-codex-desktop-with-third-party-api-and-plugins/"
+                >Codex Desktop + plugins</a
+              >.
+            </p>
+
+            <h2>Who this is for</h2>
+            <ul>
+              <li>
+                You upgraded to the merged ChatGPT+Codex app and third-party
+                models “lost” tools overnight.
+              </li>
+              <li>
+                You want one local endpoint for Codex / Claude Code / Gemini CLI
+                / OpenCode, not a different proxy config per app.
+              </li>
+              <li>
+                You care about failover, cost traces, and one-click switch back
+                to official config.
+              </li>
+            </ul>
+
+            <h2>FAQ</h2>
+            <h3>
+              Why did tools stop working after the ChatGPT+Codex merge?
+            </h3>
+            <p>
+              Tool definitions moved into
+              <code>additional_tools</code> inside
+              <code>input</code>. Proxies that only read top-level
+              <code>tools</code> send an empty schema upstream.
+            </p>
+            <h3>Is AgentGate a cloud proxy?</h3>
+            <p>
+              No. It runs locally. You bring your own provider keys. Prefer
+              server-side multi-tenant billing? Look at LiteLLM / new-api
+              instead—see
+              <a href="../agentgate-vs-litellm/">AgentGate vs LiteLLM</a>.
+            </p>
+            <h3>Which version do I need?</h3>
+            <p>
+              <strong>1.4.12 or later</strong> for
+              <code>additional_tools</code> hoisting and the gpt-5.6 catalog.
+              Older builds still work as a general gateway but will not fix this
+              protocol shape.
+            </p>
+
+            <h2>Related</h2>
+            <ul>
+              <li>
+                <a
+                  href="../use-codex-desktop-with-third-party-api-and-plugins/"
+                  >Codex Desktop + third-party APIs and plugins</a
+                >
+              </li>
+              <li>
+                <a href="../use-codex-with-deepseek/">Codex + DeepSeek</a>
+              </li>
+              <li>
+                <a href="../use-codex-with-mimo/">Codex + Xiaomi MiMo</a>
+              </li>
+              <li>
+                <a href="../trace-codex-requests/">Trace requests locally</a>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/dengmengmian/agentgate-ai/releases/tag/v1.4.12"
+                  >Release v1.4.12</a
+                >
+              </li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="bg-bg-soft/40">
+        <div class="mx-auto max-w-4xl px-6 py-16">
+          <div class="prompt text-sm text-ink-soft">agentgate --related</div>
+          <h2 class="mt-4 text-xl font-medium">Keep reading.</h2>
+          <div class="mt-8 space-y-3 text-sm">
+            <a
+              class="hover-prompt block py-1 text-ink-soft hover:text-ink"
+              href="../use-codex-desktop-with-third-party-api-and-plugins/"
+              >Codex Desktop + plugins
+              <span class="text-faint"
+                >— third-party APIs, plugins intact</span
+              ></a
+            >
+            <a
+              class="hover-prompt block py-1 text-ink-soft hover:text-ink"
+              href="../use-codex-with-deepseek/"
+              >Codex + DeepSeek
+              <span class="text-faint"
+                >— route Codex through a local gateway</span
+              ></a
+            >
+            <a
+              class="hover-prompt block py-1 text-ink-soft hover:text-ink"
+              href="../local-ai-gateway/"
+              >Local AI gateway
+              <span class="text-faint"
+                >— routing, tracing, failover, rollback</span
+              ></a
+            >
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-border-soft">
+      <div
+        class="mx-auto flex max-w-4xl flex-col items-start justify-between gap-3 px-6 py-8 text-sm sm:flex-row sm:items-center"
+      >
+        <div class="flex flex-wrap items-center gap-2 text-ink-soft">
+          <span>local AI model gateway</span>
+          <span class="text-faint">·</span>
+          <span class="text-muted">MIT</span>
+        </div>
+        <nav class="flex items-center gap-5 text-ink-soft">
+          <a class="hover:text-ink" href="https://github.com/dengmengmian/agentgate-ai"
+            >dengmengmian/agentgate-ai</a
+          >
+        </nav>
+      </div>
+    </footer>
+  </body>
+</html>
