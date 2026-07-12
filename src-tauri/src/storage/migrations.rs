@@ -883,6 +883,10 @@ mod tests {
     fn run_migrations_seeds_deepseek_v4_provider() {
         let conn = Connection::open_in_memory().unwrap();
         run_migrations(&conn).unwrap();
+        let provider_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM providers", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(provider_count, 1, "首次初始化只应创建一个默认供应商");
         let (default_model, reasoning_model, supported_models, anthropic_base_url, protocol): (
             String,
             String,
@@ -928,22 +932,6 @@ fn seed_default_providers(conn: &Connection) -> Result<(), AppError> {
             r#"["deepseek-v4-flash","deepseek-v4-pro"]"#,
             "https://api.deepseek.com/anthropic",
             r#"["openai_chat_completions","anthropic_messages"]"#,
-            120,
-            "not_tested",
-            &now,
-        ],
-    )?;
-
-    conn.execute(
-        "INSERT INTO providers (id, name, provider_type, base_url, default_model, protocol, timeout_seconds, status, enabled, is_active, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1, 0, ?9, ?9)",
-        rusqlite::params![
-            uuid::Uuid::new_v4().to_string(),
-            "Custom OpenAI Compatible",
-            "custom_openai_compatible",
-            "http://localhost:8000",
-            "custom-model",
-            r#"["openai_chat_completions"]"#,
             120,
             "not_tested",
             &now,

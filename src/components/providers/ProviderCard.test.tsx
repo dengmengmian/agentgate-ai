@@ -156,7 +156,7 @@ describe("ProviderCard", () => {
     );
 
     expect(screen.getByText("Health status")).toBeInTheDocument();
-    expect(screen.getByText("Primary actions")).toBeInTheDocument();
+    expect(screen.queryByText("Primary actions")).not.toBeInTheDocument();
     expect(screen.getByText(/Stream forwarding failed/i)).toBeInTheDocument();
     expect(
       screen.queryByText(/PASS_THROUGH_STREAM_FAILED/)

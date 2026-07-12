@@ -415,11 +415,11 @@ mod tests {
     }
 
     #[test]
-    fn test_list_all_empty() {
+    fn test_list_all_returns_single_default() {
         let conn = setup_db();
         let providers = list_all(&conn).unwrap();
-        // After migrations seed_default_providers inserts 2 defaults
-        assert!(providers.len() >= 2);
+        assert_eq!(providers.len(), 1);
+        assert_eq!(providers[0].provider_type, "deepseek");
     }
 
     #[test]

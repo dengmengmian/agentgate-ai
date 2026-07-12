@@ -278,7 +278,10 @@ export function Providers() {
       ) : filteredProviders.length === 0 ? (
         <p className="text-xs text-text-muted">{t("providers.no_match")}</p>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,520px))] gap-4">
+        <div
+          data-testid="provider-grid"
+          className="grid grid-cols-1 gap-4 xl:grid-cols-2"
+        >
           {filteredProviders.map((provider) => (
             <ProviderCard
               key={provider.id}

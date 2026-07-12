@@ -100,6 +100,9 @@ describe("Providers", () => {
 
     expect(screen.getByText("Provider One")).toBeInTheDocument();
     expect(screen.getByText("Provider Two")).toBeInTheDocument();
+    expect(screen.getByTestId("provider-grid")).toHaveClass(
+      "xl:grid-cols-2"
+    );
   });
 
   it("creates a provider from the add dialog", async () => {

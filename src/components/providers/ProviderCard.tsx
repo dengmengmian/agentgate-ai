@@ -164,11 +164,11 @@ export function ProviderCard({
 
   return (
     <div
-      className={`rounded-xl border bg-card p-4 ${provider.is_active ? "border-accent/40 border-l-2 border-l-accent" : "border-border"}`}
+      className={`flex min-w-0 flex-col rounded-xl border bg-card p-4 ${provider.is_active ? "border-accent/50" : "border-border"}`}
       style={{ boxShadow: "var(--shadow-sm)" }}
     >
       {/* ── Header: icon + name + url ; status dot + capability icons ── */}
-      <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent-soft">
             <Cloud className="h-4 w-4 text-accent" />
@@ -218,7 +218,7 @@ export function ProviderCard({
       </div>
 
       {/* ── Essentials: model · key · timeout · 直连 chips ── */}
-      <div className="mb-3 rounded-lg border border-border/60 bg-card-secondary/30 p-3">
+      <div className="mb-3 border-y border-border/70 py-3">
         <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
           <div className="min-w-0">
             <span className="text-[10px] uppercase tracking-wide text-text-muted">
@@ -238,7 +238,7 @@ export function ProviderCard({
             </p>
           </div>
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] text-text-muted">
             {provider.timeout_seconds}s
           </span>
@@ -256,7 +256,7 @@ export function ProviderCard({
 
       {/* ── Operational status: runtime + probe + real traffic in one vocabulary ── */}
       {(runtime || health) && (
-        <div className="mb-4 space-y-2 rounded-lg border border-border/60 bg-card-secondary/30 p-3 text-[11px] text-text-muted">
+        <div className="mb-3 space-y-2 text-[11px] text-text-muted">
           <div className="flex items-center justify-between gap-3">
             <span className="text-xs font-semibold text-text-primary">
               {t("providers.card_health_status")}
@@ -366,7 +366,7 @@ export function ProviderCard({
 
       {/* ── Collapsible details ── */}
       {showDetails && (
-        <div className="mb-3 grid grid-cols-2 gap-y-2 rounded-md bg-card-secondary/40 p-3 text-xs">
+        <div className="mb-3 grid grid-cols-2 gap-y-2 rounded-md bg-card-secondary/50 p-3 text-xs">
           <div>
             <span className="text-text-muted">{t("providers.type")}</span>
             <p className="text-text-primary">{provider.provider_type}</p>
@@ -398,17 +398,12 @@ export function ProviderCard({
       )}
 
       {/* ── Actions ── */}
-      <div className="border-t border-border/70 pt-3">
-        <div className="mb-2 text-xs font-semibold text-text-primary">
-          {t("providers.primary_actions")}
-        </div>
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-border/70 pt-3">
+        <div className="flex flex-wrap gap-1.5">
           <button
             onClick={() => onTest(provider)}
             disabled={testing}
-            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-md bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
           >
             {testing ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -419,7 +414,7 @@ export function ProviderCard({
           </button>
           <button
             onClick={() => onEdit(provider)}
-            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+            className="flex items-center gap-1.5 rounded-md bg-card-secondary px-2.5 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
           >
             <Pencil className="h-3 w-3" />
             {t("common.edit")}
@@ -427,7 +422,7 @@ export function ProviderCard({
           {onDetails && (
             <button
               onClick={() => onDetails(provider)}
-              className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+              className="flex items-center gap-1.5 rounded-md bg-card-secondary px-2.5 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
             >
               <ExternalLink className="h-3 w-3" />
               {t("common.details")}
@@ -436,7 +431,7 @@ export function ProviderCard({
           {!provider.is_active && (
             <button
               onClick={() => onSetActive(provider)}
-              className="flex items-center gap-1.5 rounded-md bg-card-secondary px-3 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
+              className="flex items-center gap-1.5 rounded-md bg-card-secondary px-2.5 py-1.5 text-[11px] font-medium text-text-secondary transition-colors hover:bg-border hover:text-text-primary"
             >
               <Star className="h-3 w-3" />
               {t("providers.set_active")}

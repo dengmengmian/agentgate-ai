@@ -1,5 +1,12 @@
 # Changelog / 更新日志
 
+## [1.4.13] - 2026-07-12
+
+### Improvements / 改进
+
+- **Denser provider layout / 更紧凑的供应商布局** —— The Providers page now uses the available desktop width with a responsive two-column grid, flatter information grouping, and a compact bottom-aligned action row. 供应商页改为桌面端双列响应式布局，减少嵌套容器并压缩底部操作区，充分利用横向空间。
+- **Single first-run provider / 首次初始化仅保留一个供应商** —— New or empty databases now seed only DeepSeek instead of also adding an unused Custom OpenAI Compatible placeholder. Existing provider records are never removed or changed. 新安装或空数据库现在只初始化 DeepSeek，不再额外创建未配置的 Custom OpenAI Compatible；已有供应商记录不会被删除或修改。
+
 ## [1.4.12] - 2026-07-10
 
 ### Added / 新增
