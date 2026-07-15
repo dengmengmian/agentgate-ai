@@ -43,6 +43,10 @@ function gatewaySettings(): any {
     thinking_rectifier_global: false,
     error_mapper_global: false,
     health_probe_enabled: false,
+    wake_enabled: true,
+    wake_request_control: false,
+    wake_cooldown_seconds: 900,
+    wake_keep_display_awake: false,
   };
 }
 
@@ -50,6 +54,19 @@ describe("Settings", () => {
   beforeEach(() => {
     __resetGlobalStoresForTest();
     vi.mocked(api.getGatewaySettings).mockResolvedValue(gatewaySettings());
+    vi.mocked(api.getWakeStatus).mockResolvedValue({
+      supported: true,
+      platform: "macos",
+      enabled: true,
+      request_control: false,
+      active: true,
+      active_requests: 0,
+      mode: "continuous",
+      cooldown_remaining: 0,
+      elapsed_seconds: 60,
+      keep_display_awake: false,
+      last_error: null,
+    });
     vi.mocked(api.getGatewayAuthSettings).mockResolvedValue({
       token_path: "/tmp/token",
     } as any);
@@ -110,6 +127,25 @@ describe("Settings", () => {
       expect(api.updateGatewaySettings).toHaveBeenCalledWith(
         expect.objectContaining({ auto_start: false })
       )
+    );
+  });
+
+  it("updates the wake master switch", async () => {
+    render(
+      <MemoryRouter>
+        <Settings />
+      </MemoryRouter>
+    );
+
+    const title = await screen.findByText("settings.wake.enabled");
+    const row = title.parentElement?.parentElement;
+    const toggle = row?.querySelector('input[type="checkbox"]') as HTMLElement;
+    await act(async () => toggle.click());
+
+    await waitFor(() =>
+      expect(api.updateGatewaySettings).toHaveBeenCalledWith({
+        wake_enabled: false,
+      })
     );
   });
 

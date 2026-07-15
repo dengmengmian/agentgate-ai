@@ -4,6 +4,7 @@ use crate::errors::AppError;
 use crate::models::gateway::{GatewaySettings, UpdateGatewaySettingsInput};
 
 const MAX_REQUEST_BODY_LIMIT_MB: i64 = 128;
+const MAX_WAKE_COOLDOWN_SECONDS: i64 = 86_400;
 
 pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
     conn.query_row(
@@ -11,7 +12,9 @@ pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
                 auto_start, log_retention_days, body_filter_global, thinking_rectifier_global,
                 error_mapper_global, updated_at, health_probe_enabled,
                 codex_compact_enabled, codex_compact_summary_max_tokens,
-                request_body_limit_mb, cost_alert_enabled, cost_alert_threshold
+                request_body_limit_mb, cost_alert_enabled, cost_alert_threshold,
+                wake_enabled, wake_request_control, wake_cooldown_seconds,
+                wake_keep_display_awake
          FROM gateway_settings WHERE id = 1",
         [],
         |row| {
@@ -34,6 +37,10 @@ pub fn get(conn: &Connection) -> Result<GatewaySettings, AppError> {
                 request_body_limit_mb: row.get(15)?,
                 cost_alert_enabled: row.get(16)?,
                 cost_alert_threshold: row.get(17)?,
+                wake_enabled: row.get(18)?,
+                wake_request_control: row.get(19)?,
+                wake_cooldown_seconds: row.get(20)?,
+                wake_keep_display_awake: row.get(21)?,
             })
         },
     )
@@ -93,6 +100,17 @@ pub fn update(
         Some(v) => Some(v),
         None => existing.cost_alert_threshold,
     };
+    let wake_enabled = input.wake_enabled.unwrap_or(existing.wake_enabled);
+    let wake_request_control = input
+        .wake_request_control
+        .unwrap_or(existing.wake_request_control);
+    let wake_cooldown_seconds = input
+        .wake_cooldown_seconds
+        .unwrap_or(existing.wake_cooldown_seconds)
+        .clamp(0, MAX_WAKE_COOLDOWN_SECONDS);
+    let wake_keep_display_awake = input
+        .wake_keep_display_awake
+        .unwrap_or(existing.wake_keep_display_awake);
 
     conn.execute(
         "UPDATE gateway_settings SET host=?1, port=?2, active_provider_id=?3,
@@ -102,7 +120,10 @@ pub fn update(
                 health_probe_enabled=?11, codex_compact_enabled=?12,
                 codex_compact_summary_max_tokens=?13,
                 request_body_limit_mb=?14,
-                cost_alert_enabled=?15, cost_alert_threshold=?16, updated_at=?17
+                cost_alert_enabled=?15, cost_alert_threshold=?16,
+                wake_enabled=?17, wake_request_control=?18,
+                wake_cooldown_seconds=?19, wake_keep_display_awake=?20,
+                updated_at=?21
          WHERE id = 1",
         params![
             &host,
@@ -121,6 +142,10 @@ pub fn update(
             request_body_limit_mb,
             cost_alert_enabled,
             cost_alert_threshold,
+            wake_enabled,
+            wake_request_control,
+            wake_cooldown_seconds,
+            wake_keep_display_awake,
             &now,
         ],
     )?;
@@ -206,5 +231,41 @@ mod tests {
         )
         .unwrap();
         assert_eq!(updated.request_body_limit_mb, 128);
+    }
+
+    #[test]
+    fn wake_settings_are_persisted() {
+        let conn = setup_db();
+        let updated = update(
+            &conn,
+            UpdateGatewaySettingsInput {
+                wake_enabled: Some(false),
+                wake_request_control: Some(true),
+                wake_cooldown_seconds: Some(30),
+                wake_keep_display_awake: Some(true),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert!(!updated.wake_enabled);
+        assert!(updated.wake_request_control);
+        assert_eq!(updated.wake_cooldown_seconds, 30);
+        assert!(updated.wake_keep_display_awake);
+    }
+
+    #[test]
+    fn wake_cooldown_is_clamped_before_save() {
+        let conn = setup_db();
+        let updated = update(
+            &conn,
+            UpdateGatewaySettingsInput {
+                wake_cooldown_seconds: Some(i64::MAX),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(updated.wake_cooldown_seconds, 86_400);
     }
 }

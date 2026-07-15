@@ -482,7 +482,28 @@ async fn cmd_serve(
     #[cfg(unix)]
     install_sighup_handler(db.clone());
 
-    match agentgate_lib::gateway::server::start(host, port, db, tls).await {
+    let wake = agentgate_lib::wake::WakeManager::new();
+    if let Ok(conn) = db.get() {
+        if let Ok(settings) = agentgate_lib::storage::gateway_settings::get(&conn) {
+            wake.set_config(agentgate_lib::wake::WakeConfig {
+                enabled: settings.wake_enabled,
+                request_control: settings.wake_request_control,
+                cooldown_seconds: settings.wake_cooldown_seconds.clamp(0, 86_400) as u64,
+                keep_display_awake: settings.wake_keep_display_awake,
+            });
+        }
+    }
+    wake.start();
+    {
+        let wake = wake.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                wake.tick();
+            }
+        });
+    }
+    match agentgate_lib::gateway::server::start(host, port, db, tls, wake.clone()).await {
         Ok((shutdown_tx, handle, _active_requests, _port)) => {
             eprintln!("Gateway running on {scheme}://{host}:{port}");
             eprintln!("Send SIGINT (Ctrl+C) or SIGTERM to stop. SIGHUP to reload caches.");
@@ -492,6 +513,7 @@ async fn cmd_serve(
             tracing::info!("shutdown signal received, draining in-flight requests");
             let _ = shutdown_tx.send(());
             let _ = handle.await;
+            wake.shutdown();
             tracing::info!("server stopped");
         }
         Err(e) => {

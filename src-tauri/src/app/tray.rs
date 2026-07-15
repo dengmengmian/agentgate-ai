@@ -12,7 +12,7 @@
 //!  - `switch_active:<provider_id>` — set that provider as active and refresh
 //!  - everything else routes through the same static-id handler in lib.rs
 //!    (show / start_gateway / stop_gateway / restart_gateway / toggle_pet /
-//!     quit).
+//!     toggle_wake_* / quit).
 //!
 //! Borrowed from codex-switcher's tray popover design, simplified to the
 //! Tauri-native menu surface — interactive popover window is a future PR.
@@ -24,6 +24,68 @@ use tauri::tray::TrayIconId;
 use tauri::{AppHandle, Manager};
 
 pub const TRAY_ID: &str = "main";
+
+#[derive(Debug, PartialEq, Eq)]
+enum WakeToggle {
+    Enabled(bool),
+    RequestControl(bool),
+    KeepDisplayAwake(bool),
+}
+
+fn wake_toggle_for_menu_id(
+    menu_id: &str,
+    enabled: bool,
+    request_control: bool,
+    keep_display_awake: bool,
+) -> Option<WakeToggle> {
+    match menu_id {
+        "toggle_wake_enabled" => Some(WakeToggle::Enabled(!enabled)),
+        "toggle_wake_request_control" => Some(WakeToggle::RequestControl(!request_control)),
+        "toggle_wake_display" => Some(WakeToggle::KeepDisplayAwake(!keep_display_awake)),
+        _ => None,
+    }
+}
+
+fn wake_primary_label(
+    zh: bool,
+    supported: bool,
+    enabled: bool,
+    request_control: bool,
+    has_error: bool,
+) -> String {
+    if !supported {
+        return if zh {
+            "防休眠（当前平台不支持）".into()
+        } else {
+            "Keep Awake (unsupported)".into()
+        };
+    }
+    if has_error {
+        return if zh {
+            "防休眠（申请失败）".into()
+        } else {
+            "Keep Awake (failed)".into()
+        };
+    }
+    if !enabled {
+        return if zh {
+            "启用防休眠".into()
+        } else {
+            "Enable Keep Awake".into()
+        };
+    }
+    if request_control {
+        if zh {
+            "防休眠（请求智能控制）".into()
+        } else {
+            "Keep Awake (request-aware)".into()
+        }
+    } else if zh {
+        "防休眠（持续保持）".into()
+    } else {
+        "Keep Awake (continuous)".into()
+    }
+}
 
 /// Rebuild the tray menu and tooltip from current DB + runtime state.
 /// Safe to call from any thread / async context. Silently no-ops if the
@@ -72,6 +134,11 @@ struct Snapshot {
     today_total: i64,
     gateway_running: bool,
     gateway_port: u16,
+    wake_supported: bool,
+    wake_enabled: bool,
+    wake_request_control: bool,
+    wake_keep_display_awake: bool,
+    wake_has_error: bool,
 }
 
 fn read_snapshot(app: &AppHandle) -> Result<Snapshot, Box<dyn std::error::Error>> {
@@ -104,6 +171,7 @@ fn read_snapshot(app: &AppHandle) -> Result<Snapshot, Box<dyn std::error::Error>
     let gateway_running = runtime.running;
     let gateway_port = runtime.port;
     drop(runtime);
+    let wake_status = state.wake.status();
 
     Ok(Snapshot {
         zh,
@@ -113,6 +181,11 @@ fn read_snapshot(app: &AppHandle) -> Result<Snapshot, Box<dyn std::error::Error>
         today_total,
         gateway_running,
         gateway_port,
+        wake_supported: wake_status.supported,
+        wake_enabled: wake_status.enabled,
+        wake_request_control: wake_status.request_control,
+        wake_keep_display_awake: wake_status.keep_display_awake,
+        wake_has_error: wake_status.mode == crate::wake::WakeMode::Error,
     })
 }
 
@@ -229,6 +302,41 @@ fn build_menu(
     )
     .enabled(snap.gateway_running)
     .build(app)?;
+    let toggle_wake_enabled = CheckMenuItemBuilder::with_id(
+        "toggle_wake_enabled",
+        wake_primary_label(
+            zh,
+            snap.wake_supported,
+            snap.wake_enabled,
+            snap.wake_request_control,
+            snap.wake_has_error,
+        ),
+    )
+    .checked(snap.wake_supported && snap.wake_enabled)
+    .enabled(snap.wake_supported)
+    .build(app)?;
+    let toggle_wake_request_control = CheckMenuItemBuilder::with_id(
+        "toggle_wake_request_control",
+        if zh {
+            "请求智能控制"
+        } else {
+            "Request-aware control"
+        },
+    )
+    .checked(snap.wake_supported && snap.wake_request_control)
+    .enabled(snap.wake_supported && snap.wake_enabled)
+    .build(app)?;
+    let toggle_wake_display = CheckMenuItemBuilder::with_id(
+        "toggle_wake_display",
+        if zh {
+            "同时保持显示器常亮"
+        } else {
+            "Keep display awake too"
+        },
+    )
+    .checked(snap.wake_supported && snap.wake_keep_display_awake)
+    .enabled(snap.wake_supported && snap.wake_enabled)
+    .build(app)?;
     let toggle_pet = MenuItemBuilder::with_id(
         "toggle_pet",
         if zh {
@@ -261,6 +369,10 @@ fn build_menu(
         .item(&start_gw)
         .item(&stop_gw)
         .item(&restart_gw)
+        .separator()
+        .item(&toggle_wake_enabled)
+        .item(&toggle_wake_request_control)
+        .item(&toggle_wake_display)
         .separator()
         .item(&toggle_pet)
         .item(&toggle_pet_click_through)
@@ -314,6 +426,61 @@ pub fn handle_switch_active(app: &AppHandle, menu_id: &str) {
         };
         if let Err(e) = result {
             eprintln!("[tray] set_active({provider_id}) failed: {e:?}");
+        }
+        refresh_tray(&app_clone);
+    });
+}
+
+pub fn handle_wake_toggle(app: &AppHandle, menu_id: &str) {
+    let menu_id = menu_id.to_string();
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state: tauri::State<'_, AppState> = app_clone.state();
+        if !state.wake.status().supported {
+            refresh_tray(&app_clone);
+            return;
+        }
+
+        let result = (|| {
+            let conn = state.db.get().map_err(|_| "DB lock failed".to_string())?;
+            let settings = storage::gateway_settings::get(&conn).map_err(|e| e.to_string())?;
+            let toggle = wake_toggle_for_menu_id(
+                &menu_id,
+                settings.wake_enabled,
+                settings.wake_request_control,
+                settings.wake_keep_display_awake,
+            )
+            .ok_or_else(|| format!("unknown wake menu id: {menu_id}"))?;
+            let input = match toggle {
+                WakeToggle::Enabled(value) => crate::models::gateway::UpdateGatewaySettingsInput {
+                    wake_enabled: Some(value),
+                    ..Default::default()
+                },
+                WakeToggle::RequestControl(value) => {
+                    crate::models::gateway::UpdateGatewaySettingsInput {
+                        wake_request_control: Some(value),
+                        ..Default::default()
+                    }
+                }
+                WakeToggle::KeepDisplayAwake(value) => {
+                    crate::models::gateway::UpdateGatewaySettingsInput {
+                        wake_keep_display_awake: Some(value),
+                        ..Default::default()
+                    }
+                }
+            };
+            let updated = storage::gateway_settings::update(&conn, input)
+                .map_err(|error| error.to_string())?;
+            state
+                .wake
+                .set_config(crate::app::commands::gateway::wake_config_from_settings(
+                    &updated,
+                ));
+            Ok::<(), String>(())
+        })();
+
+        if let Err(error) = result {
+            eprintln!("[tray] wake toggle failed: {error}");
         }
         refresh_tray(&app_clone);
     });
@@ -393,5 +560,42 @@ mod tests {
 
         let bad = "show".strip_prefix("switch_active:");
         assert_eq!(bad, None);
+    }
+
+    #[test]
+    fn wake_menu_label_reflects_runtime_mode_and_support() {
+        assert_eq!(
+            wake_primary_label(true, true, true, false, false),
+            "防休眠（持续保持）"
+        );
+        assert_eq!(
+            wake_primary_label(true, true, true, true, false),
+            "防休眠（请求智能控制）"
+        );
+        assert_eq!(
+            wake_primary_label(true, false, true, false, false),
+            "防休眠（当前平台不支持）"
+        );
+        assert_eq!(
+            wake_primary_label(false, true, true, false, true),
+            "Keep Awake (failed)"
+        );
+    }
+
+    #[test]
+    fn wake_menu_actions_toggle_only_the_selected_setting() {
+        assert_eq!(
+            wake_toggle_for_menu_id("toggle_wake_enabled", true, false, false),
+            Some(WakeToggle::Enabled(false))
+        );
+        assert_eq!(
+            wake_toggle_for_menu_id("toggle_wake_request_control", true, false, false),
+            Some(WakeToggle::RequestControl(true))
+        );
+        assert_eq!(
+            wake_toggle_for_menu_id("toggle_wake_display", true, false, true),
+            Some(WakeToggle::KeepDisplayAwake(false))
+        );
+        assert_eq!(wake_toggle_for_menu_id("show", true, false, false), None);
     }
 }

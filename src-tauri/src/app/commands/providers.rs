@@ -708,6 +708,7 @@ mod tests {
             gateway_runtime: Arc::new(Mutex::new(
                 crate::models::gateway::GatewayRuntimeState::default(),
             )),
+            wake: crate::wake::WakeManager::new(),
             pet_click_through: Arc::new(Mutex::new(false)),
         }
     }

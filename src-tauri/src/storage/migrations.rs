@@ -4,7 +4,7 @@ use crate::errors::AppError;
 
 /// 当前 schema 版本。每加一段新迁移就 +1,放到 `run_versioned_migrations`
 /// 里 match 上对应的 version。读 `PRAGMA user_version` 决定该跑哪些。
-const CURRENT_SCHEMA_VERSION: u32 = 7;
+const CURRENT_SCHEMA_VERSION: u32 = 8;
 
 fn get_user_version(conn: &Connection) -> Result<u32, AppError> {
     let v: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
@@ -124,6 +124,20 @@ fn run_versioned_migrations(conn: &Connection, from_version: u32) -> Result<(), 
             )?;
         }
         set_user_version(conn, 7)?;
+    }
+    if from_version < 8 {
+        let has_wake = conn
+            .prepare("SELECT wake_enabled FROM gateway_settings LIMIT 0")
+            .is_ok();
+        if !has_wake {
+            conn.execute_batch(
+                "ALTER TABLE gateway_settings ADD COLUMN wake_enabled INTEGER NOT NULL DEFAULT 1;
+                 ALTER TABLE gateway_settings ADD COLUMN wake_request_control INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE gateway_settings ADD COLUMN wake_cooldown_seconds INTEGER NOT NULL DEFAULT 900;
+                 ALTER TABLE gateway_settings ADD COLUMN wake_keep_display_awake INTEGER NOT NULL DEFAULT 0;",
+            )?;
+        }
+        set_user_version(conn, 8)?;
     }
     Ok(())
 }
@@ -855,6 +869,24 @@ mod tests {
         let settings = crate::storage::gateway_settings::get(&conn)
             .expect("v6 存量 DB 升级后 gateway_settings::get() 必须成功");
         assert_eq!(settings.request_body_limit_mb, 32);
+    }
+
+    #[test]
+    fn wake_settings_are_added_with_product_defaults() {
+        let conn = Connection::open_in_memory().unwrap();
+        run_migrations(&conn).unwrap();
+
+        let values: (i64, i64, i64, i64) = conn
+            .query_row(
+                "SELECT wake_enabled, wake_request_control,
+                        wake_cooldown_seconds, wake_keep_display_awake
+                 FROM gateway_settings WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("wake settings migration should add all columns");
+
+        assert_eq!(values, (1, 0, 900, 0));
     }
 
     #[test]

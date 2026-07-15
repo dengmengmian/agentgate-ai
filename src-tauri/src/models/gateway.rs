@@ -36,6 +36,14 @@ pub struct GatewaySettings {
     pub cost_alert_enabled: bool,
     /// 今日花费预警阈值(USD)。None / <=0 视为未设。
     pub cost_alert_threshold: Option<f64>,
+    /// 防休眠总开关。默认开启。
+    pub wake_enabled: bool,
+    /// false=AgentGate 生命周期持续保持，true=仅按生成请求控制。
+    pub wake_request_control: bool,
+    /// 最后一个生成请求结束后的保持秒数。
+    pub wake_cooldown_seconds: i64,
+    /// 在保持系统唤醒的同时保持显示器常亮。
+    pub wake_keep_display_awake: bool,
     pub updated_at: String,
 }
 
@@ -57,6 +65,10 @@ pub struct UpdateGatewaySettingsInput {
     pub request_body_limit_mb: Option<i64>,
     pub cost_alert_enabled: Option<bool>,
     pub cost_alert_threshold: Option<f64>,
+    pub wake_enabled: Option<bool>,
+    pub wake_request_control: Option<bool>,
+    pub wake_cooldown_seconds: Option<i64>,
+    pub wake_keep_display_awake: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Type)]
@@ -108,6 +120,10 @@ mod tests {
             request_body_limit_mb: 32,
             cost_alert_enabled: false,
             cost_alert_threshold: None,
+            wake_enabled: true,
+            wake_request_control: false,
+            wake_cooldown_seconds: 900,
+            wake_keep_display_awake: false,
             updated_at: "2024-01-01T00:00:00Z".into(),
         };
         let json = serde_json::to_string(&s).unwrap();

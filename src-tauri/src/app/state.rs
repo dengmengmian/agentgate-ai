@@ -9,6 +9,7 @@ pub struct AppState {
     /// 内部 Arc 共享池状态——AppState 持有 owned Pool 即可,无需再包 Arc。
     pub db: DbPool,
     pub gateway_runtime: Arc<Mutex<GatewayRuntimeState>>,
+    pub wake: Arc<crate::wake::WakeManager>,
     /// 宠物窗口鼠标穿透开关(运行时状态,不持久化)。
     /// 多窗口共享:右键菜单 / tray / Settings 三处都可改;
     /// 改动后 emit `pet-click-through-changed` 通知所有 webview。
@@ -28,6 +29,7 @@ mod tests {
         let state = AppState {
             db: pool,
             gateway_runtime: Arc::new(Mutex::new(GatewayRuntimeState::default())),
+            wake: crate::wake::WakeManager::new(),
             pet_click_through: Arc::new(Mutex::new(false)),
         };
         assert!(state.gateway_runtime.lock().unwrap().port == 0);

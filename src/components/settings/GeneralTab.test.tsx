@@ -39,6 +39,10 @@ function baseSettings(over: Record<string, unknown> = {}) {
     request_body_limit_mb: 32,
     cost_alert_enabled: false,
     cost_alert_threshold: null,
+    wake_enabled: true,
+    wake_request_control: false,
+    wake_cooldown_seconds: 900,
+    wake_keep_display_awake: false,
     updated_at: "",
     ...over,
   };
@@ -58,6 +62,8 @@ function setup(over: Record<string, unknown> = {}) {
       handleUpdateRefinerGlobal={vi.fn()}
       handleUpdateCostAlert={handleUpdateCostAlert}
       handleUpdateRequestBodyLimit={handleUpdateRequestBodyLimit}
+      wakeStatus={null}
+      handleUpdateWake={vi.fn()}
       t={(k: string) => k}
       ToggleSwitch={ToggleSwitch}
       ThemePicker={ThemePicker}

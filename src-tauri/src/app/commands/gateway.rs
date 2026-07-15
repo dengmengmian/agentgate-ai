@@ -66,11 +66,34 @@ pub fn update_gateway_settings(
     input: UpdateGatewaySettingsInput,
     state: State<'_, AppState>,
 ) -> Result<GatewaySettings, AppError> {
+    let wake_changed = input.wake_enabled.is_some()
+        || input.wake_request_control.is_some()
+        || input.wake_cooldown_seconds.is_some()
+        || input.wake_keep_display_awake.is_some();
     let conn = state
         .db
         .get()
         .map_err(|_| AppError::internal("DB lock failed"))?;
-    storage::gateway_settings::update(&conn, input)
+    let settings = storage::gateway_settings::update(&conn, input)?;
+    if wake_changed {
+        state.wake.set_config(wake_config_from_settings(&settings));
+    }
+    Ok(settings)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_wake_status(state: State<'_, AppState>) -> Result<crate::wake::WakeStatus, AppError> {
+    Ok(state.wake.status())
+}
+
+pub(crate) fn wake_config_from_settings(settings: &GatewaySettings) -> crate::wake::WakeConfig {
+    crate::wake::WakeConfig {
+        enabled: settings.wake_enabled,
+        request_control: settings.wake_request_control,
+        cooldown_seconds: settings.wake_cooldown_seconds.clamp(0, 86_400) as u64,
+        keep_display_awake: settings.wake_keep_display_awake,
+    }
 }
 
 #[tauri::command]
@@ -105,7 +128,7 @@ pub async fn start_gateway(
 
     // Start real HTTP server. GUI 走纯 HTTP（127.0.0.1 本地通信，无 TLS 需求）。
     let (shutdown_tx, server_handle, active_requests, _bound_port) =
-        gateway::server::start(&host, port, state.db.clone(), None).await?;
+        gateway::server::start(&host, port, state.db.clone(), None, state.wake.clone()).await?;
 
     // Update runtime state
     {
@@ -278,6 +301,7 @@ mod tests {
         AppState {
             db: pool,
             gateway_runtime: Arc::new(Mutex::new(GatewayRuntimeState::default())),
+            wake: crate::wake::WakeManager::new(),
             pet_click_through: Arc::new(Mutex::new(false)),
         }
     }
@@ -312,6 +336,32 @@ mod tests {
         let fetched = get_gateway_settings(unsafe { as_state(&state) }).unwrap();
         assert_eq!(fetched.host, "0.0.0.0");
         assert_eq!(fetched.port, 8080);
+    }
+
+    #[test]
+    fn update_gateway_settings_applies_wake_changes_to_runtime() {
+        let state = test_state();
+        update_gateway_settings(
+            UpdateGatewaySettingsInput {
+                wake_enabled: Some(false),
+                wake_request_control: Some(true),
+                wake_cooldown_seconds: Some(30),
+                wake_keep_display_awake: Some(true),
+                ..Default::default()
+            },
+            unsafe { as_state(&state) },
+        )
+        .unwrap();
+
+        assert_eq!(
+            state.wake.config(),
+            crate::wake::WakeConfig {
+                enabled: false,
+                request_control: true,
+                cooldown_seconds: 30,
+                keep_display_awake: true,
+            }
+        );
     }
 
     #[test]

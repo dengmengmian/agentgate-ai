@@ -150,10 +150,15 @@ impl GatewayHarness {
 
         // setup 阶段拿的 conn 在 server::start 前 drop,归还给 pool。
         drop(conn);
-        let (shutdown_tx, server_handle, _counter, port) =
-            server::start("127.0.0.1", 0, pool.clone(), None)
-                .await
-                .expect("start gateway");
+        let (shutdown_tx, server_handle, _counter, port) = server::start(
+            "127.0.0.1",
+            0,
+            pool.clone(),
+            None,
+            agentgate_lib::wake::WakeManager::new(),
+        )
+        .await
+        .expect("start gateway");
 
         // axum_server binds asynchronously; give it a tick before clients
         // start sending requests.

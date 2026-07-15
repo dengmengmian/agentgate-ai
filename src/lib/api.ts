@@ -55,6 +55,7 @@ export type {
   GatewayStatus,
   GatewaySettings,
   UpdateGatewaySettingsInput,
+  WakeStatus,
   RequestLogListItem,
   RequestLogDetail,
   RequestLogFilter,
@@ -192,6 +193,7 @@ export const getGatewaySettings = () => unwrap(bindings.getGatewaySettings());
 export const updateGatewaySettings = (
   input: import("@/types/gateway").UpdateGatewaySettingsInput
 ) => unwrap(bindings.updateGatewaySettings(input as never));
+export const getWakeStatus = () => unwrap(bindings.getWakeStatus());
 export const startGateway = () => unwrap(bindings.startGateway());
 export const stopGateway = () => unwrap(bindings.stopGateway());
 export const restartGateway = () => unwrap(bindings.restartGateway());

@@ -240,10 +240,15 @@ async fn release_preflight_smoke() {
     let port = smoke_port();
     println!("   Starting test gateway on {}:{} ...", host, port);
 
-    let (shutdown_tx, server_handle, _active_requests, _port) =
-        server::start(&host, port, db.clone(), None)
-            .await
-            .expect("start gateway");
+    let (shutdown_tx, server_handle, _active_requests, _port) = server::start(
+        &host,
+        port,
+        db.clone(),
+        None,
+        agentgate_lib::wake::WakeManager::new(),
+    )
+    .await
+    .expect("start gateway");
 
     // Wait for server to bind
     tokio::time::sleep(Duration::from_millis(300)).await;

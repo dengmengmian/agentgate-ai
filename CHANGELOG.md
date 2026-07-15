@@ -1,5 +1,17 @@
 # Changelog / 更新日志
 
+## [1.5.0] - 2026-07-15
+
+### Added / 新增
+
+- **Keep Awake / 防休眠** —— AgentGate now prevents automatic system sleep by default on macOS and Windows while the app is running. The display may still turn off unless explicitly kept awake. AgentGate 现在默认在应用运行期间阻止 macOS 和 Windows 自动休眠；显示器默认仍可关闭，也可单独设为常亮。
+- **Request-aware control / 请求智能控制** —— An optional request-aware mode keeps the system awake only while AI generation requests are active and during a configurable cooldown (15 minutes by default). Concurrent and streaming requests remain protected until their response bodies finish or disconnect. 可选的请求智能控制仅在 AI 生成请求进行中及可配置冷却期内保持唤醒（默认 15 分钟）；并发和流式请求会持续保护到响应结束或客户端断开。
+- **Settings and tray controls / 设置页与托盘快捷操作** —— Keep-awake status, errors, request mode, cooldown, and display behavior are available in Settings; the system tray adds one-click toggles for keep-awake, request-aware control, and display wakefulness. 设置页可查看防休眠状态、错误、请求模式、冷却时间和显示器行为；系统托盘新增防休眠、请求智能控制、显示器常亮三个快捷开关。
+
+### Improvements / 改进
+
+- **Cross-platform native lifecycle / 跨平台原生生命周期** —— macOS uses the built-in `caffeinate` assertion and Windows uses native Power Request APIs. Assertions reconcile immediately when settings change and are released on shutdown. Unsupported Linux environments are reported explicitly instead of pretending success. macOS 使用系统内置 `caffeinate`，Windows 使用原生 Power Request API；设置变化会立即重建申请，退出时可靠释放；Linux 暂不支持时明确显示，不会假装成功。
+
 ## [1.4.13] - 2026-07-12
 
 ### Improvements / 改进

@@ -25,6 +25,7 @@ pub mod storage;
 #[cfg_attr(not(feature = "desktop"), allow(dead_code))]
 mod tools;
 pub mod transform;
+pub mod wake;
 
 #[cfg(feature = "desktop")]
 use std::sync::{Arc, Mutex};
@@ -154,6 +155,7 @@ fn build_specta() -> tauri_specta::Builder<tauri::Wry> {
             commands::get_gateway_status,
             commands::get_gateway_settings,
             commands::update_gateway_settings,
+            commands::get_wake_status,
             commands::start_gateway,
             commands::stop_gateway,
             commands::restart_gateway,
@@ -519,9 +521,18 @@ pub fn run() {
             let pool = storage::db::init_database(&app_data_dir)
                 .expect("Failed to initialize database");
 
+            let wake = crate::wake::WakeManager::new();
+            if let Ok(conn) = pool.get() {
+                if let Ok(settings) = storage::gateway_settings::get(&conn) {
+                    wake.set_config(commands::gateway::wake_config_from_settings(&settings));
+                }
+            }
+            wake.start();
+
             let state = AppState {
                 db: pool,
                 gateway_runtime: Arc::new(Mutex::new(GatewayRuntimeState::default())),
+                wake: wake.clone(),
                 pet_click_through: Arc::new(Mutex::new(false)),
             };
 
@@ -530,6 +541,16 @@ pub fn run() {
             let health_probe_db = state.db.clone();
             let cost_alert_db = state.db.clone();
             app.manage(state);
+
+            {
+                let wake = wake.clone();
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        wake.tick();
+                    }
+                });
+            }
 
             // ── Ensure local access token exists ──
             let _ = security::local_token::ensure_token();
@@ -686,6 +707,7 @@ pub fn run() {
             commands::get_gateway_status,
             commands::get_gateway_settings,
             commands::update_gateway_settings,
+            commands::get_wake_status,
             commands::start_gateway,
             commands::stop_gateway,
             commands::restart_gateway,
@@ -952,6 +974,9 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                         let _ = commands::restart_gateway(app_handle.clone(), state).await;
                     });
                 }
+                "toggle_wake_enabled" | "toggle_wake_request_control" | "toggle_wake_display" => {
+                    app::tray::handle_wake_toggle(app, &id);
+                }
                 "toggle_pet" => {
                     if let Some(pet_win) = app.get_webview_window("pet") {
                         let is_visible = pet_win.is_visible().unwrap_or(false);
@@ -1007,6 +1032,7 @@ fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     let app_handle = app.clone();
                     tauri::async_runtime::spawn(async move {
                         let state: tauri::State<'_, AppState> = app_handle.state();
+                        state.wake.shutdown();
                         let _ = commands::stop_gateway(app_handle.clone(), state).await;
                         app_handle.exit(0);
                     });

@@ -4,6 +4,8 @@ import { ChevronDown } from "lucide-react";
 import type { Locale } from "@/lib/i18n";
 import type { GatewaySettings as GatewaySettingsType } from "@/types/gateway";
 import { toast } from "@/components/common/Toast";
+import type { WakeStatus } from "@/lib/bindings";
+import { WakeSettings } from "./WakeSettings";
 
 interface Props {
   settings: GatewaySettingsType;
@@ -25,6 +27,13 @@ interface Props {
     cost_alert_threshold?: number;
   }) => Promise<void>;
   handleUpdateRequestBodyLimit: (mb: number) => Promise<void>;
+  wakeStatus: WakeStatus | null;
+  handleUpdateWake: (patch: {
+    wake_enabled?: boolean;
+    wake_request_control?: boolean;
+    wake_cooldown_seconds?: number;
+    wake_keep_display_awake?: boolean;
+  }) => Promise<void>;
   t: (key: string) => string;
   ToggleSwitch: React.ComponentType<{
     checked: boolean;
@@ -46,6 +55,8 @@ export function GeneralTab({
   handleUpdateRefinerGlobal,
   handleUpdateCostAlert,
   handleUpdateRequestBodyLimit,
+  wakeStatus,
+  handleUpdateWake,
   t,
   ToggleSwitch,
   ThemePicker,
@@ -142,6 +153,14 @@ export function GeneralTab({
             }
           />
         </SettingsGroup>
+
+        <WakeSettings
+          settings={settings}
+          status={wakeStatus}
+          onUpdate={handleUpdateWake}
+          t={t}
+          ToggleSwitch={ToggleSwitch}
+        />
 
         <SettingsGroup title={t("settings.general.appearance")}>
           <div>

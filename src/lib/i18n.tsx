@@ -1263,6 +1263,75 @@ const translations: Record<string, Record<Locale, string>> = {
     en: "Open AgentGate automatically when you log in to the system",
     zh: "登录系统时自动打开 AgentGate",
   },
+  "settings.wake": { en: "Keep Awake", zh: "保持唤醒" },
+  "settings.wake.enabled": { en: "Enable keep-awake", zh: "启用防休眠" },
+  "settings.wake.enabled_desc": {
+    en: "Prevent automatic system sleep so AI work is not interrupted",
+    zh: "阻止系统自动休眠，降低 AI 任务被中断的概率",
+  },
+  "settings.wake.request_control": {
+    en: "Request-aware control",
+    zh: "请求智能控制",
+  },
+  "settings.wake.request_control_desc": {
+    en: "When enabled, allow normal sleep while there are no AI generation requests",
+    zh: "开启后，仅在处理 AI 生成请求及冷却期间保持系统唤醒",
+  },
+  "settings.wake.cooldown": {
+    en: "Keep awake after requests",
+    zh: "请求结束后继续保持",
+  },
+  "settings.wake.cooldown_desc": {
+    en: "Leave time for reading results and sending the next instruction",
+    zh: "为查看结果和继续发送下一步指令预留时间",
+  },
+  "settings.wake.cooldown.0": { en: "Immediately", zh: "立即释放" },
+  "settings.wake.cooldown.60": { en: "1 minute", zh: "1 分钟" },
+  "settings.wake.cooldown.300": { en: "5 minutes", zh: "5 分钟" },
+  "settings.wake.cooldown.900": { en: "15 minutes", zh: "15 分钟" },
+  "settings.wake.cooldown.1800": { en: "30 minutes", zh: "30 分钟" },
+  "settings.wake.cooldown.3600": { en: "1 hour", zh: "1 小时" },
+  "settings.wake.display": {
+    en: "Keep display awake too",
+    zh: "同时保持显示器常亮",
+  },
+  "settings.wake.display_desc": {
+    en: "Also prevent the display from turning off while keep-awake is active",
+    zh: "防休眠生效时，同时阻止显示器自动关闭",
+  },
+  "settings.wake.unsupported": {
+    en: "Keep-awake is currently available on macOS and Windows.",
+    zh: "保持唤醒目前仅支持 macOS 和 Windows。",
+  },
+  "settings.wake.status.loading": {
+    en: "Loading status…",
+    zh: "正在读取状态…",
+  },
+  "settings.wake.status.unsupported": {
+    en: "Unsupported",
+    zh: "当前平台不支持",
+  },
+  "settings.wake.status.disabled": { en: "Disabled", zh: "防休眠已关闭" },
+  "settings.wake.status.continuous": {
+    en: "Keeping awake while AgentGate is running",
+    zh: "AgentGate 运行期间持续保持唤醒",
+  },
+  "settings.wake.status.request": {
+    en: "AI generation requests in progress",
+    zh: "AI 生成请求处理中",
+  },
+  "settings.wake.status.cooldown": {
+    en: "Waiting for follow-up requests",
+    zh: "等待后续请求",
+  },
+  "settings.wake.status.idle": {
+    en: "System sleep is allowed",
+    zh: "当前允许系统休眠",
+  },
+  "settings.wake.status.error": {
+    en: "Keep-awake failed",
+    zh: "防休眠申请失败",
+  },
   "settings.gateway": { en: "Gateway", zh: "网关" },
   "settings.data": { en: "Data", zh: "数据" },
   "settings.log_retention": { en: "Log retention", zh: "日志保留" },

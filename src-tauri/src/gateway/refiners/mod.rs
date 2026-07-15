@@ -158,6 +158,10 @@ mod tests {
             request_body_limit_mb: 32,
             cost_alert_enabled: false,
             cost_alert_threshold: None,
+            wake_enabled: true,
+            wake_request_control: false,
+            wake_cooldown_seconds: 900,
+            wake_keep_display_awake: false,
             updated_at: "now".into(),
         }
     }

@@ -31,6 +31,7 @@ import { useI18n } from "@/lib/i18n";
 import * as api from "@/lib/api";
 import { useGatewaySettings, usePricing } from "@/store/global";
 import type { GatewaySettings as GatewaySettingsType } from "@/types/gateway";
+import type { WakeStatus } from "@/lib/bindings";
 import type { GatewayAuthSettings } from "@/types/config";
 import type { ModelPricing } from "@/types/stats";
 import type { PetType, PetSettings as PetSettingsType } from "@/types/pet";
@@ -114,6 +115,7 @@ export function Settings() {
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [petSettings, setPetSettings] = useState<PetSettingsType | null>(null);
   const [petClickThrough, setPetClickThroughState] = useState(false);
+  const [wakeStatus, setWakeStatus] = useState<WakeStatus | null>(null);
   useEffect(() => {
     api
       .getPetClickThrough()
@@ -142,14 +144,16 @@ export function Settings() {
     try {
       // gateway settings / pricing 走 store.refetch()——确保 mutation 后值是新的;
       // auth / pet 是这页专属、暂不进 store。
-      const [a, pet] = await Promise.all([
+      const [a, pet, wake] = await Promise.all([
         api.getGatewayAuthSettings(),
         api.getPetSettings(),
+        api.getWakeStatus(),
         useGatewaySettings.getState().refetch(),
         usePricing.getState().refetch(),
       ]);
       setAuth(a);
       setPetSettings(pet);
+      setWakeStatus(wake);
     } catch (err) {
       toast("error", (err as api.AppError).message);
     }
@@ -158,6 +162,16 @@ export function Settings() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      api
+        .getWakeStatus()
+        .then(setWakeStatus)
+        .catch((error) => console.warn("Failed to refresh wake status", error));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleUpdateRetention = async (days: number) => {
     try {
@@ -215,6 +229,25 @@ export function Settings() {
       await api.updateGatewaySettings({ request_body_limit_mb: mb });
       toast("success", t("settings.updated"));
       load();
+    } catch (err) {
+      toast("error", (err as api.AppError).message);
+    }
+  };
+
+  const handleUpdateWake = async (patch: {
+    wake_enabled?: boolean;
+    wake_request_control?: boolean;
+    wake_cooldown_seconds?: number;
+    wake_keep_display_awake?: boolean;
+  }) => {
+    try {
+      await api.updateGatewaySettings(patch);
+      const [, status] = await Promise.all([
+        useGatewaySettings.getState().refetch(),
+        api.getWakeStatus(),
+      ]);
+      setWakeStatus(status);
+      toast("success", t("settings.updated"));
     } catch (err) {
       toast("error", (err as api.AppError).message);
     }
@@ -314,6 +347,8 @@ export function Settings() {
             handleUpdateRefinerGlobal={handleUpdateRefinerGlobal}
             handleUpdateCostAlert={handleUpdateCostAlert}
             handleUpdateRequestBodyLimit={handleUpdateRequestBodyLimit}
+            wakeStatus={wakeStatus}
+            handleUpdateWake={handleUpdateWake}
             t={t}
             ToggleSwitch={ToggleSwitch}
             ThemePicker={ThemePicker}

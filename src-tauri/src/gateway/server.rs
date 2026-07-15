@@ -30,6 +30,25 @@ const DEFAULT_REQUEST_BODY_LIMIT_MB: i64 = 32;
 const MAX_REQUEST_BODY_LIMIT_MB: i64 = 128;
 const BYTES_PER_MIB: usize = 1024 * 1024;
 
+fn is_wake_managed_request(method: &axum::http::Method, path: &str) -> bool {
+    if method != axum::http::Method::POST {
+        return false;
+    }
+
+    matches!(
+        path,
+        "/v1/responses"
+            | "/responses"
+            | "/v1/responses/compact"
+            | "/responses/compact"
+            | "/v1/chat/completions"
+            | "/chat/completions"
+            | "/v1/messages"
+            | "/messages"
+    ) || (path.starts_with("/v1beta/models/")
+        && (path.ends_with(":generateContent") || path.ends_with(":streamGenerateContent")))
+}
+
 /// 包一层 Body，使 active-requests 计数器在 **body 真正流完**（或被
 /// drop——客户端断开）时才 decrement。
 ///
@@ -43,6 +62,7 @@ const BYTES_PER_MIB: usize = 1024 * 1024;
 struct CountingBody {
     inner: Body,
     counter: Arc<AtomicU64>,
+    wake: Option<Arc<crate::wake::WakeManager>>,
     decremented: bool,
 }
 
@@ -50,6 +70,9 @@ impl Drop for CountingBody {
     fn drop(&mut self) {
         if !self.decremented {
             self.counter.fetch_sub(1, Ordering::Relaxed);
+            if let Some(wake) = &self.wake {
+                wake.request_finished();
+            }
             self.decremented = true;
         }
     }
@@ -87,6 +110,7 @@ pub async fn start(
     port: u16,
     db: crate::storage::db::DbPool,
     tls: Option<TlsConfig>,
+    wake: Arc<crate::wake::WakeManager>,
 ) -> Result<
     (
         oneshot::Sender<()>,
@@ -223,10 +247,15 @@ pub async fn start(
             post(routes::handle_gemini_generate),
         )
         .layer(axum::middleware::from_fn(
-            move |req, next: axum::middleware::Next| {
+            move |req: axum::extract::Request, next: axum::middleware::Next| {
                 let counter = counter.clone();
+                let wake = wake.clone();
                 async move {
+                    let manage_wake = is_wake_managed_request(req.method(), req.uri().path());
                     counter.fetch_add(1, Ordering::Relaxed);
+                    if manage_wake {
+                        wake.request_started();
+                    }
                     let response = next.run(req).await;
                     // 不在这 decrement —— next.run 对 streaming 响应几毫秒就返回，
                     // body 还没流给 client。包一层 CountingBody，body Drop 时才减。
@@ -234,6 +263,7 @@ pub async fn start(
                     let wrapped = CountingBody {
                         inner: body,
                         counter,
+                        wake: manage_wake.then_some(wake),
                         decremented: false,
                     };
                     axum::http::Response::from_parts(parts, Body::new(wrapped))
@@ -418,5 +448,86 @@ mod tests {
         std::env::remove_var("AGENTGATE_REQUEST_BODY_LIMIT_MB");
         assert_eq!(effective_request_body_limit_mb(4096), 128);
         assert_eq!(request_body_limit_bytes(4096), 128 * BYTES_PER_MIB);
+    }
+
+    #[test]
+    fn wake_management_only_tracks_generation_requests() {
+        use axum::http::Method;
+
+        for path in [
+            "/v1/responses",
+            "/responses",
+            "/v1/responses/compact",
+            "/v1/chat/completions",
+            "/chat/completions",
+            "/v1/messages",
+            "/messages",
+            "/v1beta/models/gemini-2.5-pro:generateContent",
+            "/v1beta/models/gemini-2.5-pro:streamGenerateContent",
+        ] {
+            assert!(
+                is_wake_managed_request(&Method::POST, path),
+                "expected generation path to be tracked: {path}"
+            );
+        }
+
+        for path in [
+            "/health",
+            "/metrics",
+            "/v1/models",
+            "/v1/messages/count_tokens",
+            "/messages/count_tokens",
+            "/v1beta/models",
+            "/v1beta/models/gemini-2.5-pro:countTokens",
+        ] {
+            assert!(
+                !is_wake_managed_request(&Method::POST, path),
+                "expected non-generation path to be ignored: {path}"
+            );
+        }
+        assert!(!is_wake_managed_request(&Method::GET, "/v1/responses"));
+    }
+
+    struct TestWakeBackend;
+
+    impl crate::wake::WakeBackend for TestWakeBackend {
+        fn supported(&self) -> bool {
+            true
+        }
+
+        fn platform(&self) -> &'static str {
+            "test"
+        }
+
+        fn acquire(&self, _options: crate::wake::WakeOptions) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn release(&self) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn dropping_response_body_finishes_the_wake_request() {
+        let wake = crate::wake::WakeManager::with_backend(Arc::new(TestWakeBackend));
+        wake.set_config(crate::wake::WakeConfig {
+            request_control: true,
+            cooldown_seconds: 15,
+            ..crate::wake::WakeConfig::default()
+        });
+        wake.start();
+        wake.request_started();
+
+        let body = CountingBody {
+            inner: Body::empty(),
+            counter: Arc::new(AtomicU64::new(1)),
+            wake: Some(wake.clone()),
+            decremented: false,
+        };
+        drop(body);
+
+        assert_eq!(wake.status().active_requests, 0);
+        assert_eq!(wake.status().mode, crate::wake::WakeMode::Cooldown);
     }
 }
