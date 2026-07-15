@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>One local gateway for your AI model requests.</b><br>
-  AgentGate is a local AI gateway for AI apps and clients, including Codex, Claude Code, Gemini CLI, OpenCode, AtomCode, and apps compatible with OpenAI, Anthropic, or Gemini protocols. It routes each request to the model you choose, fails over automatically when a provider breaks, traces everything locally, and bridges protocol differences across OpenAI-compatible providers.
+  AgentGate is a local AI gateway for AI apps and clients, including Codex, Claude Code, Gemini CLI, OpenCode, AtomCode, and apps compatible with OpenAI, Anthropic, or Gemini protocols. It routes each request to the model you choose, fails over automatically when a provider breaks, traces everything locally, bridges protocol differences across OpenAI-compatible providers, and keeps long-running AI tasks from being interrupted by automatic sleep on macOS and Windows.
 </p>
 
 <p align="center">
@@ -27,6 +27,8 @@
 <p align="center">
   <img src="docs/demo-header-v2.gif" width="800" alt="AgentGate intercepts requests from Claude Code, Codex, and Gemini CLI at a local gateway — converting, passing through, routing, or failing over to 26 providers, with every request traced live">
 </p>
+
+> **New in v1.5.0 — Keep Awake:** While AgentGate is running on macOS or Windows, it prevents automatic system sleep by default while still allowing the display to turn off. You can switch to request-aware control, which keeps the system awake only during AI generation requests and a configurable cooldown, and toggle everything from Settings or the system tray. Linux tray controls are available, but keep-awake is not supported in this release. [See the v1.5.0 release notes](./docs/release-notes/1.5.0.md).
 
 ## Download
 
@@ -74,6 +76,7 @@ Provider presets fill common base URLs, protocols, model defaults, and capabilit
 | Keep Codex Desktop plugins working | Preserves the official OpenAI-authenticated provider path while routing model requests through AgentGate. |
 | Use Claude Code with DeepSeek / MiMo / Copilot | Supports Anthropic-compatible pass-through, model-name mapping, and optional GitHub Copilot provider setup. |
 | Avoid provider outages or quota stalls | Tries failover providers on configured status codes, keywords, timeouts, and cooldown state. |
+| Keep long AI tasks running unattended | Prevents automatic sleep on macOS and Windows by default, with optional request-aware control and quick system-tray toggles. |
 | Understand every request | Stores raw and converted payloads, route decisions, upstream errors, token counts, latency, and estimated cost. |
 
 <details>

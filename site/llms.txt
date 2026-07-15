@@ -1,6 +1,6 @@
 # AgentGate
 
-> AgentGate is a local AI gateway for model requests from AI apps and clients. It runs on the user's machine and helps route requests to upstream model providers, trace requests locally, fail over between providers, and keep client configuration reversible.
+> AgentGate is a local AI gateway for model requests from AI apps and clients. It runs on the user's machine and helps route requests to upstream model providers, trace requests locally, fail over between providers, keep client configuration reversible, and prevent long-running AI tasks from being interrupted by automatic sleep on macOS and Windows.
 
 Website: https://dengmengmian.github.io/agentgate-ai/
 Repository: https://github.com/dengmengmian/agentgate-ai
@@ -56,3 +56,4 @@ Sitemap: https://dengmengmian.github.io/agentgate-ai/sitemap.xml
 - Users bring their own provider keys.
 - AgentGate is designed for AI apps and clients, not only coding tools.
 - Supported workflows include Codex, Claude Code, Gemini CLI, OpenCode, AtomCode, and OpenAI-compatible, Anthropic-compatible, or Gemini-compatible model requests.
+- Keep-awake is supported on macOS and Windows. Linux desktop and tray controls are available, but keep-awake is not supported in v1.5.0.

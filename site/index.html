@@ -6,7 +6,7 @@
     <title>AgentGate — One local gateway for AI model requests</title>
     <meta
       name="description"
-      content="AgentGate is a local model gateway for AI apps and clients. Locally converts protocols or passes through to 26 upstream providers, while keeping client behavior intact with config rollback, cost tracking, and request tracing."
+      content="AgentGate is a local model gateway for AI apps and clients. Route to 26 providers, trace requests locally, and prevent long AI tasks from being interrupted by automatic sleep on macOS and Windows."
     />
     <meta
       name="keywords"
@@ -55,7 +55,7 @@
     />
     <meta
       property="og:description"
-      content="Local model gateway for AI apps and clients. 26 providers, protocol conversion, native pass-through, request tracing — all local."
+      content="Local model gateway for AI apps and clients. 26 providers, local request tracing, and keep-awake for long AI tasks on macOS and Windows."
     />
     <meta
       property="og:image"
@@ -72,7 +72,7 @@
     />
     <meta
       name="twitter:description"
-      content="Local model gateway for AI apps and clients. 26 providers, protocol conversion, native pass-through, request tracing — all local."
+      content="Local model gateway for AI apps and clients. 26 providers, local request tracing, and keep-awake for long AI tasks on macOS and Windows."
     />
     <meta
       name="twitter:image"
@@ -89,7 +89,7 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "AgentGate",
-        "description": "Local model gateway for AI apps and clients — Codex, Claude Code, Gemini CLI, OpenCode, AtomCode, and apps compatible with OpenAI, Anthropic, or Gemini protocols. Protocol conversion, native pass-through, multi-provider routing.",
+        "description": "Local model gateway for AI apps and clients — Codex, Claude Code, Gemini CLI, OpenCode, AtomCode, and apps compatible with OpenAI, Anthropic, or Gemini protocols. Protocol conversion, multi-provider routing, local request tracing, and keep-awake on macOS and Windows.",
         "applicationCategory": "DeveloperApplication",
         "operatingSystem": "macOS, Windows, Linux",
         "offers": {
@@ -100,7 +100,7 @@
         "url": "https://dengmengmian.github.io/agentgate-ai/",
         "sameAs": "https://github.com/dengmengmian/agentgate-ai",
         "downloadUrl": "https://github.com/dengmengmian/agentgate-ai/releases",
-        "softwareVersion": "1.4.2",
+        "softwareVersion": "1.5.0",
         "license": "https://github.com/dengmengmian/agentgate-ai/blob/main/LICENSE",
         "author": {
           "@type": "Person",
@@ -129,7 +129,7 @@
         <a href="./" class="flex items-center gap-2 text-ink">
           <span class="text-amber">▲</span>
           <span class="font-medium">agentgate</span>
-          <span data-version class="text-faint">v1.4.2</span>
+          <span data-version class="text-faint">v1.5.0</span>
         </a>
         <nav class="flex items-center gap-5 text-ink-soft">
           <a
@@ -170,7 +170,7 @@
           <span class="text-ink-soft">running on</span>
           <span class="text-cyan">127.0.0.1:9090</span>
           <span class="text-faint">·</span>
-          <span data-version class="text-ink-soft">v1.4.2</span>
+          <span data-version class="text-ink-soft">v1.5.0</span>
           <span class="text-faint">·</span>
           <span class="text-ink-soft">26 providers</span>
         </div>
@@ -193,7 +193,8 @@
           with OpenAI, Anthropic, or Gemini protocols. It routes each request to
           the model you choose, fails over automatically when a provider breaks,
           traces everything locally, and bridges protocol differences across
-          OpenAI-compatible providers.
+          OpenAI-compatible providers. On macOS and Windows, it also prevents
+          long-running AI tasks from being interrupted by automatic sleep.
         </p>
 
         <!-- clients → providers diagram -->
@@ -333,6 +334,21 @@
               路由、转换、错误、token、成本、故障转移 —— 都在本地面板可追踪。
             </p>
           </article>
+
+          <!-- card 4 -->
+          <article class="reveal frame rounded p-6 md:p-8">
+            <div class="text-xs uppercase tracking-wider text-amber">
+              <span class="text-faint">#</span> long tasks stay running
+            </div>
+            <p class="mt-4 text-base text-ink">
+              On macOS and Windows, AgentGate prevents automatic system sleep
+              by default while still allowing the display to turn off. Switch
+              to request-aware control or use the system tray for quick toggles.
+            </p>
+            <p class="comment-zh zh mt-3">
+              macOS 和 Windows 默认防休眠，也可按 AI 请求智能控制，并从托盘快速切换。
+            </p>
+          </article>
         </div>
 
         <!-- positioning blurb -->
@@ -361,7 +377,7 @@
           </p>
           <p class="mt-3 text-xs text-muted">
             <span class="text-faint"># latest </span>
-            <span data-version class="text-cyan">v1.4.2</span>
+            <span data-version class="text-cyan">v1.5.0</span>
             <span class="text-faint">·</span>
             <span data-released class="text-ink-soft">recently</span>
           </p>
@@ -610,7 +626,7 @@
           <span class="text-faint">·</span>
           <span class="text-muted">MIT</span>
           <span class="text-faint">·</span>
-          <span data-version class="text-muted">v1.4.2</span>
+          <span data-version class="text-muted">v1.5.0</span>
         </div>
         <nav class="flex items-center gap-5 text-ink-soft">
           <a
