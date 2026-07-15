@@ -207,7 +207,7 @@ mod platform {
 
     impl SystemWakeBackend {
         pub fn new() -> Self {
-            Self::default()
+            Self
         }
     }
 
