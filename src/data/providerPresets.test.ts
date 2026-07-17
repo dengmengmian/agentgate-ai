@@ -62,6 +62,28 @@ describe("MiMo provider endpoints", () => {
     expect(preset?.baseUrl).toBe("https://api.deepseek.com");
   });
 
+  it("routes Kimi Code sk-kimi- keys to coding endpoints and k3", () => {
+    // Synthetic sk-kimi- fixture (prefix is enough for routing).
+    const preset = resolveProviderPresetForKey("kimi", "sk-kimi-test-code-key");
+    expect(preset?.baseUrl).toBe("https://api.kimi.com/coding/v1");
+    expect(preset?.anthropicBaseUrl).toBe("https://api.kimi.com/coding");
+    expect(preset?.defaultModel).toBe("k3");
+    expect(preset?.reasoningModel).toBe("k3");
+    expect(preset?.protocols).toContain("anthropic_messages");
+  });
+
+  it("keeps Platform endpoints for classic Moonshot sk- keys on kimi", () => {
+    const preset = resolveProviderPresetForKey(
+      "kimi",
+      "sk-AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789"
+    );
+    expect(preset?.baseUrl).toBe("https://api.moonshot.cn");
+    expect(preset?.anthropicBaseUrl).toBe(
+      "https://api.moonshot.cn/anthropic"
+    );
+    expect(preset?.defaultModel).toBe("kimi-k3");
+  });
+
   it("enables Claude Code native protocol for DeepSeek", () => {
     const preset = resolveProviderPresetForKey("deepseek", "deepseek-xxxxx");
     expect(preset?.protocols).toContain("anthropic_messages");

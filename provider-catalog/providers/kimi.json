@@ -5,22 +5,85 @@
   "displayName": "Kimi / Moonshot",
   "displayNameZh": "Kimi / Moonshot",
   "aliases": ["kimi", "moonshot"],
-  "protocols": ["openai_chat_completions"],
+  "protocols": ["openai_chat_completions", "anthropic_messages"],
   "endpoints": {
-    "baseUrl": "https://api.moonshot.cn"
+    "baseUrl": "https://api.moonshot.cn",
+    "anthropicBaseUrl": "https://api.moonshot.cn/anthropic"
   },
-  "defaultModel": "kimi-k2.6",
-  "supportedModels": ["kimi-k2.6", "kimi-k2.7-code", "kimi-k2", "kimi-for-coding"],
+  "defaultModel": "kimi-k3",
+  "reasoningModel": "kimi-k3",
+  "recommendedMapping": {
+    "codexPrimaryTarget": "reasoning",
+    "codexMiniTarget": "default",
+    "claudePrimaryTarget": "reasoning",
+    "claudeSmallTarget": "default",
+    "repairLegacy1m": true
+  },
+  "supportedModels": [
+    "kimi-k3",
+    "k3",
+    "kimi-k2.7-code",
+    "kimi-k2.7-code-highspeed",
+    "kimi-for-coding",
+    "kimi-for-coding-highspeed",
+    "kimi-k2.6",
+    "kimi-k2"
+  ],
+  "deprecatedModels": ["kimi-k2"],
   "models": [
-    { "id": "kimi-k2.6", "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 } },
-    { "id": "kimi-k2.7-code", "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 } },
-    { "id": "kimi-k2", "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 } },
-    { "id": "kimi-for-coding", "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 } }
+    {
+      "id": "kimi-k3",
+      "capabilities": ["text", "vision", "video_in", "reasoning", "tools", "web_search"],
+      "pricing": { "inputPerMillion": 3, "outputPerMillion": 15 },
+      "contextWindow": 1048576
+    },
+    {
+      "id": "k3",
+      "capabilities": ["text", "vision", "video_in", "reasoning", "tools", "web_search"],
+      "pricing": { "inputPerMillion": 3, "outputPerMillion": 15 },
+      "contextWindow": 1048576
+    },
+    {
+      "id": "kimi-k2.7-code",
+      "capabilities": ["text", "vision", "video_in", "reasoning", "tools", "web_search"],
+      "pricing": { "inputPerMillion": 0.95, "outputPerMillion": 4 },
+      "contextWindow": 262144
+    },
+    {
+      "id": "kimi-k2.7-code-highspeed",
+      "capabilities": ["text", "vision", "video_in", "reasoning", "tools", "web_search"],
+      "pricing": { "inputPerMillion": 1.9, "outputPerMillion": 8 },
+      "contextWindow": 262144
+    },
+    {
+      "id": "kimi-for-coding",
+      "capabilities": ["text", "vision", "reasoning", "tools", "web_search"],
+      "pricing": { "inputPerMillion": 0.95, "outputPerMillion": 4 },
+      "contextWindow": 262144
+    },
+    {
+      "id": "kimi-for-coding-highspeed",
+      "capabilities": ["text", "vision", "reasoning", "tools", "web_search"],
+      "pricing": { "inputPerMillion": 1.9, "outputPerMillion": 8 },
+      "contextWindow": 262144
+    },
+    {
+      "id": "kimi-k2.6",
+      "capabilities": ["text", "vision", "video_in", "reasoning", "tools", "web_search"],
+      "pricing": { "inputPerMillion": 0.95, "outputPerMillion": 4 },
+      "contextWindow": 262144
+    },
+    {
+      "id": "kimi-k2",
+      "capabilities": ["text", "vision", "tools", "web_search"],
+      "pricing": { "inputPerMillion": 1, "outputPerMillion": 4 },
+      "contextWindow": 131072
+    }
   ],
   "extraHeaders": "{\"User-Agent\":\"KimiCLI/1.40.0\"}",
   "docs": {
-    "handlingEn": "`web_search` → `builtin_function`/`$web_search`, thinking control",
-    "handlingZh": "`web_search` → `builtin_function`/`$web_search`、thinking 控制"
+    "handlingEn": "`web_search` → `builtin_function`/`$web_search`; K3 uses `reasoning_effort:max` (no K2 `thinking` param); coding models keep thinking on/off control",
+    "handlingZh": "`web_search` → `builtin_function`/`$web_search`；K3 使用 `reasoning_effort:max`（不用 K2 的 `thinking` 参数）；Coding 模型保留 thinking 开关控制"
   },
   "sync": {
     "envVar": "MOONSHOT_API_KEY",

@@ -77,6 +77,81 @@ pub const MODEL_CAPABILITIES: &[(&str, &str, &[&str])] = &[
         "deepseek-v4-pro",
         &["text", "reasoning", "tools"],
     ),
+    (
+        "kimi",
+        "kimi-k3",
+        &[
+            "text",
+            "vision",
+            "video_in",
+            "reasoning",
+            "tools",
+            "web_search",
+        ],
+    ),
+    (
+        "kimi",
+        "k3",
+        &[
+            "text",
+            "vision",
+            "video_in",
+            "reasoning",
+            "tools",
+            "web_search",
+        ],
+    ),
+    (
+        "kimi",
+        "kimi-k2.7-code",
+        &[
+            "text",
+            "vision",
+            "video_in",
+            "reasoning",
+            "tools",
+            "web_search",
+        ],
+    ),
+    (
+        "kimi",
+        "kimi-k2.7-code-highspeed",
+        &[
+            "text",
+            "vision",
+            "video_in",
+            "reasoning",
+            "tools",
+            "web_search",
+        ],
+    ),
+    (
+        "kimi",
+        "kimi-for-coding",
+        &["text", "vision", "reasoning", "tools", "web_search"],
+    ),
+    (
+        "kimi",
+        "kimi-for-coding-highspeed",
+        &["text", "vision", "reasoning", "tools", "web_search"],
+    ),
+    (
+        "kimi",
+        "kimi-k2.6",
+        &[
+            "text",
+            "vision",
+            "video_in",
+            "reasoning",
+            "tools",
+            "web_search",
+        ],
+    ),
+    (
+        "kimi",
+        "kimi-k2",
+        &["text", "vision", "tools", "web_search"],
+    ),
 ];
 
 pub const MODEL_PRICING_DEFAULTS: &[(&str, &str, f64, f64)] = &[
@@ -116,10 +191,14 @@ pub const MODEL_PRICING_DEFAULTS: &[(&str, &str, f64, f64)] = &[
     ("google_gemini", "gemini-3.5-flash", 1.5, 9.0),
     ("google_gemini", "gemini-2.5-flash", 0.15, 0.6),
     ("google_gemini", "gemini-2.5-pro", 1.25, 10.0),
-    ("kimi", "kimi-k2.6", 1.0, 4.0),
-    ("kimi", "kimi-k2.7-code", 1.0, 4.0),
+    ("kimi", "kimi-k3", 3.0, 15.0),
+    ("kimi", "k3", 3.0, 15.0),
+    ("kimi", "kimi-k2.7-code", 0.95, 4.0),
+    ("kimi", "kimi-k2.7-code-highspeed", 1.9, 8.0),
+    ("kimi", "kimi-for-coding", 0.95, 4.0),
+    ("kimi", "kimi-for-coding-highspeed", 1.9, 8.0),
+    ("kimi", "kimi-k2.6", 0.95, 4.0),
     ("kimi", "kimi-k2", 1.0, 4.0),
-    ("kimi", "kimi-for-coding", 1.0, 4.0),
     ("minimax", "MiniMax-M1", 1.0, 8.0),
     ("glm", "glm-5.2", 1.4, 4.4),
     ("glm", "glm-5", 0.55, 2.25),
@@ -141,11 +220,20 @@ pub const MODEL_CONTEXT_WINDOW: &[(&str, &str, u32)] = &[
     ("mimo", "mimo-v2-flash", 128000),
     ("deepseek", "deepseek-v4-flash", 128000),
     ("deepseek", "deepseek-v4-pro", 128000),
+    ("kimi", "kimi-k3", 1048576),
+    ("kimi", "k3", 1048576),
+    ("kimi", "kimi-k2.7-code", 262144),
+    ("kimi", "kimi-k2.7-code-highspeed", 262144),
+    ("kimi", "kimi-for-coding", 262144),
+    ("kimi", "kimi-for-coding-highspeed", 262144),
+    ("kimi", "kimi-k2.6", 262144),
+    ("kimi", "kimi-k2", 131072),
 ];
 
 pub const DEPRECATED_MODELS: &[(&str, &str)] = &[
     ("deepseek", "deepseek-chat"),
     ("deepseek", "deepseek-reasoner"),
+    ("kimi", "kimi-k2"),
 ];
 
 pub const RECOMMENDED_MAPPING_PROFILES: &[(&str, &str, &str, &str, &str, bool)] = &[
@@ -158,4 +246,5 @@ pub const RECOMMENDED_MAPPING_PROFILES: &[(&str, &str, &str, &str, &str, bool)] 
         "default",
         true,
     ),
+    ("kimi", "reasoning", "default", "reasoning", "default", true),
 ];

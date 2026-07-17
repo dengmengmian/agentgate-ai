@@ -76,11 +76,23 @@ fn seed_kimi(mid: &str) -> Vec<String> {
     // (AgentGate already translates Codex's web_search_preview → builtin_function
     // in tool_calls.rs), so we mark web_search universally for Kimi models.
     match base {
-        // kimi-for-coding + kimi-k2.7-code accept image input. Coding-tuned
-        // models, support function calling + web_search builtin.
-        "kimi-for-coding" | "kimi-k2.7-code" => vec![
+        // K3 flagship (Platform: kimi-k3, Kimi Code: k3) — vision + reasoning + 1M.
+        "k3" | "kimi-k3" => vec![
             CAP_TEXT.into(),
             CAP_VISION.into(),
+            CAP_VIDEO_IN.into(),
+            CAP_REASONING.into(),
+            CAP_TOOLS.into(),
+            CAP_WEB_SEARCH.into(),
+        ],
+        // Coding models (Platform + Kimi Code IDs, incl. highspeed).
+        "kimi-for-coding"
+        | "kimi-for-coding-highspeed"
+        | "kimi-k2.7-code"
+        | "kimi-k2.7-code-highspeed" => vec![
+            CAP_TEXT.into(),
+            CAP_VISION.into(),
+            CAP_REASONING.into(),
             CAP_TOOLS.into(),
             CAP_WEB_SEARCH.into(),
         ],
@@ -235,8 +247,10 @@ pub fn default_quirks_for_provider(provider_type: &str) -> crate::models::provid
         }
         // Kimi: rejects unknown reasoning-style fields; the $web_search
         // builtin works via the Plugin name, not the OpenAI `web_search_options`.
+        // K3 accepts top-level reasoning_effort (currently only "max").
         "kimi" | "moonshot" => {
             q.unsupported_fields = vec!["web_search_options".into(), "reasoning".into()];
+            q.reasoning_effort_values = vec!["max".into()];
         }
         _ => {}
     }
@@ -408,12 +422,49 @@ mod tests {
             "Kimi $web_search builtin is universally translated"
         );
         assert!(contains(&c, CAP_TOOLS));
+        assert!(contains(&c, CAP_REASONING));
+    }
+
+    #[test]
+    fn kimi_k3_has_vision_reasoning_and_1m_context() {
+        for mid in ["kimi-k3", "k3", "k3[1m]"] {
+            let c = caps_for("kimi", mid);
+            assert!(contains(&c, CAP_VISION), "{mid} vision");
+            assert!(contains(&c, CAP_REASONING), "{mid} reasoning");
+            assert!(contains(&c, CAP_TOOLS), "{mid} tools");
+            assert!(contains(&c, CAP_WEB_SEARCH), "{mid} web_search");
+        }
+        assert_eq!(
+            context_window_for("kimi", "kimi-k3"),
+            Some(1_048_576),
+            "catalog must seed K3 1M context"
+        );
+        assert_eq!(context_window_for("kimi", "k3"), Some(1_048_576));
+    }
+
+    #[test]
+    fn kimi_highspeed_coding_models_seeded() {
+        for mid in ["kimi-for-coding-highspeed", "kimi-k2.7-code-highspeed"] {
+            let c = caps_for("kimi", mid);
+            assert!(contains(&c, CAP_VISION), "{mid}");
+            assert!(contains(&c, CAP_REASONING), "{mid}");
+        }
+        assert_eq!(
+            context_window_for("kimi", "kimi-for-coding"),
+            Some(262_144)
+        );
     }
 
     #[test]
     fn kimi_k2_has_vision() {
         let c = caps_for("kimi", "kimi-k2");
         assert!(contains(&c, CAP_VISION));
+    }
+
+    #[test]
+    fn kimi_default_quirks_list_max_effort() {
+        let q = default_quirks_for_provider("kimi");
+        assert!(q.reasoning_effort_values.contains(&"max".to_string()));
     }
 
     #[test]

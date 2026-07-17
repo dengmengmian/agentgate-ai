@@ -272,7 +272,7 @@ fn provider_presets() -> std::collections::HashMap<&'static str, (&'static str, 
             "anthropic",
             ("https://api.anthropic.com", "claude-sonnet-4-7"),
         ),
-        ("kimi", ("https://api.moonshot.cn", "kimi-k2.6")),
+        ("kimi", ("https://api.moonshot.cn", "kimi-k3")),
         ("minimax", ("https://api.minimax.chat", "MiniMax-M1")),
         (
             "groq",

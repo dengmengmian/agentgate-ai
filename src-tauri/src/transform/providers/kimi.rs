@@ -6,6 +6,34 @@ pub struct KimiProvider;
 
 impl super::ProviderTransform for KimiProvider {
     fn finalize_request(&self, req: &mut ChatCompletionsRequest, tools: &Option<Vec<Value>>) {
+        if is_k3_model(&req.model) {
+            // K3 always reasons via top-level reasoning_effort. Do not send the
+            // K2.x `thinking` object — upstream docs explicitly forbid it.
+            req.thinking = None;
+            match req.reasoning_effort.as_deref().map(str::trim) {
+                // Kimi Code docs: none → disable thinking. Platform currently
+                // only documents max, but the coding endpoint accepts this.
+                Some("none") | Some("off") => {
+                    req.reasoning_effort = None;
+                    req.thinking = Some(json!({"type": "disabled"}));
+                }
+                Some(effort) if !effort.is_empty() => {
+                    // Currently only max is live; fold aliases / future buckets
+                    // down to max so clients don't get HTTP 400 for low/high.
+                    req.reasoning_effort = Some(map_k3_effort(effort));
+                }
+                _ => {
+                    // null / empty → default max
+                    req.reasoning_effort = Some("max".into());
+                }
+            }
+            return;
+        }
+
+        // K2.x / coding models: thinking is controlled by thinking:{type},
+        // not reasoning_effort. Drop any effort field that slipped through.
+        req.reasoning_effort = None;
+
         // Disable thinking when $web_search tool is present
         if let Some(ref tools) = tools {
             if tool_calls::contains_kimi_web_search(tools) {
@@ -18,10 +46,17 @@ impl super::ProviderTransform for KimiProvider {
         "kimi"
     }
 
-    /// Kimi 不识别 reasoning_effort,思考强度由 thinking:{enabled/disabled}
-    /// 控制(对齐 mimo2codex Kimi 预设),任何 effort 都不透传。
-    fn map_reasoning_effort(&self, _effort: &str) -> Option<String> {
-        None
+    /// K2.x does not accept reasoning_effort (thinking is on/off only).
+    /// K3 does — finalize_request maps the value after convert fills it.
+    /// We pass a provisional value here so convert keeps the client's effort
+    /// for K3; non-K3 models strip it in finalize_request.
+    fn map_reasoning_effort(&self, effort: &str) -> Option<String> {
+        match effort.trim().to_ascii_lowercase().as_str() {
+            "none" | "off" => Some("none".into()),
+            "auto" | "" => None,
+            other if !other.is_empty() => Some(map_k3_effort(other)),
+            _ => None,
+        }
     }
 
     fn enhance_error(&self, status: u16, body: &str) -> Option<String> {
@@ -31,14 +66,17 @@ impl super::ProviderTransform for KimiProvider {
                 "Kimi 账户余额 / 配额不足。\n\
                  • 充值入口：https://platform.moonshot.cn/console/account\n\
                  • 用量查询：https://platform.moonshot.cn/console/usage\n\
+                 • Kimi Code 会员：https://www.kimi.com/code/#pricing\n\
                  • AgentGate 会自动 failover 到其它非冷却 provider。"
                     .to_string(),
             );
         }
         if p::detect_auth_error(status, body) {
             return Some(
-                "Kimi API key 无效 / 过期。\n\
-                 • 重建 key：https://platform.moonshot.cn/console/api-keys"
+                "Kimi API key 无效 / 过期，或当前套餐无权调用该模型（如 K3 需 Moderato+）。\n\
+                 • Platform key：https://platform.moonshot.cn/console/api-keys\n\
+                 • Kimi Code key：https://www.kimi.com/code/console\n\
+                 • 模型权限说明：https://www.kimi.com/code/docs/kimi-code/models.html"
                     .to_string(),
             );
         }
@@ -54,6 +92,32 @@ impl super::ProviderTransform for KimiProvider {
     }
 }
 
+/// Platform ID `kimi-k3` and Kimi Code ID `k3` (plus optional `[1m]` qualifier).
+fn is_k3_model(model: &str) -> bool {
+    matches!(strip_model_qualifier(model), "k3" | "kimi-k3")
+}
+
+fn strip_model_qualifier(model: &str) -> &str {
+    let model = model.trim();
+    if let Some(stripped) = model.strip_suffix(']') {
+        if let Some(open) = stripped.rfind('[') {
+            return &stripped[..open];
+        }
+    }
+    model
+}
+
+/// Map client effort vocabulary onto K3's documented buckets.
+/// Live API currently only accepts `max`; fold everything else to `max` so
+/// Codex/Claude Code clients don't 400 while low/high are still gated.
+fn map_k3_effort(effort: &str) -> String {
+    match effort.trim().to_ascii_lowercase().as_str() {
+        "none" | "off" => "none".into(),
+        // low / high / medium / ultra / xhigh → max until upstream opens them.
+        _ => "max".into(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,9 +125,9 @@ mod tests {
     use crate::transform::providers::ProviderTransform;
     use serde_json::json;
 
-    fn req() -> ChatCompletionsRequest {
+    fn req(model: &str) -> ChatCompletionsRequest {
         ChatCompletionsRequest {
-            model: "kimi-k2".into(),
+            model: model.into(),
             messages: vec![],
             tools: None,
             tool_choice: None,
@@ -86,22 +150,74 @@ mod tests {
     }
 
     #[test]
-    fn kimi_drops_reasoning_effort_entirely() {
-        // Kimi 不识别 reasoning_effort(思考由 thinking:{enabled/disabled} 控制,
-        // 参考 mimo2codex Kimi 预设),不能透传——默认 trait 会折叠成 "high" 发出去。
-        use crate::transform::providers::ProviderTransform;
-        for effort in ["low", "medium", "high", "xhigh", "max", "auto", ""] {
+    fn kimi_maps_effort_for_k3_pipeline() {
+        // Provisional values for convert → finalize; non-K3 still strips them.
+        assert_eq!(
+            KimiProvider.map_reasoning_effort("max"),
+            Some("max".into())
+        );
+        assert_eq!(
+            KimiProvider.map_reasoning_effort("xhigh"),
+            Some("max".into())
+        );
+        assert_eq!(
+            KimiProvider.map_reasoning_effort("low"),
+            Some("max".into())
+        );
+        assert_eq!(
+            KimiProvider.map_reasoning_effort("none"),
+            Some("none".into())
+        );
+        assert_eq!(KimiProvider.map_reasoning_effort("auto"), None);
+        assert_eq!(KimiProvider.map_reasoning_effort(""), None);
+    }
+
+    #[test]
+    fn k3_defaults_reasoning_effort_to_max_and_drops_thinking() {
+        let mut r = req("kimi-k3");
+        r.thinking = Some(json!({"type": "enabled"}));
+        KimiProvider.finalize_request(&mut r, &None);
+        assert_eq!(r.reasoning_effort.as_deref(), Some("max"));
+        assert!(r.thinking.is_none());
+    }
+
+    #[test]
+    fn k3_code_id_and_1m_qualifier_recognized() {
+        for model in ["k3", "k3[1m]", "kimi-k3[1m]"] {
+            let mut r = req(model);
+            r.reasoning_effort = Some("high".into());
+            KimiProvider.finalize_request(&mut r, &None);
             assert_eq!(
-                KimiProvider.map_reasoning_effort(effort),
-                None,
-                "effort '{effort}' 不应透传给 Kimi"
+                r.reasoning_effort.as_deref(),
+                Some("max"),
+                "model {model} should map effort to max"
             );
+            assert!(r.thinking.is_none(), "model {model} must not send thinking");
         }
     }
 
     #[test]
-    fn kimi_disables_thinking_with_web_search() {
-        let mut r = req();
+    fn k3_none_effort_disables_thinking() {
+        let mut r = req("k3");
+        r.reasoning_effort = Some("none".into());
+        KimiProvider.finalize_request(&mut r, &None);
+        assert!(r.reasoning_effort.is_none());
+        assert_eq!(r.thinking, Some(json!({"type": "disabled"})));
+    }
+
+    #[test]
+    fn k2_coding_drops_reasoning_effort() {
+        let mut r = req("kimi-for-coding");
+        r.reasoning_effort = Some("max".into());
+        r.thinking = Some(json!({"type": "enabled"}));
+        KimiProvider.finalize_request(&mut r, &None);
+        assert!(r.reasoning_effort.is_none());
+        assert_eq!(r.thinking, Some(json!({"type": "enabled"})));
+    }
+
+    #[test]
+    fn kimi_disables_thinking_with_web_search_on_k2() {
+        let mut r = req("kimi-k2.6");
         let tools = Some(vec![
             json!({"type": "builtin_function", "function": {"name": "$web_search"}}),
         ]);
@@ -111,8 +227,21 @@ mod tests {
     }
 
     #[test]
+    fn k3_web_search_does_not_force_thinking_object() {
+        // K3 must keep reasoning_effort path; do not inject thinking disabled.
+        let mut r = req("kimi-k3");
+        let tools = Some(vec![
+            json!({"type": "builtin_function", "function": {"name": "$web_search"}}),
+        ]);
+        r.tools = tools.clone();
+        KimiProvider.finalize_request(&mut r, &tools);
+        assert_eq!(r.reasoning_effort.as_deref(), Some("max"));
+        assert!(r.thinking.is_none());
+    }
+
+    #[test]
     fn kimi_keeps_thinking_without_web_search() {
-        let mut r = req();
+        let mut r = req("kimi-k2");
         r.thinking = Some(json!({"type": "enabled"}));
         let tools = Some(vec![
             json!({"type": "function", "function": {"name": "get_weather"}}),
@@ -125,5 +254,14 @@ mod tests {
     #[test]
     fn kimi_provider_type() {
         assert_eq!(KimiProvider.provider_type(), "kimi");
+    }
+
+    #[test]
+    fn strip_qualifier_helpers() {
+        assert!(is_k3_model("k3"));
+        assert!(is_k3_model("kimi-k3"));
+        assert!(is_k3_model("k3[1m]"));
+        assert!(!is_k3_model("kimi-k2.6"));
+        assert!(!is_k3_model("kimi-for-coding"));
     }
 }

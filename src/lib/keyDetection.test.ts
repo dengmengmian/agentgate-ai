@@ -70,6 +70,13 @@ describe("detectProviderType", () => {
     ).toBe("kimi");
   });
 
+  it("recognizes Kimi Code keys by sk-kimi- prefix", () => {
+    // Membership console keys look like sk-kimi-… (hyphen after kimi).
+    // Synthetic fixtures only — never paste live keys into the suite.
+    expect(detectProviderType("sk-kimi-test-code-key")).toBe("kimi");
+    expect(detectProviderType("sk-kimi-abc123")).toBe("kimi");
+  });
+
   it("recognizes OpenAI structured prefixes", () => {
     expect(detectProviderType("sk-proj-XXXXXXX")).toBe("openai");
     expect(detectProviderType("sk-svcacct-XXXXXX")).toBe("openai");

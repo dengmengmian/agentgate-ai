@@ -1,5 +1,17 @@
 # Changelog / 更新日志
 
+## [1.5.1] - 2026-07-17
+
+### Added / 新增
+
+- **Kimi K3 / Kimi Code K3** —— Built-in Kimi catalog now includes Platform `kimi-k3` and Kimi Code `k3` (1M context), plus highspeed coding IDs `kimi-k2.7-code-highspeed` / `kimi-for-coding-highspeed`. Default model is `kimi-k3`. 内置 Kimi 目录补齐 Platform `kimi-k3` 与 Kimi Code `k3`（1M 上下文），以及高速编码模型 `kimi-k2.7-code-highspeed` / `kimi-for-coding-highspeed`；默认模型升级为 `kimi-k3`。
+- **Kimi Anthropic endpoint / Kimi Anthropic 端点** —— Preset fills Platform `anthropic_base_url` so Claude Code can native-pass through. 预设补上 Platform Anthropic 端点，Claude Code 可原生透传。
+
+### Improvements / 改进
+
+- **K3 reasoning_effort / K3 思考强度** —— K3 requests send top-level `reasoning_effort: max` and no longer use the K2 `thinking` object; coding models keep on/off thinking and still disable thinking when `$web_search` is present. K3 请求发送顶层 `reasoning_effort: max`，不再使用 K2 的 `thinking` 对象；Coding 模型仍用 thinking 开关，并在带 `$web_search` 时关闭思考。
+- **Kimi Code key auto-route / Kimi Code key 自动路由** —— Keys with prefix `sk-kimi-` are detected as Kimi and resolve to `https://api.kimi.com/coding/v1` with default model `k3` (Anthropic: `https://api.kimi.com/coding`). Classic Platform keys stay on `api.moonshot.cn` + `kimi-k3`. 识别 `sk-kimi-` 前缀并自动切到 Kimi Code 端点与模型 `k3`；经典 Platform key 仍走 `api.moonshot.cn` + `kimi-k3`。
+
 ## [1.5.0] - 2026-07-15
 
 ### Added / 新增

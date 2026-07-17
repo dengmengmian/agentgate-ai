@@ -427,9 +427,10 @@ docker build -t agentgate . && docker run -p 9090:9090 \
 | 名字 | `KimiCoding` |
 | 类型 | `kimi` |
 | Base URL | `https://api.moonshot.cn` |
-| 默认模型 | `kimi-k2` |
+| Anthropic Base URL | `https://api.moonshot.cn/anthropic` |
+| 默认模型 | `kimi-k3` |
 | 额外 Header | `{"User-Agent":"KimiCLI/1.40.0"}` |
-| Model Mapping | `gpt-5.5` → `kimi-k2` |
+| Model Mapping | `gpt-5.5` → `kimi-k3` |
 
 > KimiCoding 支持 Vision，可以作为图片请求的 故障转移 目标。
 

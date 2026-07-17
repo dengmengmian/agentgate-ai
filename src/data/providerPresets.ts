@@ -130,6 +130,40 @@ function getPreferredMimoTokenPlanRegion(
   return anthropicRegion ?? baseRegion ?? "cn";
 }
 
+/** Platform (pay-as-you-go) vs Kimi Code (membership) endpoints. */
+export const KIMI_PLATFORM_ENDPOINTS: ProviderEndpointUrls = {
+  baseUrl: "https://api.moonshot.cn",
+  anthropicBaseUrl: "https://api.moonshot.cn/anthropic",
+};
+
+export const KIMI_CODE_ENDPOINTS: ProviderEndpointUrls = {
+  baseUrl: "https://api.kimi.com/coding/v1",
+  anthropicBaseUrl: "https://api.kimi.com/coding",
+};
+
+export function isKimiProviderType(type: string): boolean {
+  const normalized = type.trim().toLowerCase();
+  return (
+    normalized === "kimi" ||
+    normalized === "moonshot" ||
+    normalized.includes("moonshot")
+  );
+}
+
+/** Kimi Code console keys use the `sk-kimi-` prefix; Platform keys are bare sk-…. */
+export function isKimiCodeApiKey(apiKey?: string | null): boolean {
+  return firstApiKey(apiKey).startsWith("sk-kimi-");
+}
+
+export function getKimiEndpointsForKey(
+  apiKey?: string | null
+): ProviderEndpointUrls | null {
+  if (isKimiCodeApiKey(apiKey)) return KIMI_CODE_ENDPOINTS;
+  // Classic Moonshot / Platform key or unknown — keep catalog Platform host.
+  if (firstApiKey(apiKey)) return KIMI_PLATFORM_ENDPOINTS;
+  return null;
+}
+
 export function resolveProviderPresetForKey(
   type: string,
   apiKey?: string | null,
@@ -139,12 +173,34 @@ export function resolveProviderPresetForKey(
   const mimoEndpoints = isMimoProviderType(type)
     ? getMimoEndpointsForKey(apiKey)
     : null;
-  if (!mimoEndpoints) return preset;
-  return {
-    ...preset,
-    baseUrl: mimoEndpoints.baseUrl,
-    anthropicBaseUrl: mimoEndpoints.anthropicBaseUrl,
-  };
+  if (mimoEndpoints) {
+    return {
+      ...preset,
+      baseUrl: mimoEndpoints.baseUrl,
+      anthropicBaseUrl: mimoEndpoints.anthropicBaseUrl,
+    };
+  }
+  if (isKimiProviderType(type)) {
+    const kimiEndpoints = getKimiEndpointsForKey(apiKey);
+    if (!kimiEndpoints) return preset;
+    // Code membership uses short model IDs (k3 / kimi-for-coding…);
+    // Platform uses kimi-k3 / kimi-k2.7-code… — catalog defaults stay Platform.
+    if (isKimiCodeApiKey(apiKey)) {
+      return {
+        ...preset,
+        baseUrl: kimiEndpoints.baseUrl,
+        anthropicBaseUrl: kimiEndpoints.anthropicBaseUrl,
+        defaultModel: "k3",
+        reasoningModel: "k3",
+      };
+    }
+    return {
+      ...preset,
+      baseUrl: kimiEndpoints.baseUrl,
+      anthropicBaseUrl: kimiEndpoints.anthropicBaseUrl,
+    };
+  }
+  return preset;
 }
 
 export function resolveKnownProviderEndpoints(
@@ -153,9 +209,13 @@ export function resolveKnownProviderEndpoints(
   baseUrl?: string | null,
   anthropicBaseUrl?: string | null
 ): ProviderEndpointUrls | null {
-  return isMimoProviderType(type)
-    ? getMimoEndpointsForKeyAndUrl(apiKey, baseUrl, anthropicBaseUrl)
-    : null;
+  if (isMimoProviderType(type)) {
+    return getMimoEndpointsForKeyAndUrl(apiKey, baseUrl, anthropicBaseUrl);
+  }
+  if (isKimiProviderType(type)) {
+    return getKimiEndpointsForKey(apiKey);
+  }
+  return null;
 }
 
 export const PROVIDER_PRESETS: Record<string, ProviderPreset> = {

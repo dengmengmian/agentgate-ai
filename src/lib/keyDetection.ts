@@ -50,6 +50,8 @@ export function detectProviderType(key: string): string | null {
   // GitHub OAuth token(gho_/ghu_)→ Copilot 接入,网关自动换 Copilot 凭证
   if (k.startsWith("gho_") || k.startsWith("ghu_")) return "copilot";
   if (k.startsWith("sk-or-")) return "openrouter";
+  // Kimi Code membership console keys (sk-kimi-…); must precede generic sk- fallback.
+  if (k.startsWith("sk-kimi-")) return "kimi";
   if (k.startsWith("gsk_")) return "groq";
   if (k.startsWith("xai-")) return "xai";
   if (k.startsWith("pplx-")) return "perplexity";

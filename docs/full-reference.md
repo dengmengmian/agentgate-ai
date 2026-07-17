@@ -425,9 +425,10 @@ Launch AgentGate → **Providers** → **Add Provider**
 | Name | `KimiCoding` |
 | Type | `kimi` |
 | Base URL | `https://api.moonshot.cn` |
-| Default Model | `kimi-k2` |
+| Anthropic Base URL | `https://api.moonshot.cn/anthropic` |
+| Default Model | `kimi-k3` |
 | Extra Headers | `{"User-Agent":"KimiCLI/1.40.0"}` |
-| Model Mapping | `gpt-5.5` → `kimi-k2` |
+| Model Mapping | `gpt-5.5` → `kimi-k3` |
 
 > KimiCoding supports Vision and can serve as a failover target for image requests.
 

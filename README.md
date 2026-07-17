@@ -91,7 +91,7 @@ Provider presets fill common base URLs, protocols, model defaults, and capabilit
 | GitHub Copilot | `copilot` | Chat + Anthropic | GitHub token → Copilot bearer exchange, `x-initiator` billing classification, Claude model dash→dot normalization |
 | OpenAI | `openai` | Chat + Responses | None (Responses passthrough or Chat conversion) |
 | Google Gemini | `google_gemini` | Chat | None |
-| Kimi / Moonshot | `kimi` | Chat | `web_search` → `builtin_function`/`$web_search`, thinking control |
+| Kimi / Moonshot | `kimi` | Chat + Anthropic | `web_search` → `builtin_function`/`$web_search`; K3 uses `reasoning_effort:max` (no K2 `thinking` param); coding models keep thinking on/off control |
 | MiniMax | `minimax` | Chat | Strip reasoning_effort / response_format, `<think>` extraction |
 | GLM (Zhipu) | `glm` | Chat | Generic |
 | DashScope (Qwen) | `dashscope` | Chat | Generic |
