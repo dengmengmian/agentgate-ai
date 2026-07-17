@@ -28,17 +28,17 @@
   <img src="docs/demo-header-v2.gif" width="800" alt="AgentGate 在本地网关截获 Claude Code、Codex、Gemini CLI 的请求——转换 / 直连 / 路由 / 故障转移到 26 家上游，每条请求都在本地可追踪">
 </p>
 
-> **v1.5.0 新增防休眠：** AgentGate 在 macOS 和 Windows 运行期间默认阻止系统自动休眠，显示器仍可正常关闭。也可开启“请求智能控制”，仅在 AI 生成请求进行中及可配置冷却期内保持唤醒；设置页和系统托盘都能快速切换。Linux 本版可使用托盘菜单，但暂不支持防休眠。[查看 v1.5.0 更新说明](./docs/release-notes/1.5.0.md)。
+> **v1.5.1 新增 Kimi K3：** 内置支持月之暗面 Kimi K3（Platform `kimi-k3` / Code `k3`，1M 上下文）、高速编码模型、正确的 `reasoning_effort: max`，以及 `sk-kimi-…` 会员 key 自动切到 Kimi Code 端点。[查看 v1.5.1 更新说明](./docs/release-notes/1.5.1.md)。
 
 ## 下载
 
 | 你的机器 | 下载 |
 |---|---|
-| macOS Apple 芯片 | [AgentGate_1.5.0_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.5.0/AgentGate_1.5.0_aarch64.dmg) |
-| macOS Intel 芯片 | [AgentGate_1.5.0_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.5.0/AgentGate_1.5.0_x64.dmg) |
-| Windows 10 / 11 | [AgentGate_1.5.0_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.5.0/AgentGate_1.5.0_x64-setup.exe) |
-| Debian / Ubuntu | [AgentGate_1.5.0_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.5.0/AgentGate_1.5.0_amd64.deb) |
-| 其他 Linux 发行版 | [AgentGate_1.5.0_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.5.0/AgentGate_1.5.0_amd64.AppImage) |
+| macOS Apple 芯片 | [AgentGate_1.5.1_aarch64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.5.1/AgentGate_1.5.1_aarch64.dmg) |
+| macOS Intel 芯片 | [AgentGate_1.5.1_x64.dmg](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.5.1/AgentGate_1.5.1_x64.dmg) |
+| Windows 10 / 11 | [AgentGate_1.5.1_x64-setup.exe](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.5.1/AgentGate_1.5.1_x64-setup.exe) |
+| Debian / Ubuntu | [AgentGate_1.5.1_amd64.deb](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.5.1/AgentGate_1.5.1_amd64.deb) |
+| 其他 Linux 发行版 | [AgentGate_1.5.1_amd64.AppImage](https://github.com/dengmengmian/agentgate-ai/releases/download/v1.5.1/AgentGate_1.5.1_amd64.AppImage) |
 
 **Windows 安装提示：** Edge/Chrome 可能提示「通常不会下载」，SmartScreen 可能提示「Windows 已保护你的电脑」。这是预期行为：安装包目前**未做 Authenticode 代码签名**。业界没有像 Let’s Encrypt 那样「免费且被 Windows 默认信任」的代码签名证书（免费证书只管 HTTPS 网站，不能签 `.exe`），开源项目常见先发未签名包——**不是病毒报错**。请只从 [GitHub Releases](https://github.com/dengmengmian/agentgate-ai/releases) 下载；浏览器里选 **保留 / 仍要保留**，运行时点 **更多信息** → **仍要运行**。
 
