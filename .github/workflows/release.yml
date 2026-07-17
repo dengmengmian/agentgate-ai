@@ -261,24 +261,52 @@ jobs:
 
   # 发布成功后自动更新 Homebrew tap 的 cask(version + 两个 dmg 的 sha256)。
   # 需要仓库 Secret HOMEBREW_TAP_TOKEN:对 dengmengmian/homebrew-tap 有 contents:write 的 PAT。
+  # needs updater-json so multi-arch upload races settle before we hash DMGs.
   homebrew-cask:
-    needs: build
+    needs: [build, updater-json]
     runs-on: ubuntu-22.04
     steps:
       - name: Update tap cask
         env:
           TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           if [ -z "$TAP_TOKEN" ]; then
             echo "::error::HOMEBREW_TAP_TOKEN secret is required to update dengmengmian/homebrew-tap"
             exit 1
           fi
           VERSION="${GITHUB_REF_NAME#v}"
-          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
-          curl -fsSLO "$BASE/AgentGate_${VERSION}_aarch64.dmg"
-          curl -fsSLO "$BASE/AgentGate_${VERSION}_x64.dmg"
-          ARM_SHA=$(sha256sum "AgentGate_${VERSION}_aarch64.dmg" | cut -d' ' -f1)
-          X64_SHA=$(sha256sum "AgentGate_${VERSION}_x64.dmg" | cut -d' ' -f1)
+          TAG="${GITHUB_REF_NAME}"
+          ARM_NAME="AgentGate_${VERSION}_aarch64.dmg"
+          X64_NAME="AgentGate_${VERSION}_x64.dmg"
+
+          # Multi-arch tauri-action uploads race; poll until both DMGs are listed
+          # on the release (or fail with a clear asset dump after ~10 minutes).
+          echo "Waiting for ${ARM_NAME} and ${X64_NAME} on ${TAG}..."
+          for i in $(seq 1 30); do
+            assets=$(gh release view "$TAG" --json assets --jq '.assets[].name' || true)
+            if echo "$assets" | grep -qx "$ARM_NAME" && echo "$assets" | grep -qx "$X64_NAME"; then
+              echo "Both DMGs present (attempt $i)."
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "::error::Release ${TAG} is missing required DMG(s) after waiting."
+              echo "Required: ${ARM_NAME}, ${X64_NAME}"
+              echo "Available assets:"
+              echo "$assets"
+              exit 1
+            fi
+            echo "attempt $i: not ready yet; assets:"
+            echo "$assets" | sed 's/^/  /' || true
+            sleep 20
+          done
+
+          gh release download "$TAG" -p "$ARM_NAME" -p "$X64_NAME"
+          ARM_SHA=$(sha256sum "$ARM_NAME" | cut -d' ' -f1)
+          X64_SHA=$(sha256sum "$X64_NAME" | cut -d' ' -f1)
+          echo "arm sha256=${ARM_SHA}"
+          echo "x64 sha256=${X64_SHA}"
 
           git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/dengmengmian/homebrew-tap.git" tap
           CASK=tap/Casks/agentgate.rb
