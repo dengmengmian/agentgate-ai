@@ -78,9 +78,7 @@ describe("MiMo provider endpoints", () => {
       "sk-AbCdEf0123456789AbCdEf0123456789AbCdEf0123456789"
     );
     expect(preset?.baseUrl).toBe("https://api.moonshot.cn");
-    expect(preset?.anthropicBaseUrl).toBe(
-      "https://api.moonshot.cn/anthropic"
-    );
+    expect(preset?.anthropicBaseUrl).toBe("https://api.moonshot.cn/anthropic");
     expect(preset?.defaultModel).toBe("kimi-k3");
   });
 

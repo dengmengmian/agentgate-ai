@@ -449,10 +449,7 @@ mod tests {
             assert!(contains(&c, CAP_VISION), "{mid}");
             assert!(contains(&c, CAP_REASONING), "{mid}");
         }
-        assert_eq!(
-            context_window_for("kimi", "kimi-for-coding"),
-            Some(262_144)
-        );
+        assert_eq!(context_window_for("kimi", "kimi-for-coding"), Some(262_144));
     }
 
     #[test]

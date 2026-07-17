@@ -152,18 +152,12 @@ mod tests {
     #[test]
     fn kimi_maps_effort_for_k3_pipeline() {
         // Provisional values for convert → finalize; non-K3 still strips them.
-        assert_eq!(
-            KimiProvider.map_reasoning_effort("max"),
-            Some("max".into())
-        );
+        assert_eq!(KimiProvider.map_reasoning_effort("max"), Some("max".into()));
         assert_eq!(
             KimiProvider.map_reasoning_effort("xhigh"),
             Some("max".into())
         );
-        assert_eq!(
-            KimiProvider.map_reasoning_effort("low"),
-            Some("max".into())
-        );
+        assert_eq!(KimiProvider.map_reasoning_effort("low"), Some("max".into()));
         assert_eq!(
             KimiProvider.map_reasoning_effort("none"),
             Some("none".into())
