@@ -1523,19 +1523,19 @@ cost_alert_enabled: boolean;
 /**
  * 今日花费预警阈值(USD)。None / <=0 视为未设。
  */
-cost_alert_threshold: number | null;
+cost_alert_threshold: number | null; 
 /**
  * 防休眠总开关。默认开启。
  */
-wake_enabled: boolean;
+wake_enabled: boolean; 
 /**
  * false=AgentGate 生命周期持续保持，true=仅按生成请求控制。
  */
-wake_request_control: boolean;
+wake_request_control: boolean; 
 /**
  * 最后一个生成请求结束后的保持秒数。
  */
-wake_cooldown_seconds: number;
+wake_cooldown_seconds: number; 
 /**
  * 在保持系统唤醒的同时保持显示器常亮。
  */

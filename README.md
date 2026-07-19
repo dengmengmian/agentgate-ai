@@ -58,6 +58,18 @@ Headless CLI (`agentgate-serve`) tarballs and older versions are on the [Release
 
 AgentGate is not a hosted API reseller or a generic proxy. It is a local entry point for AI model requests — every request enters AgentGate first, then routes, converts, fails over, or passes through under your control.
 
+## Three focused tools, one workflow
+
+**CodeLeveler writes the code. ReviewGate reviews it. AgentGate connects both
+to your model APIs.** Each tool works independently, or they can be used
+together:
+
+| Tool | Focus |
+|---|---|
+| **AgentGate** | Adapt model APIs behind one local gateway |
+| [CodeLeveler](https://github.com/dengmengmian/CodeLeveler) | Inspect, edit, run, and verify code in the terminal |
+| [ReviewGate](https://github.com/dengmengmian/ReviewGate) | Review code changes and surface high-confidence issues |
+
 ## 5-Minute Quick Start
 
 1. Download and install AgentGate.

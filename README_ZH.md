@@ -58,6 +58,17 @@ brew install --cask dengmengmian/tap/agentgate
 
 AgentGate 不是托管 API 分发平台，也不是普通代理。它是 AI 模型请求的本地入口——每一次模型请求都先进入 AgentGate，再由你决定路由、转换、故障转移还是原生直连。
 
+## 三个专注的工具，一套工作流
+
+**CodeLeveler 负责写代码，ReviewGate 负责代码 Review，AgentGate 负责连接和
+适配模型 API。** 三个工具都可以独立使用，也可以配合工作：
+
+| 工具 | 专注于 |
+|---|---|
+| **AgentGate** | 通过一个本地网关适配不同模型 API |
+| [CodeLeveler](https://github.com/dengmengmian/CodeLeveler) | 在终端中理解、修改、运行并验证代码 |
+| [ReviewGate](https://github.com/dengmengmian/ReviewGate) | 审查代码改动并筛出高置信问题 |
+
 ## 5 分钟跑通
 
 1. 下载并安装 AgentGate。
